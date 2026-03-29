@@ -10,6 +10,7 @@ import { AgentChat } from "@/components/agent/AgentChat";
 import { AgentConnections } from "@/components/agent/AgentConnections";
 import { AgentActivity } from "@/components/agent/AgentActivity";
 import { AgentMemory } from "@/components/agent/AgentMemory";
+import { AgentTools } from "@/components/agent/AgentTools";
 import {
   Loader2,
   Fingerprint,
@@ -20,16 +21,18 @@ import {
   Activity,
   Brain,
   ChevronLeft,
+  Wrench,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
-type Section = "identity" | "knowledge" | "memory" | "instructions" | "chat" | "connections" | "activity";
+type Section = "identity" | "knowledge" | "memory" | "instructions" | "tools" | "chat" | "connections" | "activity";
 
 const NAV = [
   { id: "identity" as const,     icon: Fingerprint,  labelKey: "identity" },
   { id: "knowledge" as const,    icon: Database,      labelKey: "knowledge" },
   { id: "memory" as const,       icon: Brain,         labelKey: "memory" },
   { id: "instructions" as const, icon: BookOpen,      labelKey: "instructions" },
+  { id: "tools" as const,        icon: Wrench,        labelKey: "tools" },
   { id: "chat" as const,         icon: MessageSquare, labelKey: "chat" },
   { id: "connections" as const,  icon: Network,       labelKey: "connections" },
   { id: "activity" as const,     icon: Activity,      labelKey: "activity" },
@@ -38,6 +41,7 @@ const NAV = [
 const SECTION_DESCRIPTIONS: Partial<Record<Section, string>> = {
   instructions: "permanentRulesDesc",
   memory: "memoryDesc",
+  tools: "toolsDesc",
 };
 
 export default function AgentDetail() {
@@ -175,6 +179,7 @@ export default function AgentDetail() {
                 {activeSection === "knowledge" && <AgentKnowledge agent={agent} />}
                 {activeSection === "memory" && <AgentMemory agentId={agent.id} />}
                 {activeSection === "instructions" && <AgentInstructions agent={agent} />}
+                {activeSection === "tools" && <AgentTools agentId={agent.id} />}
                 {activeSection === "connections" && <AgentConnections agent={agent} />}
                 {activeSection === "activity" && <AgentActivity agent={agent} />}
               </motion.div>

@@ -1,9 +1,10 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, asc } from "drizzle-orm";
-import { db, agentsTable, connectionsTable, knowledgeTable, instructionsTable, activityTable, agentMemoriesTable } from "@workspace/db";
+import { db, agentsTable, connectionsTable, knowledgeTable, instructionsTable, activityTable, agentMemoriesTable, agentToolsTable } from "@workspace/db";
 import { openrouter } from "@workspace/integrations-openrouter-ai";
 import { buildSystemPrompt } from "./chat";
 import { braveWebSearch, formatSearchResultsForPrompt } from "../services/search";
+import { buildOpenAITools, callToolWebhook } from "../services/tools";
 
 const router: IRouter = Router();
 
@@ -36,10 +37,11 @@ router.post("/public/chat", async (req, res): Promise<void> => {
     return;
   }
 
-  const [knowledge, instructions, memories] = await Promise.all([
+  const [knowledge, instructions, memories, agentTools] = await Promise.all([
     db.select().from(knowledgeTable).where(eq(knowledgeTable.agentId, agent.id)),
     db.select().from(instructionsTable).where(eq(instructionsTable.agentId, agent.id)),
     db.select().from(agentMemoriesTable).where(eq(agentMemoriesTable.agentId, agent.id)).orderBy(asc(agentMemoriesTable.createdAt)),
+    db.select().from(agentToolsTable).where(eq(agentToolsTable.agentId, agent.id)).orderBy(asc(agentToolsTable.createdAt)),
   ]);
 
   const systemPrompt = buildSystemPrompt(
@@ -56,13 +58,17 @@ router.post("/public/chat", async (req, res): Promise<void> => {
   const webSearchEnabled = agent.webSearchEnabled;
   const hasBraveKey = !!process.env.BRAVE_SEARCH_API_KEY;
 
-  const messages: { role: "system" | "user" | "assistant"; content: string }[] = [
+  const openAITools = buildOpenAITools(agentTools);
+
+  type Msg = { role: "system" | "user" | "assistant" | "tool"; content: string | null; tool_call_id?: string; tool_calls?: unknown[] };
+
+  const messages: Msg[] = [
     { role: "system", content: systemPrompt },
     ...history,
     { role: "user", content: body.message },
   ];
 
-  let searchContextMessages: { role: "system" | "user" | "assistant"; content: string }[] = [];
+  let searchContextMessages: Msg[] = [];
   const allSourceUrls: string[] = [];
 
   if (webSearchEnabled && hasBraveKey) {
@@ -101,17 +107,52 @@ router.post("/public/chat", async (req, res): Promise<void> => {
     }
   }
 
-  const finalMessages: { role: "system" | "user" | "assistant"; content: string }[] = searchContextMessages.length > 0
+  const finalMessages: Msg[] = searchContextMessages.length > 0
     ? [messages[0], ...searchContextMessages, ...messages.slice(1)]
     : messages;
 
-  const completion = await openrouter.chat.completions.create({
-    model,
-    max_tokens: 8192,
-    messages: finalMessages,
-  });
+  const callWithToolLoop = async (callMessages: Msg[]): Promise<string> => {
+    const callParams: Parameters<typeof openrouter.chat.completions.create>[0] = {
+      model,
+      max_tokens: 8192,
+      messages: callMessages as Parameters<typeof openrouter.chat.completions.create>[0]["messages"],
+      ...(openAITools.length > 0 ? { tools: openAITools as Parameters<typeof openrouter.chat.completions.create>[0]["tools"], tool_choice: "auto" as const } : {}),
+    };
 
-  const rawResponse = completion.choices[0]?.message?.content || "";
+    const completion = await openrouter.chat.completions.create(callParams);
+    const choice = completion.choices[0];
+
+    if (choice?.finish_reason === "tool_calls" && choice.message.tool_calls) {
+      const assistantMsg: Msg = {
+        role: "assistant",
+        content: choice.message.content ?? null,
+        tool_calls: choice.message.tool_calls,
+      };
+
+      const toolResultMsgs: Msg[] = [];
+      for (const tc of choice.message.tool_calls) {
+        const toolDef = agentTools.find(t => t.name === tc.function.name);
+        let args: Record<string, unknown> = {};
+        try { args = JSON.parse(tc.function.arguments); } catch { args = {}; }
+
+        const result = toolDef
+          ? await callToolWebhook(toolDef.webhookUrl, tc.function.name, args)
+          : JSON.stringify({ error: `Unknown tool: ${tc.function.name}` });
+
+        toolResultMsgs.push({
+          role: "tool",
+          tool_call_id: tc.id,
+          content: result,
+        });
+      }
+
+      return callWithToolLoop([...callMessages, assistantMsg, ...toolResultMsgs]);
+    }
+
+    return choice?.message?.content ?? "";
+  };
+
+  const rawResponse = await callWithToolLoop(finalMessages);
 
   const memoryRegex = /\[MEMORY:\s*([^\]]+)\]/gi;
   const memoryMatches = [...rawResponse.matchAll(memoryRegex)];

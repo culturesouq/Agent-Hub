@@ -583,6 +583,98 @@ paths:
         "204":
           description: Deleted
 
+  /agents/{agentId}/tools:
+    get:
+      operationId: listTools
+      tags: [agents]
+      summary: List tools for an agent
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Tools
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentTool"
+    post:
+      operationId: createTool
+      tags: [agents]
+      summary: Create a tool
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateToolBody"
+      responses:
+        "201":
+          description: Tool created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentTool"
+
+  /agents/{agentId}/tools/{id}:
+    patch:
+      operationId: updateTool
+      tags: [agents]
+      summary: Update a tool
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateToolBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentTool"
+    delete:
+      operationId: deleteTool
+      tags: [agents]
+      summary: Delete a tool
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
   /public/chat:
     post:
       operationId: publicChat
@@ -933,6 +1025,83 @@ components:
         - agentId
         - content
         - createdAt
+
+    ToolParameter:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [string, number, boolean, object, array]
+        description:
+          type: string
+        required:
+          type: boolean
+      required:
+        - name
+        - type
+        - description
+        - required
+
+    AgentTool:
+      type: object
+      properties:
+        id:
+          type: integer
+        agentId:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        parametersSchema:
+          type: string
+        webhookUrl:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - agentId
+        - name
+        - description
+        - parametersSchema
+        - webhookUrl
+        - createdAt
+        - updatedAt
+
+    CreateToolBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        parametersSchema:
+          type: string
+        webhookUrl:
+          type: string
+          format: uri
+      required:
+        - name
+        - description
+        - webhookUrl
+
+    UpdateToolBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        parametersSchema:
+          type: string
+        webhookUrl:
+          type: string
+          format: uri
 
     PublicChatBody:
       type: object

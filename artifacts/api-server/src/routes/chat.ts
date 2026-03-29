@@ -1,9 +1,10 @@
 import { Router, type IRouter } from "express";
 import { eq, asc } from "drizzle-orm";
-import { db, agentsTable, chatMessagesTable, knowledgeTable, instructionsTable, agentMemoriesTable } from "@workspace/db";
+import { db, agentsTable, chatMessagesTable, knowledgeTable, instructionsTable, agentMemoriesTable, agentToolsTable } from "@workspace/db";
 import { openrouter } from "@workspace/integrations-openrouter-ai";
 import { requireAuth } from "../middlewares/auth";
 import { braveWebSearch, formatSearchResultsForPrompt, type SearchResult } from "../services/search";
+import { buildOpenAITools, callToolWebhook, type OpenAITool } from "../services/tools";
 
 const router: IRouter = Router();
 
@@ -41,10 +42,11 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
     return;
   }
 
-  const [knowledge, instructions, memories] = await Promise.all([
+  const [knowledge, instructions, memories, agentTools] = await Promise.all([
     db.select().from(knowledgeTable).where(eq(knowledgeTable.agentId, agentId)),
     db.select().from(instructionsTable).where(eq(instructionsTable.agentId, agentId)),
     db.select().from(agentMemoriesTable).where(eq(agentMemoriesTable.agentId, agentId)).orderBy(asc(agentMemoriesTable.createdAt)),
+    db.select().from(agentToolsTable).where(eq(agentToolsTable.agentId, agentId)).orderBy(asc(agentToolsTable.createdAt)),
   ]);
 
   const systemPrompt = buildSystemPrompt(
@@ -77,14 +79,18 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
   const webSearchEnabled = agent.webSearchEnabled;
   const hasBraveKey = !!process.env.BRAVE_SEARCH_API_KEY;
 
-  const messages: { role: "system" | "user" | "assistant"; content: string }[] = [
+  const openAITools = buildOpenAITools(agentTools);
+
+  type Msg = { role: "system" | "user" | "assistant" | "tool"; content: string; tool_call_id?: string; tool_calls?: unknown[] };
+
+  const messages: Msg[] = [
     { role: "system", content: systemPrompt },
     ...chatHistory,
     { role: "user", content: body.message },
   ];
 
   const allSources: SearchResult[] = [];
-  let searchContextMessages: { role: "system" | "user" | "assistant"; content: string }[] = [];
+  let searchContextMessages: Msg[] = [];
 
   if (webSearchEnabled && hasBraveKey) {
     const probeCompletion = await openrouter.chat.completions.create({
@@ -124,45 +130,114 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
     }
   }
 
-  const finalMessages: { role: "system" | "user" | "assistant"; content: string }[] = searchContextMessages.length > 0
+  const finalMessages: Msg[] = searchContextMessages.length > 0
     ? [messages[0], ...searchContextMessages, ...messages.slice(1)]
     : messages;
 
-  let fullResponse = "";
+  const usedTools: string[] = [];
 
-  const stream = await openrouter.chat.completions.create({
+  const callParams: Parameters<typeof openrouter.chat.completions.create>[0] = {
     model,
     max_tokens: 8192,
-    messages: finalMessages,
+    messages: finalMessages as Parameters<typeof openrouter.chat.completions.create>[0]["messages"],
     stream: true,
-  });
+    ...(openAITools.length > 0 ? { tools: openAITools as Parameters<typeof openrouter.chat.completions.create>[0]["tools"], tool_choice: "auto" as const } : {}),
+  };
 
-  let streamBuffer = "";
+  let fullResponse = "";
 
-  for await (const chunk of stream) {
-    const content = chunk.choices[0]?.delta?.content;
-    if (content) {
-      fullResponse += content;
-      streamBuffer += content;
+  const runStream = async (callMessages: Parameters<typeof openrouter.chat.completions.create>[0]["messages"]): Promise<void> => {
+    const stream = await openrouter.chat.completions.create({
+      ...callParams,
+      messages: callMessages,
+    });
 
-      const { safe, remaining } = extractSafeContent(streamBuffer);
-      streamBuffer = remaining;
+    let streamBuffer = "";
+    let finishReason: string | null | undefined = null;
+    const pendingToolCalls: { id: string; name: string; argsRaw: string }[] = [];
 
-      if (safe) {
-        res.write(`data: ${JSON.stringify({ content: safe })}\n\n`);
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta;
+      finishReason = chunk.choices[0]?.finish_reason;
+
+      if (delta?.tool_calls) {
+        for (const tc of delta.tool_calls) {
+          const idx = tc.index ?? 0;
+          if (!pendingToolCalls[idx]) {
+            pendingToolCalls[idx] = { id: tc.id ?? "", name: tc.function?.name ?? "", argsRaw: "" };
+          }
+          if (tc.function?.arguments) {
+            pendingToolCalls[idx].argsRaw += tc.function.arguments;
+          }
+          if (tc.id) pendingToolCalls[idx].id = tc.id;
+          if (tc.function?.name) pendingToolCalls[idx].name = tc.function.name;
+        }
+      }
+
+      if (delta?.content) {
+        fullResponse += delta.content;
+        streamBuffer += delta.content;
+
+        const { safe, remaining } = extractSafeContent(streamBuffer);
+        streamBuffer = remaining;
+
+        if (safe) {
+          res.write(`data: ${JSON.stringify({ content: safe })}\n\n`);
+        }
       }
     }
-  }
 
-  if (streamBuffer) {
-    const cleaned = streamBuffer
-      .replace(/\[MEMORY:[^\]]*\]/gi, "")
-      .replace(/\[SEARCH:[^\]]*\]/gi, "")
-      .trim();
-    if (cleaned) {
-      res.write(`data: ${JSON.stringify({ content: cleaned })}\n\n`);
+    if (streamBuffer) {
+      const cleaned = streamBuffer
+        .replace(/\[MEMORY:[^\]]*\]/gi, "")
+        .replace(/\[SEARCH:[^\]]*\]/gi, "")
+        .trim();
+      if (cleaned) {
+        res.write(`data: ${JSON.stringify({ content: cleaned })}\n\n`);
+      }
     }
-  }
+
+    if (finishReason === "tool_calls" && pendingToolCalls.length > 0) {
+      const toolCallObjects = pendingToolCalls.map(tc => ({
+        id: tc.id,
+        type: "function" as const,
+        function: { name: tc.name, arguments: tc.argsRaw },
+      }));
+
+      const assistantMsg: Parameters<typeof openrouter.chat.completions.create>[0]["messages"][number] = {
+        role: "assistant" as const,
+        content: null,
+        tool_calls: toolCallObjects,
+      };
+
+      const toolResultMsgs: Parameters<typeof openrouter.chat.completions.create>[0]["messages"] = [];
+
+      res.write(`data: ${JSON.stringify({ toolCalls: pendingToolCalls.map(tc => tc.name) })}\n\n`);
+
+      for (const tc of pendingToolCalls) {
+        const toolDef = agentTools.find(t => t.name === tc.name);
+        let args: Record<string, unknown> = {};
+        try { args = JSON.parse(tc.argsRaw); } catch { args = {}; }
+
+        const result = toolDef
+          ? await callToolWebhook(toolDef.webhookUrl, tc.name, args)
+          : JSON.stringify({ error: `Unknown tool: ${tc.name}` });
+
+        usedTools.push(tc.name);
+
+        toolResultMsgs.push({
+          role: "tool" as const,
+          tool_call_id: tc.id,
+          content: result,
+        });
+      }
+
+      const nextMessages = [...callMessages, assistantMsg, ...toolResultMsgs];
+      await runStream(nextMessages as Parameters<typeof openrouter.chat.completions.create>[0]["messages"]);
+    }
+  };
+
+  await runStream(finalMessages as Parameters<typeof openrouter.chat.completions.create>[0]["messages"]);
 
   const memoryRegex = /\[MEMORY:\s*([^\]]+)\]/gi;
   const memoryMatches = [...fullResponse.matchAll(memoryRegex)];
@@ -190,7 +265,7 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
   const sources = allSources
     .map(s => ({ title: s.title, url: s.url }))
     .filter(s => { if (seenUrls.has(s.url)) return false; seenUrls.add(s.url); return true; });
-  res.write(`data: ${JSON.stringify({ done: true, sources })}\n\n`);
+  res.write(`data: ${JSON.stringify({ done: true, sources, usedTools })}\n\n`);
   res.end();
 });
 

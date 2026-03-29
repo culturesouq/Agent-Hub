@@ -12,6 +12,8 @@ export function useChatStream(agentId: number) {
   const [streamedResponse, setStreamedResponse] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [lastSources, setLastSources] = useState<ChatSource[]>([]);
+  const [activeToolCalls, setActiveToolCalls] = useState<string[]>([]);
+  const [lastUsedTools, setLastUsedTools] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const queryClient = useQueryClient();
@@ -23,6 +25,8 @@ export function useChatStream(agentId: number) {
     setStreamedResponse("");
     setIsSearching(false);
     setLastSources([]);
+    setActiveToolCalls([]);
+    setLastUsedTools([]);
     setError(null);
 
     abortControllerRef.current = new AbortController();
@@ -70,15 +74,25 @@ export function useChatStream(agentId: number) {
                 setIsSearching(true);
                 continue;
               }
+              if (data.toolCalls && Array.isArray(data.toolCalls)) {
+                setActiveToolCalls(data.toolCalls as string[]);
+                setIsSearching(false);
+                continue;
+              }
               if (data.done) {
                 setIsSearching(false);
+                setActiveToolCalls([]);
                 if (data.sources && Array.isArray(data.sources)) {
                   setLastSources(data.sources as ChatSource[]);
+                }
+                if (data.usedTools && Array.isArray(data.usedTools)) {
+                  setLastUsedTools(data.usedTools as string[]);
                 }
                 break;
               }
               if (data.content) {
                 setIsSearching(false);
+                setActiveToolCalls([]);
                 setStreamedResponse(prev => prev + data.content);
               }
             } catch (e) {
@@ -110,6 +124,8 @@ export function useChatStream(agentId: number) {
     streamedResponse,
     isSearching,
     lastSources,
+    activeToolCalls,
+    lastUsedTools,
     error,
     stopStream
   };

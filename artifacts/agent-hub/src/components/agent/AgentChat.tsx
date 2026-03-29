@@ -5,7 +5,7 @@ import { useState, useRef, useEffect } from "react";
 import { useChatStream, type ChatSource } from "@/hooks/use-chat-stream";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MessageSquare, Send, Trash2, StopCircle, Globe, ExternalLink } from "lucide-react";
+import { MessageSquare, Send, Trash2, StopCircle, Globe, ExternalLink, Wrench } from "lucide-react";
 import { format } from "date-fns";
 
 interface AgentChatProps {
@@ -42,11 +42,12 @@ function SourcesBar({ sources }: { sources: ChatSource[] }) {
 export function AgentChat({ agent, fullHeight }: AgentChatProps) {
   const { t } = useI18n();
   const { data: history } = useGetChatHistory(agent.id);
-  const { sendMessage, isStreaming, streamedResponse, isSearching, lastSources, stopStream } = useChatStream(agent.id);
+  const { sendMessage, isStreaming, streamedResponse, isSearching, lastSources, activeToolCalls, lastUsedTools, stopStream } = useChatStream(agent.id);
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const [pendingSources, setPendingSources] = useState<ChatSource[]>([]);
+  const [pendingUsedTools, setPendingUsedTools] = useState<string[]>([]);
 
   const clearMutation = useClearChatHistory({
     mutation: {
@@ -64,15 +65,19 @@ export function AgentChat({ agent, fullHeight }: AgentChatProps) {
     if (!isStreaming && lastSources.length > 0) {
       setPendingSources(lastSources);
     }
-    if (!isStreaming && lastSources.length === 0 && pendingSources.length > 0) {
-      // don't clear on no-source messages — only clear when streaming starts
-    }
   }, [isStreaming, lastSources]);
+
+  useEffect(() => {
+    if (!isStreaming && lastUsedTools.length > 0) {
+      setPendingUsedTools(lastUsedTools);
+    }
+  }, [isStreaming, lastUsedTools]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isStreaming) return;
     setPendingSources([]);
+    setPendingUsedTools([]);
     sendMessage(input);
     setInput("");
   };
@@ -141,14 +146,40 @@ export function AgentChat({ agent, fullHeight }: AgentChatProps) {
               >
                 <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
               </div>
-              {isAssistant && isLast && !isStreaming && pendingSources.length > 0 && (
-                <div className="max-w-[80%] mt-0.5 mx-1">
-                  <SourcesBar sources={pendingSources} />
+              {isAssistant && isLast && !isStreaming && (
+                <div className="max-w-[80%] mt-0.5 mx-1 space-y-1">
+                  {pendingUsedTools.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {pendingUsedTools.map((toolName, ti) => (
+                        <span key={ti} className="inline-flex items-center gap-1 text-[10px] text-amber-400/80 border border-amber-400/20 bg-amber-400/5 rounded px-1.5 py-0.5 font-mono">
+                          <Wrench className="w-2.5 h-2.5" />
+                          {toolName}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {pendingSources.length > 0 && <SourcesBar sources={pendingSources} />}
                 </div>
               )}
             </div>
           );
         })}
+
+        {isStreaming && activeToolCalls.length > 0 && !isSearching && (
+          <div className="flex flex-col items-start">
+            <span className="text-[10px] text-amber-400/80 font-mono mb-1 mx-1 animate-pulse flex items-center gap-1">
+              <Wrench className="w-3 h-3" />
+              {activeToolCalls.map(n => n).join(', ')}...
+            </span>
+            <div className="rounded-2xl px-4 py-2.5 bg-amber-400/5 border border-amber-400/15 rounded-tl-sm">
+              <div className="flex gap-1 items-center h-5">
+                <span className="w-1.5 h-1.5 bg-amber-400/60 rounded-full animate-bounce [animation-delay:0ms]" />
+                <span className="w-1.5 h-1.5 bg-amber-400/60 rounded-full animate-bounce [animation-delay:150ms]" />
+                <span className="w-1.5 h-1.5 bg-amber-400/60 rounded-full animate-bounce [animation-delay:300ms]" />
+              </div>
+            </div>
+          </div>
+        )}
 
         {isStreaming && isSearching && (
           <div className="flex flex-col items-start">

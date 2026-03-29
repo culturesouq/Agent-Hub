@@ -202,6 +202,49 @@ export interface AgentMemory {
   createdAt: string;
 }
 
+export type ToolParameterType =
+  (typeof ToolParameterType)[keyof typeof ToolParameterType];
+
+export const ToolParameterType = {
+  string: "string",
+  number: "number",
+  boolean: "boolean",
+  object: "object",
+  array: "array",
+} as const;
+
+export interface ToolParameter {
+  name: string;
+  type: ToolParameterType;
+  description: string;
+  required: boolean;
+}
+
+export interface AgentTool {
+  id: number;
+  agentId: number;
+  name: string;
+  description: string;
+  parametersSchema: string;
+  webhookUrl: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateToolBody {
+  name: string;
+  description: string;
+  parametersSchema?: string;
+  webhookUrl: string;
+}
+
+export interface UpdateToolBody {
+  name?: string;
+  description?: string;
+  parametersSchema?: string;
+  webhookUrl?: string;
+}
+
 export type ConversationTurnRole =
   (typeof ConversationTurnRole)[keyof typeof ConversationTurnRole];
 

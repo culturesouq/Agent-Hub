@@ -8,6 +8,7 @@ import chatRouter from "./chat";
 import connectionsRouter from "./connections";
 import activityRouter from "./activity";
 import publicRouter from "./public";
+import toolsRouter from "./tools";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(chatRouter);
 router.use(connectionsRouter);
 router.use(activityRouter);
 router.use(publicRouter);
+router.use(toolsRouter);
 
 export default router;

@@ -421,6 +421,73 @@ export const DeleteMemoryParams = zod.object({
 });
 
 /**
+ * @summary List tools for an agent
+ */
+export const ListToolsParams = zod.object({
+  agentId: zod.coerce.number(),
+});
+
+export const ListToolsResponseItem = zod.object({
+  id: zod.number(),
+  agentId: zod.number(),
+  name: zod.string(),
+  description: zod.string(),
+  parametersSchema: zod.string(),
+  webhookUrl: zod.string(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+export const ListToolsResponse = zod.array(ListToolsResponseItem);
+
+/**
+ * @summary Create a tool
+ */
+export const CreateToolParams = zod.object({
+  agentId: zod.coerce.number(),
+});
+
+export const CreateToolBody = zod.object({
+  name: zod.string(),
+  description: zod.string(),
+  parametersSchema: zod.string().optional(),
+  webhookUrl: zod.string().url(),
+});
+
+/**
+ * @summary Update a tool
+ */
+export const UpdateToolParams = zod.object({
+  agentId: zod.coerce.number(),
+  id: zod.coerce.number(),
+});
+
+export const UpdateToolBody = zod.object({
+  name: zod.string().optional(),
+  description: zod.string().optional(),
+  parametersSchema: zod.string().optional(),
+  webhookUrl: zod.string().url().optional(),
+});
+
+export const UpdateToolResponse = zod.object({
+  id: zod.number(),
+  agentId: zod.number(),
+  name: zod.string(),
+  description: zod.string(),
+  parametersSchema: zod.string(),
+  webhookUrl: zod.string(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+
+/**
+ * @summary Delete a tool
+ */
+export const DeleteToolParams = zod.object({
+  agentId: zod.coerce.number(),
+  id: zod.coerce.number(),
+});
+
+/**
  * @summary Public endpoint for connected apps to chat with agent
  */
 export const PublicChatBody = zod.object({
@@ -440,5 +507,5 @@ export const PublicChatBody = zod.object({
 export const PublicChatResponse = zod.object({
   response: zod.string(),
   agentName: zod.string(),
-  sources: zod.array(zod.string()).optional(),
+  sources: zod.array(zod.string().url()).optional(),
 });
