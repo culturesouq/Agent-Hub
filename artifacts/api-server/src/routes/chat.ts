@@ -5,7 +5,7 @@ import { openrouter } from "@workspace/integrations-openrouter-ai";
 import { requireAuth } from "../middlewares/auth";
 import { braveWebSearch, formatSearchResultsForPrompt, type SearchResult } from "../services/search";
 import { buildOpenAITools, callToolWebhook, type OpenAITool } from "../services/tools";
-import { getToolsForIntegrations, executeIntegrationTool, isIntegrationAvailable, getIntegrationById, INTEGRATION_CATALOG } from "../services/integrations-catalog";
+import { getToolsForIntegrations, executeIntegrationTool, INTEGRATION_CATALOG } from "../services/integrations-catalog.js";
 
 const router: IRouter = Router();
 

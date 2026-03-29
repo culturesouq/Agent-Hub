@@ -1,3 +1,5 @@
+import { getReplitConnectorToken, isReplitConnectorAvailable } from "./connector-token.js";
+
 export interface IntegrationTool {
   name: string;
   description: string;
@@ -8,14 +10,18 @@ export interface IntegrationTool {
   };
 }
 
+export type AuthType = "replit_connector" | "api_key";
+
 export interface IntegrationDefinition {
   id: string;
   displayName: string;
-  category: "google" | "dev" | "productivity" | "crm" | "finance" | "communication";
+  category: "google" | "microsoft" | "dev" | "productivity" | "crm" | "finance" | "communication";
   description: string;
   icon: string;
-  envVar: string;
-  envVarLabel: string;
+  authType: AuthType;
+  replitConnectorId?: string;
+  envVar?: string;
+  envVarLabel?: string;
   setupNote: string;
   tools: IntegrationTool[];
 }
@@ -27,9 +33,11 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     category: "dev",
     description: "List repos, create/search issues, check PRs and code",
     icon: "github",
+    authType: "replit_connector",
+    replitConnectorId: "ccfg_github_01K4B9XD3VRVD2F99YM91YTCAF",
     envVar: "GITHUB_TOKEN",
-    envVarLabel: "Personal Access Token",
-    setupNote: "Create a token at github.com/settings/tokens with repo scope",
+    envVarLabel: "Personal Access Token (fallback)",
+    setupNote: "Connect via Replit OAuth, or set GITHUB_TOKEN (github.com/settings/tokens with repo scope)",
     tools: [
       {
         name: "github_list_repos",
@@ -38,7 +46,7 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
           type: "object",
           properties: {
             per_page: { type: "number", description: "Number of repos to return (default 10)" },
-            visibility: { type: "string", description: "Filter by visibility: all, public, private", enum: ["all", "public", "private"] },
+            visibility: { type: "string", description: "Filter: all, public, private", enum: ["all", "public", "private"] },
           },
           required: [],
         },
@@ -51,7 +59,7 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
           properties: {
             owner: { type: "string", description: "Repository owner (username or org)" },
             repo: { type: "string", description: "Repository name" },
-            state: { type: "string", description: "Filter by state: open, closed, all", enum: ["open", "closed", "all"] },
+            state: { type: "string", description: "Filter: open, closed, all", enum: ["open", "closed", "all"] },
             per_page: { type: "number", description: "Number of issues (default 10)" },
           },
           required: ["owner", "repo"],
@@ -66,7 +74,7 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
             owner: { type: "string", description: "Repository owner" },
             repo: { type: "string", description: "Repository name" },
             title: { type: "string", description: "Issue title" },
-            body: { type: "string", description: "Issue description (markdown supported)" },
+            body: { type: "string", description: "Issue description (markdown)" },
             labels: { type: "string", description: "Comma-separated label names" },
           },
           required: ["owner", "repo", "title"],
@@ -91,19 +99,21 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     category: "dev",
     description: "Manage issues, projects, and teams in Linear",
     icon: "linear",
+    authType: "replit_connector",
+    replitConnectorId: "ccfg_linear_01K4B3DCSR7JEAJK400V1HTJAK",
     envVar: "LINEAR_API_KEY",
-    envVarLabel: "API Key",
-    setupNote: "Go to Linear → Settings → API → Personal API keys",
+    envVarLabel: "API Key (fallback)",
+    setupNote: "Connect via Replit OAuth, or set LINEAR_API_KEY (Linear → Settings → API → Personal API keys)",
     tools: [
       {
         name: "linear_list_issues",
-        description: "List issues from Linear (yours or a team's)",
+        description: "List issues from Linear",
         parameters: {
           type: "object",
           properties: {
-            team_key: { type: "string", description: "Team key to filter issues (optional, returns all your issues if omitted)" },
-            state: { type: "string", description: "Filter by state name (e.g. Todo, In Progress, Done)" },
-            limit: { type: "number", description: "Number of issues to return (default 10)" },
+            team_key: { type: "string", description: "Team key to filter (optional)" },
+            state: { type: "string", description: "Filter by state name (e.g. Todo, In Progress)" },
+            limit: { type: "number", description: "Number of issues (default 10)" },
           },
           required: [],
         },
@@ -115,9 +125,9 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
           type: "object",
           properties: {
             title: { type: "string", description: "Issue title" },
-            description: { type: "string", description: "Issue description (markdown supported)" },
+            description: { type: "string", description: "Issue description (markdown)" },
             team_key: { type: "string", description: "Team key (e.g. ENG)" },
-            priority: { type: "number", description: "Priority: 0=no priority, 1=urgent, 2=high, 3=medium, 4=low" },
+            priority: { type: "number", description: "Priority: 0=none, 1=urgent, 2=high, 3=medium, 4=low" },
           },
           required: ["title", "team_key"],
         },
@@ -130,9 +140,11 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     category: "productivity",
     description: "Search pages, read content, create and update pages",
     icon: "notion",
+    authType: "replit_connector",
+    replitConnectorId: "ccfg_notion_01K49R392Z3CSNMXCPWSV67AF4",
     envVar: "NOTION_TOKEN",
-    envVarLabel: "Integration Token",
-    setupNote: "Create an integration at notion.so/my-integrations and share your pages with it",
+    envVarLabel: "Integration Token (fallback)",
+    setupNote: "Connect via Replit OAuth, or set NOTION_TOKEN (notion.so/my-integrations)",
     tools: [
       {
         name: "notion_search",
@@ -152,7 +164,7 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
         parameters: {
           type: "object",
           properties: {
-            page_id: { type: "string", description: "The Notion page ID" },
+            page_id: { type: "string", description: "Notion page ID" },
           },
           required: ["page_id"],
         },
@@ -178,9 +190,11 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     category: "communication",
     description: "Send messages, list channels, read conversations",
     icon: "slack",
+    authType: "replit_connector",
+    replitConnectorId: "ccfg_slack_01KH7W1T1D6TGP3BJGNQ2N9PEH",
     envVar: "SLACK_BOT_TOKEN",
-    envVarLabel: "Bot Token",
-    setupNote: "Create a Slack app at api.slack.com, add OAuth scopes (chat:write, channels:read), install to your workspace",
+    envVarLabel: "Bot Token (fallback)",
+    setupNote: "Connect via Replit OAuth, or set SLACK_BOT_TOKEN (api.slack.com → Your Apps → OAuth)",
     tools: [
       {
         name: "slack_send_message",
@@ -200,7 +214,7 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
         parameters: {
           type: "object",
           properties: {
-            limit: { type: "number", description: "Max number of channels to return (default 20)" },
+            limit: { type: "number", description: "Max number of channels (default 20)" },
           },
           required: [],
         },
@@ -225,6 +239,7 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     category: "communication",
     description: "Send messages and files via your Telegram bot",
     icon: "telegram",
+    authType: "api_key",
     envVar: "TELEGRAM_BOT_TOKEN",
     envVarLabel: "Bot Token",
     setupNote: "Create a bot with @BotFather on Telegram and copy the token",
@@ -236,7 +251,7 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
           type: "object",
           properties: {
             chat_id: { type: "string", description: "Telegram chat ID or @username" },
-            text: { type: "string", description: "Message text (HTML or Markdown formatting supported)" },
+            text: { type: "string", description: "Message text (HTML or Markdown)" },
             parse_mode: { type: "string", description: "Formatting: Markdown or HTML", enum: ["Markdown", "HTML"] },
           },
           required: ["chat_id", "text"],
@@ -250,9 +265,11 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     category: "crm",
     description: "Manage contacts, deals, and companies in HubSpot CRM",
     icon: "hubspot",
+    authType: "replit_connector",
+    replitConnectorId: "ccfg_hubspot_96987450B7BE4A05A4843E3756",
     envVar: "HUBSPOT_API_KEY",
-    envVarLabel: "Private App Token",
-    setupNote: "Go to HubSpot → Settings → Integrations → Private Apps → Create private app",
+    envVarLabel: "Private App Token (fallback)",
+    setupNote: "Connect via Replit OAuth, or set HUBSPOT_API_KEY (HubSpot → Settings → Integrations → Private Apps)",
     tools: [
       {
         name: "hubspot_list_contacts",
@@ -289,7 +306,7 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
           properties: {
             dealname: { type: "string", description: "Deal name" },
             amount: { type: "string", description: "Deal amount in USD" },
-            dealstage: { type: "string", description: "Deal stage (e.g. appointmentscheduled, qualifiedtobuy, closedwon)" },
+            dealstage: { type: "string", description: "Deal stage (e.g. appointmentscheduled, closedwon)" },
           },
           required: ["dealname"],
         },
@@ -302,9 +319,11 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     category: "finance",
     description: "List customers, invoices, and create payment links",
     icon: "stripe",
+    authType: "replit_connector",
+    replitConnectorId: "ccfg_stripe_01K611P4YQR0SZM11XFRQJC44Y",
     envVar: "STRIPE_SECRET_KEY",
-    envVarLabel: "Secret Key",
-    setupNote: "Find your secret key in the Stripe Dashboard under Developers → API keys",
+    envVarLabel: "Secret Key (fallback)",
+    setupNote: "Connect via Replit OAuth, or set STRIPE_SECRET_KEY (Stripe Dashboard → Developers → API keys)",
     tools: [
       {
         name: "stripe_list_customers",
@@ -312,7 +331,7 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
         parameters: {
           type: "object",
           properties: {
-            limit: { type: "number", description: "Number of customers to return (default 10)" },
+            limit: { type: "number", description: "Number of customers (default 10)" },
             email: { type: "string", description: "Filter by email address" },
           },
           required: [],
@@ -325,7 +344,7 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
           type: "object",
           properties: {
             limit: { type: "number", description: "Number of invoices (default 10)" },
-            status: { type: "string", description: "Filter by status: draft, open, paid, uncollectible, void", enum: ["draft", "open", "paid", "uncollectible", "void"] },
+            status: { type: "string", description: "Filter: draft, open, paid, uncollectible, void", enum: ["draft", "open", "paid", "uncollectible", "void"] },
           },
           required: [],
         },
@@ -350,6 +369,7 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     category: "crm",
     description: "Read and write records in Airtable bases and tables",
     icon: "airtable",
+    authType: "api_key",
     envVar: "AIRTABLE_API_KEY",
     envVarLabel: "Personal Access Token",
     setupNote: "Create a token at airtable.com/create/tokens with data.records:read and data.records:write scopes",
@@ -362,7 +382,7 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
           properties: {
             base_id: { type: "string", description: "Airtable Base ID (starts with app)" },
             table_name: { type: "string", description: "Table name or ID" },
-            max_records: { type: "number", description: "Max records to return (default 20)" },
+            max_records: { type: "number", description: "Max records (default 20)" },
             filter_formula: { type: "string", description: "Airtable formula to filter records" },
           },
           required: ["base_id", "table_name"],
@@ -376,7 +396,7 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
           properties: {
             base_id: { type: "string", description: "Airtable Base ID" },
             table_name: { type: "string", description: "Table name" },
-            fields: { type: "string", description: "JSON string of field values (e.g. {\"Name\": \"Alice\", \"Status\": \"Active\"})" },
+            fields: { type: "string", description: "JSON string of field values" },
           },
           required: ["base_id", "table_name", "fields"],
         },
@@ -389,9 +409,11 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     category: "google",
     description: "Read, write and append data to Google Sheets",
     icon: "google_sheets",
+    authType: "replit_connector",
+    replitConnectorId: "ccfg_google-sheet_E42A9F6CA62546F68A1FECA0E8",
     envVar: "GOOGLE_SHEETS_SERVICE_KEY",
-    envVarLabel: "Service Account JSON",
-    setupNote: "Create a Service Account in Google Cloud Console, download the JSON key, share your spreadsheets with the service account email",
+    envVarLabel: "Service Account JSON (fallback)",
+    setupNote: "Connect via Replit OAuth, or set GOOGLE_SHEETS_SERVICE_KEY (Google Cloud → Service Accounts → JSON key)",
     tools: [
       {
         name: "sheets_read_range",
@@ -399,7 +421,7 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
         parameters: {
           type: "object",
           properties: {
-            spreadsheet_id: { type: "string", description: "The Google Spreadsheet ID from the URL" },
+            spreadsheet_id: { type: "string", description: "Google Spreadsheet ID from the URL" },
             range: { type: "string", description: "A1 notation range (e.g. Sheet1!A1:D10)" },
           },
           required: ["spreadsheet_id", "range"],
@@ -411,7 +433,7 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
         parameters: {
           type: "object",
           properties: {
-            spreadsheet_id: { type: "string", description: "The Google Spreadsheet ID" },
+            spreadsheet_id: { type: "string", description: "Google Spreadsheet ID" },
             range: { type: "string", description: "Sheet name or range (e.g. Sheet1)" },
             values: { type: "string", description: "Comma-separated values for the new row" },
           },
@@ -426,9 +448,11 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     category: "google",
     description: "Send emails, read inbox, and search messages via Gmail",
     icon: "gmail",
+    authType: "replit_connector",
+    replitConnectorId: "ccfg_google-mail_B959E7249792448ABBA58D46AF",
     envVar: "GOOGLE_OAUTH_TOKEN",
-    envVarLabel: "OAuth Access Token",
-    setupNote: "Gmail requires OAuth 2.0. Set up a Google Cloud OAuth app, complete the consent flow, and provide the access token.",
+    envVarLabel: "OAuth Access Token (fallback)",
+    setupNote: "Connect via Replit OAuth for Gmail access",
     tools: [
       {
         name: "gmail_send_email",
@@ -463,9 +487,11 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     category: "google",
     description: "List upcoming events and create calendar events",
     icon: "google_calendar",
+    authType: "replit_connector",
+    replitConnectorId: "ccfg_google-calendar_DDDBAC03DE404369B74F32E78D",
     envVar: "GOOGLE_OAUTH_TOKEN",
-    envVarLabel: "OAuth Access Token",
-    setupNote: "Google Calendar requires OAuth 2.0. Provide a valid OAuth access token with calendar scope.",
+    envVarLabel: "OAuth Access Token (fallback)",
+    setupNote: "Connect via Replit OAuth for Google Calendar access",
     tools: [
       {
         name: "gcal_list_events",
@@ -473,8 +499,8 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
         parameters: {
           type: "object",
           properties: {
-            max_results: { type: "number", description: "Max events to return (default 5)" },
-            time_min: { type: "string", description: "Start time in ISO 8601 format (defaults to now)" },
+            max_results: { type: "number", description: "Max events (default 5)" },
+            time_min: { type: "string", description: "Start time in ISO 8601 (defaults to now)" },
           },
           required: [],
         },
@@ -487,8 +513,8 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
           properties: {
             summary: { type: "string", description: "Event title" },
             description: { type: "string", description: "Event description" },
-            start: { type: "string", description: "Start time in ISO 8601 (e.g. 2024-03-15T10:00:00)" },
-            end: { type: "string", description: "End time in ISO 8601" },
+            start: { type: "string", description: "Start time ISO 8601 (e.g. 2024-03-15T10:00:00)" },
+            end: { type: "string", description: "End time ISO 8601" },
             attendees: { type: "string", description: "Comma-separated attendee emails" },
           },
           required: ["summary", "start", "end"],
@@ -497,14 +523,100 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     ],
   },
   {
+    id: "google_drive",
+    displayName: "Google Drive",
+    category: "google",
+    description: "Search, list, read, and upload files in Google Drive",
+    icon: "google_drive",
+    authType: "replit_connector",
+    replitConnectorId: "ccfg_google-drive_0F6D7EF5E22543468DB221F94F",
+    setupNote: "Connect via Replit OAuth for Google Drive access",
+    tools: [
+      {
+        name: "gdrive_list_files",
+        description: "List files in Google Drive",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "Drive search query (e.g. mimeType='application/pdf')" },
+            max_results: { type: "number", description: "Max files to return (default 10)" },
+            folder_id: { type: "string", description: "Folder ID to list files in (optional)" },
+          },
+          required: [],
+        },
+      },
+      {
+        name: "gdrive_get_file",
+        description: "Get metadata or content of a file in Google Drive",
+        parameters: {
+          type: "object",
+          properties: {
+            file_id: { type: "string", description: "Google Drive file ID" },
+            export_as_text: { type: "string", description: "Export Google Doc/Sheet as plain text: yes/no", enum: ["yes", "no"] },
+          },
+          required: ["file_id"],
+        },
+      },
+    ],
+  },
+  {
+    id: "google_docs",
+    displayName: "Google Docs",
+    category: "google",
+    description: "Read, create, and update Google Docs documents",
+    icon: "google_docs",
+    authType: "replit_connector",
+    replitConnectorId: "ccfg_google-docs_587BECDAEBD441138D618E3ABD",
+    setupNote: "Connect via Replit OAuth for Google Docs access",
+    tools: [
+      {
+        name: "gdocs_get_document",
+        description: "Get the content of a Google Docs document",
+        parameters: {
+          type: "object",
+          properties: {
+            document_id: { type: "string", description: "Google Docs document ID from the URL" },
+          },
+          required: ["document_id"],
+        },
+      },
+      {
+        name: "gdocs_create_document",
+        description: "Create a new Google Docs document",
+        parameters: {
+          type: "object",
+          properties: {
+            title: { type: "string", description: "Document title" },
+            content: { type: "string", description: "Initial document content (plain text)" },
+          },
+          required: ["title"],
+        },
+      },
+      {
+        name: "gdocs_append_text",
+        description: "Append text to an existing Google Docs document",
+        parameters: {
+          type: "object",
+          properties: {
+            document_id: { type: "string", description: "Google Docs document ID" },
+            text: { type: "string", description: "Text to append" },
+          },
+          required: ["document_id", "text"],
+        },
+      },
+    ],
+  },
+  {
     id: "outlook",
-    displayName: "Outlook / Microsoft 365",
-    category: "productivity",
-    description: "Send emails and read calendar events via Microsoft Graph API",
+    displayName: "Microsoft Outlook",
+    category: "microsoft",
+    description: "Send emails and read calendar events via Microsoft 365",
     icon: "outlook",
+    authType: "replit_connector",
+    replitConnectorId: "ccfg_outlook_01K4BBCKRJKP82N3PYQPZQ6DAK",
     envVar: "MICROSOFT_GRAPH_TOKEN",
-    envVarLabel: "OAuth Access Token",
-    setupNote: "Register an Azure AD app, grant Mail.Send and Calendars.Read permissions, complete OAuth flow",
+    envVarLabel: "OAuth Access Token (fallback)",
+    setupNote: "Connect via Replit OAuth, or set MICROSOFT_GRAPH_TOKEN (Azure AD app with Mail.Send + Calendars.Read)",
     tools: [
       {
         name: "outlook_send_email",
@@ -525,9 +637,80 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
         parameters: {
           type: "object",
           properties: {
-            top: { type: "number", description: "Number of events to return (default 5)" },
+            top: { type: "number", description: "Number of events (default 5)" },
           },
           required: [],
+        },
+      },
+    ],
+  },
+  {
+    id: "onedrive",
+    displayName: "Microsoft OneDrive",
+    category: "microsoft",
+    description: "List, read, and upload files in Microsoft OneDrive",
+    icon: "onedrive",
+    authType: "replit_connector",
+    replitConnectorId: "ccfg_onedrive_01K4E4CFAKZ9ARQZBWZW4HD05Y",
+    setupNote: "Connect via Replit OAuth for OneDrive access",
+    tools: [
+      {
+        name: "onedrive_list_files",
+        description: "List files in Microsoft OneDrive",
+        parameters: {
+          type: "object",
+          properties: {
+            folder_path: { type: "string", description: "Folder path to list (e.g. /Documents), defaults to root" },
+            top: { type: "number", description: "Max files to return (default 10)" },
+          },
+          required: [],
+        },
+      },
+      {
+        name: "onedrive_get_file",
+        description: "Get metadata or download URL for a OneDrive file",
+        parameters: {
+          type: "object",
+          properties: {
+            item_id: { type: "string", description: "OneDrive item ID" },
+          },
+          required: ["item_id"],
+        },
+      },
+    ],
+  },
+  {
+    id: "sharepoint",
+    displayName: "SharePoint Online",
+    category: "microsoft",
+    description: "List sites, libraries, and documents in SharePoint",
+    icon: "sharepoint",
+    authType: "replit_connector",
+    replitConnectorId: "ccfg_sharepoint_01K4E4GP3G31BE5PGVY2CNTDDK",
+    setupNote: "Connect via Replit OAuth for SharePoint Online access",
+    tools: [
+      {
+        name: "sharepoint_list_sites",
+        description: "List SharePoint Online sites",
+        parameters: {
+          type: "object",
+          properties: {
+            top: { type: "number", description: "Max number of sites (default 10)" },
+          },
+          required: [],
+        },
+      },
+      {
+        name: "sharepoint_list_documents",
+        description: "List documents in a SharePoint document library",
+        parameters: {
+          type: "object",
+          properties: {
+            site_id: { type: "string", description: "SharePoint site ID" },
+            drive_id: { type: "string", description: "Document library drive ID (optional)" },
+            top: { type: "number", description: "Max documents to return (default 10)" },
+          },
+          required: ["site_id"],
         },
       },
     ],
@@ -547,10 +730,113 @@ export function getToolsForIntegrations(integrationIds: string[]): IntegrationTo
   return tools;
 }
 
-export function isIntegrationAvailable(serviceId: string): boolean {
+export async function isIntegrationAvailable(serviceId: string): Promise<boolean> {
   const def = getIntegrationById(serviceId);
   if (!def) return false;
-  return !!process.env[def.envVar];
+
+  if (def.authType === "replit_connector") {
+    if (isReplitConnectorAvailable()) return true;
+    return !!(def.envVar && process.env[def.envVar]);
+  }
+  return !!(def.envVar && process.env[def.envVar]);
+}
+
+export async function getIntegrationToken(def: IntegrationDefinition): Promise<string | null> {
+  if (def.authType === "replit_connector" && def.replitConnectorId) {
+    const result = await getReplitConnectorToken(def.replitConnectorId);
+    if (result?.token) return result.token;
+  }
+  if (def.envVar && process.env[def.envVar]) {
+    return process.env[def.envVar]!;
+  }
+  return null;
+}
+
+export async function testIntegrationConnection(serviceId: string): Promise<{ success: boolean; message: string }> {
+  const def = getIntegrationById(serviceId);
+  if (!def) return { success: false, message: "Unknown integration" };
+
+  const token = await getIntegrationToken(def);
+  if (!token) {
+    if (def.authType === "replit_connector") {
+      return {
+        success: false,
+        message: `Replit OAuth connector not authorized. Connect this service in your Replit account settings, or add ${def.envVar || "an API key"} as a fallback secret.`,
+      };
+    }
+    return {
+      success: false,
+      message: `${def.envVar} environment secret is not set. ${def.setupNote}`,
+    };
+  }
+
+  return probeIntegration(serviceId, token);
+}
+
+async function probeIntegration(serviceId: string, token: string): Promise<{ success: boolean; message: string }> {
+  try {
+    switch (serviceId) {
+      case "github": {
+        const r = await fetch("https://api.github.com/user", { headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" } });
+        const d = await r.json() as { login?: string; message?: string };
+        return r.ok ? { success: true, message: `Connected as @${d.login}` } : { success: false, message: d.message || "Auth failed" };
+      }
+      case "linear": {
+        const r = await fetch("https://api.linear.app/graphql", { method: "POST", headers: { Authorization: token, "Content-Type": "application/json" }, body: JSON.stringify({ query: "{ viewer { name email } }" }) });
+        const d = await r.json() as { data?: { viewer?: { name: string; email: string } } };
+        return d.data?.viewer ? { success: true, message: `Connected as ${d.data.viewer.name}` } : { success: false, message: "Auth failed" };
+      }
+      case "notion": {
+        const r = await fetch("https://api.notion.com/v1/users/me", { headers: { Authorization: `Bearer ${token}`, "Notion-Version": "2022-06-28" } });
+        const d = await r.json() as { name?: string; message?: string };
+        return r.ok ? { success: true, message: `Connected as ${d.name || "Notion user"}` } : { success: false, message: d.message || "Auth failed" };
+      }
+      case "slack": {
+        const r = await fetch("https://slack.com/api/auth.test", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: "{}" });
+        const d = await r.json() as { ok: boolean; user?: string; error?: string };
+        return d.ok ? { success: true, message: `Connected as ${d.user}` } : { success: false, message: d.error || "Auth failed" };
+      }
+      case "telegram": {
+        const r = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+        const d = await r.json() as { ok: boolean; result?: { username: string }; description?: string };
+        return d.ok ? { success: true, message: `Bot: @${d.result?.username}` } : { success: false, message: d.description || "Auth failed" };
+      }
+      case "hubspot": {
+        const r = await fetch("https://api.hubapi.com/crm/v3/objects/contacts?limit=1", { headers: { Authorization: `Bearer ${token}` } });
+        return r.ok ? { success: true, message: "HubSpot CRM connection verified" } : { success: false, message: `HTTP ${r.status}` };
+      }
+      case "stripe": {
+        const r = await fetch("https://api.stripe.com/v1/customers?limit=1", { headers: { Authorization: `Bearer ${token}` } });
+        const d = await r.json() as { object?: string; error?: { message: string } };
+        return r.ok ? { success: true, message: "Stripe connection verified" } : { success: false, message: d.error?.message || "Auth failed" };
+      }
+      case "airtable": {
+        const r = await fetch("https://api.airtable.com/v0/meta/bases", { headers: { Authorization: `Bearer ${token}` } });
+        const d = await r.json() as { bases?: unknown[]; error?: { message: string } };
+        return r.ok ? { success: true, message: `Airtable connected, ${d.bases?.length ?? 0} base(s) accessible` } : { success: false, message: d.error?.message || "Auth failed" };
+      }
+      case "google_sheets":
+      case "gmail":
+      case "google_calendar":
+      case "google_drive":
+      case "google_docs": {
+        const r = await fetch("https://www.googleapis.com/oauth2/v1/tokeninfo", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: `access_token=${encodeURIComponent(token)}` });
+        const d = await r.json() as { email?: string; error?: string; expires_in?: number };
+        return d.email ? { success: true, message: `Google connection verified (${d.email})` } : { success: false, message: d.error || "Token invalid" };
+      }
+      case "outlook":
+      case "onedrive":
+      case "sharepoint": {
+        const r = await fetch("https://graph.microsoft.com/v1.0/me", { headers: { Authorization: `Bearer ${token}` } });
+        const d = await r.json() as { displayName?: string; userPrincipalName?: string; error?: { message: string } };
+        return r.ok ? { success: true, message: `Connected as ${d.displayName || d.userPrincipalName}` } : { success: false, message: d.error?.message || "Auth failed" };
+      }
+      default:
+        return { success: true, message: "Token present" };
+    }
+  } catch (err) {
+    return { success: false, message: String(err) };
+  }
 }
 
 export async function executeIntegrationTool(
@@ -560,16 +846,16 @@ export async function executeIntegrationTool(
   const integration = INTEGRATION_CATALOG.find(i => i.tools.some(t => t.name === toolName));
   if (!integration) return JSON.stringify({ error: `Unknown integration tool: ${toolName}` });
 
-  const apiKey = process.env[integration.envVar];
-  if (!apiKey) {
+  const token = await getIntegrationToken(integration);
+  if (!token) {
     return JSON.stringify({
-      error: `Integration '${integration.displayName}' is not configured. Please add ${integration.envVar} to your environment secrets.`,
+      error: `Integration '${integration.displayName}' is not connected. ${integration.authType === "replit_connector" ? "Please authorize the Replit connector or" : "Please"} add ${integration.envVar || "the required credential"} to your environment secrets.`,
       setup_instructions: integration.setupNote,
     });
   }
 
   try {
-    return await routeIntegrationCall(integration.id, toolName, args, apiKey);
+    return await routeIntegrationCall(integration.id, toolName, args, token);
   } catch (err) {
     return JSON.stringify({ error: String(err) });
   }
@@ -579,21 +865,25 @@ async function routeIntegrationCall(
   integrationId: string,
   toolName: string,
   args: Record<string, unknown>,
-  apiKey: string
+  token: string
 ): Promise<string> {
   switch (integrationId) {
-    case "github": return executeGitHub(toolName, args, apiKey);
-    case "linear": return executeLinear(toolName, args, apiKey);
-    case "notion": return executeNotion(toolName, args, apiKey);
-    case "slack": return executeSlack(toolName, args, apiKey);
-    case "telegram": return executeTelegram(toolName, args, apiKey);
-    case "hubspot": return executeHubSpot(toolName, args, apiKey);
-    case "stripe": return executeStripe(toolName, args, apiKey);
-    case "airtable": return executeAirtable(toolName, args, apiKey);
-    case "google_sheets": return executeGoogleSheets(toolName, args, apiKey);
-    case "gmail": return executeGmail(toolName, args, apiKey);
-    case "google_calendar": return executeGoogleCalendar(toolName, args, apiKey);
-    case "outlook": return executeOutlook(toolName, args, apiKey);
+    case "github": return executeGitHub(toolName, args, token);
+    case "linear": return executeLinear(toolName, args, token);
+    case "notion": return executeNotion(toolName, args, token);
+    case "slack": return executeSlack(toolName, args, token);
+    case "telegram": return executeTelegram(toolName, args, token);
+    case "hubspot": return executeHubSpot(toolName, args, token);
+    case "stripe": return executeStripe(toolName, args, token);
+    case "airtable": return executeAirtable(toolName, args, token);
+    case "google_sheets": return executeGoogleSheets(toolName, args, token);
+    case "gmail": return executeGmail(toolName, args, token);
+    case "google_calendar": return executeGoogleCalendar(toolName, args, token);
+    case "google_drive": return executeGoogleDrive(toolName, args, token);
+    case "google_docs": return executeGoogleDocs(toolName, args, token);
+    case "outlook": return executeOutlook(toolName, args, token);
+    case "onedrive": return executeOneDrive(toolName, args, token);
+    case "sharepoint": return executeSharePoint(toolName, args, token);
     default: return JSON.stringify({ error: `No executor for integration: ${integrationId}` });
   }
 }
@@ -892,12 +1182,14 @@ async function executeAirtable(toolName: string, args: Record<string, unknown>, 
   return JSON.stringify({ error: `Unknown Airtable tool: ${toolName}` });
 }
 
-async function executeGoogleSheets(toolName: string, args: Record<string, unknown>, serviceKey: string): Promise<string> {
-  let creds: { client_email: string; private_key: string };
-  try { creds = JSON.parse(serviceKey); } catch {
-    return JSON.stringify({ error: "Invalid GOOGLE_SHEETS_SERVICE_KEY — must be a JSON service account key" });
-  }
-  const getToken = async () => {
+async function executeGoogleSheets(toolName: string, args: Record<string, unknown>, token: string): Promise<string> {
+  let accessToken = token;
+
+  if (token.startsWith("{")) {
+    let creds: { client_email: string; private_key: string };
+    try { creds = JSON.parse(token); } catch {
+      return JSON.stringify({ error: "Invalid GOOGLE_SHEETS_SERVICE_KEY — must be a JSON service account key" });
+    }
     const jwt = await buildGoogleJWT(creds.client_email, creds.private_key, "https://www.googleapis.com/auth/spreadsheets");
     const res = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
@@ -905,11 +1197,10 @@ async function executeGoogleSheets(toolName: string, args: Record<string, unknow
       body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: jwt }).toString(),
     });
     const data = await res.json() as { access_token: string };
-    return data.access_token;
-  };
+    accessToken = data.access_token;
+  }
 
-  const token = await getToken();
-  const headers = { Authorization: `Bearer ${token}` };
+  const headers = { Authorization: `Bearer ${accessToken}` };
 
   if (toolName === "sheets_read_range") {
     const { spreadsheet_id, range } = args as Record<string, string>;
@@ -936,15 +1227,9 @@ async function buildGoogleJWT(clientEmail: string, privateKey: string, scope: st
   const now = Math.floor(Date.now() / 1000);
   const payload = btoa(JSON.stringify({ iss: clientEmail, scope, aud: "https://oauth2.googleapis.com/token", exp: now + 3600, iat: now })).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
   const signingInput = `${header}.${payload}`;
-
   const keyData = privateKey.replace(/-----.*?-----/g, "").replace(/\s/g, "");
   const binaryKey = Buffer.from(keyData, "base64");
-
-  const cryptoKey = await crypto.subtle.importKey(
-    "pkcs8", binaryKey,
-    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-    false, ["sign"]
-  );
+  const cryptoKey = await crypto.subtle.importKey("pkcs8", binaryKey, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);
   const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", cryptoKey, Buffer.from(signingInput));
   const sig = Buffer.from(signature).toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
   return `${signingInput}.${sig}`;
@@ -987,27 +1272,89 @@ async function executeGoogleCalendar(toolName: string, args: Record<string, unkn
   if (toolName === "gcal_list_events") {
     const maxResults = (args.max_results as number) || 5;
     const timeMin = (args.time_min as string) || new Date().toISOString();
-    const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?maxResults=${maxResults}&timeMin=${encodeURIComponent(timeMin)}&orderBy=startTime&singleEvents=true`, { headers });
+    const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?maxResults=${maxResults}&timeMin=${encodeURIComponent(timeMin)}&singleEvents=true&orderBy=startTime`, { headers });
     const data = await res.json() as { items?: {id:string;summary:string;start:{dateTime?:string;date?:string};location?:string}[] };
-    const events = (data.items || []).map(e => ({ id: e.id, title: e.summary, start: e.start.dateTime || e.start.date, location: e.location }));
+    const events = (data.items || []).map(e => ({ id: e.id, summary: e.summary, start: e.start.dateTime || e.start.date, location: e.location }));
     return JSON.stringify({ events, count: events.length });
   }
   if (toolName === "gcal_create_event") {
     const { summary, description, start, end, attendees } = args as Record<string, string>;
-    const attendeeList = attendees ? attendees.split(",").map(a => ({ email: a.trim() })) : [];
-    const body = {
-      summary, description,
-      start: { dateTime: start, timeZone: "UTC" },
-      end: { dateTime: end, timeZone: "UTC" },
-      attendees: attendeeList,
-    };
+    const attendeeList = attendees ? attendees.split(",").map(e => ({ email: e.trim() })) : undefined;
+    const body = { summary, description, start: { dateTime: start }, end: { dateTime: end }, attendees: attendeeList };
     const res = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
       method: "POST", headers, body: JSON.stringify(body),
     });
-    const event = await res.json() as { id: string; htmlLink: string; summary: string };
-    return JSON.stringify({ created: true, id: event.id, link: event.htmlLink, title: event.summary });
+    const data = await res.json() as { id?: string; htmlLink?: string; error?: { message: string } };
+    return data.id ? JSON.stringify({ created: true, id: data.id, link: data.htmlLink }) : JSON.stringify({ error: data.error?.message });
   }
   return JSON.stringify({ error: `Unknown Google Calendar tool: ${toolName}` });
+}
+
+async function executeGoogleDrive(toolName: string, args: Record<string, unknown>, token: string): Promise<string> {
+  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+
+  if (toolName === "gdrive_list_files") {
+    const maxResults = (args.max_results as number) || 10;
+    const folder_id = args.folder_id as string | undefined;
+    const q_parts = [args.query as string | undefined, folder_id ? `'${folder_id}' in parents` : undefined].filter(Boolean);
+    const q = q_parts.length ? `&q=${encodeURIComponent(q_parts.join(" and "))}` : "";
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files?pageSize=${maxResults}&fields=files(id,name,mimeType,size,modifiedTime,webViewLink)${q}`, { headers });
+    const data = await res.json() as { files?: {id:string;name:string;mimeType:string;size?:string;modifiedTime:string;webViewLink?:string}[] };
+    return JSON.stringify({ files: data.files || [], count: (data.files || []).length });
+  }
+  if (toolName === "gdrive_get_file") {
+    const { file_id, export_as_text } = args as Record<string, string>;
+    const metaRes = await fetch(`https://www.googleapis.com/drive/v3/files/${file_id}?fields=id,name,mimeType,size,modifiedTime,webViewLink`, { headers });
+    const meta = await metaRes.json() as { id: string; name: string; mimeType: string; webViewLink?: string };
+    if (export_as_text === "yes" && meta.mimeType?.startsWith("application/vnd.google-apps")) {
+      const exportRes = await fetch(`https://www.googleapis.com/drive/v3/files/${file_id}/export?mimeType=text/plain`, { headers });
+      const text = await exportRes.text();
+      return JSON.stringify({ ...meta, content: text.slice(0, 5000) });
+    }
+    return JSON.stringify(meta);
+  }
+  return JSON.stringify({ error: `Unknown Google Drive tool: ${toolName}` });
+}
+
+async function executeGoogleDocs(toolName: string, args: Record<string, unknown>, token: string): Promise<string> {
+  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+
+  if (toolName === "gdocs_get_document") {
+    const { document_id } = args as Record<string, string>;
+    const res = await fetch(`https://docs.googleapis.com/v1/documents/${document_id}`, { headers });
+    const doc = await res.json() as { title?: string; body?: { content?: { paragraph?: { elements?: { textRun?: { content: string } }[] } }[] }; error?: { message: string } };
+    if (doc.error) return JSON.stringify({ error: doc.error.message });
+    const text = doc.body?.content?.flatMap(c => c.paragraph?.elements?.map(e => e.textRun?.content || "") || []).join("") || "";
+    return JSON.stringify({ title: doc.title, content: text.slice(0, 5000) });
+  }
+  if (toolName === "gdocs_create_document") {
+    const { title, content } = args as Record<string, string>;
+    const res = await fetch("https://docs.googleapis.com/v1/documents", {
+      method: "POST", headers, body: JSON.stringify({ title }),
+    });
+    const doc = await res.json() as { documentId?: string; title?: string; error?: { message: string } };
+    if (doc.error) return JSON.stringify({ error: doc.error.message });
+    if (content && doc.documentId) {
+      await fetch(`https://docs.googleapis.com/v1/documents/${doc.documentId}:batchUpdate`, {
+        method: "POST", headers,
+        body: JSON.stringify({ requests: [{ insertText: { location: { index: 1 }, text: content } }] }),
+      });
+    }
+    return JSON.stringify({ created: true, document_id: doc.documentId, title: doc.title });
+  }
+  if (toolName === "gdocs_append_text") {
+    const { document_id, text } = args as Record<string, string>;
+    const docRes = await fetch(`https://docs.googleapis.com/v1/documents/${document_id}`, { headers });
+    const doc = await docRes.json() as { body?: { content?: { endIndex?: number }[] } };
+    const endIndex = Math.max(1, (doc.body?.content?.at(-1)?.endIndex ?? 2) - 1);
+    const res = await fetch(`https://docs.googleapis.com/v1/documents/${document_id}:batchUpdate`, {
+      method: "POST", headers,
+      body: JSON.stringify({ requests: [{ insertText: { location: { index: endIndex }, text: `\n${text}` } }] }),
+    });
+    const data = await res.json() as { error?: { message: string } };
+    return data.error ? JSON.stringify({ error: data.error.message }) : JSON.stringify({ appended: true });
+  }
+  return JSON.stringify({ error: `Unknown Google Docs tool: ${toolName}` });
 }
 
 async function executeOutlook(toolName: string, args: Record<string, unknown>, token: string): Promise<string> {
@@ -1015,25 +1362,66 @@ async function executeOutlook(toolName: string, args: Record<string, unknown>, t
 
   if (toolName === "outlook_send_email") {
     const { to, subject, body } = args as Record<string, string>;
-    const msgBody = {
-      message: {
-        subject,
-        body: { contentType: "Text", content: body },
-        toRecipients: [{ emailAddress: { address: to } }],
-      },
-    };
-    await fetch("https://graph.microsoft.com/v1.0/me/sendMail", {
-      method: "POST", headers, body: JSON.stringify(msgBody),
+    const msg = { message: { subject, body: { contentType: "HTML", content: body }, toRecipients: [{ emailAddress: { address: to } }] }, saveToSentItems: true };
+    const res = await fetch("https://graph.microsoft.com/v1.0/me/sendMail", {
+      method: "POST", headers, body: JSON.stringify(msg),
     });
-    return JSON.stringify({ sent: true, to, subject });
+    return res.ok ? JSON.stringify({ sent: true }) : JSON.stringify({ error: `HTTP ${res.status}` });
   }
   if (toolName === "outlook_list_calendar") {
     const top = (args.top as number) || 5;
     const now = new Date().toISOString();
-    const res = await fetch(`https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=${now}&endDateTime=${new Date(Date.now() + 30 * 86400000).toISOString()}&$top=${top}&$orderby=start/dateTime`, { headers });
-    const data = await res.json() as { value?: {id:string;subject:string;start:{dateTime:string};location:{displayName:string}}[] };
+    const res = await fetch(`https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=${now}&endDateTime=${new Date(Date.now() + 7 * 24 * 3600000).toISOString()}&$top=${top}&$orderby=start/dateTime`, { headers });
+    const data = await res.json() as { value?: {id:string;subject:string;start:{dateTime:string};location?:{displayName:string}}[]; error?: { message: string } };
+    if (data.error) return JSON.stringify({ error: data.error.message });
     const events = (data.value || []).map(e => ({ id: e.id, subject: e.subject, start: e.start.dateTime, location: e.location?.displayName }));
     return JSON.stringify({ events, count: events.length });
   }
   return JSON.stringify({ error: `Unknown Outlook tool: ${toolName}` });
+}
+
+async function executeOneDrive(toolName: string, args: Record<string, unknown>, token: string): Promise<string> {
+  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+
+  if (toolName === "onedrive_list_files") {
+    const folder_path = (args.folder_path as string) || "/";
+    const top = (args.top as number) || 10;
+    const path = folder_path === "/" ? "/me/drive/root/children" : `/me/drive/root:${folder_path}:/children`;
+    const res = await fetch(`https://graph.microsoft.com/v1.0${path}?$top=${top}&$select=id,name,size,lastModifiedDateTime,webUrl,file,folder`, { headers });
+    const data = await res.json() as { value?: {id:string;name:string;size?:number;lastModifiedDateTime:string;webUrl:string;file?:unknown;folder?:unknown}[]; error?: { message: string } };
+    if (data.error) return JSON.stringify({ error: data.error.message });
+    const files = (data.value || []).map(f => ({ id: f.id, name: f.name, size: f.size, type: f.folder ? "folder" : "file", modified: f.lastModifiedDateTime, url: f.webUrl }));
+    return JSON.stringify({ files, count: files.length });
+  }
+  if (toolName === "onedrive_get_file") {
+    const { item_id } = args as Record<string, string>;
+    const res = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${item_id}?$select=id,name,size,lastModifiedDateTime,webUrl,@microsoft.graph.downloadUrl`, { headers });
+    const data = await res.json() as { id?: string; name?: string; size?: number; webUrl?: string; "@microsoft.graph.downloadUrl"?: string; error?: { message: string } };
+    if (data.error) return JSON.stringify({ error: data.error.message });
+    return JSON.stringify({ id: data.id, name: data.name, size: data.size, url: data.webUrl, download_url: data["@microsoft.graph.downloadUrl"] });
+  }
+  return JSON.stringify({ error: `Unknown OneDrive tool: ${toolName}` });
+}
+
+async function executeSharePoint(toolName: string, args: Record<string, unknown>, token: string): Promise<string> {
+  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+
+  if (toolName === "sharepoint_list_sites") {
+    const top = (args.top as number) || 10;
+    const res = await fetch(`https://graph.microsoft.com/v1.0/sites?$top=${top}&search=*`, { headers });
+    const data = await res.json() as { value?: {id:string;name:string;displayName:string;webUrl:string}[]; error?: { message: string } };
+    if (data.error) return JSON.stringify({ error: data.error.message });
+    const sites = (data.value || []).map(s => ({ id: s.id, name: s.name, displayName: s.displayName, url: s.webUrl }));
+    return JSON.stringify({ sites, count: sites.length });
+  }
+  if (toolName === "sharepoint_list_documents") {
+    const { site_id, drive_id, top = 10 } = args as Record<string, unknown>;
+    const drivePath = drive_id ? `/sites/${site_id}/drives/${drive_id}/root/children` : `/sites/${site_id}/drive/root/children`;
+    const res = await fetch(`https://graph.microsoft.com/v1.0${drivePath}?$top=${top}&$select=id,name,size,lastModifiedDateTime,webUrl,file,folder`, { headers });
+    const data = await res.json() as { value?: {id:string;name:string;size?:number;lastModifiedDateTime:string;webUrl:string;file?:unknown;folder?:unknown}[]; error?: { message: string } };
+    if (data.error) return JSON.stringify({ error: data.error.message });
+    const docs = (data.value || []).map(f => ({ id: f.id, name: f.name, size: f.size, type: f.folder ? "folder" : "file", modified: f.lastModifiedDateTime, url: f.webUrl }));
+    return JSON.stringify({ documents: docs, count: docs.length });
+  }
+  return JSON.stringify({ error: `Unknown SharePoint tool: ${toolName}` });
 }

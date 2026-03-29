@@ -3,11 +3,12 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Plug, Search, CheckCircle2, XCircle, Loader2, Info, ChevronDown, ChevronUp, Zap
+  Plug, Search, CheckCircle2, XCircle, Loader2, Info, ChevronDown, ChevronUp, Zap, Shield
 } from "lucide-react";
 
 const CATEGORY_LABELS: Record<string, string> = {
-  google: "Google",
+  google: "Google Workspace",
+  microsoft: "Microsoft 365",
   dev: "Developer Tools",
   productivity: "Productivity",
   crm: "CRM & Data",
@@ -15,7 +16,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   communication: "Communication",
 };
 
-const CATEGORY_ORDER = ["google", "dev", "productivity", "crm", "finance", "communication"];
+const CATEGORY_ORDER = ["google", "microsoft", "dev", "productivity", "crm", "finance", "communication"];
 
 const SERVICE_ICONS: Record<string, string> = {
   github: "🐙",
@@ -29,7 +30,11 @@ const SERVICE_ICONS: Record<string, string> = {
   google_sheets: "📊",
   gmail: "📧",
   google_calendar: "📅",
+  google_drive: "🗄️",
+  google_docs: "📄",
   outlook: "📨",
+  onedrive: "☁️",
+  sharepoint: "🏢",
 };
 
 interface CatalogItem {
@@ -38,13 +43,16 @@ interface CatalogItem {
   category: string;
   description: string;
   icon: string;
-  envVar: string;
-  envVarLabel: string;
+  authType: "replit_connector" | "api_key";
+  replitConnectorId?: string;
+  envVar?: string;
+  envVarLabel?: string;
   setupNote: string;
   toolNames: string[];
   toolCount: number;
   available: boolean;
   enabled: boolean;
+  replitConnectorInfraAvailable: boolean;
 }
 
 export function AgentIntegrations({ agentId }: { agentId: number }) {
@@ -100,7 +108,7 @@ export function AgentIntegrations({ agentId }: { agentId: number }) {
       });
       const data = await res.json() as { ok: boolean; message?: string; error?: string };
       toast({
-        title: data.ok ? "Connection OK" : "Connection failed",
+        title: data.ok ? "Connection verified" : "Connection failed",
         description: data.message || data.error,
         variant: data.ok ? "default" : "destructive",
       });
@@ -125,6 +133,7 @@ export function AgentIntegrations({ agentId }: { agentId: number }) {
   }, {});
 
   const enabledCount = catalog.filter(c => c.enabled).length;
+  const totalTools = catalog.filter(c => c.enabled).reduce((sum, c) => sum + c.toolCount, 0);
 
   if (loading) {
     return (
@@ -142,8 +151,12 @@ export function AgentIntegrations({ agentId }: { agentId: number }) {
         <div className="flex-1">
           <p className="text-sm text-white font-medium">{enabledCount} integration{enabledCount !== 1 ? "s" : ""} active</p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            This agent can use {catalog.filter(c => c.enabled).reduce((sum, c) => sum + c.toolCount, 0)} tools from connected services
+            This agent can use {totalTools} tools from connected services
           </p>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Shield className="w-3.5 h-3.5 text-primary/60" />
+          <span className="font-mono">{catalog.filter(c => c.authType === "replit_connector").length} via OAuth</span>
         </div>
       </div>
 
@@ -203,6 +216,8 @@ function IntegrationCard({
   onTest: () => void;
   onExpand: () => void;
 }) {
+  const isOAuth = item.authType === "replit_connector";
+
   return (
     <div className={`glass-panel rounded-xl border transition-all ${item.enabled ? "border-primary/25 bg-primary/5" : "border-white/5"}`}>
       <div className="flex items-center gap-3 p-4">
@@ -213,20 +228,23 @@ function IntegrationCard({
 
         {/* Info */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-semibold text-white">{item.displayName}</span>
             {item.available
               ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
               : <XCircle className="w-3.5 h-3.5 text-orange-400 shrink-0" />
             }
             <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${item.available ? "bg-green-500/15 text-green-400" : "bg-orange-500/15 text-orange-400"}`}>
-              {item.available ? "configured" : "needs setup"}
+              {item.available ? "ready" : "needs setup"}
+            </span>
+            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${isOAuth ? "bg-blue-500/15 text-blue-400" : "bg-white/8 text-white/40"}`}>
+              {isOAuth ? "OAuth" : "API key"}
             </span>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5 truncate">{item.description}</p>
         </div>
 
-        {/* Tool count badge */}
+        {/* Tool count */}
         <div className="shrink-0 flex items-center gap-1 text-xs text-muted-foreground font-mono">
           <Zap className="w-3 h-3" />
           <span>{item.toolCount}</span>
@@ -243,7 +261,7 @@ function IntegrationCard({
             {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </Button>
 
-          {item.enabled && item.available && (
+          {item.enabled && (
             <Button
               variant="outline"
               size="sm"
@@ -260,9 +278,7 @@ function IntegrationCard({
             className={`h-7 px-3 text-xs font-semibold transition-all ${
               item.enabled
                 ? "bg-primary/15 text-primary hover:bg-destructive/15 hover:text-destructive border border-primary/20"
-                : item.available
-                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                  : "bg-white/5 text-muted-foreground border border-white/10"
+                : "bg-primary text-primary-foreground hover:bg-primary/90"
             }`}
             onClick={onToggle}
             disabled={toggling}
@@ -278,19 +294,37 @@ function IntegrationCard({
       {/* Expanded panel */}
       {expanded && (
         <div className="border-t border-white/5 px-4 pb-4 pt-3 space-y-3">
-          {!item.available && (
-            <div className="flex items-start gap-2.5 p-3 rounded-lg bg-orange-500/8 border border-orange-500/15">
-              <Info className="w-4 h-4 text-orange-400 mt-0.5 shrink-0" />
-              <div className="text-xs">
-                <p className="text-orange-300 font-medium mb-1">Setup required</p>
-                <p className="text-muted-foreground">{item.setupNote}</p>
+          {/* Auth info */}
+          <div className={`flex items-start gap-2.5 p-3 rounded-lg ${isOAuth ? "bg-blue-500/8 border border-blue-500/15" : "bg-white/3 border border-white/8"}`}>
+            <Shield className={`w-4 h-4 mt-0.5 shrink-0 ${isOAuth ? "text-blue-400" : "text-muted-foreground"}`} />
+            <div className="text-xs">
+              <p className={`font-medium mb-1 ${isOAuth ? "text-blue-300" : "text-white/70"}`}>
+                {isOAuth ? "Replit OAuth connector" : "API key authentication"}
+              </p>
+              <p className="text-muted-foreground">{item.setupNote}</p>
+              {!isOAuth && item.envVar && (
                 <p className="text-muted-foreground mt-1.5">
-                  Add secret: <code className="text-orange-300 bg-black/30 px-1 rounded">{item.envVar}</code> ({item.envVarLabel})
+                  Secret: <code className="text-orange-300 bg-black/30 px-1 rounded">{item.envVar}</code>
+                  {item.envVarLabel && <span className="ml-1 text-white/40">({item.envVarLabel})</span>}
                 </p>
-              </div>
+              )}
+              {isOAuth && item.envVar && (
+                <p className="text-muted-foreground mt-1.5">
+                  Fallback: <code className="text-white/40 bg-black/30 px-1 rounded">{item.envVar}</code>
+                  <span className="ml-1 text-white/30">({item.envVarLabel})</span>
+                </p>
+              )}
+              {!item.available && (
+                <p className="text-orange-400 mt-2 font-medium">
+                  {isOAuth
+                    ? "Not yet authorized. Set up OAuth via Replit integrations or add the fallback API key."
+                    : `Add the ${item.envVar} secret to enable this integration.`}
+                </p>
+              )}
             </div>
-          )}
+          </div>
 
+          {/* Tools list */}
           <div>
             <p className="text-xs text-muted-foreground font-mono uppercase tracking-wider mb-2">Available tools</p>
             <div className="flex flex-wrap gap-1.5">

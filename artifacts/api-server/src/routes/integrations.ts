@@ -2,7 +2,12 @@ import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, agentIntegrationsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
-import { INTEGRATION_CATALOG, isIntegrationAvailable } from "../services/integrations-catalog";
+import {
+  INTEGRATION_CATALOG,
+  isIntegrationAvailable,
+  testIntegrationConnection,
+} from "../services/integrations-catalog.js";
+import { isReplitConnectorAvailable } from "../services/connector-token.js";
 
 const router: IRouter = Router();
 
@@ -18,20 +23,23 @@ router.get("/agents/:agentId/integrations/catalog", async (req, res): Promise<vo
 
   const enabledSet = new Set(enabled.map(e => e.serviceId));
 
-  const catalog = INTEGRATION_CATALOG.map(def => ({
+  const catalog = await Promise.all(INTEGRATION_CATALOG.map(async def => ({
     id: def.id,
     displayName: def.displayName,
     category: def.category,
     description: def.description,
     icon: def.icon,
+    authType: def.authType,
+    replitConnectorId: def.replitConnectorId,
     envVar: def.envVar,
     envVarLabel: def.envVarLabel,
     setupNote: def.setupNote,
     toolNames: def.tools.map(t => t.name),
     toolCount: def.tools.length,
-    available: isIntegrationAvailable(def.id),
+    available: await isIntegrationAvailable(def.id),
     enabled: enabledSet.has(def.id),
-  }));
+    replitConnectorInfraAvailable: isReplitConnectorAvailable(),
+  })));
 
   res.json(catalog);
 });
@@ -48,13 +56,25 @@ router.post("/agents/:agentId/integrations/:serviceId/enable", async (req, res):
 
   await db
     .insert(agentIntegrationsTable)
-    .values({ agentId, serviceId, isEnabled: true })
+    .values({
+      agentId,
+      serviceId,
+      isEnabled: true,
+      connectorConfigId: def.replitConnectorId ?? null,
+      authType: def.authType,
+      credentialKey: def.envVar ?? null,
+    })
     .onConflictDoUpdate({
       target: [agentIntegrationsTable.agentId, agentIntegrationsTable.serviceId],
-      set: { isEnabled: true },
+      set: {
+        isEnabled: true,
+        connectorConfigId: def.replitConnectorId ?? null,
+        authType: def.authType,
+        credentialKey: def.envVar ?? null,
+      },
     });
 
-  res.json({ enabled: true, serviceId });
+  res.json({ enabled: true, serviceId, authType: def.authType, connectorConfigId: def.replitConnectorId });
 });
 
 router.post("/agents/:agentId/integrations/:serviceId/disable", async (req, res): Promise<void> => {
@@ -71,20 +91,9 @@ router.post("/agents/:agentId/integrations/:serviceId/disable", async (req, res)
 
 router.post("/agents/:agentId/integrations/:serviceId/test", async (req, res): Promise<void> => {
   const serviceId = req.params.serviceId;
-  const def = INTEGRATION_CATALOG.find(i => i.id === serviceId);
 
-  if (!def) {
-    res.status(404).json({ ok: false, error: `Unknown integration: ${serviceId}` });
-    return;
-  }
-
-  const available = isIntegrationAvailable(serviceId);
-  if (!available) {
-    res.json({ ok: false, error: `${def.envVar} environment variable is not set. ${def.setupNote}` });
-    return;
-  }
-
-  res.json({ ok: true, message: `${def.displayName} credentials are configured and ready` });
+  const result = await testIntegrationConnection(serviceId);
+  res.json({ ok: result.success, message: result.message });
 });
 
 export default router;
