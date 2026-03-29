@@ -40,11 +40,32 @@ router.post("/agents/:agentId/tools", async (req, res): Promise<void> => {
     return;
   }
 
+  const sanitizedName = body.name.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "");
+  if (!sanitizedName || !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(sanitizedName)) {
+    res.status(400).json({ error: "Tool name must start with a letter or underscore and contain only letters, numbers, or underscores" });
+    return;
+  }
+
+  try { new URL(body.webhookUrl); } catch {
+    res.status(400).json({ error: "webhookUrl must be a valid URL" });
+    return;
+  }
+
+  if (body.parametersSchema !== undefined && body.parametersSchema !== null) {
+    try {
+      const parsed = JSON.parse(body.parametersSchema);
+      if (!Array.isArray(parsed)) throw new Error("not an array");
+    } catch {
+      res.status(400).json({ error: "parametersSchema must be a valid JSON array" });
+      return;
+    }
+  }
+
   const [tool] = await db
     .insert(agentToolsTable)
     .values({
       agentId,
-      name: body.name.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, ""),
+      name: sanitizedName,
       description: body.description,
       parametersSchema: body.parametersSchema ?? "[]",
       webhookUrl: body.webhookUrl,
@@ -72,10 +93,36 @@ router.patch("/agents/:agentId/tools/:id", async (req, res): Promise<void> => {
   }>;
 
   const updateData: Record<string, unknown> = {};
-  if (body.name !== undefined) updateData.name = body.name.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "");
+
+  if (body.name !== undefined) {
+    const sanitized = body.name.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "");
+    if (!sanitized || !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(sanitized)) {
+      res.status(400).json({ error: "Tool name must start with a letter or underscore and contain only letters, numbers, or underscores" });
+      return;
+    }
+    updateData.name = sanitized;
+  }
+
   if (body.description !== undefined) updateData.description = body.description;
-  if (body.parametersSchema !== undefined) updateData.parametersSchema = body.parametersSchema;
-  if (body.webhookUrl !== undefined) updateData.webhookUrl = body.webhookUrl;
+
+  if (body.parametersSchema !== undefined) {
+    try {
+      const parsed = JSON.parse(body.parametersSchema);
+      if (!Array.isArray(parsed)) throw new Error("not an array");
+      updateData.parametersSchema = body.parametersSchema;
+    } catch {
+      res.status(400).json({ error: "parametersSchema must be a valid JSON array" });
+      return;
+    }
+  }
+
+  if (body.webhookUrl !== undefined) {
+    try { new URL(body.webhookUrl); } catch {
+      res.status(400).json({ error: "webhookUrl must be a valid URL" });
+      return;
+    }
+    updateData.webhookUrl = body.webhookUrl;
+  }
 
   const [tool] = await db
     .update(agentToolsTable)
