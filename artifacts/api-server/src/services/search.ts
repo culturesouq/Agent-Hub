@@ -4,6 +4,15 @@ export interface SearchResult {
   url: string;
 }
 
+function isValidHttpUrl(str: string): boolean {
+  try {
+    const url = new URL(str);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export async function braveWebSearch(query: string): Promise<SearchResult[]> {
   const apiKey = process.env.BRAVE_SEARCH_API_KEY;
   if (!apiKey) {
@@ -40,11 +49,14 @@ export async function braveWebSearch(query: string): Promise<SearchResult[]> {
     };
 
     const results = data?.web?.results ?? [];
-    return results.slice(0, 5).map((r) => ({
-      title: r.title ?? "",
-      snippet: r.description ?? "",
-      url: r.url ?? "",
-    }));
+    return results
+      .slice(0, 5)
+      .map((r) => ({
+        title: r.title ?? "",
+        snippet: r.description ?? "",
+        url: r.url ?? "",
+      }))
+      .filter((r) => isValidHttpUrl(r.url));
   } catch (err) {
     console.error("Brave Search error:", err);
     return [];

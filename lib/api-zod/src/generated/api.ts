@@ -440,4 +440,5 @@ export const PublicChatBody = zod.object({
 export const PublicChatResponse = zod.object({
   response: zod.string(),
   agentName: zod.string(),
+  sources: zod.array(zod.string()).optional(),
 });

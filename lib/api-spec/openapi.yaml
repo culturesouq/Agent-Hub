@@ -970,6 +970,10 @@ components:
           type: string
         agentName:
           type: string
+        sources:
+          type: array
+          items:
+            type: string
       required:
         - response
         - agentName

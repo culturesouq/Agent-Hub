@@ -226,6 +226,7 @@ export interface PublicChatBody {
 export interface PublicChatResponse {
   response: string;
   agentName: string;
+  sources?: string[];
 }
 
 export type UploadKnowledgeFileBody = {

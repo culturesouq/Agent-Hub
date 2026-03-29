@@ -9,4 +9,5 @@
 export interface PublicChatResponse {
   response: string;
   agentName: string;
+  sources?: string[];
 }
