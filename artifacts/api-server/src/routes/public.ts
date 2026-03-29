@@ -42,7 +42,10 @@ router.post("/public/chat", async (req, res): Promise<void> => {
     db.select().from(agentMemoriesTable).where(eq(agentMemoriesTable.agentId, agent.id)).orderBy(asc(agentMemoriesTable.createdAt)),
   ]);
 
-  const systemPrompt = buildSystemPrompt(agent, knowledge, instructions, memories);
+  const systemPrompt = buildSystemPrompt(
+    { ...agent, searchAvailable: !!process.env.BRAVE_SEARCH_API_KEY },
+    knowledge, instructions, memories
+  );
 
   const history = (body.conversationHistory || []).slice(-20).map(m => ({
     role: m.role as "user" | "assistant",
@@ -144,7 +147,7 @@ router.post("/public/chat", async (req, res): Promise<void> => {
   res.json({
     response: responseText,
     agentName: agent.name,
-    sources: allSourceUrls.length > 0 ? allSourceUrls : undefined,
+    sources: allSourceUrls.length > 0 ? [...new Set(allSourceUrls)] : undefined,
   });
 });
 

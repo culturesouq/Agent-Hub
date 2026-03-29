@@ -974,6 +974,7 @@ components:
           type: array
           items:
             type: string
+            format: uri
       required:
         - response
         - agentName

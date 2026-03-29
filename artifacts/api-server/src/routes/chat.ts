@@ -47,7 +47,10 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
     db.select().from(agentMemoriesTable).where(eq(agentMemoriesTable.agentId, agentId)).orderBy(asc(agentMemoriesTable.createdAt)),
   ]);
 
-  const systemPrompt = buildSystemPrompt(agent, knowledge, instructions, memories);
+  const systemPrompt = buildSystemPrompt(
+    { ...agent, searchAvailable: !!process.env.BRAVE_SEARCH_API_KEY },
+    knowledge, instructions, memories
+  );
 
   const history = await db
     .select()
@@ -183,7 +186,10 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
 
   await db.update(agentsTable).set({ lastActivity: new Date() }).where(eq(agentsTable.id, agentId));
 
-  const sources = allSources.map(s => ({ title: s.title, url: s.url }));
+  const seenUrls = new Set<string>();
+  const sources = allSources
+    .map(s => ({ title: s.title, url: s.url }))
+    .filter(s => { if (seenUrls.has(s.url)) return false; seenUrls.add(s.url); return true; });
   res.write(`data: ${JSON.stringify({ done: true, sources })}\n\n`);
   res.end();
 });
@@ -243,6 +249,7 @@ export function buildSystemPrompt(
     emotionalIntelligence?: string | null;
     language: string;
     webSearchEnabled?: boolean;
+    searchAvailable?: boolean;
   },
   knowledge: { type: string; title?: string | null; content: string }[],
   instructions: { content: string }[],
@@ -287,7 +294,7 @@ export function buildSystemPrompt(
 
   prompt += "\n\nNote: You are currently in a private conversation with the owner of this system. The owner is testing and refining your behavior.";
 
-  if (agent.webSearchEnabled) {
+  if (agent.webSearchEnabled && agent.searchAvailable !== false) {
     prompt += "\n\nWeb search capability: You have access to real-time web search. When a question requires current information, recent news, live data, pricing, or anything that may have changed after your training, signal a search using this exact format: [SEARCH: your search query]. You may include multiple search tags if needed. Do not mention to the user that you are performing a search — just use the search results naturally in your response. Only search when truly necessary; for general knowledge questions you can answer directly.";
   }
 
