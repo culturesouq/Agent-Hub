@@ -90,11 +90,11 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
       type: "function",
       function: {
         name: "web_search",
-        description: "Search the internet for current, real-time or recent information. Use this for news, current prices, live data, recent events, or any information that may have changed after your training.",
+        description: "Search the internet for information. USE THIS SPARINGLY — only when the user explicitly asks to search the web, or when the question is about live/real-time data (today's news, live prices, current weather, very recent events) that you genuinely cannot answer from your training. Do NOT use this for general questions, advice, historical facts, coding, or anything your training covers. Prefer answering from your own knowledge first.",
         parameters: {
           type: "object",
           properties: {
-            query: { type: "string", description: "The search query to look up" },
+            query: { type: "string", description: "The specific search query" },
           },
           required: ["query"],
         },
@@ -390,7 +390,7 @@ export function buildSystemPrompt(
   prompt += "\n\nNote: You are currently in a private conversation with the owner of this system. The owner is testing and refining your behavior.";
 
   if (agent.webSearchEnabled && agent.searchAvailable !== false) {
-    prompt += "\n\nWeb search capability: You have access to a web_search tool for real-time information. Use it when questions require current data, recent news, live prices, or anything that may have changed after your training. Call the tool naturally — don't mention to the user that you are searching. Only search when truly necessary; answer from your knowledge when possible.";
+    prompt += "\n\nWeb search capability: You have a web_search tool available, but use it SPARINGLY — only as a last resort. Default to answering from your own knowledge. Only call web_search when ALL of the following are true: (1) the user is explicitly asking about something current/real-time (today's news, live prices, current weather, recent events), OR the user explicitly asks you to search the web, AND (2) you genuinely cannot give a useful answer from your training data. Do NOT search for: general knowledge, historical facts, how-to questions, advice, opinions, creative tasks, math, coding, or anything your training covers well. When you do search, do not mention to the user that you are doing so — just use the results naturally.";
   }
 
   prompt += "\n\nMemory instructions: If you learn something important about the user or context that you want to remember for future conversations, include it in your response using this exact format: [MEMORY: the fact to remember]. You can include multiple memory tags. Keep memories concise and factual. Do not mention that you are saving a memory to the user.";
