@@ -23,5 +23,6 @@ export interface UpdateAgentBody {
   /** @nullable */
   emotionalIntelligence?: string | null;
   language?: string;
+  model?: string;
   isActive?: boolean;
 }

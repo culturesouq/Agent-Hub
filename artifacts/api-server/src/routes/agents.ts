@@ -47,6 +47,7 @@ router.post("/agents", async (req, res): Promise<void> => {
     communicationStyle?: string | null;
     emotionalIntelligence?: string | null;
     language?: string;
+    model?: string;
   };
 
   if (!body.name) {
@@ -66,6 +67,7 @@ router.post("/agents", async (req, res): Promise<void> => {
       communicationStyle: body.communicationStyle ?? null,
       emotionalIntelligence: body.emotionalIntelligence ?? null,
       language: body.language ?? "english",
+      model: body.model ?? "openai/gpt-4.1-mini",
     })
     .returning();
 
@@ -130,6 +132,7 @@ router.patch("/agents/:id", async (req, res): Promise<void> => {
     communicationStyle: string | null;
     emotionalIntelligence: string | null;
     language: string;
+    model: string;
     isActive: boolean;
   }>;
 
@@ -143,6 +146,7 @@ router.patch("/agents/:id", async (req, res): Promise<void> => {
   if (body.communicationStyle !== undefined) updateData.communicationStyle = body.communicationStyle;
   if (body.emotionalIntelligence !== undefined) updateData.emotionalIntelligence = body.emotionalIntelligence;
   if (body.language !== undefined) updateData.language = body.language;
+  if (body.model !== undefined) updateData.model = body.model;
   if (body.isActive !== undefined) updateData.isActive = body.isActive;
 
   const [agent] = await db

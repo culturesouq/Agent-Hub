@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, sql } from "drizzle-orm";
 import { db, agentsTable, connectionsTable, knowledgeTable, instructionsTable, activityTable } from "@workspace/db";
-import { openai } from "@workspace/integrations-openai-ai-server";
+import { openrouter } from "@workspace/integrations-openrouter-ai";
 import { buildSystemPrompt } from "./chat";
 
 const router: IRouter = Router();
@@ -45,12 +45,11 @@ router.post("/public/chat", async (req, res): Promise<void> => {
     content: m.content,
   }));
 
-  const isComplex = body.message.length > 200 || body.message.includes("analyze") || body.message.includes("explain");
-  const model = isComplex ? "gpt-5.2" : "gpt-5-mini";
+  const model = agent.model || "openai/gpt-4.1-mini";
 
-  const completion = await openai.chat.completions.create({
+  const completion = await openrouter.chat.completions.create({
     model,
-    max_completion_tokens: 8192,
+    max_tokens: 8192,
     messages: [
       { role: "system", content: systemPrompt },
       ...history,

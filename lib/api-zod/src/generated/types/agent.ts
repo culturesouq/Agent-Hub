@@ -24,6 +24,7 @@ export interface Agent {
   /** @nullable */
   emotionalIntelligence?: string | null;
   language: string;
+  model?: string;
   isActive: boolean;
   connectionsCount: number;
   /** @nullable */

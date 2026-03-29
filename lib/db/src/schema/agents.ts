@@ -13,6 +13,7 @@ export const agentsTable = pgTable("agents", {
   communicationStyle: text("communication_style"),
   emotionalIntelligence: text("emotional_intelligence"),
   language: text("language").notNull().default("english"),
+  model: text("model").notNull().default("openai/gpt-4.1-mini"),
   isActive: boolean("is_active").notNull().default(true),
   lastActivity: timestamp("last_activity", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

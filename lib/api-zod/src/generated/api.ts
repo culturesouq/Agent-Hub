@@ -46,6 +46,7 @@ export const ListAgentsResponseItem = zod.object({
   communicationStyle: zod.string().nullish(),
   emotionalIntelligence: zod.string().nullish(),
   language: zod.string(),
+  model: zod.string().optional(),
   isActive: zod.boolean(),
   connectionsCount: zod.number(),
   lastActivity: zod.string().nullish(),
@@ -67,6 +68,7 @@ export const CreateAgentBody = zod.object({
   communicationStyle: zod.string().nullish(),
   emotionalIntelligence: zod.string().nullish(),
   language: zod.string().optional(),
+  model: zod.string().optional(),
 });
 
 /**
@@ -87,6 +89,7 @@ export const GetAgentResponse = zod.object({
   communicationStyle: zod.string().nullish(),
   emotionalIntelligence: zod.string().nullish(),
   language: zod.string(),
+  model: zod.string().optional(),
   isActive: zod.boolean(),
   connectionsCount: zod.number(),
   lastActivity: zod.string().nullish(),
@@ -111,6 +114,7 @@ export const UpdateAgentBody = zod.object({
   communicationStyle: zod.string().nullish(),
   emotionalIntelligence: zod.string().nullish(),
   language: zod.string().optional(),
+  model: zod.string().optional(),
   isActive: zod.boolean().optional(),
 });
 
@@ -125,6 +129,7 @@ export const UpdateAgentResponse = zod.object({
   communicationStyle: zod.string().nullish(),
   emotionalIntelligence: zod.string().nullish(),
   language: zod.string(),
+  model: zod.string().optional(),
   isActive: zod.boolean(),
   connectionsCount: zod.number(),
   lastActivity: zod.string().nullish(),
@@ -157,6 +162,7 @@ export const ToggleAgentStatusResponse = zod.object({
   communicationStyle: zod.string().nullish(),
   emotionalIntelligence: zod.string().nullish(),
   language: zod.string(),
+  model: zod.string().optional(),
   isActive: zod.boolean(),
   connectionsCount: zod.number(),
   lastActivity: zod.string().nullish(),

@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, asc } from "drizzle-orm";
 import { db, agentsTable, chatMessagesTable, knowledgeTable, instructionsTable } from "@workspace/db";
-import { openai } from "@workspace/integrations-openai-ai-server";
+import { openrouter } from "@workspace/integrations-openrouter-ai";
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -68,12 +68,11 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
 
   let fullResponse = "";
 
-  const isComplex = body.message.length > 200 || body.message.includes("analyze") || body.message.includes("explain");
-  const model = isComplex ? "gpt-5.2" : "gpt-5-mini";
+  const model = agent.model || "openai/gpt-4.1-mini";
 
-  const stream = await openai.chat.completions.create({
+  const stream = await openrouter.chat.completions.create({
     model,
-    max_completion_tokens: 8192,
+    max_tokens: 8192,
     messages: [
       { role: "system", content: systemPrompt },
       ...chatHistory,
@@ -110,8 +109,17 @@ router.delete("/agents/:agentId/chat", async (req, res): Promise<void> => {
   res.sendStatus(204);
 });
 
-function buildSystemPrompt(
-  agent: { name: string; backstory?: string | null; personality?: string | null; coreValues?: string | null; expertiseAreas?: string | null; communicationStyle?: string | null; emotionalIntelligence?: string | null; language: string },
+export function buildSystemPrompt(
+  agent: {
+    name: string;
+    backstory?: string | null;
+    personality?: string | null;
+    coreValues?: string | null;
+    expertiseAreas?: string | null;
+    communicationStyle?: string | null;
+    emotionalIntelligence?: string | null;
+    language: string;
+  },
   knowledge: { type: string; title?: string | null; content: string }[],
   instructions: { content: string }[]
 ): string {
@@ -150,5 +158,4 @@ function buildSystemPrompt(
   return prompt;
 }
 
-export { buildSystemPrompt };
 export default router;
