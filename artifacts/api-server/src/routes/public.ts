@@ -64,7 +64,7 @@ router.post("/public/chat", async (req, res): Promise<void> => {
 
   const memoryRegex = /\[MEMORY:\s*([^\]]+)\]/gi;
   const memoryMatches = [...rawResponse.matchAll(memoryRegex)];
-  const responseText = rawResponse.replace(/\[MEMORY:[^\]]*\]/gi, "").replace(/\s+/g, " ").trim();
+  const responseText = rawResponse.replace(/\[MEMORY:[^\]]*\]/gi, "").trim();
 
   for (const match of memoryMatches) {
     const memContent = match[1]?.trim();

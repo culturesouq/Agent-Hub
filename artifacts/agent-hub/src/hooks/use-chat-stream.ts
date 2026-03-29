@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { getGetChatHistoryQueryKey } from "@workspace/api-client-react";
+import { getGetChatHistoryQueryKey, getListMemoriesQueryKey } from "@workspace/api-client-react";
 
 export function useChatStream(agentId: number) {
   const [isStreaming, setIsStreaming] = useState(false);
@@ -78,6 +78,8 @@ export function useChatStream(agentId: number) {
       setIsStreaming(false);
       // Invalidate chat history to get the final persisted assistant message
       queryClient.invalidateQueries({ queryKey: getGetChatHistoryQueryKey(agentId) });
+      // Invalidate memories so badge and list update immediately after agent saves new memories
+      queryClient.invalidateQueries({ queryKey: getListMemoriesQueryKey(agentId) });
     }
   };
 
