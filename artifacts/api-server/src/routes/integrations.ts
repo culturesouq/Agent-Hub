@@ -4,9 +4,10 @@ import { db, agentIntegrationsTable, agentsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import {
   INTEGRATION_CATALOG,
-  isIntegrationAvailable,
   testIntegrationConnection,
 } from "../services/integrations-catalog.js";
+import { isServiceConnected, OAUTH_SERVICE_MAP, API_KEY_SERVICES } from "../services/token-resolver.js";
+import { OAUTH_PROVIDERS } from "../services/oauth-providers.js";
 
 const router: IRouter = Router();
 
@@ -31,20 +32,37 @@ router.get("/agents/:agentId/integrations/catalog", async (req, res): Promise<vo
 
   const enabledSet = new Set(enabled.map(e => e.serviceId));
 
-  const catalog = INTEGRATION_CATALOG.map(def => ({
-    id: def.id,
-    displayName: def.displayName,
-    category: def.category,
-    description: def.description,
-    icon: def.icon,
-    envVar: def.envVar,
-    envVarLabel: def.envVarLabel,
-    setupNote: def.setupNote,
-    toolNames: def.tools.map(t => t.name),
-    toolCount: def.tools.length,
-    available: isIntegrationAvailable(def.id),
-    enabled: enabledSet.has(def.id),
-  }));
+  const catalog = await Promise.all(
+    INTEGRATION_CATALOG.map(async def => {
+      const { connected, accountLabel } = await isServiceConnected(def.id);
+      const oauthProviderId = OAUTH_SERVICE_MAP[def.id];
+      const oauthProvider = oauthProviderId ? OAUTH_PROVIDERS[oauthProviderId] : undefined;
+      const oauthReady = oauthProviderId
+        ? !!(process.env[oauthProvider?.clientIdEnvVar || ""])
+        : false;
+
+      return {
+        id: def.id,
+        displayName: def.displayName,
+        category: def.category,
+        description: def.description,
+        icon: def.icon,
+        authType: def.authType,
+        oauthProvider: oauthProviderId ?? null,
+        oauthReady,
+        envVar: def.envVar,
+        envVarLabel: def.envVarLabel,
+        apiKeyLabel: def.apiKeyLabel ?? null,
+        setupNote: def.setupNote,
+        toolNames: def.tools.map(t => t.name),
+        toolCount: def.tools.length,
+        available: connected,
+        connected,
+        accountLabel: accountLabel ?? null,
+        enabled: enabledSet.has(def.id),
+      };
+    })
+  );
 
   res.json(catalog);
 });

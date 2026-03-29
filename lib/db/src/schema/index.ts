@@ -8,3 +8,5 @@ export * from "./memories";
 export * from "./tools";
 export * from "./automations";
 export * from "./integrations";
+export * from "./oauthConnections";
+export * from "./serviceApiKeys";

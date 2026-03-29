@@ -14,8 +14,11 @@ export interface IntegrationDefinition {
   category: "google" | "microsoft" | "dev" | "productivity" | "crm" | "finance" | "communication";
   description: string;
   icon: string;
+  authType: "oauth" | "api_key";
+  oauthProvider?: string;
   envVar: string;
   envVarLabel: string;
+  apiKeyLabel?: string;
   setupNote: string;
   tools: IntegrationTool[];
 }
@@ -26,6 +29,8 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     id: "gmail",
     displayName: "Gmail",
     category: "google",
+    authType: "oauth" as const,
+    oauthProvider: "google",
     description: "Send emails, read inbox, and search messages via Gmail",
     icon: "gmail",
     envVar: "GOOGLE_OAUTH_TOKEN",
@@ -40,6 +45,8 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     id: "google_calendar",
     displayName: "Google Calendar",
     category: "google",
+    authType: "oauth" as const,
+    oauthProvider: "google",
     description: "List upcoming events and create calendar events",
     icon: "google_calendar",
     envVar: "GOOGLE_OAUTH_TOKEN",
@@ -54,6 +61,8 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     id: "google_sheets",
     displayName: "Google Sheets",
     category: "google",
+    authType: "oauth" as const,
+    oauthProvider: "google",
     description: "Read, write and append data to Google Sheets",
     icon: "google_sheets",
     envVar: "GOOGLE_SHEETS_SERVICE_KEY",
@@ -68,6 +77,8 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     id: "google_drive",
     displayName: "Google Drive",
     category: "google",
+    authType: "oauth" as const,
+    oauthProvider: "google",
     description: "Search, list, and read files in Google Drive",
     icon: "google_drive",
     envVar: "GOOGLE_OAUTH_TOKEN",
@@ -82,6 +93,8 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     id: "google_docs",
     displayName: "Google Docs",
     category: "google",
+    authType: "oauth" as const,
+    oauthProvider: "google",
     description: "Read, create, and update Google Docs documents",
     icon: "google_docs",
     envVar: "GOOGLE_OAUTH_TOKEN",
@@ -98,6 +111,8 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     id: "outlook",
     displayName: "Microsoft Outlook",
     category: "microsoft",
+    authType: "oauth" as const,
+    oauthProvider: "microsoft",
     description: "Send emails and read calendar events via Microsoft 365",
     icon: "outlook",
     envVar: "MICROSOFT_GRAPH_TOKEN",
@@ -112,6 +127,8 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     id: "onedrive",
     displayName: "Microsoft OneDrive",
     category: "microsoft",
+    authType: "oauth" as const,
+    oauthProvider: "microsoft",
     description: "List, read, and access files in Microsoft OneDrive",
     icon: "onedrive",
     envVar: "MICROSOFT_GRAPH_TOKEN",
@@ -126,6 +143,8 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     id: "sharepoint",
     displayName: "SharePoint Online",
     category: "microsoft",
+    authType: "oauth" as const,
+    oauthProvider: "microsoft",
     description: "List sites, libraries, and documents in SharePoint",
     icon: "sharepoint",
     envVar: "MICROSOFT_GRAPH_TOKEN",
@@ -141,6 +160,8 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     id: "github",
     displayName: "GitHub",
     category: "dev",
+    authType: "oauth" as const,
+    oauthProvider: "github",
     description: "List repos, create/search issues, check PRs and code",
     icon: "github",
     envVar: "GITHUB_TOKEN",
@@ -157,6 +178,7 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     id: "linear",
     displayName: "Linear",
     category: "dev",
+    authType: "api_key" as const,
     description: "Manage issues, projects, and teams in Linear",
     icon: "linear",
     envVar: "LINEAR_API_KEY",
@@ -172,6 +194,8 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     id: "notion",
     displayName: "Notion",
     category: "productivity",
+    authType: "oauth" as const,
+    oauthProvider: "notion",
     description: "Search pages, read content, create and update pages",
     icon: "notion",
     envVar: "NOTION_TOKEN",
@@ -187,6 +211,7 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     id: "airtable",
     displayName: "Airtable",
     category: "productivity",
+    authType: "api_key" as const,
     description: "Read and write records in Airtable bases and tables",
     icon: "airtable",
     envVar: "AIRTABLE_API_KEY",
@@ -202,6 +227,8 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     id: "hubspot",
     displayName: "HubSpot",
     category: "crm",
+    authType: "oauth" as const,
+    oauthProvider: "hubspot",
     description: "Manage contacts, deals, and companies in HubSpot CRM",
     icon: "hubspot",
     envVar: "HUBSPOT_API_KEY",
@@ -217,6 +244,8 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     id: "linkedin",
     displayName: "LinkedIn",
     category: "crm",
+    authType: "oauth" as const,
+    oauthProvider: "linkedin",
     description: "Post updates, read profile, and send messages via LinkedIn",
     icon: "linkedin",
     envVar: "LINKEDIN_ACCESS_TOKEN",
@@ -232,6 +261,7 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     id: "stripe",
     displayName: "Stripe",
     category: "finance",
+    authType: "api_key" as const,
     description: "List customers, invoices, and create payment links",
     icon: "stripe",
     envVar: "STRIPE_SECRET_KEY",
@@ -248,6 +278,8 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     id: "slack",
     displayName: "Slack",
     category: "communication",
+    authType: "oauth" as const,
+    oauthProvider: "slack",
     description: "Send messages, list channels, read conversations",
     icon: "slack",
     envVar: "SLACK_BOT_TOKEN",
@@ -263,6 +295,7 @@ export const INTEGRATION_CATALOG: IntegrationDefinition[] = [
     id: "telegram",
     displayName: "Telegram",
     category: "communication",
+    authType: "api_key" as const,
     description: "Send messages and files via your Telegram bot",
     icon: "telegram",
     envVar: "TELEGRAM_BOT_TOKEN",
@@ -287,19 +320,20 @@ export function getToolsForIntegrations(integrationIds: string[]): IntegrationTo
   return tools;
 }
 
-export function isIntegrationAvailable(serviceId: string): boolean {
-  const def = getIntegrationById(serviceId);
-  if (!def) return false;
-  return !!process.env[def.envVar];
+export async function isIntegrationAvailable(serviceId: string): Promise<boolean> {
+  const { resolveToken } = await import("./token-resolver.js");
+  const token = await resolveToken(serviceId);
+  return !!token;
 }
 
 export async function testIntegrationConnection(serviceId: string): Promise<{ success: boolean; message: string }> {
   const def = getIntegrationById(serviceId);
   if (!def) return { success: false, message: "Unknown integration" };
 
-  const token = process.env[def.envVar];
+  const { resolveToken } = await import("./token-resolver.js");
+  const token = await resolveToken(serviceId);
   if (!token) {
-    return { success: false, message: `${def.envVar} is not set. ${def.setupNote}` };
+    return { success: false, message: `Not connected. ${def.setupNote}` };
   }
 
   return probeIntegration(serviceId, token);
@@ -390,10 +424,11 @@ export async function executeIntegrationTool(
   const integration = INTEGRATION_CATALOG.find(i => i.tools.some(t => t.name === toolName));
   if (!integration) return JSON.stringify({ error: `Unknown integration tool: ${toolName}` });
 
-  const token = process.env[integration.envVar];
+  const { resolveToken } = await import("./token-resolver.js");
+  const token = await resolveToken(integration.id);
   if (!token) {
     return JSON.stringify({
-      error: `Integration '${integration.displayName}' is not configured. Please add ${integration.envVar} to your environment secrets.`,
+      error: `Integration '${integration.displayName}' is not connected. Please connect it in the Integrations panel.`,
       setup_instructions: integration.setupNote,
     });
   }
