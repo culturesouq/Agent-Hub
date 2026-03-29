@@ -111,6 +111,9 @@ router.post("/public/chat", async (req, res): Promise<void> => {
     ? [messages[0], ...searchContextMessages, ...messages.slice(1)]
     : messages;
 
+  let toolIterations = 0;
+  const MAX_TOOL_ITERATIONS = 5;
+
   const callWithToolLoop = async (callMessages: Msg[]): Promise<string> => {
     const callParams: Parameters<typeof openrouter.chat.completions.create>[0] = {
       model,
@@ -122,7 +125,8 @@ router.post("/public/chat", async (req, res): Promise<void> => {
     const completion = await openrouter.chat.completions.create(callParams);
     const choice = completion.choices[0];
 
-    if (choice?.finish_reason === "tool_calls" && choice.message.tool_calls) {
+    if (choice?.finish_reason === "tool_calls" && choice.message.tool_calls && toolIterations < MAX_TOOL_ITERATIONS) {
+      toolIterations++;
       const assistantMsg: Msg = {
         role: "assistant",
         content: choice.message.content ?? null,

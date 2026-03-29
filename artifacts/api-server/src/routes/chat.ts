@@ -135,6 +135,8 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
     : messages;
 
   const usedTools: string[] = [];
+  const MAX_TOOL_ITERATIONS = 5;
+  let toolIterations = 0;
 
   const callParams: Parameters<typeof openrouter.chat.completions.create>[0] = {
     model,
@@ -197,7 +199,8 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
       }
     }
 
-    if (finishReason === "tool_calls" && pendingToolCalls.length > 0) {
+    if (finishReason === "tool_calls" && pendingToolCalls.length > 0 && toolIterations < MAX_TOOL_ITERATIONS) {
+      toolIterations++;
       const toolCallObjects = pendingToolCalls.map(tc => ({
         id: tc.id,
         type: "function" as const,

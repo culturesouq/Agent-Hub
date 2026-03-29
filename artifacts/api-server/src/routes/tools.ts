@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, and } from "drizzle-orm";
 import { db, agentToolsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 
@@ -59,6 +59,8 @@ router.post("/agents/:agentId/tools", async (req, res): Promise<void> => {
 });
 
 router.patch("/agents/:agentId/tools/:id", async (req, res): Promise<void> => {
+  const rawAgentId = Array.isArray(req.params.agentId) ? req.params.agentId[0] : req.params.agentId;
+  const agentId = parseInt(rawAgentId, 10);
   const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(rawId, 10);
 
@@ -78,7 +80,7 @@ router.patch("/agents/:agentId/tools/:id", async (req, res): Promise<void> => {
   const [tool] = await db
     .update(agentToolsTable)
     .set(updateData)
-    .where(eq(agentToolsTable.id, id))
+    .where(and(eq(agentToolsTable.id, id), eq(agentToolsTable.agentId, agentId)))
     .returning();
 
   if (!tool) {
@@ -94,10 +96,12 @@ router.patch("/agents/:agentId/tools/:id", async (req, res): Promise<void> => {
 });
 
 router.delete("/agents/:agentId/tools/:id", async (req, res): Promise<void> => {
+  const rawAgentId = Array.isArray(req.params.agentId) ? req.params.agentId[0] : req.params.agentId;
+  const agentId = parseInt(rawAgentId, 10);
   const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(rawId, 10);
 
-  await db.delete(agentToolsTable).where(eq(agentToolsTable.id, id));
+  await db.delete(agentToolsTable).where(and(eq(agentToolsTable.id, id), eq(agentToolsTable.agentId, agentId)));
   res.sendStatus(204);
 });
 
