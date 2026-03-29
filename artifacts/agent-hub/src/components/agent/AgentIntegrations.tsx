@@ -1,14 +1,15 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import {
   Puzzle, CheckCircle, XCircle, Loader2, ChevronDown,
-  Info, Zap, ExternalLink,
+  Info, Zap, ExternalLink, Search,
 } from "lucide-react";
 
 interface CatalogItem {
@@ -51,6 +52,7 @@ export function AgentIntegrations({ agentId }: { agentId: number }) {
   const [testingId, setTestingId] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<Record<string, { ok: boolean; message?: string | null }>>({});
   const [expandedSetup, setExpandedSetup] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -106,7 +108,19 @@ export function AgentIntegrations({ agentId }: { agentId: number }) {
     );
   }
 
-  const byCategory = catalog.reduce<Record<string, CatalogItem[]>>((acc, item) => {
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    if (!q) return catalog;
+    return catalog.filter(
+      item =>
+        item.displayName.toLowerCase().includes(q) ||
+        item.description.toLowerCase().includes(q) ||
+        item.category.toLowerCase().includes(q) ||
+        item.toolNames.some(t => t.toLowerCase().includes(q))
+    );
+  }, [catalog, search]);
+
+  const byCategory = filtered.reduce<Record<string, CatalogItem[]>>((acc, item) => {
     (acc[item.category] = acc[item.category] || []).push(item);
     return acc;
   }, {});
@@ -121,14 +135,28 @@ export function AgentIntegrations({ agentId }: { agentId: number }) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h2 className="text-lg font-semibold flex items-center gap-2">
-          <Puzzle className="h-5 w-5" />
-          Platform Integrations
-        </h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          Connect external services with your own API keys. {availableCount} of {catalog.length} configured · {enabledCount} active.
-        </p>
+      <div className="space-y-3">
+        <div>
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Puzzle className="h-5 w-5" />
+            Platform Integrations
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Connect external services with your own API keys. {availableCount} of {catalog.length} configured · {enabledCount} active.
+          </p>
+        </div>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search integrations or tools…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        {search && filtered.length === 0 && (
+          <p className="text-sm text-muted-foreground text-center py-4">No integrations match "{search}"</p>
+        )}
       </div>
 
       {/* Categories */}
@@ -175,6 +203,17 @@ export function AgentIntegrations({ agentId }: { agentId: number }) {
                           )}
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
+
+                        {/* Tool names */}
+                        {item.toolNames.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {item.toolNames.map(tool => (
+                              <span key={tool} className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono text-muted-foreground">
+                                {tool}
+                              </span>
+                            ))}
+                          </div>
+                        )}
 
                         {/* Test result */}
                         {testResult && (
