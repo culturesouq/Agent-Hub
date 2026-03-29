@@ -13,10 +13,20 @@ interface UseVoiceSessionOptions {
 const SILENCE_THRESHOLD = 0.01;
 const SILENCE_DURATION_MS = 1800;
 const MIN_RECORDING_MS = 600;
+const TTS_SAMPLE_RATE = 24000;
 
-export function useVoiceSession({ agentId, voice = "nova", voiceSpeed = 1.0, onTranscript, onError }: UseVoiceSessionOptions) {
+export function useVoiceSession({
+  agentId,
+  voice = "nova",
+  voiceSpeed = 1.0,
+  onTranscript,
+  onError,
+}: UseVoiceSessionOptions) {
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [isActive, setIsActive] = useState(false);
+  const [transcript, setTranscript] = useState("");
+
+  const isActiveRef = useRef(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
@@ -24,26 +34,27 @@ export function useVoiceSession({ agentId, voice = "nova", voiceSpeed = 1.0, onT
   const analyserRef = useRef<AnalyserNode | null>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recordingStartRef = useRef<number>(0);
-  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
-  const isRecordingRef = useRef(false);
+  const currentSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const speakAbortRef = useRef<AbortController | null>(null);
 
   const stopCurrentAudio = useCallback(() => {
-    if (currentAudioRef.current) {
-      currentAudioRef.current.pause();
-      currentAudioRef.current.src = "";
-      currentAudioRef.current = null;
-    }
+    speakAbortRef.current?.abort();
+    speakAbortRef.current = null;
+    try { currentSourceRef.current?.stop(); } catch (_) {}
+    currentSourceRef.current = null;
   }, []);
 
   const startRecording = useCallback(async () => {
-    if (isRecordingRef.current) return;
+    if (!isActiveRef.current) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!isActiveRef.current) { stream.getTracks().forEach(t => t.stop()); return; }
       streamRef.current = stream;
 
-      audioContextRef.current = new AudioContext();
-      const source = audioContextRef.current.createMediaStreamSource(stream);
-      const analyser = audioContextRef.current.createAnalyser();
+      const ctx = new AudioContext();
+      audioContextRef.current = ctx;
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
       analyser.fftSize = 512;
       source.connect(analyser);
       analyserRef.current = analyser;
@@ -60,157 +71,179 @@ export function useVoiceSession({ agentId, voice = "nova", voiceSpeed = 1.0, onT
       mediaRecorderRef.current = recorder;
       audioChunksRef.current = [];
       recordingStartRef.current = Date.now();
-      isRecordingRef.current = true;
 
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
-      };
-
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
       recorder.onstop = async () => {
-        isRecordingRef.current = false;
         const duration = Date.now() - recordingStartRef.current;
-        if (duration < MIN_RECORDING_MS || audioChunksRef.current.length === 0) {
-          setVoiceState("recording");
-          startRecording();
+        if (!isActiveRef.current || duration < MIN_RECORDING_MS || audioChunksRef.current.length === 0) {
+          if (isActiveRef.current) startRecording();
           return;
         }
-        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
         audioChunksRef.current = [];
-        await transcribeAndProcess(audioBlob);
+        await transcribeAudio(blob);
       };
 
       recorder.start(250);
       setVoiceState("recording");
-
       detectSilence();
     } catch (err: any) {
-      onError?.(err.message || "Microphone access denied");
-      setIsActive(false);
-      setVoiceState("idle");
+      if (isActiveRef.current) {
+        onError?.(err.message || "Microphone access denied");
+        isActiveRef.current = false;
+        setIsActive(false);
+        setVoiceState("idle");
+      }
     }
-  }, [agentId, voice, voiceSpeed]);
+  }, [agentId]);
 
   const detectSilence = useCallback(() => {
     const analyser = analyserRef.current;
-    if (!analyser || !isRecordingRef.current) return;
-
+    if (!analyser) return;
     const data = new Float32Array(analyser.fftSize);
-
     const check = () => {
-      if (!isRecordingRef.current) return;
+      if (!isActiveRef.current || mediaRecorderRef.current?.state !== "recording") return;
       analyser.getFloatTimeDomainData(data);
       const rms = Math.sqrt(data.reduce((s, v) => s + v * v, 0) / data.length);
-
       if (rms < SILENCE_THRESHOLD) {
         if (!silenceTimerRef.current) {
           silenceTimerRef.current = setTimeout(() => {
-            if (mediaRecorderRef.current?.state === "recording") {
-              mediaRecorderRef.current.stop();
-            }
+            silenceTimerRef.current = null;
+            if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
           }, SILENCE_DURATION_MS);
         }
       } else {
-        if (silenceTimerRef.current) {
-          clearTimeout(silenceTimerRef.current);
-          silenceTimerRef.current = null;
-        }
+        if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
       }
       requestAnimationFrame(check);
     };
     requestAnimationFrame(check);
   }, []);
 
-  const transcribeAndProcess = useCallback(async (audioBlob: Blob) => {
+  const transcribeAudio = useCallback(async (blob: Blob) => {
+    if (!isActiveRef.current) return;
     setVoiceState("transcribing");
     try {
       const formData = new FormData();
-      formData.append("audio", audioBlob, "recording.webm");
-
-      const res = await fetch(`/api/agents/${agentId}/transcribe`, {
-        method: "POST",
-        body: formData,
-      });
-
+      formData.append("audio", blob, "recording.webm");
+      const res = await fetch(`/api/agents/${agentId}/transcribe`, { method: "POST", body: formData });
+      if (!isActiveRef.current) return;
       if (!res.ok) throw new Error("Transcription failed");
       const { text } = await res.json() as { text: string };
-
+      if (!isActiveRef.current) return;
       if (text.trim()) {
+        setTranscript(text.trim());
         onTranscript?.(text.trim());
       } else {
-        setVoiceState("idle");
-        if (isActive) {
-          setTimeout(() => startRecording(), 300);
-        }
+        setVoiceState("recording");
+        startRecording();
       }
     } catch (err: any) {
+      if (!isActiveRef.current) return;
       onError?.(err.message || "Transcription failed");
-      setVoiceState("idle");
+      setVoiceState("recording");
+      startRecording();
     }
-  }, [agentId, isActive, onTranscript, onError, startRecording]);
+  }, [agentId, onTranscript, onError, startRecording]);
 
   const speak = useCallback(async (text: string) => {
-    if (!text.trim()) return;
+    if (!text.trim() || !isActiveRef.current) return;
     setVoiceState("speaking");
     stopCurrentAudio();
+
+    speakAbortRef.current = new AbortController();
+    const { signal } = speakAbortRef.current;
+
     try {
       const res = await fetch(`/api/agents/${agentId}/speak`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, voice, speed: voiceSpeed }),
+        signal,
       });
-      if (!res.ok) throw new Error("TTS failed");
-      const { audio } = await res.json() as { audio: string };
 
-      const binaryStr = atob(audio);
-      const bytes = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
-      const blob = new Blob([bytes], { type: "audio/mpeg" });
-      const url = URL.createObjectURL(blob);
+      if (!res.ok || !res.body) throw new Error("TTS failed");
 
-      const audioEl = new Audio(url);
-      currentAudioRef.current = audioEl;
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      const pcm16Parts: Int16Array[] = [];
+      let nextPlayTime = 0;
+      let playbackCtx: AudioContext | null = null;
 
-      audioEl.onended = () => {
-        URL.revokeObjectURL(url);
-        currentAudioRef.current = null;
-        if (isActive) {
-          setVoiceState("recording");
-          startRecording();
-        } else {
-          setVoiceState("idle");
+      const getCtx = () => {
+        if (!playbackCtx || playbackCtx.state === "closed") {
+          playbackCtx = new AudioContext({ sampleRate: TTS_SAMPLE_RATE });
+          nextPlayTime = playbackCtx.currentTime;
         }
+        return playbackCtx;
       };
 
-      audioEl.onerror = () => {
-        URL.revokeObjectURL(url);
-        currentAudioRef.current = null;
-        setVoiceState("idle");
-      };
+      outer: while (true) {
+        const { done, value } = await reader.read();
+        if (done || signal.aborted) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n\n");
+        buf = lines.pop() || "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          let parsed: { chunk?: string; done?: boolean; error?: string };
+          try { parsed = JSON.parse(line.substring(6)); } catch { continue; }
+          if (parsed.error) throw new Error(parsed.error);
+          if (parsed.done) break outer;
+          if (parsed.chunk) {
+            const bStr = atob(parsed.chunk);
+            const bytes = new Uint8Array(bStr.length);
+            for (let i = 0; i < bStr.length; i++) bytes[i] = bStr.charCodeAt(i);
+            const int16 = new Int16Array(bytes.buffer);
+            pcm16Parts.push(int16);
 
-      await audioEl.play();
-    } catch (err: any) {
-      onError?.(err.message || "TTS failed");
-      setVoiceState("idle");
-      if (isActive) {
-        setTimeout(() => startRecording(), 300);
+            if (signal.aborted) break outer;
+
+            const ctx = getCtx();
+            const float32 = new Float32Array(int16.length);
+            for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768.0;
+            const audioBuf = ctx.createBuffer(1, float32.length, TTS_SAMPLE_RATE);
+            audioBuf.copyToChannel(float32, 0);
+            const src = ctx.createBufferSource();
+            src.buffer = audioBuf;
+            src.connect(ctx.destination);
+            const startAt = Math.max(nextPlayTime, ctx.currentTime + 0.04);
+            src.start(startAt);
+            nextPlayTime = startAt + audioBuf.duration;
+            currentSourceRef.current = src;
+          }
+        }
       }
+
+      if (signal.aborted) return;
+
+      const bufferDuration = pcm16Parts.reduce((s, p) => s + p.length, 0) / TTS_SAMPLE_RATE;
+      const ctx = playbackCtx;
+      if (ctx && bufferDuration > 0) {
+        const remaining = (nextPlayTime - ctx.currentTime) * 1000;
+        await new Promise<void>(resolve => setTimeout(resolve, Math.max(0, remaining + 200)));
+      }
+
+      if (!isActiveRef.current) return;
+      setTranscript("");
+      setVoiceState("recording");
+      startRecording();
+    } catch (err: any) {
+      if (signal?.aborted || !isActiveRef.current) return;
+      onError?.(err.message || "TTS failed");
+      setVoiceState("recording");
+      startRecording();
     }
-  }, [agentId, voice, voiceSpeed, isActive, stopCurrentAudio, startRecording]);
+  }, [agentId, voice, voiceSpeed, stopCurrentAudio, onError, startRecording]);
 
   const stopMic = useCallback(() => {
-    isRecordingRef.current = false;
-    if (silenceTimerRef.current) {
-      clearTimeout(silenceTimerRef.current);
-      silenceTimerRef.current = null;
-    }
+    if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
     if (mediaRecorderRef.current?.state === "recording") {
-      mediaRecorderRef.current.stop();
+      try { mediaRecorderRef.current.stop(); } catch (_) {}
     }
     mediaRecorderRef.current = null;
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
-      streamRef.current = null;
-    }
+    if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
     if (audioContextRef.current?.state !== "closed") {
       audioContextRef.current?.close();
       audioContextRef.current = null;
@@ -219,23 +252,26 @@ export function useVoiceSession({ agentId, voice = "nova", voiceSpeed = 1.0, onT
   }, []);
 
   const startSession = useCallback(async () => {
+    isActiveRef.current = true;
     setIsActive(true);
+    setTranscript("");
     await startRecording();
   }, [startRecording]);
 
   const stopSession = useCallback(() => {
+    isActiveRef.current = false;
     setIsActive(false);
+    setVoiceState("idle");
+    setTranscript("");
     stopMic();
     stopCurrentAudio();
-    setVoiceState("idle");
   }, [stopMic, stopCurrentAudio]);
 
-  useEffect(() => {
-    return () => {
-      stopMic();
-      stopCurrentAudio();
-    };
+  useEffect(() => () => {
+    isActiveRef.current = false;
+    stopMic();
+    stopCurrentAudio();
   }, []);
 
-  return { voiceState, isActive, startSession, stopSession, speak };
+  return { voiceState, isActive, transcript, startSession, stopSession, speak };
 }

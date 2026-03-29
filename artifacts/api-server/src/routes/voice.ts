@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import multer from "multer";
 import { db, agentsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
-import { ensureCompatibleFormat, speechToText, textToSpeech } from "@workspace/integrations-openai-ai-server/audio";
+import { ensureCompatibleFormat, speechToText, textToSpeechStream } from "@workspace/integrations-openai-ai-server/audio";
 
 const router: IRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
@@ -65,13 +65,28 @@ router.post("/agents/:agentId/speak", async (req, res): Promise<void> => {
     textToSpeak = `[Speak quickly and energetically] ${body.text}`;
   }
 
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
   try {
-    const audioBuffer = await textToSpeech(textToSpeak, voice, "mp3");
-    const audioBase64 = audioBuffer.toString("base64");
-    res.json({ audio: audioBase64 });
+    const stream = await textToSpeechStream(textToSpeak, voice);
+    for await (const chunk of stream) {
+      if (res.writableEnded) break;
+      res.write(`data: ${JSON.stringify({ chunk })}\n\n`);
+    }
+    if (!res.writableEnded) {
+      res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+      res.end();
+    }
   } catch (err: any) {
     console.error("TTS error:", err);
-    res.status(500).json({ error: "Text-to-speech failed" });
+    if (!res.writableEnded) {
+      res.write(`data: ${JSON.stringify({ error: "Text-to-speech failed" })}\n\n`);
+      res.end();
+    }
   }
 });
 
