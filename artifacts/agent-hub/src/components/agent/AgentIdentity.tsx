@@ -15,6 +15,12 @@ import { Save, Loader2, Cpu } from "lucide-react";
 
 const MODELS = [
   {
+    group: "Auto",
+    models: [
+      { id: "openrouter/auto", label: "Auto — AI picks the best model per task" },
+    ],
+  },
+  {
     group: "OpenAI",
     models: [
       { id: "openai/gpt-4.1", label: "GPT-4.1 (Powerful)" },
@@ -190,7 +196,11 @@ export function AgentIdentity({ agent }: { agent: Agent }) {
                 {form.watch("model")}
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">This model will be used for all conversations with this agent (owner chat + connected apps)</p>
+            {selectedModel === "openrouter/auto" ? (
+              <p className="text-xs text-primary/70 font-mono">OpenRouter Auto-routing — analyzes each message and picks the optimal model automatically (cost + capability balanced)</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">This model will be used for all conversations with this agent (owner chat + connected apps)</p>
+            )}
           </div>
 
           <div className="space-y-2 md:col-span-2">
