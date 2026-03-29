@@ -68,12 +68,11 @@ export function AgentKnowledge({ agent }: { agent: Agent }) {
       const allowed = [
         "application/pdf",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/msword",
         "text/plain",
         "text/markdown",
         "text/x-markdown",
       ];
-      const allowedExts = ["pdf", "docx", "doc", "txt", "md"];
+      const allowedExts = ["pdf", "docx", "txt", "md"];
       const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
 
       if (!allowed.includes(file.type) && !allowedExts.includes(ext)) {
@@ -125,7 +124,7 @@ export function AgentKnowledge({ agent }: { agent: Agent }) {
             ref={fileInputRef}
             type="file"
             className="hidden"
-            accept=".pdf,.docx,.doc,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
+            accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
             onChange={onFileInputChange}
           />
           <Button
