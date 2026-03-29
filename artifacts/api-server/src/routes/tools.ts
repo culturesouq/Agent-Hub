@@ -105,6 +105,11 @@ router.patch("/agents/:agentId/tools/:id", async (req, res): Promise<void> => {
     webhookUrl: string;
   }>;
 
+  if (!body.name && !body.description && !body.parametersSchema && !body.webhookUrl) {
+    res.status(400).json({ error: "At least one field must be provided for update" });
+    return;
+  }
+
   const updateData: Record<string, unknown> = {};
 
   if (body.name !== undefined) {
