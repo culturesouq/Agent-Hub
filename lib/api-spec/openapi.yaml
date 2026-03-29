@@ -464,6 +464,62 @@ paths:
         "204":
           description: Cleared
 
+  /agents/{agentId}/transcribe:
+    post:
+      operationId: transcribeAudio
+      tags: [chat]
+      summary: Transcribe audio to text (STT)
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                audio:
+                  type: string
+                  format: binary
+              required:
+                - audio
+      responses:
+        "200":
+          description: Transcription result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscribeResponse"
+
+  /agents/{agentId}/speak:
+    post:
+      operationId: speakText
+      tags: [chat]
+      summary: Convert text to speech (TTS)
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpeakBody"
+      responses:
+        "200":
+          description: Audio data (base64 mp3)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpeakResponse"
+
   /agents/{agentId}/connections:
     get:
       operationId: listConnections
@@ -1017,6 +1073,10 @@ components:
           type: string
         webSearchEnabled:
           type: boolean
+        voice:
+          type: string
+        voiceSpeed:
+          type: number
         isActive:
           type: boolean
         connectionsCount:
@@ -1033,6 +1093,8 @@ components:
         - language
         - model
         - webSearchEnabled
+        - voice
+        - voiceSpeed
         - isActive
         - connectionsCount
         - createdAt
@@ -1089,6 +1151,10 @@ components:
           type: string
         webSearchEnabled:
           type: boolean
+        voice:
+          type: string
+        voiceSpeed:
+          type: number
         isActive:
           type: boolean
 
@@ -1209,6 +1275,35 @@ components:
           type: string
       required:
         - message
+
+    TranscribeResponse:
+      type: object
+      properties:
+        text:
+          type: string
+      required:
+        - text
+
+    SpeakBody:
+      type: object
+      properties:
+        text:
+          type: string
+        voice:
+          type: string
+        speed:
+          type: number
+      required:
+        - text
+
+    SpeakResponse:
+      type: object
+      properties:
+        audio:
+          type: string
+          description: Base64-encoded mp3 audio data
+      required:
+        - audio
 
     Connection:
       type: object

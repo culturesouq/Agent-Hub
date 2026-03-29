@@ -41,6 +41,8 @@ export interface Agent {
   language: string;
   model: string;
   webSearchEnabled: boolean;
+  voice: string;
+  voiceSpeed: number;
   isActive: boolean;
   connectionsCount: number;
   /** @nullable */
@@ -88,6 +90,8 @@ export interface UpdateAgentBody {
   language?: string;
   model?: string;
   webSearchEnabled?: boolean;
+  voice?: string;
+  voiceSpeed?: number;
   isActive?: boolean;
 }
 
@@ -166,6 +170,21 @@ export interface ChatMessage {
 
 export interface SendChatMessageBody {
   message: string;
+}
+
+export interface TranscribeResponse {
+  text: string;
+}
+
+export interface SpeakBody {
+  text: string;
+  voice?: string;
+  speed?: number;
+}
+
+export interface SpeakResponse {
+  /** Base64-encoded mp3 audio data */
+  audio: string;
 }
 
 export interface Connection {
@@ -394,6 +413,10 @@ export interface AutomationRunTriggered {
 
 export type UploadKnowledgeFileBody = {
   file: Blob;
+};
+
+export type TranscribeAudioBody = {
+  audio: Blob;
 };
 
 export type TriggerAutomationWebhookBody = { [key: string]: unknown };

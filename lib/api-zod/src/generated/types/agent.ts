@@ -26,6 +26,8 @@ export interface Agent {
   language: string;
   model: string;
   webSearchEnabled: boolean;
+  voice: string;
+  voiceSpeed: number;
   isActive: boolean;
   connectionsCount: number;
   /** @nullable */

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
 import {
   Select,
   SelectContent,
@@ -18,7 +19,7 @@ import {
   SelectLabel,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Loader2, Cpu, User, Sparkles, Globe } from "lucide-react";
+import { Save, Loader2, Cpu, User, Sparkles, Globe, Mic } from "lucide-react";
 
 const MODELS = [
   {
@@ -97,6 +98,15 @@ const MODELS = [
   },
 ];
 
+const VOICE_OPTIONS = [
+  { id: "alloy", label: "Alloy — Neutral & Balanced" },
+  { id: "echo", label: "Echo — Deep & Resonant" },
+  { id: "fable", label: "Fable — Warm & Narrative" },
+  { id: "onyx", label: "Onyx — Authoritative & Rich" },
+  { id: "nova", label: "Nova — Clear & Friendly" },
+  { id: "shimmer", label: "Shimmer — Soft & Bright" },
+];
+
 const schema = z.object({
   name: z.string().min(1, "Name is required"),
   identity: z.string().optional().nullable(),
@@ -104,6 +114,8 @@ const schema = z.object({
   model: z.string(),
   language: z.string(),
   webSearchEnabled: z.boolean(),
+  voice: z.string(),
+  voiceSpeed: z.number().min(0.5).max(2.0),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -115,6 +127,8 @@ export function AgentIdentity({ agent }: { agent: Agent }) {
 
   const agentModel = (agent as Agent & { model?: string }).model || "openai/gpt-4.1-mini";
   const agentWebSearch = (agent as Agent & { webSearchEnabled?: boolean }).webSearchEnabled ?? false;
+  const agentVoice = (agent as Agent & { voice?: string }).voice || "nova";
+  const agentVoiceSpeed = (agent as Agent & { voiceSpeed?: number }).voiceSpeed ?? 1.0;
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -125,6 +139,8 @@ export function AgentIdentity({ agent }: { agent: Agent }) {
       model: agentModel,
       language: agent.language ?? "english",
       webSearchEnabled: agentWebSearch,
+      voice: agentVoice,
+      voiceSpeed: agentVoiceSpeed,
     },
   });
 
@@ -150,6 +166,8 @@ export function AgentIdentity({ agent }: { agent: Agent }) {
         model: data.model,
         language: data.language,
         webSearchEnabled: data.webSearchEnabled,
+        voice: data.voice,
+        voiceSpeed: data.voiceSpeed,
       },
     });
   };
@@ -293,6 +311,57 @@ export function AgentIdentity({ agent }: { agent: Agent }) {
             {t('webSearchNote')}
           </p>
         )}
+      </div>
+
+      {/* Voice Settings */}
+      <div className="rounded-xl border border-white/8 bg-white/3 p-4 space-y-4">
+        <div className="flex items-center gap-1.5 mb-1">
+          <Mic className="w-3.5 h-3.5 text-primary" />
+          <span className="text-sm font-semibold text-white">{t('voiceChat')}</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Voice selector */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">{t('voiceLabel')}</label>
+            <Select
+              onValueChange={(val) => form.setValue('voice', val)}
+              value={form.watch('voice')}
+            >
+              <SelectTrigger className="bg-white/5 border-white/10 focus:border-primary/50">
+                <SelectValue placeholder="Select voice" />
+              </SelectTrigger>
+              <SelectContent className="bg-[#0d1117] border-white/10">
+                {VOICE_OPTIONS.map(v => (
+                  <SelectItem key={v.id} value={v.id}>{v.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground/60">{t('voiceHint')}</p>
+          </div>
+
+          {/* Speaking speed */}
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <label className="text-xs font-medium text-muted-foreground">{t('voiceSpeedLabel')}</label>
+              <span className="text-xs font-mono text-primary/80">{form.watch('voiceSpeed').toFixed(1)}x</span>
+            </div>
+            <Controller
+              name="voiceSpeed"
+              control={form.control}
+              render={({ field }) => (
+                <Slider
+                  min={0.5}
+                  max={2.0}
+                  step={0.1}
+                  value={[field.value]}
+                  onValueChange={([v]) => field.onChange(v)}
+                  className="mt-2"
+                />
+              )}
+            />
+            <p className="text-[11px] text-muted-foreground/60">{t('voiceSpeedHint')}</p>
+          </div>
+        </div>
       </div>
 
       <div className="pt-1">

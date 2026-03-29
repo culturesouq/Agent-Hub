@@ -3,9 +3,10 @@ import { useI18n } from "@/lib/i18n";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useChatStream, type ChatSource } from "@/hooks/use-chat-stream";
+import { useVoiceSession } from "@/hooks/use-voice-session";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MessageSquare, Send, Trash2, StopCircle, Globe, ExternalLink, Wrench, ImagePlus, X } from "lucide-react";
+import { MessageSquare, Send, Trash2, StopCircle, Globe, ExternalLink, Wrench, ImagePlus, X, Mic, MicOff, Volume2 } from "lucide-react";
 import { format } from "date-fns";
 
 interface AgentChatProps {
@@ -50,6 +51,26 @@ export function AgentChat({ agent, fullHeight }: AgentChatProps) {
   const queryClient = useQueryClient();
   const [pendingSources, setPendingSources] = useState<ChatSource[]>([]);
   const [pendingUsedTools, setPendingUsedTools] = useState<string[]>([]);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+
+  const agentVoice = (agent as Agent & { voice?: string }).voice || "nova";
+  const agentVoiceSpeed = (agent as Agent & { voiceSpeed?: number }).voiceSpeed ?? 1.0;
+
+  const pendingVoiceSpeak = useRef<string | null>(null);
+
+  const voice = useVoiceSession({
+    agentId: agent.id,
+    voice: agentVoice,
+    voiceSpeed: agentVoiceSpeed,
+    onTranscript: (text) => {
+      pendingVoiceSpeak.current = null;
+      sendMessage(text);
+    },
+    onError: (err) => {
+      setVoiceError(err);
+      setTimeout(() => setVoiceError(null), 4000);
+    },
+  });
 
   const clearMutation = useClearChatHistory({
     mutation: {
@@ -74,6 +95,20 @@ export function AgentChat({ agent, fullHeight }: AgentChatProps) {
       setPendingUsedTools(lastUsedTools);
     }
   }, [isStreaming, lastUsedTools]);
+
+  useEffect(() => {
+    if (!isStreaming && voice.isActive && streamedResponse) {
+      pendingVoiceSpeak.current = streamedResponse;
+    }
+  }, [isStreaming]);
+
+  useEffect(() => {
+    if (!isStreaming && voice.isActive && pendingVoiceSpeak.current) {
+      const text = pendingVoiceSpeak.current;
+      pendingVoiceSpeak.current = null;
+      voice.speak(text);
+    }
+  }, [isStreaming, voice.isActive]);
 
   const handleImageFile = useCallback((file: File) => {
     if (!file.type.startsWith("image/")) return;
@@ -108,6 +143,14 @@ export function AgentChat({ agent, fullHeight }: AgentChatProps) {
 
   const agentWebSearch = (agent as Agent & { webSearchEnabled?: boolean }).webSearchEnabled ?? false;
 
+  const voiceStateLabel = voice.voiceState === "recording"
+    ? t('voiceRecording')
+    : voice.voiceState === "transcribing"
+    ? t('voiceTranscribing')
+    : voice.voiceState === "speaking"
+    ? t('voiceSpeaking')
+    : null;
+
   return (
     <div className={containerClass}>
       {/* Header */}
@@ -123,16 +166,47 @@ export function AgentChat({ agent, fullHeight }: AgentChatProps) {
             </span>
           )}
         </h3>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => clearMutation.mutate({ agentId: agent.id })}
-          className="text-muted-foreground hover:text-destructive text-xs h-8"
-        >
-          <Trash2 className="w-3.5 h-3.5 me-1.5" />
-          {t('clearChat')}
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => clearMutation.mutate({ agentId: agent.id })}
+            className="text-muted-foreground hover:text-destructive text-xs h-8"
+          >
+            <Trash2 className="w-3.5 h-3.5 me-1.5" />
+            {t('clearChat')}
+          </Button>
+        </div>
       </div>
+
+      {/* Voice overlay banner */}
+      {voice.isActive && (
+        <div className="shrink-0 px-5 py-2 bg-primary/10 border-b border-primary/20 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full ${
+              voice.voiceState === "recording" ? "bg-red-400 animate-pulse" :
+              voice.voiceState === "speaking" ? "bg-green-400 animate-pulse" :
+              "bg-primary animate-pulse"
+            }`} />
+            <span className="text-xs font-mono text-primary/90">
+              {voiceStateLabel || "Voice Active"}
+            </span>
+          </div>
+          <button
+            onClick={voice.stopSession}
+            className="text-[10px] text-muted-foreground hover:text-white font-mono flex items-center gap-1 transition-colors"
+          >
+            <MicOff className="w-3 h-3" />
+            {t('stopVoice')}
+          </button>
+        </div>
+      )}
+
+      {voiceError && (
+        <div className="shrink-0 px-5 py-2 bg-destructive/10 border-b border-destructive/20">
+          <span className="text-xs text-destructive/80">{voiceError}</span>
+        </div>
+      )}
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
@@ -219,7 +293,8 @@ export function AgentChat({ agent, fullHeight }: AgentChatProps) {
 
         {isStreaming && streamedResponse && !isSearching && (
           <div className="flex flex-col items-start">
-            <span className="text-[10px] text-primary font-mono mb-1 mx-1 animate-pulse">
+            <span className="text-[10px] text-primary font-mono mb-1 mx-1 animate-pulse flex items-center gap-1">
+              {voice.isActive && <Volume2 className="w-3 h-3" />}
               {agent.name.toUpperCase()} • TYPING...
             </span>
             <div className="max-w-[80%] rounded-2xl px-4 py-2.5 bg-white/8 text-white rounded-tl-sm border border-white/8">
@@ -287,9 +362,15 @@ export function AgentChat({ agent, fullHeight }: AgentChatProps) {
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={attachedImage ? "Describe what you want to know about this image..." : "Message the agent... (or paste an image)"}
+            placeholder={
+              voice.isActive
+                ? voiceStateLabel || "Voice session active..."
+                : attachedImage
+                ? "Describe what you want to know about this image..."
+                : "Message the agent... (or paste an image)"
+            }
             className="bg-white/5 border-white/10 focus-visible:border-primary/50 h-11 rounded-xl"
-            disabled={isStreaming}
+            disabled={isStreaming || (voice.isActive && voice.voiceState !== "idle")}
           />
           {isStreaming ? (
             <Button
@@ -309,10 +390,33 @@ export function AgentChat({ agent, fullHeight }: AgentChatProps) {
               <Send className="w-4 h-4" />
             </Button>
           )}
+          {/* Voice toggle button */}
+          <button
+            type="button"
+            onClick={voice.isActive ? voice.stopSession : voice.startSession}
+            disabled={isStreaming}
+            title={voice.isActive ? t('stopVoice') : t('startVoice')}
+            className={`h-11 w-11 rounded-xl border flex items-center justify-center transition-all shrink-0 disabled:opacity-40 ${
+              voice.isActive
+                ? "bg-red-500/20 border-red-400/40 text-red-400 hover:bg-red-500/30"
+                : "border-white/10 bg-white/5 text-muted-foreground hover:text-primary hover:border-primary/30"
+            }`}
+          >
+            {voice.isActive ? (
+              <MicOff className="w-4 h-4" />
+            ) : (
+              <Mic className="w-4 h-4" />
+            )}
+          </button>
         </form>
-        {!attachedImage && (
+        {!attachedImage && !voice.isActive && (
           <p className="text-[10px] text-muted-foreground/50 mt-1.5 text-center">
-            Paste an image with Ctrl+V · Click <ImagePlus className="inline w-3 h-3" /> to upload
+            Paste an image with Ctrl+V · Click <ImagePlus className="inline w-3 h-3" /> to upload · Click <Mic className="inline w-3 h-3" /> for voice
+          </p>
+        )}
+        {voice.isActive && (
+          <p className="text-[10px] text-primary/50 mt-1.5 text-center font-mono">
+            VOICE ACTIVE — speak to the agent, it will reply in voice
           </p>
         )}
       </div>

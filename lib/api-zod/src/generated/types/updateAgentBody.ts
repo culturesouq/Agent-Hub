@@ -25,5 +25,7 @@ export interface UpdateAgentBody {
   language?: string;
   model?: string;
   webSearchEnabled?: boolean;
+  voice?: string;
+  voiceSpeed?: number;
   isActive?: boolean;
 }

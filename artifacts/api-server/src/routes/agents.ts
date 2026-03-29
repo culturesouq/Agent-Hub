@@ -134,6 +134,8 @@ router.patch("/agents/:id", async (req, res): Promise<void> => {
     language: string;
     model: string;
     webSearchEnabled: boolean;
+    voice: string;
+    voiceSpeed: number;
     isActive: boolean;
   }>;
 
@@ -149,6 +151,8 @@ router.patch("/agents/:id", async (req, res): Promise<void> => {
   if (body.language !== undefined) updateData.language = body.language;
   if (body.model !== undefined) updateData.model = body.model;
   if (body.webSearchEnabled !== undefined) updateData.webSearchEnabled = body.webSearchEnabled;
+  if (body.voice !== undefined) updateData.voice = body.voice;
+  if (body.voiceSpeed !== undefined) updateData.voiceSpeed = body.voiceSpeed;
   if (body.isActive !== undefined) updateData.isActive = body.isActive;
 
   const [agent] = await db

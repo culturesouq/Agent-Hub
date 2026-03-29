@@ -48,6 +48,8 @@ export const ListAgentsResponseItem = zod.object({
   language: zod.string(),
   model: zod.string(),
   webSearchEnabled: zod.boolean(),
+  voice: zod.string(),
+  voiceSpeed: zod.number(),
   isActive: zod.boolean(),
   connectionsCount: zod.number(),
   lastActivity: zod.string().nullish(),
@@ -92,6 +94,8 @@ export const GetAgentResponse = zod.object({
   language: zod.string(),
   model: zod.string(),
   webSearchEnabled: zod.boolean(),
+  voice: zod.string(),
+  voiceSpeed: zod.number(),
   isActive: zod.boolean(),
   connectionsCount: zod.number(),
   lastActivity: zod.string().nullish(),
@@ -118,6 +122,8 @@ export const UpdateAgentBody = zod.object({
   language: zod.string().optional(),
   model: zod.string().optional(),
   webSearchEnabled: zod.boolean().optional(),
+  voice: zod.string().optional(),
+  voiceSpeed: zod.number().optional(),
   isActive: zod.boolean().optional(),
 });
 
@@ -134,6 +140,8 @@ export const UpdateAgentResponse = zod.object({
   language: zod.string(),
   model: zod.string(),
   webSearchEnabled: zod.boolean(),
+  voice: zod.string(),
+  voiceSpeed: zod.number(),
   isActive: zod.boolean(),
   connectionsCount: zod.number(),
   lastActivity: zod.string().nullish(),
@@ -168,6 +176,8 @@ export const ToggleAgentStatusResponse = zod.object({
   language: zod.string(),
   model: zod.string(),
   webSearchEnabled: zod.boolean(),
+  voice: zod.string(),
+  voiceSpeed: zod.number(),
   isActive: zod.boolean(),
   connectionsCount: zod.number(),
   lastActivity: zod.string().nullish(),
@@ -341,6 +351,38 @@ export const SendChatMessageBody = zod.object({
  */
 export const ClearChatHistoryParams = zod.object({
   agentId: zod.coerce.number(),
+});
+
+/**
+ * @summary Transcribe audio to text (STT)
+ */
+export const TranscribeAudioParams = zod.object({
+  agentId: zod.coerce.number(),
+});
+
+export const TranscribeAudioBody = zod.object({
+  audio: zod.instanceof(File),
+});
+
+export const TranscribeAudioResponse = zod.object({
+  text: zod.string(),
+});
+
+/**
+ * @summary Convert text to speech (TTS)
+ */
+export const SpeakTextParams = zod.object({
+  agentId: zod.coerce.number(),
+});
+
+export const SpeakTextBody = zod.object({
+  text: zod.string(),
+  voice: zod.string().optional(),
+  speed: zod.number().optional(),
+});
+
+export const SpeakTextResponse = zod.object({
+  audio: zod.string().describe("Base64-encoded mp3 audio data"),
 });
 
 /**

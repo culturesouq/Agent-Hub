@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, boolean, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -15,6 +15,8 @@ export const agentsTable = pgTable("agents", {
   language: text("language").notNull().default("english"),
   model: text("model").notNull().default("openai/gpt-4.1-mini"),
   webSearchEnabled: boolean("web_search_enabled").notNull().default(false),
+  voice: text("voice").notNull().default("nova"),
+  voiceSpeed: real("voice_speed").notNull().default(1.0),
   isActive: boolean("is_active").notNull().default(true),
   lastActivity: timestamp("last_activity", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

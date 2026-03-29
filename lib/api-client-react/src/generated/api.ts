@@ -44,6 +44,10 @@ import type {
   PublicChatBody,
   PublicChatResponse,
   SendChatMessageBody,
+  SpeakBody,
+  SpeakResponse,
+  TranscribeAudioBody,
+  TranscribeResponse,
   TriggerAutomationWebhookBody,
   UpdateAgentBody,
   UpdateAutomationBody,
@@ -1904,6 +1908,182 @@ export const useClearChatHistory = <
   TContext
 > => {
   return useMutation(getClearChatHistoryMutationOptions(options));
+};
+
+/**
+ * @summary Transcribe audio to text (STT)
+ */
+export const getTranscribeAudioUrl = (agentId: number) => {
+  return `/api/agents/${agentId}/transcribe`;
+};
+
+export const transcribeAudio = async (
+  agentId: number,
+  transcribeAudioBody: TranscribeAudioBody,
+  options?: RequestInit,
+): Promise<TranscribeResponse> => {
+  const formData = new FormData();
+  formData.append(`audio`, transcribeAudioBody.audio);
+
+  return customFetch<TranscribeResponse>(getTranscribeAudioUrl(agentId), {
+    ...options,
+    method: "POST",
+    body: formData,
+  });
+};
+
+export const getTranscribeAudioMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof transcribeAudio>>,
+    TError,
+    { agentId: number; data: BodyType<TranscribeAudioBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof transcribeAudio>>,
+  TError,
+  { agentId: number; data: BodyType<TranscribeAudioBody> },
+  TContext
+> => {
+  const mutationKey = ["transcribeAudio"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof transcribeAudio>>,
+    { agentId: number; data: BodyType<TranscribeAudioBody> }
+  > = (props) => {
+    const { agentId, data } = props ?? {};
+
+    return transcribeAudio(agentId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TranscribeAudioMutationResult = NonNullable<
+  Awaited<ReturnType<typeof transcribeAudio>>
+>;
+export type TranscribeAudioMutationBody = BodyType<TranscribeAudioBody>;
+export type TranscribeAudioMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Transcribe audio to text (STT)
+ */
+export const useTranscribeAudio = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof transcribeAudio>>,
+    TError,
+    { agentId: number; data: BodyType<TranscribeAudioBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof transcribeAudio>>,
+  TError,
+  { agentId: number; data: BodyType<TranscribeAudioBody> },
+  TContext
+> => {
+  return useMutation(getTranscribeAudioMutationOptions(options));
+};
+
+/**
+ * @summary Convert text to speech (TTS)
+ */
+export const getSpeakTextUrl = (agentId: number) => {
+  return `/api/agents/${agentId}/speak`;
+};
+
+export const speakText = async (
+  agentId: number,
+  speakBody: SpeakBody,
+  options?: RequestInit,
+): Promise<SpeakResponse> => {
+  return customFetch<SpeakResponse>(getSpeakTextUrl(agentId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(speakBody),
+  });
+};
+
+export const getSpeakTextMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof speakText>>,
+    TError,
+    { agentId: number; data: BodyType<SpeakBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof speakText>>,
+  TError,
+  { agentId: number; data: BodyType<SpeakBody> },
+  TContext
+> => {
+  const mutationKey = ["speakText"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof speakText>>,
+    { agentId: number; data: BodyType<SpeakBody> }
+  > = (props) => {
+    const { agentId, data } = props ?? {};
+
+    return speakText(agentId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SpeakTextMutationResult = NonNullable<
+  Awaited<ReturnType<typeof speakText>>
+>;
+export type SpeakTextMutationBody = BodyType<SpeakBody>;
+export type SpeakTextMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Convert text to speech (TTS)
+ */
+export const useSpeakText = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof speakText>>,
+    TError,
+    { agentId: number; data: BodyType<SpeakBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof speakText>>,
+  TError,
+  { agentId: number; data: BodyType<SpeakBody> },
+  TContext
+> => {
+  return useMutation(getSpeakTextMutationOptions(options));
 };
 
 /**
