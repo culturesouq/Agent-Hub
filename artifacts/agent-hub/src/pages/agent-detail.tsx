@@ -99,7 +99,7 @@ export default function AgentDetail() {
         <div className="flex flex-1 overflow-hidden">
 
           {/* Left Sidebar */}
-          <aside className="w-52 shrink-0 flex flex-col border-e border-white/5 bg-black/20 overflow-y-auto">
+          <aside className="w-56 shrink-0 flex flex-col border-e border-white/5 bg-black/20 overflow-y-auto">
 
             {/* Nav Items */}
             <nav className="flex-1 py-2">
