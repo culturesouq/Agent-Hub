@@ -514,11 +514,11 @@ paths:
               $ref: "#/components/schemas/SpeakBody"
       responses:
         "200":
-          description: Audio data (base64 mp3)
+          description: Server-Sent Events stream of PCM16 audio chunks
           content:
-            application/json:
+            text/event-stream:
               schema:
-                $ref: "#/components/schemas/SpeakResponse"
+                $ref: "#/components/schemas/SpeakChunk"
 
   /agents/{agentId}/connections:
     get:
@@ -1296,14 +1296,19 @@ components:
       required:
         - text
 
-    SpeakResponse:
+    SpeakChunk:
       type: object
+      description: One SSE data frame from the /speak stream. Either `chunk` (base64 PCM16 data), `done` (stream finished), or `error`.
       properties:
-        audio:
+        chunk:
           type: string
-          description: Base64-encoded mp3 audio data
-      required:
-        - audio
+          description: Base64-encoded PCM16 audio data fragment (24 kHz, mono, signed 16-bit)
+        done:
+          type: boolean
+          description: Present and true when the stream is complete
+        error:
+          type: string
+          description: Error message if TTS failed
 
     Connection:
       type: object

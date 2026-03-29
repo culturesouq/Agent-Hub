@@ -381,10 +381,6 @@ export const SpeakTextBody = zod.object({
   speed: zod.number().optional(),
 });
 
-export const SpeakTextResponse = zod.object({
-  audio: zod.string().describe("Base64-encoded mp3 audio data"),
-});
-
 /**
  * @summary List connections for an agent
  */

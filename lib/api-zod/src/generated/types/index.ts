@@ -42,7 +42,7 @@ export * from "./publicChatBody";
 export * from "./publicChatResponse";
 export * from "./sendChatMessageBody";
 export * from "./speakBody";
-export * from "./speakResponse";
+export * from "./speakChunk";
 export * from "./toolParameter";
 export * from "./toolParameterType";
 export * from "./transcribeAudioBody";

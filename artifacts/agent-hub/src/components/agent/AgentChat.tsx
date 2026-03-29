@@ -5,6 +5,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useChatStream, type ChatSource } from "@/hooks/use-chat-stream";
 import { useVoiceSession } from "@/hooks/use-voice-session";
 import { VoiceOverlay } from "./VoiceOverlay";
+import { MicPermissionGuide } from "./MicPermissionGuide";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MessageSquare, Send, Trash2, StopCircle, Globe, ExternalLink, Wrench, ImagePlus, X, Mic } from "lucide-react";
@@ -59,6 +60,7 @@ export function AgentChat({ agent, fullHeight }: AgentChatProps) {
 
   const lastStreamedRef = useRef<string>("");
   const wasStreamingRef = useRef(false);
+  const prevIsStreamingRef = useRef(false);
 
   const voice = useVoiceSession({
     agentId: agent.id,
@@ -96,22 +98,28 @@ export function AgentChat({ agent, fullHeight }: AgentChatProps) {
   }, [isStreaming, lastUsedTools]);
 
   useEffect(() => {
-    if (isStreaming) {
-      wasStreamingRef.current = true;
-      if (streamedResponse) lastStreamedRef.current = streamedResponse;
-    }
-  }, [isStreaming, streamedResponse]);
+    const wasStreaming = prevIsStreamingRef.current;
+    prevIsStreamingRef.current = isStreaming;
 
-  useEffect(() => {
-    if (!isStreaming && wasStreamingRef.current && voice.isActive) {
+    if (isStreaming && !wasStreaming) {
+      // Stream just started — clear stale data unconditionally
+      lastStreamedRef.current = "";
+      wasStreamingRef.current = true;
+    }
+
+    if (isStreaming && streamedResponse) {
+      lastStreamedRef.current = streamedResponse;
+    }
+
+    if (!isStreaming && wasStreamingRef.current) {
       wasStreamingRef.current = false;
       const textToSpeak = lastStreamedRef.current;
       lastStreamedRef.current = "";
-      if (textToSpeak.trim()) {
+      if (textToSpeak.trim() && voice.isActive) {
         voice.speak(textToSpeak);
       }
     }
-  }, [isStreaming]);
+  }, [isStreaming, streamedResponse]);
 
   const handleImageFile = useCallback((file: File) => {
     if (!file.type.startsWith("image/")) return;
@@ -147,8 +155,16 @@ export function AgentChat({ agent, fullHeight }: AgentChatProps) {
 
   return (
     <div className={`${containerClass} relative`}>
+      {/* Mic Permission Denied Guide */}
+      {voice.micDenied && (
+        <MicPermissionGuide
+          onRetry={voice.retrySession}
+          onDismiss={voice.clearMicDenied}
+        />
+      )}
+
       {/* Voice Session Overlay */}
-      {voice.isActive && (
+      {voice.isActive && !voice.micDenied && (
         <VoiceOverlay
           agentName={agent.name}
           voiceState={voice.voiceState}

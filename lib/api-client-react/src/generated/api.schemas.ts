@@ -182,9 +182,16 @@ export interface SpeakBody {
   speed?: number;
 }
 
-export interface SpeakResponse {
-  /** Base64-encoded mp3 audio data */
-  audio: string;
+/**
+ * One SSE data frame from the /speak stream. Either `chunk` (base64 PCM16 data), `done` (stream finished), or `error`.
+ */
+export interface SpeakChunk {
+  /** Base64-encoded PCM16 audio data fragment (24 kHz, mono, signed 16-bit) */
+  chunk?: string;
+  /** Present and true when the stream is complete */
+  done?: boolean;
+  /** Error message if TTS failed */
+  error?: string;
 }
 
 export interface Connection {

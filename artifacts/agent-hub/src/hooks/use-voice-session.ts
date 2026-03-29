@@ -8,6 +8,7 @@ interface UseVoiceSessionOptions {
   voiceSpeed?: number;
   onTranscript?: (text: string) => void;
   onError?: (err: string) => void;
+  onMicDenied?: () => void;
 }
 
 const SILENCE_THRESHOLD = 0.01;
@@ -25,6 +26,7 @@ export function useVoiceSession({
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [isActive, setIsActive] = useState(false);
   const [transcript, setTranscript] = useState("");
+  const [micDenied, setMicDenied] = useState(false);
 
   const isActiveRef = useRef(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -89,10 +91,14 @@ export function useVoiceSession({
       detectSilence();
     } catch (err: any) {
       if (isActiveRef.current) {
-        onError?.(err.message || "Microphone access denied");
         isActiveRef.current = false;
         setIsActive(false);
         setVoiceState("idle");
+        if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+          setMicDenied(true);
+        } else {
+          onError?.(err.message || "Microphone access denied");
+        }
       }
     }
   }, [agentId]);
@@ -252,17 +258,31 @@ export function useVoiceSession({
   }, []);
 
   const startSession = useCallback(async () => {
+    setMicDenied(false);
     isActiveRef.current = true;
     setIsActive(true);
     setTranscript("");
     await startRecording();
   }, [startRecording]);
 
+  const retrySession = useCallback(async () => {
+    setMicDenied(false);
+    isActiveRef.current = true;
+    setIsActive(true);
+    setTranscript("");
+    await startRecording();
+  }, [startRecording]);
+
+  const clearMicDenied = useCallback(() => {
+    setMicDenied(false);
+  }, []);
+
   const stopSession = useCallback(() => {
     isActiveRef.current = false;
     setIsActive(false);
     setVoiceState("idle");
     setTranscript("");
+    setMicDenied(false);
     stopMic();
     stopCurrentAudio();
   }, [stopMic, stopCurrentAudio]);
@@ -273,5 +293,5 @@ export function useVoiceSession({
     stopCurrentAudio();
   }, []);
 
-  return { voiceState, isActive, transcript, startSession, stopSession, speak };
+  return { voiceState, isActive, micDenied, transcript, startSession, stopSession, retrySession, clearMicDenied, speak };
 }

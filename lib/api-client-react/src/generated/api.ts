@@ -45,7 +45,7 @@ import type {
   PublicChatResponse,
   SendChatMessageBody,
   SpeakBody,
-  SpeakResponse,
+  SpeakChunk,
   TranscribeAudioBody,
   TranscribeResponse,
   TriggerAutomationWebhookBody,
@@ -2010,8 +2010,8 @@ export const speakText = async (
   agentId: number,
   speakBody: SpeakBody,
   options?: RequestInit,
-): Promise<SpeakResponse> => {
-  return customFetch<SpeakResponse>(getSpeakTextUrl(agentId), {
+): Promise<SpeakChunk> => {
+  return customFetch<SpeakChunk>(getSpeakTextUrl(agentId), {
     ...options,
     method: "POST",
     headers: { "Content-Type": "application/json", ...options?.headers },
