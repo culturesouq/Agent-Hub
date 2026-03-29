@@ -258,18 +258,32 @@ export const IntegrationCatalogItemCategory = {
   communication: "communication",
 } as const;
 
+export type IntegrationCatalogItemAuthType =
+  (typeof IntegrationCatalogItemAuthType)[keyof typeof IntegrationCatalogItemAuthType];
+
+export const IntegrationCatalogItemAuthType = {
+  oauth: "oauth",
+  api_key: "api_key",
+} as const;
+
 export interface IntegrationCatalogItem {
   id: string;
   displayName: string;
   category: IntegrationCatalogItemCategory;
   description: string;
   icon: string;
+  authType: IntegrationCatalogItemAuthType;
+  oauthProvider?: string | null;
+  oauthReady: boolean;
   envVar?: string;
   envVarLabel?: string;
+  apiKeyLabel?: string | null;
   setupNote: string;
   toolNames: string[];
   toolCount: number;
   available: boolean;
+  connected: boolean;
+  accountLabel?: string | null;
   enabled: boolean;
 }
 

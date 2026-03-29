@@ -531,12 +531,18 @@ export const ListIntegrationsCatalogResponseItem = zod.object({
   ]),
   description: zod.string(),
   icon: zod.string(),
+  authType: zod.enum(["oauth", "api_key"]),
+  oauthProvider: zod.string().nullish(),
+  oauthReady: zod.boolean(),
   envVar: zod.string().optional(),
   envVarLabel: zod.string().optional(),
+  apiKeyLabel: zod.string().nullish(),
   setupNote: zod.string(),
   toolNames: zod.array(zod.string()),
   toolCount: zod.number(),
   available: zod.boolean(),
+  connected: zod.boolean(),
+  accountLabel: zod.string().nullish(),
   enabled: zod.boolean(),
 });
 export const ListIntegrationsCatalogResponse = zod.array(

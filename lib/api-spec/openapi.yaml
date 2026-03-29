@@ -1214,10 +1214,21 @@ components:
           type: string
         icon:
           type: string
+        authType:
+          type: string
+          enum: [oauth, api_key]
+        oauthProvider:
+          type: string
+          nullable: true
+        oauthReady:
+          type: boolean
         envVar:
           type: string
         envVarLabel:
           type: string
+        apiKeyLabel:
+          type: string
+          nullable: true
         setupNote:
           type: string
         toolNames:
@@ -1228,6 +1239,11 @@ components:
           type: integer
         available:
           type: boolean
+        connected:
+          type: boolean
+        accountLabel:
+          type: string
+          nullable: true
         enabled:
           type: boolean
       required:
@@ -1236,10 +1252,13 @@ components:
         - category
         - description
         - icon
+        - authType
+        - oauthReady
         - setupNote
         - toolNames
         - toolCount
         - available
+        - connected
         - enabled
 
     IntegrationToggleResponse:

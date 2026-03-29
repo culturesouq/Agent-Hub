@@ -9,7 +9,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { useToast } from "@/hooks/use-toast";
 import {
   CheckCircle, XCircle, Loader2, ChevronDown,
-  Zap, Search, Link2, Link2Off, Key, AlertCircle,
+  Zap, Search, Link2, Link2Off, Key, AlertCircle, FlaskConical,
 } from "lucide-react";
 
 interface CatalogItem {
@@ -71,6 +71,7 @@ export function AgentIntegrations({ agentId }: { agentId: number }) {
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
+  const [testingId, setTestingId] = useState<string | null>(null);
   const { toast } = useToast();
   const qc = useQueryClient();
   const returnTo = window.location.pathname + window.location.search;
@@ -162,6 +163,25 @@ export function AgentIntegrations({ agentId }: { agentId: number }) {
     }
   };
 
+  const handleTest = async (serviceId: string) => {
+    setTestingId(serviceId);
+    try {
+      const r = await fetch(`/api/agents/${agentId}/integrations/${serviceId}/test`, {
+        method: "POST", credentials: "include",
+      });
+      const data = await r.json();
+      toast({
+        title: data.ok ? "Connection successful" : "Connection failed",
+        description: data.message,
+        variant: data.ok ? "default" : "destructive",
+      });
+    } catch {
+      toast({ title: "Test failed", variant: "destructive" });
+    } finally {
+      setTestingId(null);
+    }
+  };
+
   const handleDeleteApiKey = async (serviceId: string) => {
     setDeletingKey(serviceId);
     try {
@@ -247,10 +267,12 @@ export function AgentIntegrations({ agentId }: { agentId: number }) {
                 savingKey={savingKey === item.id}
                 deletingKey={deletingKey === item.id}
                 disconnecting={disconnecting === item.oauthProvider}
+                testingConnection={testingId === item.id}
                 togglePending={toggleMutation.isPending}
                 onSaveApiKey={() => handleSaveApiKey(item.id)}
                 onDeleteApiKey={() => handleDeleteApiKey(item.id)}
                 onDisconnect={() => item.oauthProvider && handleDisconnect(item.oauthProvider)}
+                onTest={() => handleTest(item.id)}
                 onToggle={enable => toggleMutation.mutate({ serviceId: item.id, enable })}
               />
             ))}
@@ -270,8 +292,8 @@ function IntegrationCard({
   item, agentId, returnTo,
   expandedKey, setExpandedKey,
   apiKeyInput, setApiKeyInput,
-  savingKey, deletingKey, disconnecting, togglePending,
-  onSaveApiKey, onDeleteApiKey, onDisconnect, onToggle,
+  savingKey, deletingKey, disconnecting, testingConnection, togglePending,
+  onSaveApiKey, onDeleteApiKey, onDisconnect, onTest, onToggle,
 }: {
   item: CatalogItem;
   agentId: number;
@@ -283,10 +305,12 @@ function IntegrationCard({
   savingKey: boolean;
   deletingKey: boolean;
   disconnecting: boolean;
+  testingConnection: boolean;
   togglePending: boolean;
   onSaveApiKey: () => void;
   onDeleteApiKey: () => void;
   onDisconnect: () => void;
+  onTest: () => void;
   onToggle: (enable: boolean) => void;
 }) {
   const isApiKey = item.authType === "api_key";
@@ -433,6 +457,25 @@ function IntegrationCard({
               >
                 {deletingKey ? <Loader2 className="h-3 w-3 animate-spin" /> : <Link2Off className="h-3 w-3" />}
                 Remove
+              </Button>
+            )}
+
+            {/* Test Connection — shown when connected */}
+            {item.connected && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                onClick={onTest}
+                disabled={testingConnection}
+                title="Test connection"
+              >
+                {testingConnection ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <FlaskConical className="h-3 w-3" />
+                )}
+                Test
               </Button>
             )}
 

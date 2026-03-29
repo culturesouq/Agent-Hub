@@ -5,6 +5,7 @@
  * Agent Hub API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { IntegrationCatalogItemAuthType } from "./integrationCatalogItemAuthType";
 import type { IntegrationCatalogItemCategory } from "./integrationCatalogItemCategory";
 
 export interface IntegrationCatalogItem {
@@ -13,11 +14,17 @@ export interface IntegrationCatalogItem {
   category: IntegrationCatalogItemCategory;
   description: string;
   icon: string;
+  authType: IntegrationCatalogItemAuthType;
+  oauthProvider?: string | null;
+  oauthReady: boolean;
   envVar?: string;
   envVarLabel?: string;
+  apiKeyLabel?: string | null;
   setupNote: string;
   toolNames: string[];
   toolCount: number;
   available: boolean;
+  connected: boolean;
+  accountLabel?: string | null;
   enabled: boolean;
 }

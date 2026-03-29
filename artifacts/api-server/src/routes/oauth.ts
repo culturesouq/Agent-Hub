@@ -69,6 +69,8 @@ router.get("/oauth/:providerId/callback", async (req, res): Promise<void> => {
   const { providerId } = req.params;
   const { code, state, error } = req.query as Record<string, string>;
 
+  const savedState = req.session?.oauthState;
+
   if (error) {
     const returnTo = tryDecodeState(state)?.returnTo || "/";
     res.redirect(`${returnTo}?oauth_error=${encodeURIComponent(error)}`);
@@ -79,6 +81,14 @@ router.get("/oauth/:providerId/callback", async (req, res): Promise<void> => {
     res.status(400).send("Missing authorization code");
     return;
   }
+
+  if (!state || !savedState || state !== savedState) {
+    const returnTo = tryDecodeState(state)?.returnTo || "/";
+    res.redirect(`${returnTo}?oauth_error=invalid_state`);
+    return;
+  }
+
+  req.session.oauthState = undefined;
 
   const stateData = tryDecodeState(state);
   const returnTo = stateData?.returnTo || "/";

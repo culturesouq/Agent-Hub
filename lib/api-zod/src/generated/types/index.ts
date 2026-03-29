@@ -25,6 +25,7 @@ export * from "./createToolBody";
 export * from "./healthStatus";
 export * from "./instruction";
 export * from "./integrationCatalogItem";
+export * from "./integrationCatalogItemAuthType";
 export * from "./integrationCatalogItemCategory";
 export * from "./integrationTestResponse";
 export * from "./integrationToggleResponse";
