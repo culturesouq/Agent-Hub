@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Database, Plus, Trash2, Link as LinkIcon, FileText, File, Upload, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 export function AgentKnowledge({ agent }: { agent: Agent }) {
   const { t } = useI18n();
@@ -45,7 +46,7 @@ export function AgentKnowledge({ agent }: { agent: Agent }) {
     mutation: {
       onSuccess: () => invalidate(),
       onError: (err: Error) => {
-        alert(err.message || "Failed to upload file");
+        toast.error(err.message || "Failed to upload file");
       },
     },
   });
@@ -76,7 +77,7 @@ export function AgentKnowledge({ agent }: { agent: Agent }) {
       const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
 
       if (!allowed.includes(file.type) && !allowedExts.includes(ext)) {
-        alert("Unsupported file type. Please upload a PDF, .docx, .txt, or .md file.");
+        toast.error("Unsupported file type. Please upload a PDF, .docx, .txt, or .md file.");
         return;
       }
 
