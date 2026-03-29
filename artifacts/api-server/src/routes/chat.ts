@@ -277,7 +277,8 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
   const sources = allSources
     .map(s => ({ title: s.title, url: s.url }))
     .filter(s => { if (seenUrls.has(s.url)) return false; seenUrls.add(s.url); return true; });
-  res.write(`data: ${JSON.stringify({ done: true, sources, usedTools })}\n\n`);
+  const uniqueUsedTools = [...new Set(usedTools)];
+  res.write(`data: ${JSON.stringify({ done: true, sources, usedTools: uniqueUsedTools })}\n\n`);
   res.end();
 });
 

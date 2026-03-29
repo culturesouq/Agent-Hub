@@ -7,6 +7,18 @@ const router: IRouter = Router();
 
 router.use(requireAuth);
 
+function validateWebhookUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return "webhookUrl must use http or https protocol";
+    }
+    return null;
+  } catch {
+    return "webhookUrl must be a valid URL";
+  }
+}
+
 router.get("/agents/:agentId/tools", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.agentId) ? req.params.agentId[0] : req.params.agentId;
   const agentId = parseInt(raw, 10);
@@ -46,8 +58,9 @@ router.post("/agents/:agentId/tools", async (req, res): Promise<void> => {
     return;
   }
 
-  try { new URL(body.webhookUrl); } catch {
-    res.status(400).json({ error: "webhookUrl must be a valid URL" });
+  const urlError = validateWebhookUrl(body.webhookUrl);
+  if (urlError) {
+    res.status(400).json({ error: urlError });
     return;
   }
 
@@ -117,8 +130,9 @@ router.patch("/agents/:agentId/tools/:id", async (req, res): Promise<void> => {
   }
 
   if (body.webhookUrl !== undefined) {
-    try { new URL(body.webhookUrl); } catch {
-      res.status(400).json({ error: "webhookUrl must be a valid URL" });
+    const urlErr = validateWebhookUrl(body.webhookUrl);
+    if (urlErr) {
+      res.status(400).json({ error: urlErr });
       return;
     }
     updateData.webhookUrl = body.webhookUrl;
