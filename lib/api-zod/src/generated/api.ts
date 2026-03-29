@@ -437,6 +437,35 @@ export const ListActivityResponseItem = zod.object({
 export const ListActivityResponse = zod.array(ListActivityResponseItem);
 
 /**
+ * @summary List personality growth log for an agent
+ */
+export const ListGrowthLogParams = zod.object({
+  agentId: zod.coerce.number(),
+});
+
+export const ListGrowthLogResponseItem = zod.object({
+  id: zod.number(),
+  agentId: zod.number(),
+  field: zod.string(),
+  oldValue: zod.string().nullish(),
+  newValue: zod.string(),
+  appliedAt: zod.string(),
+});
+export const ListGrowthLogResponse = zod.array(ListGrowthLogResponseItem);
+
+/**
+ * @summary Revert a personality growth entry
+ */
+export const RevertGrowthParams = zod.object({
+  agentId: zod.coerce.number(),
+  id: zod.coerce.number(),
+});
+
+export const RevertGrowthResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
  * @summary List memories for an agent
  */
 export const ListMemoriesParams = zod.object({

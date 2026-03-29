@@ -27,6 +27,8 @@ tags:
     description: Agent persistent memories
   - name: integrations
     description: Agent platform integrations (GitHub, Slack, Notion, etc.)
+  - name: growth
+    description: Agent personality growth log
   - name: public
     description: Public agent API
 paths:
@@ -604,6 +606,56 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ActivityEntry"
+
+  /agents/{agentId}/growth:
+    get:
+      operationId: listGrowthLog
+      tags: [growth]
+      summary: List personality growth log for an agent
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Growth log entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GrowthLogEntry"
+
+  /agents/{agentId}/growth/{id}/revert:
+    post:
+      operationId: revertGrowth
+      tags: [growth]
+      summary: Revert a personality growth entry
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Reverted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                required:
+                  - success
 
   /agents/{agentId}/memories:
     get:
@@ -1342,6 +1394,28 @@ components:
           type: string
       required:
         - appName
+
+    GrowthLogEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        agentId:
+          type: integer
+        field:
+          type: string
+        oldValue:
+          type: ["string", "null"]
+        newValue:
+          type: string
+        appliedAt:
+          type: string
+      required:
+        - id
+        - agentId
+        - field
+        - newValue
+        - appliedAt
 
     ActivityEntry:
       type: object

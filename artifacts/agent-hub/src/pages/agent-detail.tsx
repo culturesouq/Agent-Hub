@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useRoute, Link } from "wouter";
-import { useGetAgent, useListMemories } from "@workspace/api-client-react";
+import { useGetAgent, useListMemories, useListGrowthLog } from "@workspace/api-client-react";
 import { useI18n } from "@/lib/i18n";
 import { Layout } from "@/components/layout";
 import { AgentIdentity } from "@/components/agent/AgentIdentity";
@@ -15,6 +15,7 @@ import { AgentSettings } from "@/components/agent/AgentSettings";
 import { AgentPublicAPI } from "@/components/agent/AgentPublicAPI";
 import { AgentAutomations } from "@/components/agent/AgentAutomations";
 import { AgentIntegrations } from "@/components/agent/AgentIntegrations";
+import { AgentGrowth } from "@/components/agent/AgentGrowth";
 import {
   Loader2,
   Fingerprint,
@@ -33,6 +34,7 @@ import {
   Sparkles,
   Timer,
   Plug,
+  Dna,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -42,6 +44,7 @@ type Section =
   | "knowledge"
   | "memory"
   | "instructions"
+  | "growth"
   | "tools"
   | "automations"
   | "integrations"
@@ -55,10 +58,12 @@ export default function AgentDetail() {
   const agentId = parseInt(params?.id || "0", 10);
   const { data: agent, isLoading } = useGetAgent(agentId, { query: { enabled: !!agentId } });
   const { data: memories } = useListMemories(agentId, { query: { enabled: !!agentId } });
+  const { data: growthEntries = [] } = useListGrowthLog(agentId, { query: { enabled: !!agentId } });
   const { t, dir } = useI18n();
   const [activeSection, setActiveSection] = useState<Section>("chat");
   const [brainOpen, setBrainOpen] = useState(false);
   const memoryCount = memories?.length ?? 0;
+  const growthCount = growthEntries?.length ?? 0;
 
   if (isLoading) {
     return (
@@ -105,7 +110,7 @@ export default function AgentDetail() {
     );
   };
 
-  const brainActive = ["knowledge", "memory", "instructions"].includes(activeSection);
+  const brainActive = ["knowledge", "memory", "instructions", "growth"].includes(activeSection);
 
   const SECTION_TITLES: Record<Section, string> = {
     chat: "chat",
@@ -113,6 +118,7 @@ export default function AgentDetail() {
     knowledge: "knowledge",
     memory: "memory",
     instructions: "instructions",
+    growth: "growth",
     tools: "tools",
     automations: "automations",
     integrations: "integrations",
@@ -126,6 +132,7 @@ export default function AgentDetail() {
     identity: "identityHint",
     memory: "memoryDesc",
     instructions: "permanentRulesDesc",
+    growth: "growthDesc",
     tools: "toolsDesc",
     automations: "automationsDesc",
     integrations: "integrationsDesc",
@@ -263,6 +270,24 @@ export default function AgentDetail() {
                           <BookOpen className="w-3.5 h-3.5 shrink-0" />
                           <span>{t("instructions")}</span>
                         </button>
+
+                        {/* Growth */}
+                        <button
+                          onClick={() => setActiveSection("growth")}
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-all rounded-lg
+                            ${activeSection === "growth"
+                              ? "text-primary bg-primary/10 font-medium"
+                              : "text-muted-foreground hover:text-white hover:bg-white/5"
+                            }`}
+                        >
+                          <Dna className="w-3.5 h-3.5 shrink-0" />
+                          <span className="flex-1 text-start">{t("growth")}</span>
+                          {growthCount > 0 && (
+                            <span className="text-[9px] font-mono bg-primary/20 text-primary rounded-full px-1.5 py-0.5 leading-none">
+                              {growthCount}
+                            </span>
+                          )}
+                        </button>
                       </div>
                     </motion.div>
                   )}
@@ -334,6 +359,7 @@ export default function AgentDetail() {
                 {activeSection === "knowledge" && <AgentKnowledge agent={agent} />}
                 {activeSection === "memory" && <AgentMemory agentId={agent.id} />}
                 {activeSection === "instructions" && <AgentInstructions agent={agent} />}
+                {activeSection === "growth" && <AgentGrowth agentId={agent.id} />}
                 {activeSection === "tools" && <AgentTools agentId={agent.id} />}
                 {activeSection === "automations" && <AgentAutomations agentId={agent.id} />}
                 {activeSection === "integrations" && <AgentIntegrations agentId={agent.id} />}

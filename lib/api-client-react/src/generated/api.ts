@@ -33,6 +33,7 @@ import type {
   CreateAutomationBody,
   CreateConnectionBody,
   CreateToolBody,
+  GrowthLogEntry,
   HealthStatus,
   Instruction,
   IntegrationCatalogItem,
@@ -43,6 +44,7 @@ import type {
   LoginResponse,
   PublicChatBody,
   PublicChatResponse,
+  RevertGrowth200,
   SendChatMessageBody,
   SpeakBody,
   SpeakChunk,
@@ -2006,12 +2008,6 @@ export const getSpeakTextUrl = (agentId: number) => {
   return `/api/agents/${agentId}/speak`;
 };
 
-/**
- * @deprecated This generated helper does NOT work correctly for the /speak endpoint.
- * The real endpoint streams PCM16 audio as Server-Sent Events (text/event-stream),
- * not JSON. Use the raw `fetch` API with SSE parsing instead. See `useVoiceSession`
- * hook in `artifacts/agent-hub/src/hooks/use-voice-session.ts` for the correct usage.
- */
 export const speakText = async (
   agentId: number,
   speakBody: SpeakBody,
@@ -2438,6 +2434,178 @@ export function useListActivity<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary List personality growth log for an agent
+ */
+export const getListGrowthLogUrl = (agentId: number) => {
+  return `/api/agents/${agentId}/growth`;
+};
+
+export const listGrowthLog = async (
+  agentId: number,
+  options?: RequestInit,
+): Promise<GrowthLogEntry[]> => {
+  return customFetch<GrowthLogEntry[]>(getListGrowthLogUrl(agentId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListGrowthLogQueryKey = (agentId: number) => {
+  return [`/api/agents/${agentId}/growth`] as const;
+};
+
+export const getListGrowthLogQueryOptions = <
+  TData = Awaited<ReturnType<typeof listGrowthLog>>,
+  TError = ErrorType<unknown>,
+>(
+  agentId: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listGrowthLog>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListGrowthLogQueryKey(agentId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listGrowthLog>>> = ({
+    signal,
+  }) => listGrowthLog(agentId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!agentId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listGrowthLog>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListGrowthLogQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listGrowthLog>>
+>;
+export type ListGrowthLogQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List personality growth log for an agent
+ */
+
+export function useListGrowthLog<
+  TData = Awaited<ReturnType<typeof listGrowthLog>>,
+  TError = ErrorType<unknown>,
+>(
+  agentId: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listGrowthLog>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListGrowthLogQueryOptions(agentId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Revert a personality growth entry
+ */
+export const getRevertGrowthUrl = (agentId: number, id: number) => {
+  return `/api/agents/${agentId}/growth/${id}/revert`;
+};
+
+export const revertGrowth = async (
+  agentId: number,
+  id: number,
+  options?: RequestInit,
+): Promise<RevertGrowth200> => {
+  return customFetch<RevertGrowth200>(getRevertGrowthUrl(agentId, id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRevertGrowthMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof revertGrowth>>,
+    TError,
+    { agentId: number; id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof revertGrowth>>,
+  TError,
+  { agentId: number; id: number },
+  TContext
+> => {
+  const mutationKey = ["revertGrowth"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof revertGrowth>>,
+    { agentId: number; id: number }
+  > = (props) => {
+    const { agentId, id } = props ?? {};
+
+    return revertGrowth(agentId, id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RevertGrowthMutationResult = NonNullable<
+  Awaited<ReturnType<typeof revertGrowth>>
+>;
+
+export type RevertGrowthMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Revert a personality growth entry
+ */
+export const useRevertGrowth = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof revertGrowth>>,
+    TError,
+    { agentId: number; id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof revertGrowth>>,
+  TError,
+  { agentId: number; id: number },
+  TContext
+> => {
+  return useMutation(getRevertGrowthMutationOptions(options));
+};
 
 /**
  * @summary List memories for an agent

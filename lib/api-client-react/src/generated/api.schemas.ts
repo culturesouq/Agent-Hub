@@ -209,6 +209,16 @@ export interface CreateConnectionBody {
   appName: string;
 }
 
+export interface GrowthLogEntry {
+  id: number;
+  agentId: number;
+  field: string;
+  /** @nullable */
+  oldValue?: string | null;
+  newValue: string;
+  appliedAt: string;
+}
+
 export interface ActivityEntry {
   id: number;
   agentId: number;
@@ -424,6 +434,10 @@ export type UploadKnowledgeFileBody = {
 
 export type TranscribeAudioBody = {
   audio: Blob;
+};
+
+export type RevertGrowth200 = {
+  success: boolean;
 };
 
 export type TriggerAutomationWebhookBody = { [key: string]: unknown };

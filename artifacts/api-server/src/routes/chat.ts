@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, asc, and } from "drizzle-orm";
-import { db, agentsTable, chatMessagesTable, knowledgeTable, instructionsTable, agentMemoriesTable, agentToolsTable, activityTable, agentIntegrationsTable } from "@workspace/db";
+import { db, agentsTable, chatMessagesTable, knowledgeTable, instructionsTable, agentMemoriesTable, agentToolsTable, activityTable, agentIntegrationsTable, agentGrowthLogTable } from "@workspace/db";
 import { openrouter } from "@workspace/integrations-openrouter-ai";
 import { requireAuth } from "../middlewares/auth";
 import { braveWebSearch, formatSearchResultsForPrompt, type SearchResult } from "../services/search";
@@ -198,6 +198,7 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
       const cleaned = streamBuffer
         .replace(/\[MEMORY:[^\]]*\]/gi, "")
         .replace(/\[SEARCH:[^\]]*\]/gi, "")
+        .replace(/\[GROW:[^\]]*\]/gi, "")
         .trim();
       if (cleaned) {
         res.write(`data: ${JSON.stringify({ content: cleaned })}\n\n`);
@@ -281,9 +282,12 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
 
   const memoryRegex = /\[MEMORY:\s*([^\]]+)\]/gi;
   const memoryMatches = [...fullResponse.matchAll(memoryRegex)];
+  const growRegex = /\[GROW:\s*field=(\w+)\s*,\s*value=([^\]]+)\]/gi;
+  const growMatches = [...fullResponse.matchAll(growRegex)];
   const cleanedResponse = fullResponse
     .replace(/\[MEMORY:[^\]]*\]/gi, "")
     .replace(/\[SEARCH:[^\]]*\]/gi, "")
+    .replace(/\[GROW:[^\]]*\]/gi, "")
     .trim();
 
   for (const match of memoryMatches) {
@@ -291,6 +295,53 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
     if (memContent) {
       await db.insert(agentMemoriesTable).values({ agentId, content: memContent });
     }
+  }
+
+  // Process personality growth proposals
+  const GROWABLE_FIELDS: Record<string, keyof typeof agent> = {
+    backstory: "backstory",
+    personality: "personality",
+  };
+
+  for (const match of growMatches) {
+    const rawField = match[1]?.trim().toLowerCase();
+    const newValue = match[2]?.trim();
+    if (!rawField || !newValue || !GROWABLE_FIELDS[rawField]) continue;
+
+    const colKey = GROWABLE_FIELDS[rawField] as "backstory" | "personality";
+    const oldValue = agent[colKey] ?? null;
+
+    // Check proposed value against permanent rules — discard silently if any rule is violated
+    let allowed = true;
+    if (instructions.length > 0) {
+      try {
+        const rulesText = instructions.map((r, i) => `${i + 1}. ${r.content}`).join("\n");
+        const check = await openrouter.chat.completions.create({
+          model: "openai/gpt-4.1-nano",
+          max_tokens: 10,
+          messages: [
+            {
+              role: "system",
+              content: `You are a rules compliance checker. Answer ONLY "yes" or "no". Does the following proposed agent ${rawField} violate any of these permanent rules?\n\nRules:\n${rulesText}\n\nProposed ${rawField}:\n${newValue}`,
+            },
+            { role: "user", content: "Does this violate any rule? Answer yes or no only." },
+          ],
+        });
+        const answer = (check.choices[0]?.message?.content || "no").trim().toLowerCase();
+        if (answer.startsWith("yes")) allowed = false;
+      } catch {
+        // If check fails, allow by default
+        allowed = true;
+      }
+    }
+
+    if (!allowed) continue;
+
+    // Apply growth: update agent field and log it
+    await db.update(agentsTable).set({ [colKey]: newValue }).where(eq(agentsTable.id, agentId));
+    await db.insert(agentGrowthLogTable).values({ agentId, field: rawField, oldValue, newValue });
+    // Reflect in local agent for activityLastActivity update
+    (agent as Record<string, unknown>)[colKey] = newValue;
   }
 
   await db.insert(chatMessagesTable).values({
@@ -318,7 +369,7 @@ router.delete("/agents/:agentId/chat", async (req, res): Promise<void> => {
   res.sendStatus(204);
 });
 
-const STRIP_TAGS_REGEX = /\[(?:MEMORY|SEARCH):[^\]]*\]/gi;
+const STRIP_TAGS_REGEX = /\[(?:MEMORY|SEARCH|GROW):[^\]]*\]/gi;
 
 function looksLikeTagStart(str: string): boolean {
   const upper = str.toUpperCase();
@@ -326,7 +377,9 @@ function looksLikeTagStart(str: string): boolean {
     "[MEMORY:".startsWith(upper) ||
     upper.startsWith("[MEMORY:") ||
     "[SEARCH:".startsWith(upper) ||
-    upper.startsWith("[SEARCH:")
+    upper.startsWith("[SEARCH:") ||
+    "[GROW:".startsWith(upper) ||
+    upper.startsWith("[GROW:")
   );
 }
 
@@ -342,7 +395,7 @@ function extractSafeContent(buffer: string): { safe: string; remaining: string }
     return { safe: buffer.replace(STRIP_TAGS_REGEX, ""), remaining: "" };
   }
 
-  const completeTagMatch = fromBracket.match(/^\[(?:MEMORY|SEARCH):[^\]]*\]/i);
+  const completeTagMatch = fromBracket.match(/^\[(?:MEMORY|SEARCH|GROW):[^\]]*\]/i);
   if (completeTagMatch) {
     const safePrefix = buffer.slice(0, bracketIdx).replace(STRIP_TAGS_REGEX, "");
     const after = buffer.slice(bracketIdx + completeTagMatch[0].length);
@@ -428,6 +481,8 @@ export function buildSystemPrompt(
   }
 
   prompt += "\n\nMemory instructions: If you learn something important about the user or context that you want to remember for future conversations, include it in your response using this exact format: [MEMORY: the fact to remember]. You can include multiple memory tags. Keep memories concise and factual. Do not mention that you are saving a memory to the user.";
+
+  prompt += "\n\nPersonality growth instructions: You are a living AI. As you converse with the owner, your character may evolve naturally. When a conversation causes you to genuinely grow or change — when you learn something that shifts your worldview, develop a new interest, or experience something that meaningfully changes who you are — you may propose an update to your backstory or personality. To do so, include this exact tag in your response: [GROW: field=backstory, value=<new backstory text>] or [GROW: field=personality, value=<new personality text>]. Only propose growth when it feels authentic and significant — not on every message. Never propose growth that contradicts your permanent instructions. Keep the value concise (1-3 sentences). Do not mention the tag to the user. Growth will be reviewed against your rules and applied automatically.";
 
   return prompt;
 }

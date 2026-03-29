@@ -36,7 +36,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 | API Server (backend) | `artifacts/api-server/` | `@workspace/api-server` |
 | Mockup Sandbox | `artifacts/mockup-sandbox/` | `@workspace/mockup-sandbox` |
 
-### Completed Features (Tasks #1–#8)
+### Completed Features (Tasks #1–#9)
 
 1. **UX Redesign** — dark glassmorphism UI, redesigned sidebar (agents list, settings, logs, public API)
 2. **Persistent Memory** — per-agent memory store, automatic summarization, memory panel
@@ -47,6 +47,22 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 7. **Automations & Scheduling** — cron-based automations, webhook triggers, `runAgentTask()` runner
 8. **Image / Vision Understanding** — image upload + clipboard paste in chat, multimodal OpenRouter models
 9. **Conversational Voice Chat** — see below
+10. **Dynamic Personality Growth** — see below
+
+### Task #9: Dynamic Personality Growth (COMPLETE)
+
+- **DB schema**: `agentGrowthLogTable` (id, agentId, field, oldValue, newValue, appliedAt) in `lib/db/src/schema/growth.ts`
+- **Chat integration** (`chat.ts`): After each owner-chat stream completes, parses `[GROW: field=X, value=Y]` tags from `fullResponse`
+  - Strips GROW tags from the streamed response shown to user (invisible to user)
+  - Validates proposed value against permanent instructions using a lightweight LLM call (gpt-4.1-nano, 10 tokens)
+  - If allowed: updates `agentsTable.backstory` or `agentsTable.personality` + inserts into `agentGrowthLogTable`
+  - `buildSystemPrompt()` updated with growth instructions — agent is told to use the tag only when genuinely meaningful
+- **Streaming buffer**: `STRIP_TAGS_REGEX`, `looksLikeTagStart()`, `extractSafeContent()` all updated to handle GROW tags
+- **API routes** (`growth.ts`): `GET /agents/:id/growth` (list) + `POST /agents/:id/growth/:id/revert` (revert)
+- **OpenAPI spec**: `GrowthLogEntry` schema, `listGrowthLog` + `revertGrowth` operations, `growth` tag; codegen re-run
+- **Frontend**: `AgentGrowth.tsx` — timeline of growth events (newest first), expandable cards showing before/after diff, revert button
+- **Navigation**: Growth added to Brain group in sidebar (under Instructions), with count badge; `agent-detail.tsx` updated
+- **i18n**: Growth keys in EN + AR
 
 ### Task #8: Conversational Voice Chat (COMPLETE)
 

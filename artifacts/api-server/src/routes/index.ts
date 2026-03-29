@@ -13,6 +13,7 @@ import automationsRouter from "./automations";
 import integrationsRouter from "./integrations";
 import oauthRouter from "./oauth";
 import voiceRouter from "./voice";
+import growthRouter from "./growth";
 
 const router: IRouter = Router();
 
@@ -23,6 +24,7 @@ router.use(knowledgeRouter);
 router.use(instructionsRouter);
 router.use(chatRouter);
 router.use(voiceRouter);
+router.use(growthRouter);
 router.use(connectionsRouter);
 router.use(activityRouter);
 router.use(publicRouter);
