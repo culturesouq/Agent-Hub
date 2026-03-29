@@ -31,6 +31,9 @@ import type {
   CreateToolBody,
   HealthStatus,
   Instruction,
+  IntegrationCatalogItem,
+  IntegrationTestResponse,
+  IntegrationToggleResponse,
   KnowledgeEntry,
   LoginBody,
   LoginResponse,
@@ -2844,4 +2847,363 @@ export const usePublicChat = <
   TContext
 > => {
   return useMutation(getPublicChatMutationOptions(options));
+};
+
+/**
+ * @summary List all available integrations with enabled status for this agent
+ */
+export const getListIntegrationsCatalogUrl = (agentId: number) => {
+  return `/api/agents/${agentId}/integrations/catalog`;
+};
+
+export const listIntegrationsCatalog = async (
+  agentId: number,
+  options?: RequestInit,
+): Promise<IntegrationCatalogItem[]> => {
+  return customFetch<IntegrationCatalogItem[]>(
+    getListIntegrationsCatalogUrl(agentId),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListIntegrationsCatalogQueryKey = (agentId: number) => {
+  return [`/api/agents/${agentId}/integrations/catalog`] as const;
+};
+
+export const getListIntegrationsCatalogQueryOptions = <
+  TData = Awaited<ReturnType<typeof listIntegrationsCatalog>>,
+  TError = ErrorType<unknown>,
+>(
+  agentId: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listIntegrationsCatalog>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListIntegrationsCatalogQueryKey(agentId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listIntegrationsCatalog>>
+  > = ({ signal }) =>
+    listIntegrationsCatalog(agentId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!agentId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listIntegrationsCatalog>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListIntegrationsCatalogQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listIntegrationsCatalog>>
+>;
+export type ListIntegrationsCatalogQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all available integrations with enabled status for this agent
+ */
+
+export function useListIntegrationsCatalog<
+  TData = Awaited<ReturnType<typeof listIntegrationsCatalog>>,
+  TError = ErrorType<unknown>,
+>(
+  agentId: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listIntegrationsCatalog>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListIntegrationsCatalogQueryOptions(agentId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Enable an integration for an agent
+ */
+export const getEnableIntegrationUrl = (agentId: number, serviceId: string) => {
+  return `/api/agents/${agentId}/integrations/${serviceId}/enable`;
+};
+
+export const enableIntegration = async (
+  agentId: number,
+  serviceId: string,
+  options?: RequestInit,
+): Promise<IntegrationToggleResponse> => {
+  return customFetch<IntegrationToggleResponse>(
+    getEnableIntegrationUrl(agentId, serviceId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getEnableIntegrationMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof enableIntegration>>,
+    TError,
+    { agentId: number; serviceId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof enableIntegration>>,
+  TError,
+  { agentId: number; serviceId: string },
+  TContext
+> => {
+  const mutationKey = ["enableIntegration"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof enableIntegration>>,
+    { agentId: number; serviceId: string }
+  > = (props) => {
+    const { agentId, serviceId } = props ?? {};
+
+    return enableIntegration(agentId, serviceId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type EnableIntegrationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof enableIntegration>>
+>;
+
+export type EnableIntegrationMutationError = ErrorType<void>;
+
+/**
+ * @summary Enable an integration for an agent
+ */
+export const useEnableIntegration = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof enableIntegration>>,
+    TError,
+    { agentId: number; serviceId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof enableIntegration>>,
+  TError,
+  { agentId: number; serviceId: string },
+  TContext
+> => {
+  return useMutation(getEnableIntegrationMutationOptions(options));
+};
+
+/**
+ * @summary Disable an integration for an agent
+ */
+export const getDisableIntegrationUrl = (
+  agentId: number,
+  serviceId: string,
+) => {
+  return `/api/agents/${agentId}/integrations/${serviceId}/disable`;
+};
+
+export const disableIntegration = async (
+  agentId: number,
+  serviceId: string,
+  options?: RequestInit,
+): Promise<IntegrationToggleResponse> => {
+  return customFetch<IntegrationToggleResponse>(
+    getDisableIntegrationUrl(agentId, serviceId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getDisableIntegrationMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof disableIntegration>>,
+    TError,
+    { agentId: number; serviceId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof disableIntegration>>,
+  TError,
+  { agentId: number; serviceId: string },
+  TContext
+> => {
+  const mutationKey = ["disableIntegration"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof disableIntegration>>,
+    { agentId: number; serviceId: string }
+  > = (props) => {
+    const { agentId, serviceId } = props ?? {};
+
+    return disableIntegration(agentId, serviceId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DisableIntegrationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof disableIntegration>>
+>;
+
+export type DisableIntegrationMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Disable an integration for an agent
+ */
+export const useDisableIntegration = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof disableIntegration>>,
+    TError,
+    { agentId: number; serviceId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof disableIntegration>>,
+  TError,
+  { agentId: number; serviceId: string },
+  TContext
+> => {
+  return useMutation(getDisableIntegrationMutationOptions(options));
+};
+
+/**
+ * @summary Test if an integration's credentials are configured and working
+ */
+export const getTestIntegrationUrl = (agentId: number, serviceId: string) => {
+  return `/api/agents/${agentId}/integrations/${serviceId}/test`;
+};
+
+export const testIntegration = async (
+  agentId: number,
+  serviceId: string,
+  options?: RequestInit,
+): Promise<IntegrationTestResponse> => {
+  return customFetch<IntegrationTestResponse>(
+    getTestIntegrationUrl(agentId, serviceId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getTestIntegrationMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof testIntegration>>,
+    TError,
+    { agentId: number; serviceId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof testIntegration>>,
+  TError,
+  { agentId: number; serviceId: string },
+  TContext
+> => {
+  const mutationKey = ["testIntegration"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof testIntegration>>,
+    { agentId: number; serviceId: string }
+  > = (props) => {
+    const { agentId, serviceId } = props ?? {};
+
+    return testIntegration(agentId, serviceId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TestIntegrationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof testIntegration>>
+>;
+
+export type TestIntegrationMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Test if an integration's credentials are configured and working
+ */
+export const useTestIntegration = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof testIntegration>>,
+    TError,
+    { agentId: number; serviceId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof testIntegration>>,
+  TError,
+  { agentId: number; serviceId: string },
+  TContext
+> => {
+  return useMutation(getTestIntegrationMutationOptions(options));
 };

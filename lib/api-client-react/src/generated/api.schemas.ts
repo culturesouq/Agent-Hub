@@ -245,6 +245,46 @@ export interface UpdateToolBody {
   webhookUrl?: string;
 }
 
+export type IntegrationCatalogItemCategory =
+  (typeof IntegrationCatalogItemCategory)[keyof typeof IntegrationCatalogItemCategory];
+
+export const IntegrationCatalogItemCategory = {
+  google: "google",
+  dev: "dev",
+  productivity: "productivity",
+  crm: "crm",
+  finance: "finance",
+  communication: "communication",
+} as const;
+
+export interface IntegrationCatalogItem {
+  id: string;
+  displayName: string;
+  category: IntegrationCatalogItemCategory;
+  description: string;
+  icon: string;
+  envVar: string;
+  envVarLabel: string;
+  setupNote: string;
+  toolNames: string[];
+  toolCount: number;
+  available: boolean;
+  enabled: boolean;
+}
+
+export interface IntegrationToggleResponse {
+  enabled: boolean;
+  serviceId: string;
+}
+
+export interface IntegrationTestResponse {
+  ok: boolean;
+  /** @nullable */
+  message?: string | null;
+  /** @nullable */
+  error?: string | null;
+}
+
 export type ConversationTurnRole =
   (typeof ConversationTurnRole)[keyof typeof ConversationTurnRole];
 

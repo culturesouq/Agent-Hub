@@ -25,6 +25,8 @@ tags:
     description: Agent activity log
   - name: memories
     description: Agent persistent memories
+  - name: integrations
+    description: Agent platform integrations (GitHub, Slack, Notion, etc.)
   - name: public
     description: Public agent API
 paths:
@@ -698,6 +700,101 @@ paths:
         "404":
           description: Agent not found
 
+  /agents/{agentId}/integrations/catalog:
+    get:
+      operationId: listIntegrationsCatalog
+      tags: [integrations]
+      summary: List all available integrations with enabled status for this agent
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Integration catalog
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IntegrationCatalogItem"
+
+  /agents/{agentId}/integrations/{serviceId}/enable:
+    post:
+      operationId: enableIntegration
+      tags: [integrations]
+      summary: Enable an integration for an agent
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: serviceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Integration enabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationToggleResponse"
+        "404":
+          description: Integration not found
+
+  /agents/{agentId}/integrations/{serviceId}/disable:
+    post:
+      operationId: disableIntegration
+      tags: [integrations]
+      summary: Disable an integration for an agent
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: serviceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Integration disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationToggleResponse"
+
+  /agents/{agentId}/integrations/{serviceId}/test:
+    post:
+      operationId: testIntegration
+      tags: [integrations]
+      summary: Test if an integration's credentials are configured and working
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: serviceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Test result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationTestResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -1102,6 +1199,73 @@ components:
         webhookUrl:
           type: string
           format: uri
+
+    IntegrationCatalogItem:
+      type: object
+      properties:
+        id:
+          type: string
+        displayName:
+          type: string
+        category:
+          type: string
+          enum: [google, dev, productivity, crm, finance, communication]
+        description:
+          type: string
+        icon:
+          type: string
+        envVar:
+          type: string
+        envVarLabel:
+          type: string
+        setupNote:
+          type: string
+        toolNames:
+          type: array
+          items:
+            type: string
+        toolCount:
+          type: integer
+        available:
+          type: boolean
+        enabled:
+          type: boolean
+      required:
+        - id
+        - displayName
+        - category
+        - description
+        - icon
+        - envVar
+        - envVarLabel
+        - setupNote
+        - toolNames
+        - toolCount
+        - available
+        - enabled
+
+    IntegrationToggleResponse:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        serviceId:
+          type: string
+      required:
+        - enabled
+        - serviceId
+
+    IntegrationTestResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        message:
+          type: ["string", "null"]
+        error:
+          type: ["string", "null"]
+      required:
+        - ok
 
     PublicChatBody:
       type: object

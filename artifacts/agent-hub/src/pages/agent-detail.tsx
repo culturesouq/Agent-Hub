@@ -14,6 +14,7 @@ import { AgentTools } from "@/components/agent/AgentTools";
 import { AgentSettings } from "@/components/agent/AgentSettings";
 import { AgentPublicAPI } from "@/components/agent/AgentPublicAPI";
 import { AgentAutomations } from "@/components/agent/AgentAutomations";
+import { AgentIntegrations } from "@/components/agent/AgentIntegrations";
 import {
   Loader2,
   Fingerprint,
@@ -31,6 +32,7 @@ import {
   Globe2,
   Sparkles,
   Timer,
+  Plug,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -42,6 +44,7 @@ type Section =
   | "instructions"
   | "tools"
   | "automations"
+  | "integrations"
   | "connections"
   | "publicApi"
   | "activity"
@@ -112,6 +115,7 @@ export default function AgentDetail() {
     instructions: "instructions",
     tools: "tools",
     automations: "automations",
+    integrations: "integrations",
     connections: "connections",
     publicApi: "publicApi",
     activity: "activity",
@@ -124,6 +128,7 @@ export default function AgentDetail() {
     instructions: "permanentRulesDesc",
     tools: "toolsDesc",
     automations: "automationsDesc",
+    integrations: "integrationsDesc",
     settings: "settingsDesc",
     publicApi: "publicApiDesc",
   };
@@ -270,6 +275,9 @@ export default function AgentDetail() {
               {/* Automations */}
               {navItem("automations", Timer, "automations")}
 
+              {/* Integrations */}
+              {navItem("integrations", Plug, "integrations")}
+
               <div className="mx-4 border-t border-white/5 my-1" />
 
               {/* Connections */}
@@ -328,6 +336,7 @@ export default function AgentDetail() {
                 {activeSection === "instructions" && <AgentInstructions agent={agent} />}
                 {activeSection === "tools" && <AgentTools agentId={agent.id} />}
                 {activeSection === "automations" && <AgentAutomations agentId={agent.id} />}
+                {activeSection === "integrations" && <AgentIntegrations agentId={agent.id} />}
                 {activeSection === "connections" && <AgentConnections agent={agent} />}
                 {activeSection === "publicApi" && <AgentPublicAPI agent={agent} />}
                 {activeSection === "activity" && <AgentActivity agent={agent} />}

@@ -509,3 +509,75 @@ export const PublicChatResponse = zod.object({
   agentName: zod.string(),
   sources: zod.array(zod.string().url()).optional(),
 });
+
+/**
+ * @summary List all available integrations with enabled status for this agent
+ */
+export const ListIntegrationsCatalogParams = zod.object({
+  agentId: zod.coerce.number(),
+});
+
+export const ListIntegrationsCatalogResponseItem = zod.object({
+  id: zod.string(),
+  displayName: zod.string(),
+  category: zod.enum([
+    "google",
+    "dev",
+    "productivity",
+    "crm",
+    "finance",
+    "communication",
+  ]),
+  description: zod.string(),
+  icon: zod.string(),
+  envVar: zod.string(),
+  envVarLabel: zod.string(),
+  setupNote: zod.string(),
+  toolNames: zod.array(zod.string()),
+  toolCount: zod.number(),
+  available: zod.boolean(),
+  enabled: zod.boolean(),
+});
+export const ListIntegrationsCatalogResponse = zod.array(
+  ListIntegrationsCatalogResponseItem,
+);
+
+/**
+ * @summary Enable an integration for an agent
+ */
+export const EnableIntegrationParams = zod.object({
+  agentId: zod.coerce.number(),
+  serviceId: zod.coerce.string(),
+});
+
+export const EnableIntegrationResponse = zod.object({
+  enabled: zod.boolean(),
+  serviceId: zod.string(),
+});
+
+/**
+ * @summary Disable an integration for an agent
+ */
+export const DisableIntegrationParams = zod.object({
+  agentId: zod.coerce.number(),
+  serviceId: zod.coerce.string(),
+});
+
+export const DisableIntegrationResponse = zod.object({
+  enabled: zod.boolean(),
+  serviceId: zod.string(),
+});
+
+/**
+ * @summary Test if an integration's credentials are configured and working
+ */
+export const TestIntegrationParams = zod.object({
+  agentId: zod.coerce.number(),
+  serviceId: zod.coerce.string(),
+});
+
+export const TestIntegrationResponse = zod.object({
+  ok: zod.boolean(),
+  message: zod.string().nullish(),
+  error: zod.string().nullish(),
+});

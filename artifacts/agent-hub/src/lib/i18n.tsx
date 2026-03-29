@@ -115,6 +115,8 @@ const translations = {
     publicApiDesc: "Connect external apps to this agent via REST API",
     automations: "Automations",
     automationsDesc: "Scheduled tasks that run this agent automatically on a cron schedule",
+    integrations: "Integrations",
+    integrationsDesc: "Connect this agent to external services — GitHub, Slack, Notion, Stripe, and more",
   },
   ar: {
     dashboard: "لوحة التحكم",
@@ -221,6 +223,8 @@ const translations = {
     publicApiDesc: "ربط التطبيقات الخارجية بهذا العميل عبر REST API",
     automations: "الأتمتة",
     automationsDesc: "مهام مجدولة تشغّل هذا العميل تلقائياً وفق جدول زمني",
+    integrations: "التكاملات",
+    integrationsDesc: "ربط هذا العميل بالخدمات الخارجية — GitHub وSlack وNotion وStripe والمزيد",
   }
 };
 

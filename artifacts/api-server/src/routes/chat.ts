@@ -1,10 +1,11 @@
 import { Router, type IRouter } from "express";
-import { eq, asc } from "drizzle-orm";
-import { db, agentsTable, chatMessagesTable, knowledgeTable, instructionsTable, agentMemoriesTable, agentToolsTable, activityTable } from "@workspace/db";
+import { eq, asc, and } from "drizzle-orm";
+import { db, agentsTable, chatMessagesTable, knowledgeTable, instructionsTable, agentMemoriesTable, agentToolsTable, activityTable, agentIntegrationsTable } from "@workspace/db";
 import { openrouter } from "@workspace/integrations-openrouter-ai";
 import { requireAuth } from "../middlewares/auth";
 import { braveWebSearch, formatSearchResultsForPrompt, type SearchResult } from "../services/search";
 import { buildOpenAITools, callToolWebhook, type OpenAITool } from "../services/tools";
+import { getToolsForIntegrations, executeIntegrationTool, isIntegrationAvailable, getIntegrationById, INTEGRATION_CATALOG } from "../services/integrations-catalog";
 
 const router: IRouter = Router();
 
@@ -43,16 +44,20 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
     return;
   }
 
-  const [knowledge, instructions, memories, agentTools] = await Promise.all([
+  const [knowledge, instructions, memories, agentTools, enabledIntegrations] = await Promise.all([
     db.select().from(knowledgeTable).where(eq(knowledgeTable.agentId, agentId)),
     db.select().from(instructionsTable).where(eq(instructionsTable.agentId, agentId)),
     db.select().from(agentMemoriesTable).where(eq(agentMemoriesTable.agentId, agentId)).orderBy(asc(agentMemoriesTable.createdAt)),
     db.select().from(agentToolsTable).where(eq(agentToolsTable.agentId, agentId)).orderBy(asc(agentToolsTable.createdAt)),
+    db.select().from(agentIntegrationsTable).where(and(eq(agentIntegrationsTable.agentId, agentId), eq(agentIntegrationsTable.isEnabled, true))),
   ]);
+
+  const enabledIntegrationIds = enabledIntegrations.map(i => i.serviceId);
 
   const systemPrompt = buildSystemPrompt(
     { ...agent, searchAvailable: !!process.env.BRAVE_SEARCH_API_KEY },
-    knowledge, instructions, memories
+    knowledge, instructions, memories,
+    enabledIntegrationIds
   );
 
   const history = await db
@@ -84,6 +89,20 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
   const hasBraveKey = !!process.env.BRAVE_SEARCH_API_KEY;
 
   const openAITools = buildOpenAITools(agentTools);
+
+  const integrationTools = getToolsForIntegrations(enabledIntegrationIds);
+  for (const t of integrationTools) {
+    openAITools.push({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters as Parameters<typeof openrouter.chat.completions.create>[0]["tools"][number]["function"]["parameters"],
+      },
+    });
+  }
+
+  const integrationToolNames = new Set(integrationTools.map(t => t.name));
 
   if (webSearchEnabled && hasBraveKey) {
     openAITools.push({
@@ -230,6 +249,8 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
           } else {
             result = JSON.stringify({ error: "No query provided" });
           }
+        } else if (integrationToolNames.has(tc.name)) {
+          result = await executeIntegrationTool(tc.name, args);
         } else if (toolDef) {
           result = await callToolWebhook(toolDef.webhookUrl, tc.name, args);
         } else {
@@ -348,7 +369,8 @@ export function buildSystemPrompt(
   },
   knowledge: { type: string; title?: string | null; content: string }[],
   instructions: { content: string }[],
-  memories?: { content: string }[]
+  memories?: { content: string }[],
+  enabledIntegrationIds?: string[]
 ): string {
   let prompt = `You are ${agent.name}, an AI agent.`;
 
@@ -391,6 +413,18 @@ export function buildSystemPrompt(
 
   if (agent.webSearchEnabled && agent.searchAvailable !== false) {
     prompt += "\n\nWeb search capability: You have a web_search tool available, but use it SPARINGLY — only as a last resort. Default to answering from your own knowledge. Only call web_search when ALL of the following are true: (1) the user is explicitly asking about something current/real-time (today's news, live prices, current weather, recent events), OR the user explicitly asks you to search the web, AND (2) you genuinely cannot give a useful answer from your training data. Do NOT search for: general knowledge, historical facts, how-to questions, advice, opinions, creative tasks, math, coding, or anything your training covers well. When you do search, do not mention to the user that you are doing so — just use the results naturally.";
+  }
+
+  if (enabledIntegrationIds && enabledIntegrationIds.length > 0) {
+    prompt += "\n\nConnected integrations (you have access to these services via tool calls):";
+    for (const id of enabledIntegrationIds) {
+      const def = INTEGRATION_CATALOG.find(i => i.id === id);
+      if (def) {
+        const toolList = def.tools.map(t => t.name).join(", ");
+        prompt += `\n- ${def.displayName}: ${def.description}. Tools: ${toolList}`;
+      }
+    }
+    prompt += "\n\nWhen the user asks you to perform an action on one of these services, use the appropriate tool. Be proactive — if a task involves a connected service, use the tool to actually perform it rather than just describing how.";
   }
 
   prompt += "\n\nMemory instructions: If you learn something important about the user or context that you want to remember for future conversations, include it in your response using this exact format: [MEMORY: the fact to remember]. You can include multiple memory tags. Keep memories concise and factual. Do not mention that you are saving a memory to the user.";
