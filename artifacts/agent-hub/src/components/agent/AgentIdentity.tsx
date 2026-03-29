@@ -1,17 +1,23 @@
-import { Agent } from "@workspace/api-client-react";
-import { useUpdateAgent } from "@workspace/api-client-react";
+import { Agent, useUpdateAgent, getGetAgentQueryKey } from "@workspace/api-client-react";
 import { useI18n } from "@/lib/i18n";
 import { useQueryClient } from "@tanstack/react-query";
-import { getGetAgentQueryKey } from "@workspace/api-client-react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  SelectGroup,
+  SelectLabel,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Loader2, Cpu } from "lucide-react";
+import { Save, Loader2, Cpu, User, Sparkles } from "lucide-react";
 
 const MODELS = [
   {
@@ -93,14 +99,10 @@ const MODELS = [
 const schema = z.object({
   name: z.string().min(1, "Name is required"),
   avatarUrl: z.string().optional().nullable(),
-  backstory: z.string().optional().nullable(),
-  personality: z.string().optional().nullable(),
-  coreValues: z.string().optional().nullable(),
-  expertiseAreas: z.string().optional().nullable(),
-  communicationStyle: z.string().optional().nullable(),
-  emotionalIntelligence: z.string().optional().nullable(),
-  language: z.string(),
+  identity: z.string().optional().nullable(),
+  soul: z.string().optional().nullable(),
   model: z.string(),
+  language: z.string(),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -116,149 +118,177 @@ export function AgentIdentity({ agent }: { agent: Agent }) {
     resolver: zodResolver(schema),
     defaultValues: {
       name: agent.name,
-      avatarUrl: agent.avatarUrl,
-      backstory: agent.backstory,
-      personality: agent.personality,
-      coreValues: agent.coreValues,
-      expertiseAreas: agent.expertiseAreas,
-      communicationStyle: agent.communicationStyle,
-      emotionalIntelligence: agent.emotionalIntelligence,
-      language: agent.language,
+      avatarUrl: agent.avatarUrl ?? "",
+      identity: agent.backstory ?? "",
+      soul: agent.personality ?? "",
       model: agentModel,
-    }
+      language: agent.language ?? "english",
+    },
   });
 
   const updateMutation = useUpdateAgent({
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetAgentQueryKey(agent.id) });
-        toast({ title: "System updated", description: "Agent parameters committed successfully." });
+        toast({ title: "Saved", description: "Agent updated successfully." });
       },
       onError: () => {
-        toast({ title: "Error", description: "Failed to update parameters.", variant: "destructive" });
-      }
-    }
+        toast({ title: "Error", description: "Failed to save changes.", variant: "destructive" });
+      },
+    },
   });
 
   const onSubmit = (data: FormData) => {
-    updateMutation.mutate({ id: agent.id, data });
+    updateMutation.mutate({
+      id: agent.id,
+      data: {
+        name: data.name,
+        avatarUrl: data.avatarUrl || null,
+        backstory: data.identity || null,
+        personality: data.soul || null,
+        model: data.model,
+        language: data.language,
+      },
+    });
   };
 
   const selectedModel = form.watch("model");
-  const selectedModelLabel = MODELS.flatMap(g => g.models).find(m => m.id === selectedModel)?.label || selectedModel;
+  const selectedModelLabel =
+    MODELS.flatMap((g) => g.models).find((m) => m.id === selectedModel)?.label || selectedModel;
 
   return (
-    <div className="glass-panel rounded-2xl p-6 border border-white/5">
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-2">
-            <label className="text-sm font-mono text-primary uppercase tracking-wider">{t('name')}</label>
-            <Input {...form.register('name')} className="bg-black/50 border-white/10" />
-          </div>
+    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 max-w-2xl">
+      {/* Name + Avatar */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <label className="text-sm font-semibold text-white flex items-center gap-1.5">
+            <User className="w-3.5 h-3.5 text-primary" />
+            {t('name')}
+          </label>
+          <Input
+            {...form.register('name')}
+            placeholder={t('agentNamePlaceholder')}
+            className="bg-white/5 border-white/10 focus-visible:border-primary/50"
+          />
+          {form.formState.errors.name && (
+            <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
+          )}
+        </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-mono text-primary uppercase tracking-wider">Avatar URL</label>
-            <Input {...form.register('avatarUrl')} placeholder="https://..." className="bg-black/50 border-white/10" />
-          </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-semibold text-white">Avatar URL</label>
+          <Input
+            {...form.register('avatarUrl')}
+            placeholder="https://example.com/avatar.png"
+            className="bg-white/5 border-white/10 focus-visible:border-primary/50"
+          />
+        </div>
+      </div>
 
-          {/* AI Model Selector */}
-          <div className="space-y-2 md:col-span-2">
-            <label className="text-sm font-mono text-primary uppercase tracking-wider flex items-center gap-2">
-              <Cpu className="w-3 h-3" />
-              AI Model
-            </label>
-            <div className="flex items-center gap-3">
-              <Select onValueChange={(val) => form.setValue('model', val)} value={form.watch("model")}>
-                <SelectTrigger className="bg-black/50 border-white/10 flex-1">
-                  <SelectValue placeholder="Select AI model">
-                    <span className="flex items-center gap-2">
-                      <span className="text-primary font-mono text-xs">{selectedModelLabel}</span>
-                    </span>
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent className="bg-[#0d1117] border-white/10 max-h-[320px]">
-                  {MODELS.map((group) => (
-                    <SelectGroup key={group.group}>
-                      <SelectLabel className="text-xs text-muted-foreground font-mono tracking-widest px-2 py-1">{group.group}</SelectLabel>
-                      {group.models.map((model) => (
-                        <SelectItem key={model.id} value={model.id} className="font-mono text-sm">
-                          <div className="flex flex-col">
-                            <span>{model.label}</span>
-                            <span className="text-xs text-muted-foreground">{model.id}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
+      {/* Identity */}
+      <div className="space-y-1.5">
+        <div>
+          <label className="text-sm font-semibold text-white flex items-center gap-1.5">
+            <User className="w-3.5 h-3.5 text-primary" />
+            {t('identityLabel')}
+          </label>
+          <p className="text-xs text-muted-foreground mt-0.5">{t('identityHint')}</p>
+        </div>
+        <Textarea
+          {...form.register('identity')}
+          placeholder={t('identityPlaceholder')}
+          className="bg-white/5 border-white/10 focus-visible:border-primary/50 min-h-[140px] resize-y leading-relaxed"
+        />
+      </div>
+
+      {/* Soul */}
+      <div className="space-y-1.5">
+        <div>
+          <label className="text-sm font-semibold text-white flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-primary" />
+            {t('soulLabel')}
+          </label>
+          <p className="text-xs text-muted-foreground mt-0.5">{t('soulHint')}</p>
+        </div>
+        <Textarea
+          {...form.register('soul')}
+          placeholder={t('soulPlaceholder')}
+          className="bg-white/5 border-white/10 focus-visible:border-primary/50 min-h-[140px] resize-y leading-relaxed"
+        />
+      </div>
+
+      {/* Settings row: Model + Language */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* AI Model */}
+        <div className="space-y-1.5">
+          <label className="text-sm font-semibold text-white flex items-center gap-1.5">
+            <Cpu className="w-3.5 h-3.5 text-primary" />
+            {t('model')}
+          </label>
+          <Select onValueChange={(val) => form.setValue('model', val)} value={form.watch('model')}>
+            <SelectTrigger className="bg-white/5 border-white/10 focus:border-primary/50">
+              <SelectValue placeholder="Select model">
+                <span className="text-sm">{selectedModelLabel}</span>
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent className="bg-[#0d1117] border-white/10 max-h-[300px]">
+              {MODELS.map((group) => (
+                <SelectGroup key={group.group}>
+                  <SelectLabel className="text-xs text-muted-foreground font-mono tracking-widest px-2 py-1">
+                    {group.group}
+                  </SelectLabel>
+                  {group.models.map((model) => (
+                    <SelectItem key={model.id} value={model.id} className="text-sm">
+                      <div className="flex flex-col">
+                        <span>{model.label}</span>
+                        <span className="text-[10px] text-muted-foreground font-mono">{model.id}</span>
+                      </div>
+                    </SelectItem>
                   ))}
-                </SelectContent>
-              </Select>
-              <div className="px-3 py-1 rounded-md bg-primary/10 border border-primary/20 text-primary text-xs font-mono truncate max-w-[200px]">
-                {form.watch("model")}
-              </div>
-            </div>
-            {selectedModel === "openrouter/auto" ? (
-              <p className="text-xs text-primary/70 font-mono">OpenRouter Auto-routing — analyzes each message and picks the optimal model automatically (cost + capability balanced)</p>
-            ) : (
-              <p className="text-xs text-muted-foreground">This model will be used for all conversations with this agent (owner chat + connected apps)</p>
-            )}
-          </div>
-
-          <div className="space-y-2 md:col-span-2">
-            <label className="text-sm font-mono text-primary uppercase tracking-wider">{t('backstory')}</label>
-            <Textarea {...form.register('backstory')} className="bg-black/50 border-white/10 min-h-[100px]" placeholder="Define the origin protocol..." />
-          </div>
-
-          <div className="space-y-2 md:col-span-2">
-            <label className="text-sm font-mono text-primary uppercase tracking-wider">{t('personality')}</label>
-            <Textarea {...form.register('personality')} className="bg-black/50 border-white/10" />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-mono text-primary uppercase tracking-wider">{t('coreValues')}</label>
-            <Textarea {...form.register('coreValues')} className="bg-black/50 border-white/10" />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-mono text-primary uppercase tracking-wider">{t('expertiseAreas')}</label>
-            <Textarea {...form.register('expertiseAreas')} className="bg-black/50 border-white/10" />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-mono text-primary uppercase tracking-wider">{t('communicationStyle')}</label>
-            <Input {...form.register('communicationStyle')} className="bg-black/50 border-white/10" />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-mono text-primary uppercase tracking-wider">{t('emotionalIntelligence')}</label>
-            <Input {...form.register('emotionalIntelligence')} className="bg-black/50 border-white/10" />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-mono text-primary uppercase tracking-wider">{t('language')}</label>
-            <Select onValueChange={(val) => form.setValue('language', val)} defaultValue={agent.language}>
-              <SelectTrigger className="bg-black/50 border-white/10">
-                <SelectValue placeholder="Select primary language" />
-              </SelectTrigger>
-              <SelectContent className="bg-background border-white/10">
-                <SelectItem value="english">English</SelectItem>
-                <SelectItem value="arabic">Arabic</SelectItem>
-                <SelectItem value="both">Bilingual (EN/AR)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+                </SelectGroup>
+              ))}
+            </SelectContent>
+          </Select>
+          {selectedModel === "openrouter/auto" && (
+            <p className="text-[11px] text-primary/70">
+              Auto-routing picks the best model for each message
+            </p>
+          )}
         </div>
 
-        <div className="flex justify-end pt-4 border-t border-white/5">
-          <Button
-            type="submit"
-            className="glow-effect bg-primary text-primary-foreground font-bold tracking-wider"
-            disabled={updateMutation.isPending}
+        {/* Language */}
+        <div className="space-y-1.5">
+          <label className="text-sm font-semibold text-white">{t('languageVoice')}</label>
+          <Select
+            onValueChange={(val) => form.setValue('language', val)}
+            value={form.watch('language')}
           >
-            {updateMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin me-2" /> : <Save className="w-4 h-4 me-2" />}
-            {t('save')}
-          </Button>
+            <SelectTrigger className="bg-white/5 border-white/10 focus:border-primary/50">
+              <SelectValue placeholder="Select language" />
+            </SelectTrigger>
+            <SelectContent className="bg-background border-white/10">
+              <SelectItem value="english">English</SelectItem>
+              <SelectItem value="arabic">Arabic (العربية)</SelectItem>
+              <SelectItem value="both">Bilingual (EN + AR)</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-      </form>
-    </div>
+      </div>
+
+      <div className="pt-2">
+        <Button
+          type="submit"
+          className="bg-primary text-primary-foreground font-semibold px-6"
+          disabled={updateMutation.isPending}
+        >
+          {updateMutation.isPending ? (
+            <Loader2 className="w-4 h-4 animate-spin me-2" />
+          ) : (
+            <Save className="w-4 h-4 me-2" />
+          )}
+          {t('save')}
+        </Button>
+      </div>
+    </form>
   );
 }
