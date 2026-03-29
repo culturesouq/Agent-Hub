@@ -1,0 +1,59 @@
+Build me a private Agent Hub — a web app that only I (the owner) can access with a password. This is my personal command center for creating and managing AI agents.
+
+Core concept: I can create as many AI agents as I want — now or in the future. Each agent lives here, grows here, and connects from here to any external app I build.
+
+For each agent I create, I need full control over:
+
+Identity & Soul editor
+
+Name, photo/avatar, backstory and origin story
+Personality traits (warm, sharp, patient, direct — I write this in plain words)
+Core values and what the agent believes in
+Expertise areas and what it knows deeply
+How it communicates — tone, length, style, language (Arabic/English/both)
+Emotional intelligence — how it handles different human situations
+All of this editable anytime through a simple text editor — like editing a profile
+Knowledge base (per agent)
+
+Upload documents (PDF, Word, text)
+Paste text or articles directly
+Add links to absorb
+All knowledge stored permanently and used in every response
+I can view, edit, and delete knowledge entries anytime
+Instructions & tasks (per agent)
+
+Write ongoing instructions that permanently change how the agent behaves with all users
+Example: "Always greet returning users by name" or "Never give financial advice"
+I can add, edit, and remove instructions anytime
+Private owner chat (per agent)
+
+A private chat window where I talk directly to each agent as the owner
+I can ask it questions, give it feedback, test how it responds, correct it
+These conversations are separate from user conversations
+Activity & learning log (per agent)
+
+See what the agent has learned from user conversations
+See summaries of what users are asking most
+Review and approve or reject new learnings
+Connector — the most important feature
+
+Each agent gets a unique API key and a connection code snippet
+The code snippet is simple enough to paste into any app (Replit, or any website)
+Once connected, that app can send messages to the agent and get responses
+The agent uses its soul, knowledge, and instructions in every response
+One agent can connect to multiple apps at the same time
+I can see which apps are connected to each agent
+Overall hub dashboard
+
+See all my agents in one view
+Create a new agent with a simple form
+Each agent shows: status (active/inactive), how many apps connected, last activity
+Technical requirements:
+
+Node.js backend with PostgreSQL database for all permanent storage
+Vector database (pgvector) for knowledge storage and retrieval (RAG)
+OpenAI GPT-4o-mini for fast responses, GPT-4o or o4-mini for deep reasoning — auto-switch based on question complexity
+Password-protected — only I can enter
+Bilingual interface: English and Arabic
+Clean, professional design
+Each agent's API endpoint: receives a message + conversation history, returns a response using that agent's full soul + knowledge + instructions

@@ -1,22 +1,36 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Agent Hub API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: agents
+    description: Agent management
+  - name: knowledge
+    description: Agent knowledge base
+  - name: instructions
+    description: Agent instructions
+  - name: chat
+    description: Owner chat with agents
+  - name: connections
+    description: Agent external connections
+  - name: activity
+    description: Agent activity log
+  - name: public
+    description: Public agent API
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +38,503 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login with password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginBody"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Invalid password
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout
+      responses:
+        "200":
+          description: Logged out
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Check auth status
+      responses:
+        "200":
+          description: Auth status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthStatus"
+
+  /agents:
+    get:
+      operationId: listAgents
+      tags: [agents]
+      summary: List all agents
+      responses:
+        "200":
+          description: List of agents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Agent"
+    post:
+      operationId: createAgent
+      tags: [agents]
+      summary: Create a new agent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAgentBody"
+      responses:
+        "201":
+          description: Agent created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+
+  /agents/{id}:
+    get:
+      operationId: getAgent
+      tags: [agents]
+      summary: Get agent by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Agent details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateAgent
+      tags: [agents]
+      summary: Update agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAgentBody"
+      responses:
+        "200":
+          description: Agent updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+    delete:
+      operationId: deleteAgent
+      tags: [agents]
+      summary: Delete agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /agents/{id}/toggle-status:
+    post:
+      operationId: toggleAgentStatus
+      tags: [agents]
+      summary: Toggle agent active/inactive
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Status toggled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+
+  /agents/{agentId}/knowledge:
+    get:
+      operationId: listKnowledge
+      tags: [knowledge]
+      summary: List knowledge entries for an agent
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Knowledge entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/KnowledgeEntry"
+    post:
+      operationId: addKnowledge
+      tags: [knowledge]
+      summary: Add knowledge entry
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddKnowledgeBody"
+      responses:
+        "201":
+          description: Knowledge added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeEntry"
+
+  /agents/{agentId}/knowledge/{id}:
+    patch:
+      operationId: updateKnowledge
+      tags: [knowledge]
+      summary: Update knowledge entry
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateKnowledgeBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeEntry"
+    delete:
+      operationId: deleteKnowledge
+      tags: [knowledge]
+      summary: Delete knowledge entry
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /agents/{agentId}/instructions:
+    get:
+      operationId: listInstructions
+      tags: [instructions]
+      summary: List instructions for an agent
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Instructions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Instruction"
+    post:
+      operationId: addInstruction
+      tags: [instructions]
+      summary: Add instruction
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddInstructionBody"
+      responses:
+        "201":
+          description: Instruction added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Instruction"
+
+  /agents/{agentId}/instructions/{id}:
+    patch:
+      operationId: updateInstruction
+      tags: [instructions]
+      summary: Update instruction
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateInstructionBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Instruction"
+    delete:
+      operationId: deleteInstruction
+      tags: [instructions]
+      summary: Delete instruction
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /agents/{agentId}/chat:
+    get:
+      operationId: getChatHistory
+      tags: [chat]
+      summary: Get owner chat history
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Chat messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChatMessage"
+    post:
+      operationId: sendChatMessage
+      tags: [chat]
+      summary: Send message to agent (owner chat, streaming)
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendChatMessageBody"
+      responses:
+        "200":
+          description: Streaming SSE response
+    delete:
+      operationId: clearChatHistory
+      tags: [chat]
+      summary: Clear chat history
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Cleared
+
+  /agents/{agentId}/connections:
+    get:
+      operationId: listConnections
+      tags: [connections]
+      summary: List connections for an agent
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Connections
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Connection"
+    post:
+      operationId: createConnection
+      tags: [connections]
+      summary: Create a connection (generate API key)
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateConnectionBody"
+      responses:
+        "201":
+          description: Connection created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Connection"
+
+  /agents/{agentId}/connections/{id}:
+    delete:
+      operationId: deleteConnection
+      tags: [connections]
+      summary: Revoke connection
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /agents/{agentId}/activity:
+    get:
+      operationId: listActivity
+      tags: [activity]
+      summary: List activity log for an agent
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Activity entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityEntry"
+
+  /public/chat:
+    post:
+      operationId: publicChat
+      tags: [public]
+      summary: Public endpoint for connected apps to chat with agent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PublicChatBody"
+      responses:
+        "200":
+          description: Agent response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicChatResponse"
+        "401":
+          description: Invalid API key
+        "404":
+          description: Agent not found
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +545,329 @@ components:
       required:
         - status
 
+    LoginBody:
+      type: object
+      properties:
+        password:
+          type: string
+      required:
+        - password
+
+    LoginResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+      required:
+        - success
+
+    AuthStatus:
+      type: object
+      properties:
+        authenticated:
+          type: boolean
+      required:
+        - authenticated
+
+    Agent:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        backstory:
+          type: ["string", "null"]
+        personality:
+          type: ["string", "null"]
+        coreValues:
+          type: ["string", "null"]
+        expertiseAreas:
+          type: ["string", "null"]
+        communicationStyle:
+          type: ["string", "null"]
+        emotionalIntelligence:
+          type: ["string", "null"]
+        language:
+          type: string
+        isActive:
+          type: boolean
+        connectionsCount:
+          type: integer
+        lastActivity:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - name
+        - language
+        - isActive
+        - connectionsCount
+        - createdAt
+        - updatedAt
+
+    CreateAgentBody:
+      type: object
+      properties:
+        name:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        backstory:
+          type: ["string", "null"]
+        personality:
+          type: ["string", "null"]
+        coreValues:
+          type: ["string", "null"]
+        expertiseAreas:
+          type: ["string", "null"]
+        communicationStyle:
+          type: ["string", "null"]
+        emotionalIntelligence:
+          type: ["string", "null"]
+        language:
+          type: string
+      required:
+        - name
+
+    UpdateAgentBody:
+      type: object
+      properties:
+        name:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        backstory:
+          type: ["string", "null"]
+        personality:
+          type: ["string", "null"]
+        coreValues:
+          type: ["string", "null"]
+        expertiseAreas:
+          type: ["string", "null"]
+        communicationStyle:
+          type: ["string", "null"]
+        emotionalIntelligence:
+          type: ["string", "null"]
+        language:
+          type: string
+        isActive:
+          type: boolean
+
+    KnowledgeEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        agentId:
+          type: integer
+        type:
+          type: string
+        title:
+          type: ["string", "null"]
+        content:
+          type: string
+        sourceUrl:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - agentId
+        - type
+        - content
+        - createdAt
+        - updatedAt
+
+    AddKnowledgeBody:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [text, document, url]
+        title:
+          type: ["string", "null"]
+        content:
+          type: string
+        sourceUrl:
+          type: ["string", "null"]
+      required:
+        - type
+        - content
+
+    UpdateKnowledgeBody:
+      type: object
+      properties:
+        title:
+          type: ["string", "null"]
+        content:
+          type: string
+        sourceUrl:
+          type: ["string", "null"]
+
+    Instruction:
+      type: object
+      properties:
+        id:
+          type: integer
+        agentId:
+          type: integer
+        content:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - agentId
+        - content
+        - createdAt
+        - updatedAt
+
+    AddInstructionBody:
+      type: object
+      properties:
+        content:
+          type: string
+      required:
+        - content
+
+    UpdateInstructionBody:
+      type: object
+      properties:
+        content:
+          type: string
+
+    ChatMessage:
+      type: object
+      properties:
+        id:
+          type: integer
+        agentId:
+          type: integer
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - agentId
+        - role
+        - content
+        - createdAt
+
+    SendChatMessageBody:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+        - message
+
+    Connection:
+      type: object
+      properties:
+        id:
+          type: integer
+        agentId:
+          type: integer
+        appName:
+          type: string
+        apiKey:
+          type: string
+        lastUsed:
+          type: ["string", "null"]
+        requestCount:
+          type: integer
+        createdAt:
+          type: string
+      required:
+        - id
+        - agentId
+        - appName
+        - apiKey
+        - requestCount
+        - createdAt
+
+    CreateConnectionBody:
+      type: object
+      properties:
+        appName:
+          type: string
+      required:
+        - appName
+
+    ActivityEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        agentId:
+          type: integer
+        connectionId:
+          type: ["integer", "null"]
+        appName:
+          type: ["string", "null"]
+        userMessage:
+          type: string
+        agentResponse:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - agentId
+        - userMessage
+        - agentResponse
+        - createdAt
+
+    PublicChatBody:
+      type: object
+      properties:
+        apiKey:
+          type: string
+        message:
+          type: string
+        conversationHistory:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConversationTurn"
+        userId:
+          type: ["string", "null"]
+      required:
+        - apiKey
+        - message
+
+    ConversationTurn:
+      type: object
+      properties:
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+      required:
+        - role
+        - content
+
+    PublicChatResponse:
+      type: object
+      properties:
+        response:
+          type: string
+        agentName:
+          type: string
+      required:
+        - response
+        - agentName
