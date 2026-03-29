@@ -1,8 +1,8 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, knowledgeTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
-import multer from "multer";
+import multer, { MulterError } from "multer";
 import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
 
@@ -18,11 +18,12 @@ const upload = multer({
 const ALLOWED_MIME_TYPES: Record<string, string> = {
   "application/pdf": "pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
-  "application/msword": "doc",
   "text/plain": "txt",
   "text/markdown": "md",
   "text/x-markdown": "md",
 };
+
+const ALLOWED_EXTENSIONS = ["pdf", "docx", "txt", "md"];
 
 function serializeEntry(e: typeof knowledgeTable.$inferSelect) {
   return {
@@ -73,10 +74,30 @@ router.post("/agents/:agentId/knowledge", async (req, res): Promise<void> => {
   res.status(201).json(serializeEntry(entry));
 });
 
+function multerErrorHandler(err: unknown, req: Request, res: Response, next: NextFunction): void {
+  if (err instanceof MulterError) {
+    if (err.code === "LIMIT_FILE_SIZE") {
+      res.status(400).json({ error: "File is too large. Maximum allowed size is 10MB." });
+      return;
+    }
+    res.status(400).json({ error: `Upload error: ${err.message}` });
+    return;
+  }
+  next(err);
+}
+
 router.post(
   "/agents/:agentId/knowledge/upload",
-  upload.single("file"),
-  async (req, res): Promise<void> => {
+  (req: Request, res: Response, next: NextFunction) => {
+    upload.single("file")(req, res, (err) => {
+      if (err) {
+        multerErrorHandler(err, req, res, next);
+        return;
+      }
+      next();
+    });
+  },
+  async (req: Request, res: Response): Promise<void> => {
     const raw = Array.isArray(req.params.agentId) ? req.params.agentId[0] : req.params.agentId;
     const agentId = parseInt(raw, 10);
 
@@ -89,11 +110,11 @@ router.post(
 
     const ext = originalname.split(".").pop()?.toLowerCase() ?? "";
     const mimeKey = ALLOWED_MIME_TYPES[mimetype];
-    const extKey = ["pdf", "docx", "doc", "txt", "md"].includes(ext) ? ext : null;
+    const extKey = ALLOWED_EXTENSIONS.includes(ext) ? ext : null;
 
     if (!mimeKey && !extKey) {
       res.status(400).json({
-        error: `Unsupported file type: ${mimetype}. Allowed: PDF, .docx, .txt, .md`,
+        error: `Unsupported file type. Allowed formats: PDF, .docx, .txt, .md`,
       });
       return;
     }
@@ -106,7 +127,7 @@ router.post(
         const parser = new PDFParse({ data: buffer });
         const result = await parser.getText();
         extractedText = result.text.trim();
-      } else if (fileType === "docx" || fileType === "doc") {
+      } else if (fileType === "docx") {
         const result = await mammoth.extractRawText({ buffer });
         extractedText = result.value.trim();
       } else {

@@ -140,7 +140,7 @@ export function AgentKnowledge({ agent }: { agent: Agent }) {
             ) : (
               <Upload className="w-4 h-4 me-2" />
             )}
-            {uploadMutation.isPending ? "Uploading…" : t("uploadFile")}
+            {uploadMutation.isPending ? t("uploading") : t("uploadFile")}
           </Button>
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
@@ -216,12 +216,12 @@ export function AgentKnowledge({ agent }: { agent: Agent }) {
       >
         {uploadMutation.isPending ? (
           <span className="flex items-center justify-center gap-2">
-            <Loader2 className="w-4 h-4 animate-spin" /> Extracting text from file…
+            <Loader2 className="w-4 h-4 animate-spin" /> {t("dropZoneExtracting")}
           </span>
         ) : (
           <span className="flex items-center justify-center gap-2">
             <Upload className="w-4 h-4" />
-            {isDragging ? "Drop to upload" : "Drag & drop a PDF, .docx, .txt, or .md file here, or click to browse"}
+            {isDragging ? t("dropZoneDrop") : t("dropZonePrompt")}
           </span>
         )}
       </div>
