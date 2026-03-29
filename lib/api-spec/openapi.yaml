@@ -665,6 +665,8 @@ components:
           type: string
         model:
           type: string
+        webSearchEnabled:
+          type: boolean
         isActive:
           type: boolean
         connectionsCount:
@@ -679,6 +681,8 @@ components:
         - id
         - name
         - language
+        - model
+        - webSearchEnabled
         - isActive
         - connectionsCount
         - createdAt
@@ -733,6 +737,8 @@ components:
           type: string
         model:
           type: string
+        webSearchEnabled:
+          type: boolean
         isActive:
           type: boolean
 

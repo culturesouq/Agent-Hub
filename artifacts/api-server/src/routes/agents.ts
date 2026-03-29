@@ -133,6 +133,7 @@ router.patch("/agents/:id", async (req, res): Promise<void> => {
     emotionalIntelligence: string | null;
     language: string;
     model: string;
+    webSearchEnabled: boolean;
     isActive: boolean;
   }>;
 
@@ -147,6 +148,7 @@ router.patch("/agents/:id", async (req, res): Promise<void> => {
   if (body.emotionalIntelligence !== undefined) updateData.emotionalIntelligence = body.emotionalIntelligence;
   if (body.language !== undefined) updateData.language = body.language;
   if (body.model !== undefined) updateData.model = body.model;
+  if (body.webSearchEnabled !== undefined) updateData.webSearchEnabled = body.webSearchEnabled;
   if (body.isActive !== undefined) updateData.isActive = body.isActive;
 
   const [agent] = await db

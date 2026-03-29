@@ -1,12 +1,13 @@
 import { Agent, useUpdateAgent, getGetAgentQueryKey } from "@workspace/api-client-react";
 import { useI18n } from "@/lib/i18n";
 import { useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -17,7 +18,7 @@ import {
   SelectLabel,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Loader2, Cpu, User, Sparkles } from "lucide-react";
+import { Save, Loader2, Cpu, User, Sparkles, Globe } from "lucide-react";
 
 const MODELS = [
   {
@@ -102,6 +103,7 @@ const schema = z.object({
   soul: z.string().optional().nullable(),
   model: z.string(),
   language: z.string(),
+  webSearchEnabled: z.boolean(),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -112,6 +114,7 @@ export function AgentIdentity({ agent }: { agent: Agent }) {
   const queryClient = useQueryClient();
 
   const agentModel = (agent as Agent & { model?: string }).model || "openai/gpt-4.1-mini";
+  const agentWebSearch = (agent as Agent & { webSearchEnabled?: boolean }).webSearchEnabled ?? false;
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -121,6 +124,7 @@ export function AgentIdentity({ agent }: { agent: Agent }) {
       soul: agent.personality ?? "",
       model: agentModel,
       language: agent.language ?? "english",
+      webSearchEnabled: agentWebSearch,
     },
   });
 
@@ -145,6 +149,7 @@ export function AgentIdentity({ agent }: { agent: Agent }) {
         personality: data.soul || null,
         model: data.model,
         language: data.language,
+        webSearchEnabled: data.webSearchEnabled,
       },
     });
   };
@@ -260,6 +265,34 @@ export function AgentIdentity({ agent }: { agent: Agent }) {
             </SelectContent>
           </Select>
         </div>
+      </div>
+
+      {/* Web Search Toggle */}
+      <div className="rounded-xl border border-white/8 bg-white/3 p-4 space-y-3">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <label className="text-sm font-semibold text-white flex items-center gap-1.5 cursor-pointer">
+              <Globe className="w-3.5 h-3.5 text-primary" />
+              {t('webSearch')}
+            </label>
+            <p className="text-xs text-muted-foreground mt-0.5">{t('webSearchDesc')}</p>
+          </div>
+          <Controller
+            name="webSearchEnabled"
+            control={form.control}
+            render={({ field }) => (
+              <Switch
+                checked={field.value}
+                onCheckedChange={field.onChange}
+              />
+            )}
+          />
+        </div>
+        {form.watch('webSearchEnabled') && (
+          <p className="text-[11px] text-primary/60 leading-relaxed">
+            {t('webSearchNote')}
+          </p>
+        )}
       </div>
 
       <div className="pt-1">

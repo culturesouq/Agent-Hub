@@ -2,9 +2,16 @@ import { useState, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetChatHistoryQueryKey, getListMemoriesQueryKey } from "@workspace/api-client-react";
 
+export interface ChatSource {
+  title: string;
+  url: string;
+}
+
 export function useChatStream(agentId: number) {
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamedResponse, setStreamedResponse] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
+  const [lastSources, setLastSources] = useState<ChatSource[]>([]);
   const [error, setError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const queryClient = useQueryClient();
@@ -14,12 +21,13 @@ export function useChatStream(agentId: number) {
 
     setIsStreaming(true);
     setStreamedResponse("");
+    setIsSearching(false);
+    setLastSources([]);
     setError(null);
 
     abortControllerRef.current = new AbortController();
 
     try {
-      // Optimistically add user message to cache
       queryClient.setQueryData(getGetChatHistoryQueryKey(agentId), (old: any) => {
         const newMsg = { id: Date.now(), agentId, role: 'user', content: message, createdAt: new Date().toISOString() };
         return old ? [...old, newMsg] : [newMsg];
@@ -48,20 +56,29 @@ export function useChatStream(agentId: number) {
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n\n');
-        
-        buffer = lines.pop() || ""; // Keep the last incomplete part in the buffer
+
+        buffer = lines.pop() || "";
 
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             const dataStr = line.substring(6);
             if (dataStr.trim() === '[DONE]') continue;
-            
+
             try {
               const data = JSON.parse(dataStr);
+              if (data.searching) {
+                setIsSearching(true);
+                continue;
+              }
               if (data.done) {
+                setIsSearching(false);
+                if (data.sources && Array.isArray(data.sources)) {
+                  setLastSources(data.sources as ChatSource[]);
+                }
                 break;
               }
               if (data.content) {
+                setIsSearching(false);
                 setStreamedResponse(prev => prev + data.content);
               }
             } catch (e) {
@@ -76,9 +93,7 @@ export function useChatStream(agentId: number) {
       }
     } finally {
       setIsStreaming(false);
-      // Invalidate chat history to get the final persisted assistant message
       queryClient.invalidateQueries({ queryKey: getGetChatHistoryQueryKey(agentId) });
-      // Invalidate memories so badge and list update immediately after agent saves new memories
       queryClient.invalidateQueries({ queryKey: getListMemoriesQueryKey(agentId) });
     }
   };
@@ -93,6 +108,8 @@ export function useChatStream(agentId: number) {
     sendMessage,
     isStreaming,
     streamedResponse,
+    isSearching,
+    lastSources,
     error,
     stopStream
   };

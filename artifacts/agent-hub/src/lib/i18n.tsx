@@ -81,6 +81,11 @@ const translations = {
     memoryDesc: "Facts and context this agent has remembered from past conversations",
     noMemoriesYet: "No memories yet — start a conversation",
     noMemoriesHint: "The agent will automatically remember things as you chat",
+    webSearch: "Web Search",
+    webSearchDesc: "Allow this agent to search the internet for real-time information",
+    webSearchNote: "Requires a Brave Search API key (BRAVE_SEARCH_API_KEY) in server environment",
+    sourcesLabel: "Sources",
+    agentSearching: "Searching the web...",
   },
   ar: {
     dashboard: "لوحة التحكم",
@@ -153,6 +158,11 @@ const translations = {
     memoryDesc: "الحقائق والسياق الذي تذكره هذا العميل من المحادثات السابقة",
     noMemoriesYet: "لا توجد ذكريات بعد — ابدأ محادثة",
     noMemoriesHint: "سيتذكر العميل الأشياء تلقائيًا أثناء المحادثة",
+    webSearch: "البحث على الويب",
+    webSearchDesc: "السماح لهذا العميل بالبحث على الإنترنت للحصول على معلومات في الوقت الفعلي",
+    webSearchNote: "يتطلب مفتاح Brave Search API في بيئة الخادم",
+    sourcesLabel: "المصادر",
+    agentSearching: "جاري البحث على الويب...",
   }
 };
 

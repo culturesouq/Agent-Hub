@@ -39,7 +39,8 @@ export interface Agent {
   /** @nullable */
   emotionalIntelligence?: string | null;
   language: string;
-  model?: string;
+  model: string;
+  webSearchEnabled: boolean;
   isActive: boolean;
   connectionsCount: number;
   /** @nullable */
@@ -86,6 +87,7 @@ export interface UpdateAgentBody {
   emotionalIntelligence?: string | null;
   language?: string;
   model?: string;
+  webSearchEnabled?: boolean;
   isActive?: boolean;
 }
 

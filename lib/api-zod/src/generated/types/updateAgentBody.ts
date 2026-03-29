@@ -24,5 +24,6 @@ export interface UpdateAgentBody {
   emotionalIntelligence?: string | null;
   language?: string;
   model?: string;
+  webSearchEnabled?: boolean;
   isActive?: boolean;
 }

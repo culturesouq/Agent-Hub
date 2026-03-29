@@ -2,10 +2,10 @@ import { Agent, useGetChatHistory, useClearChatHistory, getGetChatHistoryQueryKe
 import { useI18n } from "@/lib/i18n";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useEffect } from "react";
-import { useChatStream } from "@/hooks/use-chat-stream";
+import { useChatStream, type ChatSource } from "@/hooks/use-chat-stream";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MessageSquare, Send, Trash2, StopCircle } from "lucide-react";
+import { MessageSquare, Send, Trash2, StopCircle, Globe, ExternalLink } from "lucide-react";
 import { format } from "date-fns";
 
 interface AgentChatProps {
@@ -13,13 +13,40 @@ interface AgentChatProps {
   fullHeight?: boolean;
 }
 
+function SourcesBar({ sources }: { sources: ChatSource[] }) {
+  const { t } = useI18n();
+  if (!sources || sources.length === 0) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      <span className="text-[10px] text-muted-foreground font-mono flex items-center gap-1">
+        <Globe className="w-3 h-3" />
+        {t('sourcesLabel')}:
+      </span>
+      {sources.map((s, i) => (
+        <a
+          key={i}
+          href={s.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-0.5 text-[10px] text-primary/70 hover:text-primary underline underline-offset-2 transition-colors max-w-[200px] truncate"
+          title={s.title || s.url}
+        >
+          {s.title || new URL(s.url).hostname}
+          <ExternalLink className="w-2.5 h-2.5 shrink-0" />
+        </a>
+      ))}
+    </div>
+  );
+}
+
 export function AgentChat({ agent, fullHeight }: AgentChatProps) {
   const { t } = useI18n();
   const { data: history } = useGetChatHistory(agent.id);
-  const { sendMessage, isStreaming, streamedResponse, stopStream } = useChatStream(agent.id);
+  const { sendMessage, isStreaming, streamedResponse, isSearching, lastSources, stopStream } = useChatStream(agent.id);
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
+  const [pendingSources, setPendingSources] = useState<ChatSource[]>([]);
 
   const clearMutation = useClearChatHistory({
     mutation: {
@@ -31,11 +58,21 @@ export function AgentChat({ agent, fullHeight }: AgentChatProps) {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [history, streamedResponse]);
+  }, [history, streamedResponse, isSearching]);
+
+  useEffect(() => {
+    if (!isStreaming && lastSources.length > 0) {
+      setPendingSources(lastSources);
+    }
+    if (!isStreaming && lastSources.length === 0 && pendingSources.length > 0) {
+      // don't clear on no-source messages — only clear when streaming starts
+    }
+  }, [isStreaming, lastSources]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isStreaming) return;
+    setPendingSources([]);
     sendMessage(input);
     setInput("");
   };
@@ -43,6 +80,8 @@ export function AgentChat({ agent, fullHeight }: AgentChatProps) {
   const containerClass = fullHeight
     ? "flex flex-col h-full overflow-hidden bg-black/10"
     : "flex flex-col h-[600px] glass-panel rounded-2xl border border-white/5 overflow-hidden";
+
+  const agentWebSearch = (agent as Agent & { webSearchEnabled?: boolean }).webSearchEnabled ?? false;
 
   return (
     <div className={containerClass}>
@@ -52,6 +91,12 @@ export function AgentChat({ agent, fullHeight }: AgentChatProps) {
           <MessageSquare className="w-4 h-4 text-primary" />
           {t('chat')}
           <span className="text-xs text-muted-foreground font-mono">• {agent.name}</span>
+          {agentWebSearch && (
+            <span className="flex items-center gap-0.5 text-[10px] text-primary/60 font-mono border border-primary/20 rounded px-1.5 py-0.5">
+              <Globe className="w-2.5 h-2.5" />
+              WEB
+            </span>
+          )}
         </h3>
         <Button
           variant="ghost"
@@ -78,25 +123,50 @@ export function AgentChat({ agent, fullHeight }: AgentChatProps) {
           </div>
         )}
 
-        {history?.map((msg, i) => (
-          <div key={msg.id || i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-            <span className="text-[10px] text-muted-foreground font-mono mb-1 mx-1">
-              {msg.role === 'user' ? 'YOU' : agent.name.toUpperCase()}
-              {msg.createdAt ? ` • ${format(new Date(msg.createdAt), 'HH:mm')}` : ''}
+        {history?.map((msg, i) => {
+          const isLast = i === (history.length - 1);
+          const isAssistant = msg.role === 'assistant';
+          return (
+            <div key={msg.id || i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+              <span className="text-[10px] text-muted-foreground font-mono mb-1 mx-1">
+                {msg.role === 'user' ? 'YOU' : agent.name.toUpperCase()}
+                {msg.createdAt ? ` • ${format(new Date(msg.createdAt), 'HH:mm')}` : ''}
+              </span>
+              <div
+                className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
+                  msg.role === 'user'
+                    ? 'bg-primary text-primary-foreground rounded-tr-sm shadow-[0_0_15px_rgba(0,190,255,0.12)]'
+                    : 'bg-white/8 text-white rounded-tl-sm border border-white/8'
+                }`}
+              >
+                <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+              </div>
+              {isAssistant && isLast && !isStreaming && pendingSources.length > 0 && (
+                <div className="max-w-[80%] mt-0.5 mx-1">
+                  <SourcesBar sources={pendingSources} />
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {isStreaming && isSearching && (
+          <div className="flex flex-col items-start">
+            <span className="text-[10px] text-primary font-mono mb-1 mx-1 animate-pulse flex items-center gap-1">
+              <Globe className="w-3 h-3" />
+              {t('agentSearching')}
             </span>
-            <div
-              className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
-                msg.role === 'user'
-                  ? 'bg-primary text-primary-foreground rounded-tr-sm shadow-[0_0_15px_rgba(0,190,255,0.12)]'
-                  : 'bg-white/8 text-white rounded-tl-sm border border-white/8'
-              }`}
-            >
-              <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+            <div className="rounded-2xl px-4 py-2.5 bg-white/8 border border-white/8 rounded-tl-sm">
+              <div className="flex gap-1 items-center h-5">
+                <span className="w-1.5 h-1.5 bg-primary/60 rounded-full animate-bounce [animation-delay:0ms]" />
+                <span className="w-1.5 h-1.5 bg-primary/60 rounded-full animate-bounce [animation-delay:150ms]" />
+                <span className="w-1.5 h-1.5 bg-primary/60 rounded-full animate-bounce [animation-delay:300ms]" />
+              </div>
             </div>
           </div>
-        ))}
+        )}
 
-        {isStreaming && streamedResponse && (
+        {isStreaming && streamedResponse && !isSearching && (
           <div className="flex flex-col items-start">
             <span className="text-[10px] text-primary font-mono mb-1 mx-1 animate-pulse">
               {agent.name.toUpperCase()} • TYPING...
@@ -110,7 +180,7 @@ export function AgentChat({ agent, fullHeight }: AgentChatProps) {
           </div>
         )}
 
-        {isStreaming && !streamedResponse && (
+        {isStreaming && !streamedResponse && !isSearching && (
           <div className="flex flex-col items-start">
             <span className="text-[10px] text-primary font-mono mb-1 mx-1 animate-pulse">
               {agent.name.toUpperCase()} • THINKING...
