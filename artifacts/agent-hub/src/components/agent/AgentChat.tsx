@@ -1,11 +1,11 @@
 import { Agent, useGetChatHistory, useClearChatHistory, getGetChatHistoryQueryKey } from "@workspace/api-client-react";
 import { useI18n } from "@/lib/i18n";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useChatStream, type ChatSource } from "@/hooks/use-chat-stream";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MessageSquare, Send, Trash2, StopCircle, Globe, ExternalLink, Wrench } from "lucide-react";
+import { MessageSquare, Send, Trash2, StopCircle, Globe, ExternalLink, Wrench, ImagePlus, X } from "lucide-react";
 import { format } from "date-fns";
 
 interface AgentChatProps {
@@ -44,6 +44,8 @@ export function AgentChat({ agent, fullHeight }: AgentChatProps) {
   const { data: history } = useGetChatHistory(agent.id);
   const { sendMessage, isStreaming, streamedResponse, isSearching, lastSources, activeToolCalls, lastUsedTools, stopStream } = useChatStream(agent.id);
   const [input, setInput] = useState("");
+  const [attachedImage, setAttachedImage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const [pendingSources, setPendingSources] = useState<ChatSource[]>([]);
@@ -73,13 +75,31 @@ export function AgentChat({ agent, fullHeight }: AgentChatProps) {
     }
   }, [isStreaming, lastUsedTools]);
 
+  const handleImageFile = useCallback((file: File) => {
+    if (!file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = (e) => setAttachedImage(e.target?.result as string);
+    reader.readAsDataURL(file);
+  }, []);
+
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const items = e.clipboardData.items;
+    for (const item of items) {
+      if (item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) handleImageFile(file);
+      }
+    }
+  }, [handleImageFile]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isStreaming) return;
+    if ((!input.trim() && !attachedImage) || isStreaming) return;
     setPendingSources([]);
     setPendingUsedTools([]);
-    sendMessage(input);
+    sendMessage(input || "What do you see in this image?", attachedImage || undefined);
     setInput("");
+    setAttachedImage(null);
   };
 
   const containerClass = fullHeight
@@ -229,11 +249,45 @@ export function AgentChat({ agent, fullHeight }: AgentChatProps) {
 
       {/* Input */}
       <div className="px-5 py-4 border-t border-white/5 bg-black/20 shrink-0">
-        <form onSubmit={handleSubmit} className="flex gap-2">
+        {/* Image preview */}
+        {attachedImage && (
+          <div className="mb-2 relative inline-flex">
+            <img
+              src={attachedImage}
+              alt="Attached"
+              className="h-20 rounded-xl border border-white/15 object-cover max-w-[160px]"
+            />
+            <button
+              type="button"
+              onClick={() => setAttachedImage(null)}
+              className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-black/80 border border-white/20 flex items-center justify-center text-white hover:bg-destructive transition-colors"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="flex gap-2" onPaste={handlePaste}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageFile(f); e.target.value = ""; }}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isStreaming}
+            className="h-11 w-11 rounded-xl border border-white/10 bg-white/5 flex items-center justify-center text-muted-foreground hover:text-primary hover:border-primary/30 transition-colors shrink-0 disabled:opacity-40"
+            title="Attach image (or paste from clipboard)"
+          >
+            <ImagePlus className="w-4 h-4" />
+          </button>
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Message the agent..."
+            placeholder={attachedImage ? "Describe what you want to know about this image..." : "Message the agent... (or paste an image)"}
             className="bg-white/5 border-white/10 focus-visible:border-primary/50 h-11 rounded-xl"
             disabled={isStreaming}
           />
@@ -250,12 +304,17 @@ export function AgentChat({ agent, fullHeight }: AgentChatProps) {
             <Button
               type="submit"
               className="bg-primary text-primary-foreground h-11 px-5 rounded-xl shrink-0"
-              disabled={!input.trim()}
+              disabled={!input.trim() && !attachedImage}
             >
               <Send className="w-4 h-4" />
             </Button>
           )}
         </form>
+        {!attachedImage && (
+          <p className="text-[10px] text-muted-foreground/50 mt-1.5 text-center">
+            Paste an image with Ctrl+V · Click <ImagePlus className="inline w-3 h-3" /> to upload
+          </p>
+        )}
       </div>
     </div>
   );

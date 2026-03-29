@@ -9,6 +9,7 @@ import connectionsRouter from "./connections";
 import activityRouter from "./activity";
 import publicRouter from "./public";
 import toolsRouter from "./tools";
+import automationsRouter from "./automations";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(connectionsRouter);
 router.use(activityRouter);
 router.use(publicRouter);
 router.use(toolsRouter);
+router.use(automationsRouter);
 
 export default router;

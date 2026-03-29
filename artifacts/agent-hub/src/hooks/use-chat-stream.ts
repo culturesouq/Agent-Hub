@@ -18,7 +18,7 @@ export function useChatStream(agentId: number) {
   const abortControllerRef = useRef<AbortController | null>(null);
   const queryClient = useQueryClient();
 
-  const sendMessage = async (message: string) => {
+  const sendMessage = async (message: string, imageUrl?: string) => {
     if (isStreaming) return;
 
     setIsStreaming(true);
@@ -40,7 +40,7 @@ export function useChatStream(agentId: number) {
       const res = await fetch(`/api/agents/${agentId}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, ...(imageUrl ? { imageUrl } : {}) }),
         signal: abortControllerRef.current.signal,
       });
 

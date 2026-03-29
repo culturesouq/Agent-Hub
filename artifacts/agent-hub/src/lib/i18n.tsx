@@ -113,6 +113,8 @@ const translations = {
     settingsDesc: "AI model, web search, language and agent status",
     publicApi: "Public API",
     publicApiDesc: "Connect external apps to this agent via REST API",
+    automations: "Automations",
+    automationsDesc: "Scheduled tasks that run this agent automatically on a cron schedule",
   },
   ar: {
     dashboard: "لوحة التحكم",
@@ -217,6 +219,8 @@ const translations = {
     settingsDesc: "نموذج الذكاء الاصطناعي، البحث على الويب، اللغة وحالة العميل",
     publicApi: "واجهة API العامة",
     publicApiDesc: "ربط التطبيقات الخارجية بهذا العميل عبر REST API",
+    automations: "الأتمتة",
+    automationsDesc: "مهام مجدولة تشغّل هذا العميل تلقائياً وفق جدول زمني",
   }
 };
 

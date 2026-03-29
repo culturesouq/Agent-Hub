@@ -6,3 +6,4 @@ export * from "./connections";
 export * from "./activity";
 export * from "./memories";
 export * from "./tools";
+export * from "./automations";

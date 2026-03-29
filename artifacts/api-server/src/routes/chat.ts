@@ -30,11 +30,12 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.agentId) ? req.params.agentId[0] : req.params.agentId;
   const agentId = parseInt(raw, 10);
 
-  const body = req.body as { message: string };
+  const body = req.body as { message: string; imageUrl?: string };
   if (!body.message) {
     res.status(400).json({ error: "Message is required" });
     return;
   }
+  const imageUrl = body.imageUrl || null;
 
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
   if (!agent) {
@@ -72,8 +73,11 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
   });
 
   res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.setHeader("Transfer-Encoding", "chunked");
+  res.flushHeaders();
 
   const model = agent.model || "openai/gpt-4.1-mini";
   const webSearchEnabled = agent.webSearchEnabled;
@@ -81,58 +85,40 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
 
   const openAITools = buildOpenAITools(agentTools);
 
-  type Msg = { role: "system" | "user" | "assistant" | "tool"; content: string; tool_call_id?: string; tool_calls?: unknown[] };
+  if (webSearchEnabled && hasBraveKey) {
+    openAITools.push({
+      type: "function",
+      function: {
+        name: "web_search",
+        description: "Search the internet for current, real-time or recent information. Use this for news, current prices, live data, recent events, or any information that may have changed after your training.",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "The search query to look up" },
+          },
+          required: ["query"],
+        },
+      },
+    });
+  }
+
+  type Msg = { role: "system" | "user" | "assistant" | "tool"; content: string | unknown[]; tool_call_id?: string; tool_calls?: unknown[] };
+
+  const userContent: string | unknown[] = imageUrl
+    ? [
+        { type: "text", text: body.message },
+        { type: "image_url", image_url: { url: imageUrl } },
+      ]
+    : body.message;
 
   const messages: Msg[] = [
     { role: "system", content: systemPrompt },
     ...chatHistory,
-    { role: "user", content: body.message },
+    { role: "user", content: userContent },
   ];
 
   const allSources: SearchResult[] = [];
-  let searchContextMessages: Msg[] = [];
-
-  if (webSearchEnabled && hasBraveKey) {
-    const probeCompletion = await openrouter.chat.completions.create({
-      model,
-      max_tokens: 512,
-      messages: [
-        ...messages,
-        {
-          role: "system",
-          content: "ONLY output [SEARCH: <query>] tags if you need real-time or current information to answer. Output NOTHING else. If you can answer from existing knowledge, output: NO_SEARCH",
-        },
-      ],
-    });
-
-    const probeResponse = probeCompletion.choices[0]?.message?.content ?? "";
-    const searchMatches = [...probeResponse.matchAll(/\[SEARCH:\s*([^\]]+)\]/gi)];
-
-    if (searchMatches.length > 0) {
-      res.write(`data: ${JSON.stringify({ searching: true })}\n\n`);
-
-      const searchResults = await Promise.all(
-        searchMatches.map(async (match) => {
-          const query = match[1]?.trim() ?? "";
-          const results = await braveWebSearch(query);
-          allSources.push(...results);
-          return formatSearchResultsForPrompt(query, results);
-        })
-      );
-
-      const searchContext = searchResults.join("\n\n");
-      searchContextMessages = [
-        {
-          role: "system",
-          content: `The following are current web search results to help you answer the user's question. Use them to give accurate, up-to-date information:\n\n${searchContext}\n\nIMPORTANT: You now have the search results above. Answer the user's question directly using these results. Do NOT output any [SEARCH: ...] tags in your response.`,
-        },
-      ];
-    }
-  }
-
-  const finalMessages: Msg[] = searchContextMessages.length > 0
-    ? [messages[0], ...searchContextMessages, ...messages.slice(1)]
-    : messages;
+  const finalMessages: Msg[] = messages;
 
   const usedTools: string[] = [];
   const MAX_TOOL_ITERATIONS = 5;
@@ -215,7 +201,14 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
 
       const toolResultMsgs: Parameters<typeof openrouter.chat.completions.create>[0]["messages"] = [];
 
-      res.write(`data: ${JSON.stringify({ toolCalls: pendingToolCalls.map(tc => tc.name) })}\n\n`);
+      const hasWebSearch = pendingToolCalls.some(tc => tc.name === "web_search");
+      const userTools = pendingToolCalls.filter(tc => tc.name !== "web_search");
+      if (hasWebSearch) {
+        res.write(`data: ${JSON.stringify({ searching: true })}\n\n`);
+      }
+      if (userTools.length > 0) {
+        res.write(`data: ${JSON.stringify({ toolCalls: userTools.map(tc => tc.name) })}\n\n`);
+      }
 
       for (const tc of pendingToolCalls) {
         const toolDef = agentTools.find(t => t.name === tc.name);
@@ -223,7 +216,21 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
         try { args = JSON.parse(tc.argsRaw); } catch { args = {}; }
 
         let result: string;
-        if (toolDef) {
+
+        if (tc.name === "web_search") {
+          const query = (args.query as string) || "";
+          if (query) {
+            try {
+              const searchResults = await braveWebSearch(query);
+              allSources.push(...searchResults);
+              result = formatSearchResultsForPrompt(query, searchResults);
+            } catch {
+              result = JSON.stringify({ error: "Search failed" });
+            }
+          } else {
+            result = JSON.stringify({ error: "No query provided" });
+          }
+        } else if (toolDef) {
           result = await callToolWebhook(toolDef.webhookUrl, tc.name, args);
         } else {
           result = JSON.stringify({ error: `Unknown tool: ${tc.name}` });
@@ -277,7 +284,7 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
   const sources = allSources
     .map(s => ({ title: s.title, url: s.url }))
     .filter(s => { if (seenUrls.has(s.url)) return false; seenUrls.add(s.url); return true; });
-  const uniqueUsedTools = [...new Set(usedTools)];
+  const uniqueUsedTools = [...new Set(usedTools)].filter(t => t !== "web_search");
   res.write(`data: ${JSON.stringify({ done: true, sources, usedTools: uniqueUsedTools })}\n\n`);
   res.end();
 });
@@ -383,7 +390,7 @@ export function buildSystemPrompt(
   prompt += "\n\nNote: You are currently in a private conversation with the owner of this system. The owner is testing and refining your behavior.";
 
   if (agent.webSearchEnabled && agent.searchAvailable !== false) {
-    prompt += "\n\nWeb search capability: You have access to real-time web search. When a question requires current information, recent news, live data, pricing, or anything that may have changed after your training, signal a search using this exact format: [SEARCH: your search query]. You may include multiple search tags if needed. Do not mention to the user that you are performing a search — just use the search results naturally in your response. Only search when truly necessary; for general knowledge questions you can answer directly.";
+    prompt += "\n\nWeb search capability: You have access to a web_search tool for real-time information. Use it when questions require current data, recent news, live prices, or anything that may have changed after your training. Call the tool naturally — don't mention to the user that you are searching. Only search when truly necessary; answer from your knowledge when possible.";
   }
 
   prompt += "\n\nMemory instructions: If you learn something important about the user or context that you want to remember for future conversations, include it in your response using this exact format: [MEMORY: the fact to remember]. You can include multiple memory tags. Keep memories concise and factual. Do not mention that you are saving a memory to the user.";
