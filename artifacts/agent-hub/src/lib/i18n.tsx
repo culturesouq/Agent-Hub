@@ -114,7 +114,7 @@ const translations = {
     publicApi: "Public API",
     publicApiDesc: "Connect external apps to this agent via REST API",
     automations: "Automations",
-    automationsDesc: "Scheduled tasks that run this agent automatically on a cron schedule",
+    automationsDesc: "Scheduled tasks and webhook triggers that run this agent automatically",
     integrations: "Integrations",
     integrationsDesc: "Connect this agent to external services — GitHub, Slack, Notion, Stripe, and more",
   },

@@ -1,150 +1,220 @@
 import { Router, type IRouter } from "express";
-import { eq, asc } from "drizzle-orm";
-import { db, agentsTable, agentAutomationsTable, activityTable } from "@workspace/db";
-import { requireAuth } from "../middlewares/auth";
-import { buildSystemPrompt } from "./chat";
-import { openrouter } from "@workspace/integrations-openrouter-ai";
-import { knowledgeTable, instructionsTable, agentMemoriesTable } from "@workspace/db";
+import { eq, desc, and } from "drizzle-orm";
+import { randomBytes } from "crypto";
+import { db, agentsTable, agentAutomationsTable, automationRunsTable } from "@workspace/db";
+import { requireAuth } from "../middlewares/auth.js";
+import { executeAutomation } from "../services/agent-runner.js";
 
 const router: IRouter = Router();
-router.use(requireAuth);
 
-router.get("/agents/:agentId/automations", async (req, res): Promise<void> => {
+async function verifyAgentAccess(agentId: number): Promise<boolean> {
+  const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
+  return !!agent;
+}
+
+function buildWebhookUrl(secret: string): string {
+  const domain = process.env.REPLIT_DEV_DOMAIN;
+  const base = domain ? `https://${domain}` : "http://localhost:8080";
+  return `${base}/api/webhooks/automation/${secret}`;
+}
+
+function serializeAutomation(a: typeof agentAutomationsTable.$inferSelect) {
+  return {
+    ...a,
+    lastRunAt: a.lastRunAt?.toISOString() ?? null,
+    createdAt: a.createdAt.toISOString(),
+    webhookUrl: a.triggerType === "webhook" && a.webhookSecret
+      ? buildWebhookUrl(a.webhookSecret)
+      : null,
+  };
+}
+
+router.get("/agents/:agentId/automations", requireAuth, async (req, res): Promise<void> => {
   const agentId = parseInt(req.params.agentId, 10);
+  if (isNaN(agentId) || !(await verifyAgentAccess(agentId))) {
+    res.status(404).json({ error: "Agent not found" });
+    return;
+  }
+
   const automations = await db
     .select()
     .from(agentAutomationsTable)
     .where(eq(agentAutomationsTable.agentId, agentId))
-    .orderBy(asc(agentAutomationsTable.createdAt));
-  res.json(automations);
+    .orderBy(desc(agentAutomationsTable.createdAt));
+
+  res.json(automations.map(serializeAutomation));
 });
 
-router.post("/agents/:agentId/automations", async (req, res): Promise<void> => {
+router.post("/agents/:agentId/automations", requireAuth, async (req, res): Promise<void> => {
   const agentId = parseInt(req.params.agentId, 10);
-  const { name, description, triggerMessage, cronExpression } = req.body as {
-    name: string;
-    description?: string;
-    triggerMessage: string;
-    cronExpression: string;
-  };
-
-  if (!name || !triggerMessage || !cronExpression) {
-    res.status(400).json({ error: "name, triggerMessage and cronExpression are required" });
+  if (isNaN(agentId) || !(await verifyAgentAccess(agentId))) {
+    res.status(404).json({ error: "Agent not found" });
     return;
   }
 
-  const [automation] = await db
+  const body = req.body as {
+    name: string;
+    triggerType: "schedule" | "webhook";
+    cronExpression?: string;
+    prompt: string;
+  };
+
+  if (!body.name?.trim() || !body.prompt?.trim()) {
+    res.status(400).json({ error: "name and prompt are required" });
+    return;
+  }
+
+  const triggerType = body.triggerType || "schedule";
+
+  if (triggerType === "schedule" && !body.cronExpression?.trim()) {
+    res.status(400).json({ error: "cronExpression is required for schedule automations" });
+    return;
+  }
+
+  const webhookSecret = triggerType === "webhook"
+    ? randomBytes(24).toString("hex")
+    : null;
+
+  const [created] = await db
     .insert(agentAutomationsTable)
-    .values({ agentId, name, description: description ?? null, triggerMessage, cronExpression })
+    .values({
+      agentId,
+      name: body.name.trim(),
+      triggerType,
+      cronExpression: triggerType === "schedule" ? (body.cronExpression?.trim() || null) : null,
+      webhookSecret,
+      prompt: body.prompt.trim(),
+      isEnabled: true,
+    })
     .returning();
 
-  res.status(201).json(automation);
+  res.status(201).json(serializeAutomation(created));
 });
 
-router.patch("/agents/:agentId/automations/:id", async (req, res): Promise<void> => {
+router.patch("/agents/:agentId/automations/:id", requireAuth, async (req, res): Promise<void> => {
   const agentId = parseInt(req.params.agentId, 10);
   const id = parseInt(req.params.id, 10);
 
-  const [existing] = await db
-    .select()
-    .from(agentAutomationsTable)
-    .where(eq(agentAutomationsTable.id, id));
-
-  if (!existing || existing.agentId !== agentId) {
-    res.status(404).json({ error: "Automation not found" });
+  if (isNaN(agentId) || isNaN(id) || !(await verifyAgentAccess(agentId))) {
+    res.status(404).json({ error: "Not found" });
     return;
   }
 
-  const { name, description, triggerMessage, cronExpression, isActive } = req.body as Partial<{
-    name: string;
-    description: string;
-    triggerMessage: string;
-    cronExpression: string;
-    isActive: boolean;
-  }>;
+  const body = req.body as {
+    name?: string;
+    cronExpression?: string;
+    prompt?: string;
+    isEnabled?: boolean;
+  };
 
   const updates: Partial<typeof agentAutomationsTable.$inferInsert> = {};
-  if (name !== undefined) updates.name = name;
-  if (description !== undefined) updates.description = description;
-  if (triggerMessage !== undefined) updates.triggerMessage = triggerMessage;
-  if (cronExpression !== undefined) updates.cronExpression = cronExpression;
-  if (isActive !== undefined) updates.isActive = isActive;
+  if (body.name !== undefined) updates.name = body.name.trim();
+  if (body.cronExpression !== undefined) updates.cronExpression = body.cronExpression;
+  if (body.prompt !== undefined) updates.prompt = body.prompt.trim();
+  if (body.isEnabled !== undefined) updates.isEnabled = body.isEnabled;
 
   const [updated] = await db
     .update(agentAutomationsTable)
     .set(updates)
-    .where(eq(agentAutomationsTable.id, id))
+    .where(and(eq(agentAutomationsTable.id, id), eq(agentAutomationsTable.agentId, agentId)))
     .returning();
 
-  res.json(updated);
-});
-
-router.delete("/agents/:agentId/automations/:id", async (req, res): Promise<void> => {
-  const agentId = parseInt(req.params.agentId, 10);
-  const id = parseInt(req.params.id, 10);
-
-  const [existing] = await db
-    .select()
-    .from(agentAutomationsTable)
-    .where(eq(agentAutomationsTable.id, id));
-
-  if (!existing || existing.agentId !== agentId) {
+  if (!updated) {
     res.status(404).json({ error: "Automation not found" });
     return;
   }
 
-  await db.delete(agentAutomationsTable).where(eq(agentAutomationsTable.id, id));
+  res.json(serializeAutomation(updated));
+});
+
+router.delete("/agents/:agentId/automations/:id", requireAuth, async (req, res): Promise<void> => {
+  const agentId = parseInt(req.params.agentId, 10);
+  const id = parseInt(req.params.id, 10);
+
+  if (isNaN(agentId) || isNaN(id) || !(await verifyAgentAccess(agentId))) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  await db
+    .delete(agentAutomationsTable)
+    .where(and(eq(agentAutomationsTable.id, id), eq(agentAutomationsTable.agentId, agentId)));
+
   res.sendStatus(204);
 });
 
-router.post("/agents/:agentId/automations/:id/run", async (req, res): Promise<void> => {
-  const agentId = parseInt(req.params.agentId, 10);
+router.get("/automations/:id/runs", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const runs = await db
+    .select()
+    .from(automationRunsTable)
+    .where(eq(automationRunsTable.automationId, id))
+    .orderBy(desc(automationRunsTable.triggeredAt))
+    .limit(50);
+
+  res.json(runs.map(r => ({ ...r, triggeredAt: r.triggeredAt.toISOString() })));
+});
+
+router.post("/automations/:id/run", requireAuth, async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const [automation] = await db
     .select()
     .from(agentAutomationsTable)
     .where(eq(agentAutomationsTable.id, id));
 
-  if (!automation || automation.agentId !== agentId) {
-    res.status(404).json({ error: "Automation not found" });
+  if (!automation) { res.status(404).json({ error: "Automation not found" }); return; }
+
+  res.json({ triggered: true, automationId: id });
+  executeAutomation(id).catch(console.error);
+});
+
+router.post("/webhooks/automation/:webhookSecret", async (req, res): Promise<void> => {
+  const { webhookSecret } = req.params;
+
+  const [automation] = await db
+    .select()
+    .from(agentAutomationsTable)
+    .where(eq(agentAutomationsTable.webhookSecret, webhookSecret));
+
+  if (!automation || automation.triggerType !== "webhook") {
+    res.status(404).json({ error: "Webhook not found" });
     return;
   }
 
-  const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
-  if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+  if (!automation.isEnabled) {
+    res.status(403).json({ error: "Automation is disabled" });
+    return;
+  }
 
-  const [knowledge, instructions, memories] = await Promise.all([
-    db.select().from(knowledgeTable).where(eq(knowledgeTable.agentId, agentId)),
-    db.select().from(instructionsTable).where(eq(instructionsTable.agentId, agentId)),
-    db.select().from(agentMemoriesTable).where(eq(agentMemoriesTable.agentId, agentId)).orderBy(asc(agentMemoriesTable.createdAt)),
-  ]);
+  const body = req.body as Record<string, unknown>;
+  const contextVars: Record<string, string> = {};
+  flattenObject(body, "body", contextVars);
+  const resolvedPrompt = interpolatePrompt(automation.prompt, contextVars);
 
-  const systemPrompt = buildSystemPrompt({ ...agent, searchAvailable: false }, knowledge, instructions, memories);
-
-  const completion = await openrouter.chat.completions.create({
-    model: agent.model || "openai/gpt-4.1-mini",
-    max_tokens: 2048,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: automation.triggerMessage },
-    ],
-  });
-
-  const response = completion.choices[0]?.message?.content ?? "";
-
-  await db.insert(activityTable).values({
-    agentId,
-    userMessage: `[AUTOMATION] ${automation.name}: ${automation.triggerMessage}`,
-    agentResponse: response.slice(0, 2000),
-  });
-
-  await db
-    .update(agentAutomationsTable)
-    .set({ lastRunAt: new Date() })
-    .where(eq(agentAutomationsTable.id, id));
-
-  res.json({ response, ranAt: new Date().toISOString() });
+  res.json({ triggered: true, automationId: automation.id });
+  executeAutomation(automation.id, resolvedPrompt).catch(console.error);
 });
+
+function flattenObject(obj: Record<string, unknown>, prefix: string, out: Record<string, string>): void {
+  for (const [k, v] of Object.entries(obj)) {
+    const key = `${prefix}.${k}`;
+    if (v && typeof v === "object" && !Array.isArray(v)) {
+      flattenObject(v as Record<string, unknown>, key, out);
+    } else {
+      out[key] = String(v ?? "");
+    }
+  }
+}
+
+function interpolatePrompt(prompt: string, vars: Record<string, string>): string {
+  return Object.entries(vars).reduce(
+    (p, [k, v]) => p.replace(new RegExp(`\\{\\{${k.replace(/\./g, "\\.")}\\}\\}`, "g"), v),
+    prompt
+  );
+}
 
 export default router;
