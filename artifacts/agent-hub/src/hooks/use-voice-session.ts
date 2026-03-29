@@ -38,12 +38,23 @@ export function useVoiceSession({
   const recordingStartRef = useRef<number>(0);
   const currentSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const speakAbortRef = useRef<AbortController | null>(null);
+  // Tracks every scheduled AudioBufferSourceNode so stopCurrentAudio can halt them all
+  const scheduledSourcesRef = useRef<AudioBufferSourceNode[]>([]);
+  // Playback AudioContext reused across speak() calls; closing it stops all queued sources
+  const playbackCtxRef = useRef<AudioContext | null>(null);
 
   const stopCurrentAudio = useCallback(() => {
     speakAbortRef.current?.abort();
     speakAbortRef.current = null;
-    try { currentSourceRef.current?.stop(); } catch (_) {}
+    // Stop every scheduled source node to immediately halt all queued TTS audio
+    scheduledSourcesRef.current.forEach(src => { try { src.stop(); } catch (_) {} });
+    scheduledSourcesRef.current = [];
     currentSourceRef.current = null;
+    // Close the playback AudioContext — this unconditionally stops any remaining audio
+    if (playbackCtxRef.current && playbackCtxRef.current.state !== "closed") {
+      playbackCtxRef.current.close().catch(() => {});
+      playbackCtxRef.current = null;
+    }
   }, []);
 
   const startRecording = useCallback(async () => {
@@ -187,15 +198,14 @@ export function useVoiceSession({
       let buf = "";
       const pcm16Parts: Int16Array[] = [];
       let nextPlayTime = 0;
-      let playbackCtx: AudioContext | null = null;
 
-      const getCtx = () => {
-        if (!playbackCtx || playbackCtx.state === "closed") {
-          playbackCtx = new AudioContext({ sampleRate: TTS_SAMPLE_RATE });
-          nextPlayTime = playbackCtx.currentTime;
-        }
-        return playbackCtx;
-      };
+      // Use a shared, ref-tracked AudioContext so stopCurrentAudio() can close it immediately
+      if (!playbackCtxRef.current || playbackCtxRef.current.state === "closed") {
+        playbackCtxRef.current = new AudioContext({ sampleRate: TTS_SAMPLE_RATE });
+        nextPlayTime = playbackCtxRef.current.currentTime;
+      } else {
+        nextPlayTime = playbackCtxRef.current.currentTime;
+      }
 
       outer: while (true) {
         const { done, value } = await reader.read();
@@ -218,7 +228,9 @@ export function useVoiceSession({
 
             if (signal.aborted) break outer;
 
-            const ctx = getCtx();
+            const ctx = playbackCtxRef.current;
+            if (!ctx || ctx.state === "closed") break outer;
+
             const float32 = new Float32Array(int16.length);
             for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768.0;
             const audioBuf = ctx.createBuffer(1, float32.length, TTS_SAMPLE_RATE);
@@ -229,6 +241,11 @@ export function useVoiceSession({
             const startAt = Math.max(nextPlayTime, ctx.currentTime + 0.04);
             src.start(startAt);
             nextPlayTime = startAt + audioBuf.duration;
+            // Track every source node — stopCurrentAudio() stops all of them
+            scheduledSourcesRef.current.push(src);
+            src.onended = () => {
+              scheduledSourcesRef.current = scheduledSourcesRef.current.filter(s => s !== src);
+            };
             currentSourceRef.current = src;
           }
         }
@@ -237,8 +254,8 @@ export function useVoiceSession({
       if (signal.aborted) return;
 
       const bufferDuration = pcm16Parts.reduce((s, p) => s + p.length, 0) / TTS_SAMPLE_RATE;
-      const ctx = playbackCtx;
-      if (ctx && bufferDuration > 0) {
+      const ctx = playbackCtxRef.current;
+      if (ctx && ctx.state !== "closed" && bufferDuration > 0) {
         const remaining = (nextPlayTime - ctx.currentTime) * 1000;
         await new Promise<void>(resolve => setTimeout(resolve, Math.max(0, remaining + 200)));
       }
