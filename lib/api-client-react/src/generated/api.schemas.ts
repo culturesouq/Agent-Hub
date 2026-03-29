@@ -250,6 +250,7 @@ export type IntegrationCatalogItemCategory =
 
 export const IntegrationCatalogItemCategory = {
   google: "google",
+  microsoft: "microsoft",
   dev: "dev",
   productivity: "productivity",
   crm: "crm",
@@ -263,8 +264,8 @@ export interface IntegrationCatalogItem {
   category: IntegrationCatalogItemCategory;
   description: string;
   icon: string;
-  envVar: string;
-  envVarLabel: string;
+  envVar?: string;
+  envVarLabel?: string;
   setupNote: string;
   toolNames: string[];
   toolCount: number;

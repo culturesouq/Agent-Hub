@@ -11,6 +11,7 @@ export type IntegrationCatalogItemCategory =
 
 export const IntegrationCatalogItemCategory = {
   google: "google",
+  microsoft: "microsoft",
   dev: "dev",
   productivity: "productivity",
   crm: "crm",

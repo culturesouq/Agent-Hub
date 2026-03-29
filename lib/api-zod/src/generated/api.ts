@@ -522,6 +522,7 @@ export const ListIntegrationsCatalogResponseItem = zod.object({
   displayName: zod.string(),
   category: zod.enum([
     "google",
+    "microsoft",
     "dev",
     "productivity",
     "crm",
@@ -530,8 +531,8 @@ export const ListIntegrationsCatalogResponseItem = zod.object({
   ]),
   description: zod.string(),
   icon: zod.string(),
-  envVar: zod.string(),
-  envVarLabel: zod.string(),
+  envVar: zod.string().optional(),
+  envVarLabel: zod.string().optional(),
   setupNote: zod.string(),
   toolNames: zod.array(zod.string()),
   toolCount: zod.number(),

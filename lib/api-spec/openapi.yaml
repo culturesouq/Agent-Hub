@@ -1209,7 +1209,7 @@ components:
           type: string
         category:
           type: string
-          enum: [google, dev, productivity, crm, finance, communication]
+          enum: [google, microsoft, dev, productivity, crm, finance, communication]
         description:
           type: string
         icon:
@@ -1236,8 +1236,6 @@ components:
         - category
         - description
         - icon
-        - envVar
-        - envVarLabel
         - setupNote
         - toolNames
         - toolCount

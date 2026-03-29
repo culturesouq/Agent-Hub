@@ -1,20 +1,28 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
-import { db, agentIntegrationsTable } from "@workspace/db";
+import { db, agentIntegrationsTable, agentsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import {
   INTEGRATION_CATALOG,
   isIntegrationAvailable,
   testIntegrationConnection,
 } from "../services/integrations-catalog.js";
-import { isReplitConnectorAvailable } from "../services/connector-token.js";
 
 const router: IRouter = Router();
 
 router.use(requireAuth);
 
+async function verifyAgentAccess(agentId: number): Promise<boolean> {
+  const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
+  return !!agent;
+}
+
 router.get("/agents/:agentId/integrations/catalog", async (req, res): Promise<void> => {
   const agentId = parseInt(req.params.agentId, 10);
+  if (isNaN(agentId) || !(await verifyAgentAccess(agentId))) {
+    res.status(404).json({ error: "Agent not found" });
+    return;
+  }
 
   const enabled = await db
     .select()
@@ -23,23 +31,20 @@ router.get("/agents/:agentId/integrations/catalog", async (req, res): Promise<vo
 
   const enabledSet = new Set(enabled.map(e => e.serviceId));
 
-  const catalog = await Promise.all(INTEGRATION_CATALOG.map(async def => ({
+  const catalog = INTEGRATION_CATALOG.map(def => ({
     id: def.id,
     displayName: def.displayName,
     category: def.category,
     description: def.description,
     icon: def.icon,
-    authType: def.authType,
-    replitConnectorId: def.replitConnectorId,
     envVar: def.envVar,
     envVarLabel: def.envVarLabel,
     setupNote: def.setupNote,
     toolNames: def.tools.map(t => t.name),
     toolCount: def.tools.length,
-    available: await isIntegrationAvailable(def.id),
+    available: isIntegrationAvailable(def.id),
     enabled: enabledSet.has(def.id),
-    replitConnectorInfraAvailable: isReplitConnectorAvailable(),
-  })));
+  }));
 
   res.json(catalog);
 });
@@ -47,6 +52,11 @@ router.get("/agents/:agentId/integrations/catalog", async (req, res): Promise<vo
 router.post("/agents/:agentId/integrations/:serviceId/enable", async (req, res): Promise<void> => {
   const agentId = parseInt(req.params.agentId, 10);
   const serviceId = req.params.serviceId;
+
+  if (isNaN(agentId) || !(await verifyAgentAccess(agentId))) {
+    res.status(404).json({ error: "Agent not found" });
+    return;
+  }
 
   const def = INTEGRATION_CATALOG.find(i => i.id === serviceId);
   if (!def) {
@@ -56,30 +66,23 @@ router.post("/agents/:agentId/integrations/:serviceId/enable", async (req, res):
 
   await db
     .insert(agentIntegrationsTable)
-    .values({
-      agentId,
-      serviceId,
-      isEnabled: true,
-      connectorConfigId: def.replitConnectorId ?? null,
-      authType: def.authType,
-      credentialKey: def.envVar ?? null,
-    })
+    .values({ agentId, serviceId, isEnabled: true })
     .onConflictDoUpdate({
       target: [agentIntegrationsTable.agentId, agentIntegrationsTable.serviceId],
-      set: {
-        isEnabled: true,
-        connectorConfigId: def.replitConnectorId ?? null,
-        authType: def.authType,
-        credentialKey: def.envVar ?? null,
-      },
+      set: { isEnabled: true },
     });
 
-  res.json({ enabled: true, serviceId, authType: def.authType, connectorConfigId: def.replitConnectorId });
+  res.json({ enabled: true, serviceId });
 });
 
 router.post("/agents/:agentId/integrations/:serviceId/disable", async (req, res): Promise<void> => {
   const agentId = parseInt(req.params.agentId, 10);
   const serviceId = req.params.serviceId;
+
+  if (isNaN(agentId) || !(await verifyAgentAccess(agentId))) {
+    res.status(404).json({ error: "Agent not found" });
+    return;
+  }
 
   await db
     .update(agentIntegrationsTable)
@@ -90,7 +93,13 @@ router.post("/agents/:agentId/integrations/:serviceId/disable", async (req, res)
 });
 
 router.post("/agents/:agentId/integrations/:serviceId/test", async (req, res): Promise<void> => {
+  const agentId = parseInt(req.params.agentId, 10);
   const serviceId = req.params.serviceId;
+
+  if (isNaN(agentId) || !(await verifyAgentAccess(agentId))) {
+    res.status(404).json({ error: "Agent not found" });
+    return;
+  }
 
   const result = await testIntegrationConnection(serviceId);
   res.json({ ok: result.success, message: result.message });

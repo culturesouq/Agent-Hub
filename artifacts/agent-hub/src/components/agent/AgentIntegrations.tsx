@@ -1,41 +1,15 @@
-import { useState, useEffect } from "react";
-import { useToast } from "@/hooks/use-toast";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useToast } from "@/hooks/use-toast";
 import {
-  Plug, Search, CheckCircle2, XCircle, Loader2, Info, ChevronDown, ChevronUp, Zap, Shield
+  Puzzle, CheckCircle, XCircle, Loader2, ChevronDown,
+  Info, Zap, ExternalLink,
 } from "lucide-react";
-
-const CATEGORY_LABELS: Record<string, string> = {
-  google: "Google Workspace",
-  microsoft: "Microsoft 365",
-  dev: "Developer Tools",
-  productivity: "Productivity",
-  crm: "CRM & Data",
-  finance: "Finance",
-  communication: "Communication",
-};
-
-const CATEGORY_ORDER = ["google", "microsoft", "dev", "productivity", "crm", "finance", "communication"];
-
-const SERVICE_ICONS: Record<string, string> = {
-  github: "🐙",
-  linear: "📐",
-  notion: "📝",
-  slack: "💬",
-  telegram: "✈️",
-  hubspot: "🟠",
-  stripe: "💳",
-  airtable: "🗂️",
-  google_sheets: "📊",
-  gmail: "📧",
-  google_calendar: "📅",
-  google_drive: "🗄️",
-  google_docs: "📄",
-  outlook: "📨",
-  onedrive: "☁️",
-  sharepoint: "🏢",
-};
 
 interface CatalogItem {
   id: string;
@@ -43,8 +17,6 @@ interface CatalogItem {
   category: string;
   description: string;
   icon: string;
-  authType: "replit_connector" | "api_key";
-  replitConnectorId?: string;
   envVar?: string;
   envVarLabel?: string;
   setupNote: string;
@@ -52,291 +24,226 @@ interface CatalogItem {
   toolCount: number;
   available: boolean;
   enabled: boolean;
-  replitConnectorInfraAvailable: boolean;
 }
 
+const CATEGORY_META: Record<string, { label: string; order: number }> = {
+  google:        { label: "Google Workspace",   order: 1 },
+  microsoft:     { label: "Microsoft 365",       order: 2 },
+  dev:           { label: "Developer Tools",     order: 3 },
+  productivity:  { label: "Productivity",        order: 4 },
+  crm:           { label: "CRM & Sales",         order: 5 },
+  finance:       { label: "Finance",             order: 6 },
+  communication: { label: "Communication",       order: 7 },
+};
+
+const SERVICE_ICONS: Record<string, string> = {
+  gmail: "📧", google_calendar: "📅", google_sheets: "📊",
+  google_drive: "💾", google_docs: "📄",
+  outlook: "📬", onedrive: "☁️", sharepoint: "🏢",
+  github: "🐙", linear: "📐",
+  notion: "📓", airtable: "🗃️",
+  hubspot: "🎯", linkedin: "💼",
+  stripe: "💳",
+  slack: "💬", telegram: "✈️",
+};
+
 export function AgentIntegrations({ agentId }: { agentId: number }) {
-  const { toast } = useToast();
-  const [catalog, setCatalog] = useState<CatalogItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [togglingId, setTogglingId] = useState<string | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [testResults, setTestResults] = useState<Record<string, { ok: boolean; message?: string | null }>>({});
+  const [expandedSetup, setExpandedSetup] = useState<string | null>(null);
+  const { toast } = useToast();
+  const qc = useQueryClient();
 
-  const fetchCatalog = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/agents/${agentId}/integrations/catalog`, { credentials: "include" });
-      const data = await res.json();
-      setCatalog(data);
-    } catch {
-      toast({ title: "Error", description: "Failed to load integrations", variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: catalog = [], isLoading } = useQuery<CatalogItem[]>({
+    queryKey: ["integrations-catalog", agentId],
+    queryFn: async () => {
+      const r = await fetch(`/api/agents/${agentId}/integrations/catalog`, { credentials: "include" });
+      if (!r.ok) throw new Error("Failed to load integrations");
+      return r.json();
+    },
+  });
 
-  useEffect(() => { fetchCatalog(); }, [agentId]);
-
-  const toggle = async (item: CatalogItem) => {
-    setTogglingId(item.id);
-    const action = item.enabled ? "disable" : "enable";
-    try {
-      await fetch(`/api/agents/${agentId}/integrations/${item.id}/${action}`, {
+  const toggleMutation = useMutation({
+    mutationFn: async ({ serviceId, enable }: { serviceId: string; enable: boolean }) => {
+      const action = enable ? "enable" : "disable";
+      const r = await fetch(`/api/agents/${agentId}/integrations/${serviceId}/${action}`, {
         method: "POST",
         credentials: "include",
       });
-      setCatalog(prev => prev.map(c => c.id === item.id ? { ...c, enabled: !c.enabled } : c));
-      toast({
-        title: item.enabled ? "Integration disabled" : "Integration enabled",
-        description: `${item.displayName} ${item.enabled ? "removed from" : "added to"} this agent`,
-      });
-    } catch {
-      toast({ title: "Error", description: "Failed to update integration", variant: "destructive" });
-    } finally {
-      setTogglingId(null);
-    }
-  };
+      if (!r.ok) throw new Error("Failed to update integration");
+      return r.json();
+    },
+    onSuccess: (_, { enable, serviceId }) => {
+      qc.invalidateQueries({ queryKey: ["integrations-catalog", agentId] });
+      const item = catalog.find(i => i.id === serviceId);
+      toast({ title: enable ? `${item?.displayName} enabled` : `${item?.displayName} disabled` });
+    },
+    onError: () => toast({ title: "Error", description: "Could not update integration", variant: "destructive" }),
+  });
 
-  const testConnection = async (item: CatalogItem) => {
-    setTestingId(item.id);
+  const handleTest = async (serviceId: string) => {
+    setTestingId(serviceId);
     try {
-      const res = await fetch(`/api/agents/${agentId}/integrations/${item.id}/test`, {
+      const r = await fetch(`/api/agents/${agentId}/integrations/${serviceId}/test`, {
         method: "POST",
         credentials: "include",
       });
-      const data = await res.json() as { ok: boolean; message?: string; error?: string };
-      toast({
-        title: data.ok ? "Connection verified" : "Connection failed",
-        description: data.message || data.error,
-        variant: data.ok ? "default" : "destructive",
-      });
+      const data = await r.json() as { ok: boolean; message?: string | null };
+      setTestResults(prev => ({ ...prev, [serviceId]: data }));
     } catch {
-      toast({ title: "Error", description: "Test failed", variant: "destructive" });
+      setTestResults(prev => ({ ...prev, [serviceId]: { ok: false, message: "Network error" } }));
     } finally {
       setTestingId(null);
     }
   };
 
-  const filtered = catalog.filter(
-    c =>
-      c.displayName.toLowerCase().includes(search.toLowerCase()) ||
-      c.description.toLowerCase().includes(search.toLowerCase()) ||
-      c.category.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const grouped = CATEGORY_ORDER.reduce<Record<string, CatalogItem[]>>((acc, cat) => {
-    const items = filtered.filter(c => c.category === cat);
-    if (items.length > 0) acc[cat] = items;
-    return acc;
-  }, {});
-
-  const enabledCount = catalog.filter(c => c.enabled).length;
-  const totalTools = catalog.filter(c => c.enabled).reduce((sum, c) => sum + c.toolCount, 0);
-
-  if (loading) {
+  if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      <div className="flex items-center justify-center h-48 text-muted-foreground gap-2">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        <span>Loading integrations…</span>
       </div>
     );
   }
 
+  const byCategory = catalog.reduce<Record<string, CatalogItem[]>>((acc, item) => {
+    (acc[item.category] = acc[item.category] || []).push(item);
+    return acc;
+  }, {});
+
+  const sortedCategories = Object.keys(byCategory).sort(
+    (a, b) => (CATEGORY_META[a]?.order ?? 99) - (CATEGORY_META[b]?.order ?? 99)
+  );
+
+  const enabledCount = catalog.filter(i => i.enabled).length;
+  const availableCount = catalog.filter(i => i.available).length;
+
   return (
     <div className="space-y-6">
-      {/* Stats bar */}
-      <div className="flex items-center gap-4 p-4 rounded-xl bg-primary/5 border border-primary/10">
-        <Plug className="w-5 h-5 text-primary shrink-0" />
-        <div className="flex-1">
-          <p className="text-sm text-white font-medium">{enabledCount} integration{enabledCount !== 1 ? "s" : ""} active</p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            This agent can use {totalTools} tools from connected services
-          </p>
-        </div>
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Shield className="w-3.5 h-3.5 text-primary/60" />
-          <span className="font-mono">{catalog.filter(c => c.authType === "replit_connector").length} via OAuth</span>
-        </div>
+      {/* Header */}
+      <div>
+        <h2 className="text-lg font-semibold flex items-center gap-2">
+          <Puzzle className="h-5 w-5" />
+          Platform Integrations
+        </h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          Connect external services with your own API keys. {availableCount} of {catalog.length} configured · {enabledCount} active.
+        </p>
       </div>
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search integrations..."
-          className="ps-9 bg-black/40 border-white/10 text-sm"
-        />
-      </div>
-
-      {/* Grouped catalog */}
-      {Object.entries(grouped).map(([cat, items]) => (
-        <div key={cat} className="space-y-2">
-          <h4 className="text-xs font-mono uppercase tracking-widest text-muted-foreground px-1">
-            {CATEGORY_LABELS[cat] || cat}
-          </h4>
+      {/* Categories */}
+      {sortedCategories.map(category => (
+        <div key={category}>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+            {CATEGORY_META[category]?.label ?? category}
+          </h3>
           <div className="grid grid-cols-1 gap-2">
-            {items.map(item => (
-              <IntegrationCard
-                key={item.id}
-                item={item}
-                icon={SERVICE_ICONS[item.id] || "🔌"}
-                toggling={togglingId === item.id}
-                testing={testingId === item.id}
-                expanded={expandedId === item.id}
-                onToggle={() => toggle(item)}
-                onTest={() => testConnection(item)}
-                onExpand={() => setExpandedId(expandedId === item.id ? null : item.id)}
-              />
-            ))}
+            {byCategory[category].map(item => {
+              const testResult = testResults[item.id];
+              const isTesting = testingId === item.id;
+              const isExpanded = expandedSetup === item.id;
+
+              return (
+                <Card key={item.id} className={`transition-all ${item.enabled ? "border-primary/30 bg-primary/5" : ""}`}>
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      {/* Icon */}
+                      <div className="text-2xl w-8 text-center flex-shrink-0 mt-0.5">
+                        {SERVICE_ICONS[item.id] ?? "🔌"}
+                      </div>
+
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-sm">{item.displayName}</span>
+                          {item.available ? (
+                            <Badge variant="outline" className="text-xs text-green-600 border-green-300 bg-green-50 dark:bg-green-950/20">
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              Ready
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-xs text-orange-600 border-orange-300 bg-orange-50 dark:bg-orange-950/20">
+                              <XCircle className="h-3 w-3 mr-1" />
+                              Needs setup
+                            </Badge>
+                          )}
+                          {item.enabled && item.available && (
+                            <Badge variant="outline" className="text-xs text-blue-600 border-blue-300 bg-blue-50 dark:bg-blue-950/20">
+                              <Zap className="h-3 w-3 mr-1" />
+                              {item.toolCount} tool{item.toolCount !== 1 ? "s" : ""} active
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
+
+                        {/* Test result */}
+                        {testResult && (
+                          <div className={`text-xs mt-2 flex items-center gap-1 ${testResult.ok ? "text-green-600" : "text-red-500"}`}>
+                            {testResult.ok ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+                            {testResult.message ?? (testResult.ok ? "Connected successfully" : "Connection failed")}
+                          </div>
+                        )}
+
+                        {/* Setup instructions collapsible (shown when not available) */}
+                        {!item.available && (
+                          <Collapsible open={isExpanded} onOpenChange={v => setExpandedSetup(v ? item.id : null)}>
+                            <CollapsibleTrigger asChild>
+                              <button className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 mt-2">
+                                <Info className="h-3 w-3" />
+                                Setup instructions
+                                <ChevronDown className={`h-3 w-3 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                              </button>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
+                              <div className="mt-2 p-3 rounded-md bg-muted/50 text-xs text-muted-foreground space-y-2">
+                                <p>{item.setupNote}</p>
+                                {item.envVar && (
+                                  <p className="font-mono bg-background/80 rounded px-2 py-1 text-foreground">
+                                    Add <strong>{item.envVar}</strong> to your environment secrets
+                                    {item.envVarLabel && ` (${item.envVarLabel})`}
+                                  </p>
+                                )}
+                              </div>
+                            </CollapsibleContent>
+                          </Collapsible>
+                        )}
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {item.available && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => handleTest(item.id)}
+                            disabled={isTesting}
+                          >
+                            {isTesting
+                              ? <Loader2 className="h-3 w-3 animate-spin" />
+                              : <ExternalLink className="h-3 w-3" />}
+                            Test
+                          </Button>
+                        )}
+                        <Switch
+                          checked={item.enabled}
+                          disabled={!item.available || toggleMutation.isPending}
+                          onCheckedChange={checked => toggleMutation.mutate({ serviceId: item.id, enable: checked })}
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </div>
       ))}
 
-      {filtered.length === 0 && (
-        <div className="text-center py-12 border border-white/5 border-dashed rounded-2xl">
-          <p className="text-muted-foreground font-mono text-sm">No integrations found</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function IntegrationCard({
-  item, icon, toggling, testing, expanded, onToggle, onTest, onExpand,
-}: {
-  item: CatalogItem;
-  icon: string;
-  toggling: boolean;
-  testing: boolean;
-  expanded: boolean;
-  onToggle: () => void;
-  onTest: () => void;
-  onExpand: () => void;
-}) {
-  const isOAuth = item.authType === "replit_connector";
-
-  return (
-    <div className={`glass-panel rounded-xl border transition-all ${item.enabled ? "border-primary/25 bg-primary/5" : "border-white/5"}`}>
-      <div className="flex items-center gap-3 p-4">
-        {/* Icon */}
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 ${item.enabled ? "bg-primary/15" : "bg-white/5"}`}>
-          {icon}
-        </div>
-
-        {/* Info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-semibold text-white">{item.displayName}</span>
-            {item.available
-              ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
-              : <XCircle className="w-3.5 h-3.5 text-orange-400 shrink-0" />
-            }
-            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${item.available ? "bg-green-500/15 text-green-400" : "bg-orange-500/15 text-orange-400"}`}>
-              {item.available ? "ready" : "needs setup"}
-            </span>
-            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${isOAuth ? "bg-blue-500/15 text-blue-400" : "bg-white/8 text-white/40"}`}>
-              {isOAuth ? "OAuth" : "API key"}
-            </span>
-          </div>
-          <p className="text-xs text-muted-foreground mt-0.5 truncate">{item.description}</p>
-        </div>
-
-        {/* Tool count */}
-        <div className="shrink-0 flex items-center gap-1 text-xs text-muted-foreground font-mono">
-          <Zap className="w-3 h-3" />
-          <span>{item.toolCount}</span>
-        </div>
-
-        {/* Actions */}
-        <div className="flex items-center gap-2 shrink-0">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="w-7 h-7 text-muted-foreground hover:text-white"
-            onClick={onExpand}
-          >
-            {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-          </Button>
-
-          {item.enabled && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 px-2 text-xs border-white/10 text-muted-foreground hover:text-white"
-              onClick={onTest}
-              disabled={testing}
-            >
-              {testing ? <Loader2 className="w-3 h-3 animate-spin" /> : "Test"}
-            </Button>
-          )}
-
-          <Button
-            size="sm"
-            className={`h-7 px-3 text-xs font-semibold transition-all ${
-              item.enabled
-                ? "bg-primary/15 text-primary hover:bg-destructive/15 hover:text-destructive border border-primary/20"
-                : "bg-primary text-primary-foreground hover:bg-primary/90"
-            }`}
-            onClick={onToggle}
-            disabled={toggling}
-          >
-            {toggling
-              ? <Loader2 className="w-3 h-3 animate-spin" />
-              : item.enabled ? "Disable" : "Enable"
-            }
-          </Button>
-        </div>
-      </div>
-
-      {/* Expanded panel */}
-      {expanded && (
-        <div className="border-t border-white/5 px-4 pb-4 pt-3 space-y-3">
-          {/* Auth info */}
-          <div className={`flex items-start gap-2.5 p-3 rounded-lg ${isOAuth ? "bg-blue-500/8 border border-blue-500/15" : "bg-white/3 border border-white/8"}`}>
-            <Shield className={`w-4 h-4 mt-0.5 shrink-0 ${isOAuth ? "text-blue-400" : "text-muted-foreground"}`} />
-            <div className="text-xs">
-              <p className={`font-medium mb-1 ${isOAuth ? "text-blue-300" : "text-white/70"}`}>
-                {isOAuth ? "Replit OAuth connector" : "API key authentication"}
-              </p>
-              <p className="text-muted-foreground">{item.setupNote}</p>
-              {!isOAuth && item.envVar && (
-                <p className="text-muted-foreground mt-1.5">
-                  Secret: <code className="text-orange-300 bg-black/30 px-1 rounded">{item.envVar}</code>
-                  {item.envVarLabel && <span className="ml-1 text-white/40">({item.envVarLabel})</span>}
-                </p>
-              )}
-              {isOAuth && item.envVar && (
-                <p className="text-muted-foreground mt-1.5">
-                  Fallback: <code className="text-white/40 bg-black/30 px-1 rounded">{item.envVar}</code>
-                  <span className="ml-1 text-white/30">({item.envVarLabel})</span>
-                </p>
-              )}
-              {!item.available && (
-                <p className="text-orange-400 mt-2 font-medium">
-                  {isOAuth
-                    ? "Not yet authorized. Set up OAuth via Replit integrations or add the fallback API key."
-                    : `Add the ${item.envVar} secret to enable this integration.`}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Tools list */}
-          <div>
-            <p className="text-xs text-muted-foreground font-mono uppercase tracking-wider mb-2">Available tools</p>
-            <div className="flex flex-wrap gap-1.5">
-              {item.toolNames.map(name => (
-                <span key={name} className="text-[11px] font-mono px-2 py-1 rounded-md bg-black/40 border border-white/8 text-white/70">
-                  {name}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Footer hint */}
+      <p className="text-xs text-muted-foreground text-center pt-2 border-t">
+        Enabled integrations give this agent tools to use during chat. Add your API keys via environment secrets to activate them.
+      </p>
     </div>
   );
 }
