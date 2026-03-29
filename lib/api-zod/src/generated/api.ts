@@ -607,6 +607,7 @@ export const ListAutomationsResponseItem = zod.object({
   prompt: zod.string(),
   isEnabled: zod.boolean(),
   lastRunAt: zod.string().nullish(),
+  lastRunStatus: zod.string().nullish(),
   createdAt: zod.string(),
 });
 export const ListAutomationsResponse = zod.array(ListAutomationsResponseItem);
@@ -651,6 +652,7 @@ export const UpdateAutomationResponse = zod.object({
   prompt: zod.string(),
   isEnabled: zod.boolean(),
   lastRunAt: zod.string().nullish(),
+  lastRunStatus: zod.string().nullish(),
   createdAt: zod.string(),
 });
 

@@ -162,8 +162,18 @@ router.delete("/agents/:agentId/automations/:id", requireAuth, async (req, res):
 });
 
 router.get("/automations/:id/runs", requireAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [automation] = await db
+    .select()
+    .from(agentAutomationsTable)
+    .where(eq(agentAutomationsTable.id, id));
+
+  if (!automation || !(await verifyAgentAccess(automation.agentId))) {
+    res.status(404).json({ error: "Automation not found" });
+    return;
+  }
 
   const runs = await db
     .select()
@@ -176,7 +186,7 @@ router.get("/automations/:id/runs", requireAuth, async (req, res): Promise<void>
 });
 
 router.post("/automations/:id/run", requireAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const [automation] = await db
@@ -184,7 +194,10 @@ router.post("/automations/:id/run", requireAuth, async (req, res): Promise<void>
     .from(agentAutomationsTable)
     .where(eq(agentAutomationsTable.id, id));
 
-  if (!automation) { res.status(404).json({ error: "Automation not found" }); return; }
+  if (!automation || !(await verifyAgentAccess(automation.agentId))) {
+    res.status(404).json({ error: "Automation not found" });
+    return;
+  }
 
   res.json({ triggered: true, automationId: id });
   executeAutomation(id).catch(console.error);

@@ -22,5 +22,7 @@ export interface Automation {
   isEnabled: boolean;
   /** @nullable */
   lastRunAt?: string | null;
+  /** @nullable */
+  lastRunStatus?: string | null;
   createdAt: string;
 }

@@ -1514,6 +1514,8 @@ components:
           type: boolean
         lastRunAt:
           type: ["string", "null"]
+        lastRunStatus:
+          type: ["string", "null"]
         createdAt:
           type: string
       required:
