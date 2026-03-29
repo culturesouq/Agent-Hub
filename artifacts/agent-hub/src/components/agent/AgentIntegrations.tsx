@@ -117,15 +117,6 @@ export function AgentIntegrations({ agentId }: { agentId: number }) {
     );
   }, [catalog, search]);
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-48 text-muted-foreground gap-2">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        <span>Loading integrations…</span>
-      </div>
-    );
-  }
-
   const toggleMutation = useMutation({
     mutationFn: async ({ serviceId, enable }: { serviceId: string; enable: boolean }) => {
       const r = await fetch(`/api/agents/${agentId}/integrations/${serviceId}/${enable ? "enable" : "disable"}`, {
@@ -140,6 +131,15 @@ export function AgentIntegrations({ agentId }: { agentId: number }) {
     },
     onError: () => toast({ title: "Error", variant: "destructive" }),
   });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-48 text-muted-foreground gap-2">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        <span>Loading integrations…</span>
+      </div>
+    );
+  }
 
   const handleSaveApiKey = async (serviceId: string) => {
     const key = apiKeyInputs[serviceId]?.trim();
