@@ -172,7 +172,8 @@ export function AgentAutomations({ agentId }: { agentId: number }) {
   const deleteAutomation = async (id: number) => {
     if (!confirm("Delete this automation?")) return;
     try {
-      await fetch(`/api/agents/${agentId}/automations/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/agents/${agentId}/automations/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed");
       setAutomations(prev => prev.filter(a => a.id !== id));
     } catch {
       toast({ title: "Error", description: "Delete failed.", variant: "destructive" });
@@ -196,7 +197,8 @@ export function AgentAutomations({ agentId }: { agentId: number }) {
   const runNow = async (a: Automation) => {
     setRunningId(a.id);
     try {
-      await fetch(`/api/automations/${a.id}/run`, { method: "POST" });
+      const res = await fetch(`/api/automations/${a.id}/run`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed");
       toast({ title: "Triggered", description: "Automation is running in the background." });
       setTimeout(() => fetchAutomations(), 3000);
     } catch {
