@@ -48,6 +48,18 @@ export function useVoiceSession({
 
   const startRecording = useCallback(async () => {
     if (!isActiveRef.current) return;
+
+    // Always tear down any previous mic/context resources before starting a new turn.
+    // This prevents tracks from leaking across silence→onstop→restart cycles.
+    if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
+    if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
+    if (audioContextRef.current && audioContextRef.current.state !== "closed") {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
+    mediaRecorderRef.current = null;
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       if (!isActiveRef.current) { stream.getTracks().forEach(t => t.stop()); return; }
