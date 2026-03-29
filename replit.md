@@ -15,25 +15,88 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Validation**: Zod (`zod/v4`), `drizzle-zod`
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
-- **AI**: OpenRouter via Replit AI Integrations (env: `AI_INTEGRATIONS_OPENROUTER_BASE_URL`, `AI_INTEGRATIONS_OPENROUTER_API_KEY`)
+- **AI chat**: OpenRouter via Replit AI Integrations (`AI_INTEGRATIONS_OPENROUTER_BASE_URL`, `AI_INTEGRATIONS_OPENROUTER_API_KEY`)
+- **AI voice (STT/TTS)**: OpenAI via Replit AI Integrations (`AI_INTEGRATIONS_OPENAI_BASE_URL`, `AI_INTEGRATIONS_OPENAI_API_KEY`)
+
+## Authentication
+
+- Password-protected single-owner app. Default password: `agent-hub-secret` (override with `OWNER_PASSWORD` env var).
+- Session: `express-session`, 7-day expiry, `SESSION_SECRET` env var.
+- API keys: format `ahub_<48hex>`, stored hashed in DB, per-agent.
+
+## Project
+
+**Agent Hub** — a private web app for managing AI agents with rich customization.
+
+### Artifacts
+
+| Name | Path | Package |
+|------|------|---------|
+| Agent Hub (frontend) | `artifacts/agent-hub/` | `@workspace/agent-hub` |
+| API Server (backend) | `artifacts/api-server/` | `@workspace/api-server` |
+| Mockup Sandbox | `artifacts/mockup-sandbox/` | `@workspace/mockup-sandbox` |
+
+### Completed Features (Tasks #1–#8)
+
+1. **UX Redesign** — dark glassmorphism UI, redesigned sidebar (agents list, settings, logs, public API)
+2. **Persistent Memory** — per-agent memory store, automatic summarization, memory panel
+3. **Knowledge Base** — file upload (PDF, TXT, DOCX, CSV, images), per-agent knowledge retrieval
+4. **Web Search** — per-agent toggle, DuckDuckGo/SerpAPI search integration, source citations
+5. **Tool Calling & Custom Functions** — webhook tools, custom JS functions, tool call display in chat
+6. **Expanded Platform Integrations** — connections panel, OAuth/webhook integrations (Slack, GitHub, etc.)
+7. **Automations & Scheduling** — cron-based automations, webhook triggers, `runAgentTask()` runner
+8. **Image / Vision Understanding** — image upload + clipboard paste in chat, multimodal OpenRouter models
+9. **Conversational Voice Chat** — see below
+
+### Task #8: Conversational Voice Chat (COMPLETE)
+
+- `voice` (text, default `nova`) and `voiceSpeed` (real, default `1.0`) columns added to agents DB table and migrated
+- Per-agent voice selector (alloy/echo/fable/onyx/nova/shimmer) + speed slider in Identity tab
+- **Backend routes** (`artifacts/api-server/src/routes/voice.ts`):
+  - `POST /agents/:id/transcribe` — multipart audio → `speechToText()` (gpt-4o-mini-transcribe)
+  - `POST /agents/:id/speak` — JSON body → **SSE streaming PCM16** via `textToSpeechStream()` (gpt-audio, 24kHz mono)
+    - Response: `text/event-stream` with `data: {chunk: base64_pcm16}` frames, then `data: {done: true}`
+    - **Note**: The generated `speakText()` client helper is marked `@deprecated` — do NOT use it. Use raw `fetch` with SSE parsing (see `useVoiceSession` hook).
+- **`useVoiceSession` hook** (`artifacts/agent-hub/src/hooks/use-voice-session.ts`):
+  - State machine: `idle → recording → transcribing → speaking → recording (loop)`
+  - MediaRecorder + Web Audio API VAD (RMS silence detection, 1.8s threshold)
+  - Proper teardown: each recording turn stops all previous MediaStream tracks + closes AudioContext
+  - PCM16 SSE streaming playback via `AudioBufferSourceNode` scheduling (progressive, not buffered)
+  - All sources tracked in `scheduledSourcesRef`; `stopSession()` closes the `playbackCtxRef` immediately
+  - `isActiveRef` cancellation guard on every `await` (no messages fire after session ends)
+  - `micDenied` state + `retrySession()` + `clearMicDenied()` for permission denied flow
+- **UI Components**:
+  - `VoiceOverlay.tsx` — full-screen absolute overlay with pulse rings, waveform bars, transcript preview, stop button
+  - `MicPermissionGuide.tsx` — browser-specific step-by-step permission fix guide (Chrome/Firefox/Safari) with retry/dismiss
+  - "Start Voice" / "Stop" button in the **chat header** (not the input bar)
+- **OpenAPI spec**: `/speak` → `text/event-stream` response with `SpeakChunk` schema; codegen re-run
+- **i18n**: All voice keys in EN + AR (`voiceRecording`, `voiceTranscribing`, `voiceSpeaking`, `startVoice`, `stopVoice`)
+
+### Pending Tasks (future sessions)
+
+- **Task #9**: Dynamic Personality Growth (Auto) — agent personality evolves from conversation patterns
+- **Task #10**: WhatsApp & Telegram Connectors — incoming/outgoing message webhooks
+- **Task #11**: API Docs & Secrets Manager — interactive API docs UI, key management UI
 
 ## Structure
 
 ```text
 artifacts-monorepo/
-├── artifacts/              # Deployable applications
-│   └── api-server/         # Express API server
-├── lib/                    # Shared libraries
-│   ├── api-spec/           # OpenAPI spec + Orval codegen config
-│   ├── api-client-react/   # Generated React Query hooks
-│   ├── api-zod/            # Generated Zod schemas from OpenAPI
-│   └── db/                 # Drizzle ORM schema + DB connection
-├── scripts/                # Utility scripts (single workspace package)
-│   └── src/                # Individual .ts scripts, run via `pnpm --filter @workspace/scripts run <script>`
-├── pnpm-workspace.yaml     # pnpm workspace (artifacts/*, lib/*, lib/integrations/*, scripts)
-├── tsconfig.base.json      # Shared TS options (composite, bundler resolution, es2022)
-├── tsconfig.json           # Root TS project references
-└── package.json            # Root package with hoisted devDeps
+├── artifacts/
+│   ├── agent-hub/              # React + Vite frontend (port via $PORT)
+│   └── api-server/             # Express API server (port 8080)
+├── lib/
+│   ├── api-spec/               # OpenAPI spec + Orval codegen config
+│   ├── api-client-react/       # Generated React Query hooks (do not hand-edit generated/)
+│   ├── api-zod/                # Generated Zod schemas
+│   ├── db/                     # Drizzle ORM schema + DB connection
+│   ├── integrations-openai-ai-server/   # OpenAI AI integration (STT + TTS)
+│   └── integrations/openai_ai_integrations/  # OpenAI integration internals
+├── scripts/
+├── pnpm-workspace.yaml
+├── tsconfig.base.json
+├── tsconfig.json
+└── package.json
 ```
 
 ## TypeScript & Composite Projects
@@ -57,11 +120,10 @@ Express 5 API server. Routes live in `src/routes/` and use `@workspace/api-zod` 
 
 - Entry: `src/index.ts` — reads `PORT`, starts Express
 - App setup: `src/app.ts` — mounts CORS, JSON/urlencoded parsing, routes at `/api`
-- Routes: `src/routes/index.ts` mounts sub-routers; `src/routes/health.ts` exposes `GET /health` (full path: `/api/health`)
-- Depends on: `@workspace/db`, `@workspace/api-zod`
+- Routes: `src/routes/index.ts` mounts sub-routers
+- SSE streaming headers (required for Replit nginx proxy): `X-Accel-Buffering: no`, `Cache-Control: no-cache, no-transform`, `res.flushHeaders()`
+- Depends on: `@workspace/db`, `@workspace/api-zod`, `@workspace/integrations-openai-ai-server`
 - `pnpm --filter @workspace/api-server run dev` — run the dev server
-- `pnpm --filter @workspace/api-server run build` — production esbuild bundle (`dist/index.cjs`)
-- Build bundles an allowlist of deps (express, cors, pg, drizzle-orm, zod, etc.) and externalizes the rest
 
 ### `lib/db` (`@workspace/db`)
 
@@ -69,11 +131,9 @@ Database layer using Drizzle ORM with PostgreSQL. Exports a Drizzle client insta
 
 - `src/index.ts` — creates a `Pool` + Drizzle instance, exports schema
 - `src/schema/index.ts` — barrel re-export of all models
-- `src/schema/<modelname>.ts` — table definitions with `drizzle-zod` insert schemas (no models definitions exist right now)
 - `drizzle.config.ts` — Drizzle Kit config (requires `DATABASE_URL`, automatically provided by Replit)
 - Exports: `.` (pool, db, schema), `./schema` (schema only)
-
-Production migrations are handled by Replit when publishing. In development, we just use `pnpm --filter @workspace/db run push`, and we fallback to `pnpm --filter @workspace/db run push-force`.
+- Dev push: `pnpm --filter @workspace/db run push` or `push-force`
 
 ### `lib/api-spec` (`@workspace/api-spec`)
 
@@ -82,16 +142,25 @@ Owns the OpenAPI 3.1 spec (`openapi.yaml`) and the Orval config (`orval.config.t
 1. `lib/api-client-react/src/generated/` — React Query hooks + fetch client
 2. `lib/api-zod/src/generated/` — Zod schemas
 
-Run codegen: `pnpm --filter @workspace/api-spec run codegen`
+**CRITICAL after any spec change**: Run `cd lib/api-spec && pnpm run codegen`
 
 ### `lib/api-zod` (`@workspace/api-zod`)
 
-Generated Zod schemas from the OpenAPI spec (e.g. `HealthCheckResponse`). Used by `api-server` for response validation.
+Generated Zod schemas from the OpenAPI spec. Used by `api-server` for response validation.
 
 ### `lib/api-client-react` (`@workspace/api-client-react`)
 
-Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHealthCheck`, `healthCheck`).
+Generated React Query hooks and fetch client from the OpenAPI spec.
+⚠️ The `speakText()` function is `@deprecated` — the `/speak` endpoint is SSE, not JSON. Use `useVoiceSession` hook directly.
 
 ### `scripts` (`@workspace/scripts`)
 
-Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
+Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`.
+
+## Key Implementation Notes
+
+- **Automation webhook URL**: `/api/webhooks/automation/:webhookSecret` — no auth required
+- **`agent-runner.ts`**: exports `runAgentTask(agentId, prompt, contextVars?)` and `executeAutomation(automationId, promptOverride?)`
+- **Voice TTS**: `textToSpeechStream()` from `@workspace/integrations-openai-ai-server/audio` — yields base64 PCM16 chunks (24kHz, mono, signed 16-bit)
+- **Voice STT**: `speechToText()` from same package — uses `gpt-4o-mini-transcribe`; `ensureCompatibleFormat()` handles ffmpeg conversion
+- **Voice speed**: applied via prompt hint (gpt-audio doesn't support native speed param)

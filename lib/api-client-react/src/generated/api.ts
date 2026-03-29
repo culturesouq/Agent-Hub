@@ -2006,6 +2006,12 @@ export const getSpeakTextUrl = (agentId: number) => {
   return `/api/agents/${agentId}/speak`;
 };
 
+/**
+ * @deprecated This generated helper does NOT work correctly for the /speak endpoint.
+ * The real endpoint streams PCM16 audio as Server-Sent Events (text/event-stream),
+ * not JSON. Use the raw `fetch` API with SSE parsing instead. See `useVoiceSession`
+ * hook in `artifacts/agent-hub/src/hooks/use-voice-session.ts` for the correct usage.
+ */
 export const speakText = async (
   agentId: number,
   speakBody: SpeakBody,
