@@ -92,7 +92,7 @@ router.post("/public/chat", async (req, res): Promise<void> => {
       searchContextMessages = [
         {
           role: "system",
-          content: `The following are current web search results to help you answer the user's question. Use them to give accurate, up-to-date information:\n\n${searchContext}`,
+          content: `The following are current web search results to help you answer the user's question. Use them to give accurate, up-to-date information:\n\n${searchContext}\n\nIMPORTANT: You now have the search results above. Answer the user's question directly using these results. Do NOT output any [SEARCH: ...] tags in your response.`,
         },
       ];
     }
@@ -112,7 +112,10 @@ router.post("/public/chat", async (req, res): Promise<void> => {
 
   const memoryRegex = /\[MEMORY:\s*([^\]]+)\]/gi;
   const memoryMatches = [...rawResponse.matchAll(memoryRegex)];
-  const responseText = rawResponse.replace(/\[MEMORY:[^\]]*\]/gi, "").trim();
+  const responseText = rawResponse
+    .replace(/\[MEMORY:[^\]]*\]/gi, "")
+    .replace(/\[SEARCH:[^\]]*\]/gi, "")
+    .trim();
 
   for (const match of memoryMatches) {
     const memContent = match[1]?.trim();

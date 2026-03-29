@@ -115,7 +115,7 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
       searchContextMessages = [
         {
           role: "system",
-          content: `The following are current web search results to help you answer the user's question. Use them to give accurate, up-to-date information:\n\n${searchContext}`,
+          content: `The following are current web search results to help you answer the user's question. Use them to give accurate, up-to-date information:\n\n${searchContext}\n\nIMPORTANT: You now have the search results above. Answer the user's question directly using these results. Do NOT output any [SEARCH: ...] tags in your response.`,
         },
       ];
     }
@@ -152,7 +152,10 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
   }
 
   if (streamBuffer) {
-    const cleaned = streamBuffer.replace(/\[MEMORY:[^\]]*\]/gi, "").trim();
+    const cleaned = streamBuffer
+      .replace(/\[MEMORY:[^\]]*\]/gi, "")
+      .replace(/\[SEARCH:[^\]]*\]/gi, "")
+      .trim();
     if (cleaned) {
       res.write(`data: ${JSON.stringify({ content: cleaned })}\n\n`);
     }
@@ -160,7 +163,10 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
 
   const memoryRegex = /\[MEMORY:\s*([^\]]+)\]/gi;
   const memoryMatches = [...fullResponse.matchAll(memoryRegex)];
-  const cleanedResponse = fullResponse.replace(/\[MEMORY:[^\]]*\]/gi, "").trim();
+  const cleanedResponse = fullResponse
+    .replace(/\[MEMORY:[^\]]*\]/gi, "")
+    .replace(/\[SEARCH:[^\]]*\]/gi, "")
+    .trim();
 
   for (const match of memoryMatches) {
     const memContent = match[1]?.trim();
@@ -190,31 +196,39 @@ router.delete("/agents/:agentId/chat", async (req, res): Promise<void> => {
   res.sendStatus(204);
 });
 
-function extractSafeContent(buffer: string): { safe: string; remaining: string } {
-  const memoryRegex = /\[MEMORY:[^\]]*\]/gi;
+const STRIP_TAGS_REGEX = /\[(?:MEMORY|SEARCH):[^\]]*\]/gi;
 
+function looksLikeTagStart(str: string): boolean {
+  const upper = str.toUpperCase();
+  return (
+    "[MEMORY:".startsWith(upper) ||
+    upper.startsWith("[MEMORY:") ||
+    "[SEARCH:".startsWith(upper) ||
+    upper.startsWith("[SEARCH:")
+  );
+}
+
+function extractSafeContent(buffer: string): { safe: string; remaining: string } {
   const bracketIdx = buffer.lastIndexOf("[");
   if (bracketIdx === -1) {
-    return { safe: buffer.replace(memoryRegex, ""), remaining: "" };
+    return { safe: buffer.replace(STRIP_TAGS_REGEX, ""), remaining: "" };
   }
 
   const fromBracket = buffer.slice(bracketIdx);
 
-  const looksLikeMemoryStart = "[MEMORY:".startsWith(fromBracket.toUpperCase()) || fromBracket.toUpperCase().startsWith("[MEMORY:");
-
-  if (!looksLikeMemoryStart) {
-    return { safe: buffer.replace(memoryRegex, ""), remaining: "" };
+  if (!looksLikeTagStart(fromBracket)) {
+    return { safe: buffer.replace(STRIP_TAGS_REGEX, ""), remaining: "" };
   }
 
-  const completeTagMatch = fromBracket.match(/^\[MEMORY:[^\]]*\]/i);
+  const completeTagMatch = fromBracket.match(/^\[(?:MEMORY|SEARCH):[^\]]*\]/i);
   if (completeTagMatch) {
-    const safePrefix = buffer.slice(0, bracketIdx).replace(memoryRegex, "");
+    const safePrefix = buffer.slice(0, bracketIdx).replace(STRIP_TAGS_REGEX, "");
     const after = buffer.slice(bracketIdx + completeTagMatch[0].length);
     const { safe: restSafe, remaining: restRemaining } = extractSafeContent(after);
     return { safe: safePrefix + restSafe, remaining: restRemaining };
   }
 
-  const safePrefix = buffer.slice(0, bracketIdx).replace(memoryRegex, "");
+  const safePrefix = buffer.slice(0, bracketIdx).replace(STRIP_TAGS_REGEX, "");
   return { safe: safePrefix, remaining: fromBracket };
 }
 
