@@ -795,6 +795,167 @@ paths:
               schema:
                 $ref: "#/components/schemas/IntegrationTestResponse"
 
+  /agents/{agentId}/automations:
+    get:
+      operationId: listAutomations
+      tags: [automations]
+      summary: List automations for an agent
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of automations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Automation"
+    post:
+      operationId: createAutomation
+      tags: [automations]
+      summary: Create a new automation for an agent
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAutomationBody"
+      responses:
+        "201":
+          description: Automation created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Automation"
+
+  /agents/{agentId}/automations/{id}:
+    patch:
+      operationId: updateAutomation
+      tags: [automations]
+      summary: Update an automation
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAutomationBody"
+      responses:
+        "200":
+          description: Automation updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Automation"
+        "404":
+          description: Automation not found
+    delete:
+      operationId: deleteAutomation
+      tags: [automations]
+      summary: Delete an automation
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /automations/{id}/run:
+    post:
+      operationId: runAutomation
+      tags: [automations]
+      summary: Manually trigger an automation run
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Automation triggered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationRunTriggered"
+
+  /automations/{id}/runs:
+    get:
+      operationId: listAutomationRuns
+      tags: [automations]
+      summary: Get run history for an automation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Run history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AutomationRun"
+
+  /webhooks/automation/{webhookSecret}:
+    post:
+      operationId: triggerAutomationWebhook
+      tags: [automations]
+      summary: Trigger a webhook automation (no auth required — secret acts as token)
+      parameters:
+        - name: webhookSecret
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Automation triggered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationRunTriggered"
+        "404":
+          description: Webhook not found
+
 components:
   schemas:
     HealthStatus:
@@ -1328,3 +1489,99 @@ components:
       required:
         - response
         - agentName
+
+    Automation:
+      type: object
+      properties:
+        id:
+          type: integer
+        agentId:
+          type: integer
+        name:
+          type: string
+        triggerType:
+          type: string
+          enum: [schedule, webhook]
+        cronExpression:
+          type: ["string", "null"]
+        webhookSecret:
+          type: ["string", "null"]
+        webhookUrl:
+          type: ["string", "null"]
+        prompt:
+          type: string
+        isEnabled:
+          type: boolean
+        lastRunAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - agentId
+        - name
+        - triggerType
+        - prompt
+        - isEnabled
+        - createdAt
+
+    CreateAutomationBody:
+      type: object
+      properties:
+        name:
+          type: string
+        triggerType:
+          type: string
+          enum: [schedule, webhook]
+        cronExpression:
+          type: string
+        prompt:
+          type: string
+      required:
+        - name
+        - prompt
+
+    UpdateAutomationBody:
+      type: object
+      properties:
+        name:
+          type: string
+        cronExpression:
+          type: string
+        prompt:
+          type: string
+        isEnabled:
+          type: boolean
+
+    AutomationRun:
+      type: object
+      properties:
+        id:
+          type: integer
+        automationId:
+          type: integer
+        triggeredAt:
+          type: string
+        prompt:
+          type: string
+        response:
+          type: ["string", "null"]
+        status:
+          type: string
+      required:
+        - id
+        - automationId
+        - triggeredAt
+        - prompt
+        - status
+
+    AutomationRunTriggered:
+      type: object
+      properties:
+        triggered:
+          type: boolean
+        automationId:
+          type: integer
+      required:
+        - triggered
+        - automationId

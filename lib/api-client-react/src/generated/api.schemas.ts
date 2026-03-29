@@ -327,6 +327,71 @@ export interface PublicChatResponse {
   sources?: string[];
 }
 
+export type AutomationTriggerType =
+  (typeof AutomationTriggerType)[keyof typeof AutomationTriggerType];
+
+export const AutomationTriggerType = {
+  schedule: "schedule",
+  webhook: "webhook",
+} as const;
+
+export interface Automation {
+  id: number;
+  agentId: number;
+  name: string;
+  triggerType: AutomationTriggerType;
+  /** @nullable */
+  cronExpression?: string | null;
+  /** @nullable */
+  webhookSecret?: string | null;
+  /** @nullable */
+  webhookUrl?: string | null;
+  prompt: string;
+  isEnabled: boolean;
+  /** @nullable */
+  lastRunAt?: string | null;
+  createdAt: string;
+}
+
+export type CreateAutomationBodyTriggerType =
+  (typeof CreateAutomationBodyTriggerType)[keyof typeof CreateAutomationBodyTriggerType];
+
+export const CreateAutomationBodyTriggerType = {
+  schedule: "schedule",
+  webhook: "webhook",
+} as const;
+
+export interface CreateAutomationBody {
+  name: string;
+  triggerType?: CreateAutomationBodyTriggerType;
+  cronExpression?: string;
+  prompt: string;
+}
+
+export interface UpdateAutomationBody {
+  name?: string;
+  cronExpression?: string;
+  prompt?: string;
+  isEnabled?: boolean;
+}
+
+export interface AutomationRun {
+  id: number;
+  automationId: number;
+  triggeredAt: string;
+  prompt: string;
+  /** @nullable */
+  response?: string | null;
+  status: string;
+}
+
+export interface AutomationRunTriggered {
+  triggered: boolean;
+  automationId: number;
+}
+
 export type UploadKnowledgeFileBody = {
   file: Blob;
 };
+
+export type TriggerAutomationWebhookBody = { [key: string]: unknown };

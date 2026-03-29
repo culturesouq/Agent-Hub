@@ -28,6 +28,7 @@ interface Automation {
   prompt: string;
   isEnabled: boolean;
   lastRunAt: string | null;
+  lastRunStatus: string | null;
   createdAt: string;
 }
 
@@ -37,7 +38,17 @@ interface AutomationRun {
   triggeredAt: string;
   prompt: string;
   response: string | null;
-  status: string;
+  status: "pending" | "success" | "error" | string;
+}
+
+function RunStatusBadge({ status }: { status: string }) {
+  if (status === "success") {
+    return <span className="text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded border border-green-400/20 bg-green-400/8 text-green-400">success</span>;
+  }
+  if (status === "error") {
+    return <span className="text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded border border-red-400/20 bg-red-400/8 text-red-400">error</span>;
+  }
+  return <span className="text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded border border-yellow-400/20 bg-yellow-400/8 text-yellow-400">{status}</span>;
 }
 
 const CRON_PRESETS = [
@@ -263,6 +274,7 @@ export function AgentAutomations({ agentId }: { agentId: number }) {
                     webhook
                   </span>
                 )}
+                {a.lastRunStatus && <RunStatusBadge status={a.lastRunStatus} />}
               </div>
               <p className="text-xs text-muted-foreground mt-0.5 truncate">
                 {a.prompt.slice(0, 70)}{a.prompt.length > 70 ? "…" : ""}

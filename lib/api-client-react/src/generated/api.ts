@@ -24,9 +24,13 @@ import type {
   AgentMemory,
   AgentTool,
   AuthStatus,
+  Automation,
+  AutomationRun,
+  AutomationRunTriggered,
   ChatMessage,
   Connection,
   CreateAgentBody,
+  CreateAutomationBody,
   CreateConnectionBody,
   CreateToolBody,
   HealthStatus,
@@ -40,7 +44,9 @@ import type {
   PublicChatBody,
   PublicChatResponse,
   SendChatMessageBody,
+  TriggerAutomationWebhookBody,
   UpdateAgentBody,
+  UpdateAutomationBody,
   UpdateInstructionBody,
   UpdateKnowledgeBody,
   UpdateToolBody,
@@ -3206,4 +3212,614 @@ export const useTestIntegration = <
   TContext
 > => {
   return useMutation(getTestIntegrationMutationOptions(options));
+};
+
+/**
+ * @summary List automations for an agent
+ */
+export const getListAutomationsUrl = (agentId: number) => {
+  return `/api/agents/${agentId}/automations`;
+};
+
+export const listAutomations = async (
+  agentId: number,
+  options?: RequestInit,
+): Promise<Automation[]> => {
+  return customFetch<Automation[]>(getListAutomationsUrl(agentId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAutomationsQueryKey = (agentId: number) => {
+  return [`/api/agents/${agentId}/automations`] as const;
+};
+
+export const getListAutomationsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAutomations>>,
+  TError = ErrorType<unknown>,
+>(
+  agentId: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAutomations>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListAutomationsQueryKey(agentId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listAutomations>>> = ({
+    signal,
+  }) => listAutomations(agentId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!agentId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAutomations>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAutomationsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAutomations>>
+>;
+export type ListAutomationsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List automations for an agent
+ */
+
+export function useListAutomations<
+  TData = Awaited<ReturnType<typeof listAutomations>>,
+  TError = ErrorType<unknown>,
+>(
+  agentId: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAutomations>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAutomationsQueryOptions(agentId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a new automation for an agent
+ */
+export const getCreateAutomationUrl = (agentId: number) => {
+  return `/api/agents/${agentId}/automations`;
+};
+
+export const createAutomation = async (
+  agentId: number,
+  createAutomationBody: CreateAutomationBody,
+  options?: RequestInit,
+): Promise<Automation> => {
+  return customFetch<Automation>(getCreateAutomationUrl(agentId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createAutomationBody),
+  });
+};
+
+export const getCreateAutomationMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createAutomation>>,
+    TError,
+    { agentId: number; data: BodyType<CreateAutomationBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createAutomation>>,
+  TError,
+  { agentId: number; data: BodyType<CreateAutomationBody> },
+  TContext
+> => {
+  const mutationKey = ["createAutomation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createAutomation>>,
+    { agentId: number; data: BodyType<CreateAutomationBody> }
+  > = (props) => {
+    const { agentId, data } = props ?? {};
+
+    return createAutomation(agentId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateAutomationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createAutomation>>
+>;
+export type CreateAutomationMutationBody = BodyType<CreateAutomationBody>;
+export type CreateAutomationMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a new automation for an agent
+ */
+export const useCreateAutomation = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createAutomation>>,
+    TError,
+    { agentId: number; data: BodyType<CreateAutomationBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createAutomation>>,
+  TError,
+  { agentId: number; data: BodyType<CreateAutomationBody> },
+  TContext
+> => {
+  return useMutation(getCreateAutomationMutationOptions(options));
+};
+
+/**
+ * @summary Update an automation
+ */
+export const getUpdateAutomationUrl = (agentId: number, id: number) => {
+  return `/api/agents/${agentId}/automations/${id}`;
+};
+
+export const updateAutomation = async (
+  agentId: number,
+  id: number,
+  updateAutomationBody: UpdateAutomationBody,
+  options?: RequestInit,
+): Promise<Automation> => {
+  return customFetch<Automation>(getUpdateAutomationUrl(agentId, id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateAutomationBody),
+  });
+};
+
+export const getUpdateAutomationMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAutomation>>,
+    TError,
+    { agentId: number; id: number; data: BodyType<UpdateAutomationBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateAutomation>>,
+  TError,
+  { agentId: number; id: number; data: BodyType<UpdateAutomationBody> },
+  TContext
+> => {
+  const mutationKey = ["updateAutomation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateAutomation>>,
+    { agentId: number; id: number; data: BodyType<UpdateAutomationBody> }
+  > = (props) => {
+    const { agentId, id, data } = props ?? {};
+
+    return updateAutomation(agentId, id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateAutomationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateAutomation>>
+>;
+export type UpdateAutomationMutationBody = BodyType<UpdateAutomationBody>;
+export type UpdateAutomationMutationError = ErrorType<void>;
+
+/**
+ * @summary Update an automation
+ */
+export const useUpdateAutomation = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAutomation>>,
+    TError,
+    { agentId: number; id: number; data: BodyType<UpdateAutomationBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateAutomation>>,
+  TError,
+  { agentId: number; id: number; data: BodyType<UpdateAutomationBody> },
+  TContext
+> => {
+  return useMutation(getUpdateAutomationMutationOptions(options));
+};
+
+/**
+ * @summary Delete an automation
+ */
+export const getDeleteAutomationUrl = (agentId: number, id: number) => {
+  return `/api/agents/${agentId}/automations/${id}`;
+};
+
+export const deleteAutomation = async (
+  agentId: number,
+  id: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteAutomationUrl(agentId, id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteAutomationMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteAutomation>>,
+    TError,
+    { agentId: number; id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteAutomation>>,
+  TError,
+  { agentId: number; id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteAutomation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteAutomation>>,
+    { agentId: number; id: number }
+  > = (props) => {
+    const { agentId, id } = props ?? {};
+
+    return deleteAutomation(agentId, id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteAutomationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteAutomation>>
+>;
+
+export type DeleteAutomationMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete an automation
+ */
+export const useDeleteAutomation = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteAutomation>>,
+    TError,
+    { agentId: number; id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteAutomation>>,
+  TError,
+  { agentId: number; id: number },
+  TContext
+> => {
+  return useMutation(getDeleteAutomationMutationOptions(options));
+};
+
+/**
+ * @summary Manually trigger an automation run
+ */
+export const getRunAutomationUrl = (id: number) => {
+  return `/api/automations/${id}/run`;
+};
+
+export const runAutomation = async (
+  id: number,
+  options?: RequestInit,
+): Promise<AutomationRunTriggered> => {
+  return customFetch<AutomationRunTriggered>(getRunAutomationUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRunAutomationMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runAutomation>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof runAutomation>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["runAutomation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof runAutomation>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return runAutomation(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RunAutomationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof runAutomation>>
+>;
+
+export type RunAutomationMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Manually trigger an automation run
+ */
+export const useRunAutomation = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runAutomation>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof runAutomation>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getRunAutomationMutationOptions(options));
+};
+
+/**
+ * @summary Get run history for an automation
+ */
+export const getListAutomationRunsUrl = (id: number) => {
+  return `/api/automations/${id}/runs`;
+};
+
+export const listAutomationRuns = async (
+  id: number,
+  options?: RequestInit,
+): Promise<AutomationRun[]> => {
+  return customFetch<AutomationRun[]>(getListAutomationRunsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAutomationRunsQueryKey = (id: number) => {
+  return [`/api/automations/${id}/runs`] as const;
+};
+
+export const getListAutomationRunsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAutomationRuns>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAutomationRuns>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAutomationRunsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listAutomationRuns>>
+  > = ({ signal }) => listAutomationRuns(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAutomationRuns>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAutomationRunsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAutomationRuns>>
+>;
+export type ListAutomationRunsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get run history for an automation
+ */
+
+export function useListAutomationRuns<
+  TData = Awaited<ReturnType<typeof listAutomationRuns>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAutomationRuns>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAutomationRunsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Trigger a webhook automation (no auth required — secret acts as token)
+ */
+export const getTriggerAutomationWebhookUrl = (webhookSecret: string) => {
+  return `/api/webhooks/automation/${webhookSecret}`;
+};
+
+export const triggerAutomationWebhook = async (
+  webhookSecret: string,
+  triggerAutomationWebhookBody: TriggerAutomationWebhookBody,
+  options?: RequestInit,
+): Promise<AutomationRunTriggered> => {
+  return customFetch<AutomationRunTriggered>(
+    getTriggerAutomationWebhookUrl(webhookSecret),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(triggerAutomationWebhookBody),
+    },
+  );
+};
+
+export const getTriggerAutomationWebhookMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof triggerAutomationWebhook>>,
+    TError,
+    { webhookSecret: string; data: BodyType<TriggerAutomationWebhookBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof triggerAutomationWebhook>>,
+  TError,
+  { webhookSecret: string; data: BodyType<TriggerAutomationWebhookBody> },
+  TContext
+> => {
+  const mutationKey = ["triggerAutomationWebhook"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof triggerAutomationWebhook>>,
+    { webhookSecret: string; data: BodyType<TriggerAutomationWebhookBody> }
+  > = (props) => {
+    const { webhookSecret, data } = props ?? {};
+
+    return triggerAutomationWebhook(webhookSecret, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TriggerAutomationWebhookMutationResult = NonNullable<
+  Awaited<ReturnType<typeof triggerAutomationWebhook>>
+>;
+export type TriggerAutomationWebhookMutationBody =
+  BodyType<TriggerAutomationWebhookBody>;
+export type TriggerAutomationWebhookMutationError = ErrorType<void>;
+
+/**
+ * @summary Trigger a webhook automation (no auth required — secret acts as token)
+ */
+export const useTriggerAutomationWebhook = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof triggerAutomationWebhook>>,
+    TError,
+    { webhookSecret: string; data: BodyType<TriggerAutomationWebhookBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof triggerAutomationWebhook>>,
+  TError,
+  { webhookSecret: string; data: BodyType<TriggerAutomationWebhookBody> },
+  TContext
+> => {
+  return useMutation(getTriggerAutomationWebhookMutationOptions(options));
 };

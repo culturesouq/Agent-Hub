@@ -88,7 +88,7 @@ export async function runAgentTask(
         ...(openAITools.length > 0 ? { tools: openAITools as Parameters<typeof openrouter.chat.completions.create>[0]["tools"], tool_choice: "auto" as const } : {}),
       });
 
-      const choice = (response as { choices?: { message?: { content?: string | null; tool_calls?: unknown[]; finish_reason?: string } }[] }).choices?.[0];
+      const choice = (response as { choices?: { finish_reason?: string; message?: { content?: string | null; tool_calls?: unknown[] } }[] }).choices?.[0];
       const message = choice?.message;
 
       if (message?.content) {
@@ -96,7 +96,7 @@ export async function runAgentTask(
       }
 
       const toolCalls = message?.tool_calls as { id: string; function: { name: string; arguments: string } }[] | undefined;
-      if (choice?.message?.finish_reason === "tool_calls" && toolCalls && toolCalls.length > 0 && toolIterations < MAX_TOOL_ITERATIONS) {
+      if (choice?.finish_reason === "tool_calls" && toolCalls && toolCalls.length > 0 && toolIterations < MAX_TOOL_ITERATIONS) {
         toolIterations++;
 
         const toolResultMsgs: Msg[] = [];

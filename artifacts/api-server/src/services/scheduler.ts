@@ -79,9 +79,8 @@ export function startScheduler(): void {
   if (schedulerInterval) return;
   console.log("[Scheduler] Starting automation scheduler (polling every 60s)");
   schedulerInterval = setInterval(() => { tick().catch(console.error); }, 60_000);
-  const nextMinute = new Date();
-  nextMinute.setSeconds(60 - nextMinute.getSeconds(), 0);
-  setTimeout(() => { tick().catch(console.error); }, nextMinute.getTime() - Date.now());
+  const secsUntilNextMinute = 60 - new Date().getSeconds();
+  setTimeout(() => { tick().catch(console.error); }, secsUntilNextMinute * 1000);
 }
 
 export function stopScheduler(): void {

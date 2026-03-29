@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, inArray } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import { db, agentsTable, agentAutomationsTable, automationRunsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth.js";
@@ -42,7 +42,25 @@ router.get("/agents/:agentId/automations", requireAuth, async (req, res): Promis
     .where(eq(agentAutomationsTable.agentId, agentId))
     .orderBy(desc(agentAutomationsTable.createdAt));
 
-  res.json(automations.map(serializeAutomation));
+  let lastRunStatusMap: Record<number, string> = {};
+  if (automations.length > 0) {
+    const ids = automations.map(a => a.id);
+    const lastRuns = await db
+      .select()
+      .from(automationRunsTable)
+      .where(inArray(automationRunsTable.automationId, ids))
+      .orderBy(desc(automationRunsTable.triggeredAt));
+    for (const run of lastRuns) {
+      if (!(run.automationId in lastRunStatusMap)) {
+        lastRunStatusMap[run.automationId] = run.status;
+      }
+    }
+  }
+
+  res.json(automations.map(a => ({
+    ...serializeAutomation(a),
+    lastRunStatus: lastRunStatusMap[a.id] ?? null,
+  })));
 });
 
 router.post("/agents/:agentId/automations", requireAuth, async (req, res): Promise<void> => {

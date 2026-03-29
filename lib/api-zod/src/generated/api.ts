@@ -588,3 +588,124 @@ export const TestIntegrationResponse = zod.object({
   message: zod.string().nullish(),
   error: zod.string().nullish(),
 });
+
+/**
+ * @summary List automations for an agent
+ */
+export const ListAutomationsParams = zod.object({
+  agentId: zod.coerce.number(),
+});
+
+export const ListAutomationsResponseItem = zod.object({
+  id: zod.number(),
+  agentId: zod.number(),
+  name: zod.string(),
+  triggerType: zod.enum(["schedule", "webhook"]),
+  cronExpression: zod.string().nullish(),
+  webhookSecret: zod.string().nullish(),
+  webhookUrl: zod.string().nullish(),
+  prompt: zod.string(),
+  isEnabled: zod.boolean(),
+  lastRunAt: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+export const ListAutomationsResponse = zod.array(ListAutomationsResponseItem);
+
+/**
+ * @summary Create a new automation for an agent
+ */
+export const CreateAutomationParams = zod.object({
+  agentId: zod.coerce.number(),
+});
+
+export const CreateAutomationBody = zod.object({
+  name: zod.string(),
+  triggerType: zod.enum(["schedule", "webhook"]).optional(),
+  cronExpression: zod.string().optional(),
+  prompt: zod.string(),
+});
+
+/**
+ * @summary Update an automation
+ */
+export const UpdateAutomationParams = zod.object({
+  agentId: zod.coerce.number(),
+  id: zod.coerce.number(),
+});
+
+export const UpdateAutomationBody = zod.object({
+  name: zod.string().optional(),
+  cronExpression: zod.string().optional(),
+  prompt: zod.string().optional(),
+  isEnabled: zod.boolean().optional(),
+});
+
+export const UpdateAutomationResponse = zod.object({
+  id: zod.number(),
+  agentId: zod.number(),
+  name: zod.string(),
+  triggerType: zod.enum(["schedule", "webhook"]),
+  cronExpression: zod.string().nullish(),
+  webhookSecret: zod.string().nullish(),
+  webhookUrl: zod.string().nullish(),
+  prompt: zod.string(),
+  isEnabled: zod.boolean(),
+  lastRunAt: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary Delete an automation
+ */
+export const DeleteAutomationParams = zod.object({
+  agentId: zod.coerce.number(),
+  id: zod.coerce.number(),
+});
+
+/**
+ * @summary Manually trigger an automation run
+ */
+export const RunAutomationParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const RunAutomationResponse = zod.object({
+  triggered: zod.boolean(),
+  automationId: zod.number(),
+});
+
+/**
+ * @summary Get run history for an automation
+ */
+export const ListAutomationRunsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ListAutomationRunsResponseItem = zod.object({
+  id: zod.number(),
+  automationId: zod.number(),
+  triggeredAt: zod.string(),
+  prompt: zod.string(),
+  response: zod.string().nullish(),
+  status: zod.string(),
+});
+export const ListAutomationRunsResponse = zod.array(
+  ListAutomationRunsResponseItem,
+);
+
+/**
+ * @summary Trigger a webhook automation (no auth required — secret acts as token)
+ */
+export const TriggerAutomationWebhookParams = zod.object({
+  webhookSecret: zod.coerce.string(),
+});
+
+export const TriggerAutomationWebhookBody = zod.record(
+  zod.string(),
+  zod.unknown(),
+);
+
+export const TriggerAutomationWebhookResponse = zod.object({
+  triggered: zod.boolean(),
+  automationId: zod.number(),
+});
