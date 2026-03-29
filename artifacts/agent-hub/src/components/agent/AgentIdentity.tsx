@@ -98,7 +98,6 @@ const MODELS = [
 
 const schema = z.object({
   name: z.string().min(1, "Name is required"),
-  avatarUrl: z.string().optional().nullable(),
   identity: z.string().optional().nullable(),
   soul: z.string().optional().nullable(),
   model: z.string(),
@@ -118,7 +117,6 @@ export function AgentIdentity({ agent }: { agent: Agent }) {
     resolver: zodResolver(schema),
     defaultValues: {
       name: agent.name,
-      avatarUrl: agent.avatarUrl ?? "",
       identity: agent.backstory ?? "",
       soul: agent.personality ?? "",
       model: agentModel,
@@ -143,7 +141,6 @@ export function AgentIdentity({ agent }: { agent: Agent }) {
       id: agent.id,
       data: {
         name: data.name,
-        avatarUrl: data.avatarUrl || null,
         backstory: data.identity || null,
         personality: data.soul || null,
         model: data.model,
@@ -157,32 +154,22 @@ export function AgentIdentity({ agent }: { agent: Agent }) {
     MODELS.flatMap((g) => g.models).find((m) => m.id === selectedModel)?.label || selectedModel;
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 max-w-2xl">
-      {/* Name + Avatar */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <label className="text-sm font-semibold text-white flex items-center gap-1.5">
-            <User className="w-3.5 h-3.5 text-primary" />
-            {t('name')}
-          </label>
-          <Input
-            {...form.register('name')}
-            placeholder={t('agentNamePlaceholder')}
-            className="bg-white/5 border-white/10 focus-visible:border-primary/50"
-          />
-          {form.formState.errors.name && (
-            <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
-          )}
-        </div>
+    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-7 max-w-2xl">
 
-        <div className="space-y-1.5">
-          <label className="text-sm font-semibold text-white">Avatar URL</label>
-          <Input
-            {...form.register('avatarUrl')}
-            placeholder="https://example.com/avatar.png"
-            className="bg-white/5 border-white/10 focus-visible:border-primary/50"
-          />
-        </div>
+      {/* Name */}
+      <div className="space-y-1.5">
+        <label className="text-sm font-semibold text-white flex items-center gap-1.5">
+          <User className="w-3.5 h-3.5 text-primary" />
+          {t('name')}
+        </label>
+        <Input
+          {...form.register('name')}
+          placeholder={t('agentNamePlaceholder')}
+          className="bg-white/5 border-white/10 focus-visible:border-primary/50"
+        />
+        {form.formState.errors.name && (
+          <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
+        )}
       </div>
 
       {/* Identity */}
@@ -217,7 +204,7 @@ export function AgentIdentity({ agent }: { agent: Agent }) {
         />
       </div>
 
-      {/* Settings row: Model + Language */}
+      {/* Model + Language */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* AI Model */}
         <div className="space-y-1.5">
@@ -275,7 +262,7 @@ export function AgentIdentity({ agent }: { agent: Agent }) {
         </div>
       </div>
 
-      <div className="pt-2">
+      <div className="pt-1">
         <Button
           type="submit"
           className="bg-primary text-primary-foreground font-semibold px-6"
