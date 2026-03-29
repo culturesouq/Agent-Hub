@@ -236,6 +236,39 @@ paths:
               schema:
                 $ref: "#/components/schemas/KnowledgeEntry"
 
+  /agents/{agentId}/knowledge/upload:
+    post:
+      operationId: uploadKnowledgeFile
+      tags: [knowledge]
+      summary: Upload a file (PDF, .docx, .txt, .md) and extract text as a knowledge entry
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+                - file
+      responses:
+        "201":
+          description: Knowledge entry created from file
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeEntry"
+        "400":
+          description: Unsupported file type or parsing error
+
   /agents/{agentId}/knowledge/{id}:
     patch:
       operationId: updateKnowledge
@@ -717,6 +750,8 @@ components:
         content:
           type: string
         sourceUrl:
+          type: ["string", "null"]
+        sourceFilename:
           type: ["string", "null"]
         createdAt:
           type: string

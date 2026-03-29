@@ -98,6 +98,8 @@ export interface KnowledgeEntry {
   content: string;
   /** @nullable */
   sourceUrl?: string | null;
+  /** @nullable */
+  sourceFilename?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -223,3 +225,7 @@ export interface PublicChatResponse {
   response: string;
   agentName: string;
 }
+
+export type UploadKnowledgeFileBody = {
+  file: Blob;
+};

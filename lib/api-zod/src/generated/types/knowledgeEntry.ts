@@ -15,6 +15,8 @@ export interface KnowledgeEntry {
   content: string;
   /** @nullable */
   sourceUrl?: string | null;
+  /** @nullable */
+  sourceFilename?: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -184,6 +184,7 @@ export const ListKnowledgeResponseItem = zod.object({
   title: zod.string().nullish(),
   content: zod.string(),
   sourceUrl: zod.string().nullish(),
+  sourceFilename: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -201,6 +202,17 @@ export const AddKnowledgeBody = zod.object({
   title: zod.string().nullish(),
   content: zod.string(),
   sourceUrl: zod.string().nullish(),
+});
+
+/**
+ * @summary Upload a file (PDF, .docx, .txt, .md) and extract text as a knowledge entry
+ */
+export const UploadKnowledgeFileParams = zod.object({
+  agentId: zod.coerce.number(),
+});
+
+export const UploadKnowledgeFileBody = zod.object({
+  file: zod.instanceof(File),
 });
 
 /**
@@ -224,6 +236,7 @@ export const UpdateKnowledgeResponse = zod.object({
   title: zod.string().nullish(),
   content: zod.string(),
   sourceUrl: zod.string().nullish(),
+  sourceFilename: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });

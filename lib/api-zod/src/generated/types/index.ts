@@ -31,3 +31,4 @@ export * from "./sendChatMessageBody";
 export * from "./updateAgentBody";
 export * from "./updateInstructionBody";
 export * from "./updateKnowledgeBody";
+export * from "./uploadKnowledgeFileBody";

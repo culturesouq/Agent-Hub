@@ -76,6 +76,8 @@ async function buildAll() {
       "ffi-napi",
       "grpc",
       "hiredis",
+      "pdf-parse",
+      "pdfjs-dist",
       "kerberos",
       "leveldown",
       "miniflare",

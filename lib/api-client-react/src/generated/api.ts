@@ -38,6 +38,7 @@ import type {
   UpdateAgentBody,
   UpdateInstructionBody,
   UpdateKnowledgeBody,
+  UploadKnowledgeFileBody,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -1023,6 +1024,95 @@ export const useAddKnowledge = <
   TContext
 > => {
   return useMutation(getAddKnowledgeMutationOptions(options));
+};
+
+/**
+ * @summary Upload a file (PDF, .docx, .txt, .md) and extract text as a knowledge entry
+ */
+export const getUploadKnowledgeFileUrl = (agentId: number) => {
+  return `/api/agents/${agentId}/knowledge/upload`;
+};
+
+export const uploadKnowledgeFile = async (
+  agentId: number,
+  uploadKnowledgeFileBody: UploadKnowledgeFileBody,
+  options?: RequestInit,
+): Promise<KnowledgeEntry> => {
+  const formData = new FormData();
+  formData.append(`file`, uploadKnowledgeFileBody.file);
+
+  return customFetch<KnowledgeEntry>(getUploadKnowledgeFileUrl(agentId), {
+    ...options,
+    method: "POST",
+    body: formData,
+  });
+};
+
+export const getUploadKnowledgeFileMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof uploadKnowledgeFile>>,
+    TError,
+    { agentId: number; data: BodyType<UploadKnowledgeFileBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof uploadKnowledgeFile>>,
+  TError,
+  { agentId: number; data: BodyType<UploadKnowledgeFileBody> },
+  TContext
+> => {
+  const mutationKey = ["uploadKnowledgeFile"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof uploadKnowledgeFile>>,
+    { agentId: number; data: BodyType<UploadKnowledgeFileBody> }
+  > = (props) => {
+    const { agentId, data } = props ?? {};
+
+    return uploadKnowledgeFile(agentId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UploadKnowledgeFileMutationResult = NonNullable<
+  Awaited<ReturnType<typeof uploadKnowledgeFile>>
+>;
+export type UploadKnowledgeFileMutationBody = BodyType<UploadKnowledgeFileBody>;
+export type UploadKnowledgeFileMutationError = ErrorType<void>;
+
+/**
+ * @summary Upload a file (PDF, .docx, .txt, .md) and extract text as a knowledge entry
+ */
+export const useUploadKnowledgeFile = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof uploadKnowledgeFile>>,
+    TError,
+    { agentId: number; data: BodyType<UploadKnowledgeFileBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof uploadKnowledgeFile>>,
+  TError,
+  { agentId: number; data: BodyType<UploadKnowledgeFileBody> },
+  TContext
+> => {
+  return useMutation(getUploadKnowledgeFileMutationOptions(options));
 };
 
 /**
