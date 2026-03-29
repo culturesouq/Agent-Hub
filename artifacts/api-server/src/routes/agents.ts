@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, sql, count } from "drizzle-orm";
-import { db, agentsTable, connectionsTable } from "@workspace/db";
+import { eq, sql, count, asc } from "drizzle-orm";
+import { db, agentsTable, connectionsTable, agentMemoriesTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -224,6 +224,30 @@ router.post("/agents/:id/toggle-status", async (req, res): Promise<void> => {
     createdAt: agent.createdAt.toISOString(),
     updatedAt: agent.updatedAt.toISOString(),
   });
+});
+
+router.get("/agents/:id/memories", async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const agentId = parseInt(raw, 10);
+
+  const memories = await db
+    .select()
+    .from(agentMemoriesTable)
+    .where(eq(agentMemoriesTable.agentId, agentId))
+    .orderBy(asc(agentMemoriesTable.createdAt));
+
+  res.json(memories.map(m => ({
+    ...m,
+    createdAt: m.createdAt.toISOString(),
+  })));
+});
+
+router.delete("/memories/:id", async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+
+  await db.delete(agentMemoriesTable).where(eq(agentMemoriesTable.id, id));
+  res.sendStatus(204);
 });
 
 export default router;

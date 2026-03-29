@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, sql } from "drizzle-orm";
-import { db, agentsTable, connectionsTable, knowledgeTable, instructionsTable, activityTable } from "@workspace/db";
+import { eq, sql, asc } from "drizzle-orm";
+import { db, agentsTable, connectionsTable, knowledgeTable, instructionsTable, activityTable, agentMemoriesTable } from "@workspace/db";
 import { openrouter } from "@workspace/integrations-openrouter-ai";
 import { buildSystemPrompt } from "./chat";
 
@@ -35,10 +35,13 @@ router.post("/public/chat", async (req, res): Promise<void> => {
     return;
   }
 
-  const knowledge = await db.select().from(knowledgeTable).where(eq(knowledgeTable.agentId, agent.id));
-  const instructions = await db.select().from(instructionsTable).where(eq(instructionsTable.agentId, agent.id));
+  const [knowledge, instructions, memories] = await Promise.all([
+    db.select().from(knowledgeTable).where(eq(knowledgeTable.agentId, agent.id)),
+    db.select().from(instructionsTable).where(eq(instructionsTable.agentId, agent.id)),
+    db.select().from(agentMemoriesTable).where(eq(agentMemoriesTable.agentId, agent.id)).orderBy(asc(agentMemoriesTable.createdAt)),
+  ]);
 
-  const systemPrompt = buildSystemPrompt(agent, knowledge, instructions);
+  const systemPrompt = buildSystemPrompt(agent, knowledge, instructions, memories);
 
   const history = (body.conversationHistory || []).slice(-20).map(m => ({
     role: m.role as "user" | "assistant",
@@ -57,7 +60,18 @@ router.post("/public/chat", async (req, res): Promise<void> => {
     ],
   });
 
-  const responseText = completion.choices[0]?.message?.content || "";
+  const rawResponse = completion.choices[0]?.message?.content || "";
+
+  const memoryRegex = /\[MEMORY:\s*([^\]]+)\]/gi;
+  const memoryMatches = [...rawResponse.matchAll(memoryRegex)];
+  const responseText = rawResponse.replace(/\[MEMORY:[^\]]*\]/gi, "").replace(/\s+/g, " ").trim();
+
+  for (const match of memoryMatches) {
+    const memContent = match[1]?.trim();
+    if (memContent) {
+      await db.insert(agentMemoriesTable).values({ agentId: agent.id, content: memContent });
+    }
+  }
 
   await db.update(connectionsTable)
     .set({

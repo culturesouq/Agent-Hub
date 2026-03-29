@@ -381,6 +381,28 @@ export const ListActivityResponseItem = zod.object({
 export const ListActivityResponse = zod.array(ListActivityResponseItem);
 
 /**
+ * @summary List memories for an agent
+ */
+export const ListMemoriesParams = zod.object({
+  agentId: zod.coerce.number(),
+});
+
+export const ListMemoriesResponseItem = zod.object({
+  id: zod.number(),
+  agentId: zod.number(),
+  content: zod.string(),
+  createdAt: zod.string(),
+});
+export const ListMemoriesResponse = zod.array(ListMemoriesResponseItem);
+
+/**
+ * @summary Delete a memory entry
+ */
+export const DeleteMemoryParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
  * @summary Public endpoint for connected apps to chat with agent
  */
 export const PublicChatBody = zod.object({

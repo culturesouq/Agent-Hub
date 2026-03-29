@@ -72,6 +72,10 @@ const translations = {
     error: "Something went wrong",
     permanentRulesDesc: "Instructions this agent always follows — what to do, what to never do",
     allAgents: "All Agents",
+    memory: "Memory",
+    memoryDesc: "Facts and context this agent has remembered from past conversations",
+    noMemoriesYet: "No memories yet — start a conversation",
+    noMemoriesHint: "The agent will automatically remember things as you chat",
   },
   ar: {
     dashboard: "لوحة التحكم",
@@ -135,6 +139,10 @@ const translations = {
     error: "حدث خطأ ما",
     permanentRulesDesc: "التعليمات التي يتبعها هذا العميل دائمًا",
     allAgents: "جميع العملاء",
+    memory: "الذاكرة",
+    memoryDesc: "الحقائق والسياق الذي تذكره هذا العميل من المحادثات السابقة",
+    noMemoriesYet: "لا توجد ذكريات بعد — ابدأ محادثة",
+    noMemoriesHint: "سيتذكر العميل الأشياء تلقائيًا أثناء المحادثة",
   }
 };
 

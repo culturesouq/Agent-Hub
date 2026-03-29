@@ -191,6 +191,13 @@ export interface ActivityEntry {
   createdAt: string;
 }
 
+export interface AgentMemory {
+  id: number;
+  agentId: number;
+  content: string;
+  createdAt: string;
+}
+
 export type ConversationTurnRole =
   (typeof ConversationTurnRole)[keyof typeof ConversationTurnRole];
 

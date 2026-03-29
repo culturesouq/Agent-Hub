@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useRoute, Link } from "wouter";
-import { useGetAgent } from "@workspace/api-client-react";
+import { useGetAgent, useListMemories } from "@workspace/api-client-react";
 import { useI18n } from "@/lib/i18n";
 import { Layout } from "@/components/layout";
 import { AgentIdentity } from "@/components/agent/AgentIdentity";
@@ -9,6 +9,7 @@ import { AgentInstructions } from "@/components/agent/AgentInstructions";
 import { AgentChat } from "@/components/agent/AgentChat";
 import { AgentConnections } from "@/components/agent/AgentConnections";
 import { AgentActivity } from "@/components/agent/AgentActivity";
+import { AgentMemory } from "@/components/agent/AgentMemory";
 import {
   Loader2,
   Fingerprint,
@@ -17,15 +18,17 @@ import {
   MessageSquare,
   Network,
   Activity,
+  Brain,
   ChevronLeft,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
-type Section = "identity" | "knowledge" | "instructions" | "chat" | "connections" | "activity";
+type Section = "identity" | "knowledge" | "memory" | "instructions" | "chat" | "connections" | "activity";
 
 const NAV = [
   { id: "identity" as const,     icon: Fingerprint,  labelKey: "identity" },
   { id: "knowledge" as const,    icon: Database,      labelKey: "knowledge" },
+  { id: "memory" as const,       icon: Brain,         labelKey: "memory" },
   { id: "instructions" as const, icon: BookOpen,      labelKey: "instructions" },
   { id: "chat" as const,         icon: MessageSquare, labelKey: "chat" },
   { id: "connections" as const,  icon: Network,       labelKey: "connections" },
@@ -34,14 +37,17 @@ const NAV = [
 
 const SECTION_DESCRIPTIONS: Partial<Record<Section, string>> = {
   instructions: "permanentRulesDesc",
+  memory: "memoryDesc",
 };
 
 export default function AgentDetail() {
   const [, params] = useRoute("/agents/:id");
   const agentId = parseInt(params?.id || "0", 10);
   const { data: agent, isLoading } = useGetAgent(agentId, { query: { enabled: !!agentId } });
+  const { data: memories } = useListMemories(agentId, { query: { enabled: !!agentId } });
   const { t, dir } = useI18n();
   const [activeSection, setActiveSection] = useState<Section>("identity");
+  const memoryCount = memories?.length ?? 0;
 
   if (isLoading) {
     return (
@@ -105,6 +111,7 @@ export default function AgentDetail() {
             <nav className="flex-1 py-2">
               {NAV.map(({ id, icon: Icon, labelKey }) => {
                 const isActive = activeSection === id;
+                const showBadge = id === "memory" && memoryCount > 0;
                 return (
                   <button
                     key={id}
@@ -117,7 +124,12 @@ export default function AgentDetail() {
                       }`}
                   >
                     <Icon className="w-4 h-4 shrink-0" />
-                    {t(labelKey)}
+                    <span className="flex-1 text-start">{t(labelKey)}</span>
+                    {showBadge && (
+                      <span className="text-[10px] font-mono bg-primary/20 text-primary rounded-full px-1.5 py-0.5 leading-none">
+                        {memoryCount}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -161,6 +173,7 @@ export default function AgentDetail() {
 
                 {activeSection === "identity" && <AgentIdentity agent={agent} />}
                 {activeSection === "knowledge" && <AgentKnowledge agent={agent} />}
+                {activeSection === "memory" && <AgentMemory agentId={agent.id} />}
                 {activeSection === "instructions" && <AgentInstructions agent={agent} />}
                 {activeSection === "connections" && <AgentConnections agent={agent} />}
                 {activeSection === "activity" && <AgentActivity agent={agent} />}

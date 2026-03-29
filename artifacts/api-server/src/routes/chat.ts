@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, asc } from "drizzle-orm";
-import { db, agentsTable, chatMessagesTable, knowledgeTable, instructionsTable } from "@workspace/db";
+import { db, agentsTable, chatMessagesTable, knowledgeTable, instructionsTable, agentMemoriesTable } from "@workspace/db";
 import { openrouter } from "@workspace/integrations-openrouter-ai";
 import { requireAuth } from "../middlewares/auth";
 
@@ -40,10 +40,13 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
     return;
   }
 
-  const knowledge = await db.select().from(knowledgeTable).where(eq(knowledgeTable.agentId, agentId));
-  const instructions = await db.select().from(instructionsTable).where(eq(instructionsTable.agentId, agentId));
+  const [knowledge, instructions, memories] = await Promise.all([
+    db.select().from(knowledgeTable).where(eq(knowledgeTable.agentId, agentId)),
+    db.select().from(instructionsTable).where(eq(instructionsTable.agentId, agentId)),
+    db.select().from(agentMemoriesTable).where(eq(agentMemoriesTable.agentId, agentId)).orderBy(asc(agentMemoriesTable.createdAt)),
+  ]);
 
-  const systemPrompt = buildSystemPrompt(agent, knowledge, instructions);
+  const systemPrompt = buildSystemPrompt(agent, knowledge, instructions, memories);
 
   const history = await db
     .select()
@@ -81,18 +84,45 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
     stream: true,
   });
 
+  let streamBuffer = "";
+
   for await (const chunk of stream) {
     const content = chunk.choices[0]?.delta?.content;
     if (content) {
       fullResponse += content;
-      res.write(`data: ${JSON.stringify({ content })}\n\n`);
+      streamBuffer += content;
+
+      const { safe, remaining } = extractSafeContent(streamBuffer);
+      streamBuffer = remaining;
+
+      if (safe) {
+        res.write(`data: ${JSON.stringify({ content: safe })}\n\n`);
+      }
+    }
+  }
+
+  if (streamBuffer) {
+    const cleaned = streamBuffer.replace(/\[MEMORY:[^\]]*\]/gi, "").trim();
+    if (cleaned) {
+      res.write(`data: ${JSON.stringify({ content: cleaned })}\n\n`);
+    }
+  }
+
+  const memoryRegex = /\[MEMORY:\s*([^\]]+)\]/gi;
+  const memoryMatches = [...fullResponse.matchAll(memoryRegex)];
+  const cleanedResponse = fullResponse.replace(/\[MEMORY:[^\]]*\]/gi, "").replace(/\s+/g, " ").trim();
+
+  for (const match of memoryMatches) {
+    const memContent = match[1]?.trim();
+    if (memContent) {
+      await db.insert(agentMemoriesTable).values({ agentId, content: memContent });
     }
   }
 
   await db.insert(chatMessagesTable).values({
     agentId,
     role: "assistant",
-    content: fullResponse,
+    content: cleanedResponse,
   });
 
   await db.update(agentsTable).set({ lastActivity: new Date() }).where(eq(agentsTable.id, agentId));
@@ -109,6 +139,34 @@ router.delete("/agents/:agentId/chat", async (req, res): Promise<void> => {
   res.sendStatus(204);
 });
 
+function extractSafeContent(buffer: string): { safe: string; remaining: string } {
+  const memoryRegex = /\[MEMORY:[^\]]*\]/gi;
+
+  const bracketIdx = buffer.lastIndexOf("[");
+  if (bracketIdx === -1) {
+    return { safe: buffer.replace(memoryRegex, ""), remaining: "" };
+  }
+
+  const fromBracket = buffer.slice(bracketIdx);
+
+  const looksLikeMemoryStart = "[MEMORY:".startsWith(fromBracket.toUpperCase()) || fromBracket.toUpperCase().startsWith("[MEMORY:");
+
+  if (!looksLikeMemoryStart) {
+    return { safe: buffer.replace(memoryRegex, ""), remaining: "" };
+  }
+
+  const completeTagMatch = fromBracket.match(/^\[MEMORY:[^\]]*\]/i);
+  if (completeTagMatch) {
+    const safePrefix = buffer.slice(0, bracketIdx).replace(memoryRegex, "");
+    const after = buffer.slice(bracketIdx + completeTagMatch[0].length);
+    const { safe: restSafe, remaining: restRemaining } = extractSafeContent(after);
+    return { safe: safePrefix + restSafe, remaining: restRemaining };
+  }
+
+  const safePrefix = buffer.slice(0, bracketIdx).replace(memoryRegex, "");
+  return { safe: safePrefix, remaining: fromBracket };
+}
+
 export function buildSystemPrompt(
   agent: {
     name: string;
@@ -121,7 +179,8 @@ export function buildSystemPrompt(
     language: string;
   },
   knowledge: { type: string; title?: string | null; content: string }[],
-  instructions: { content: string }[]
+  instructions: { content: string }[],
+  memories?: { content: string }[]
 ): string {
   let prompt = `You are ${agent.name}, an AI agent.`;
 
@@ -153,7 +212,16 @@ export function buildSystemPrompt(
     });
   }
 
+  if (memories && memories.length > 0) {
+    prompt += "\n\nYour memories (facts you've remembered from past conversations):\n";
+    memories.forEach((m, i) => {
+      prompt += `${i + 1}. ${m.content}\n`;
+    });
+  }
+
   prompt += "\n\nNote: You are currently in a private conversation with the owner of this system. The owner is testing and refining your behavior.";
+
+  prompt += "\n\nMemory instructions: If you learn something important about the user or context that you want to remember for future conversations, include it in your response using this exact format: [MEMORY: the fact to remember]. You can include multiple memory tags. Keep memories concise and factual. Do not mention that you are saving a memory to the user.";
 
   return prompt;
 }

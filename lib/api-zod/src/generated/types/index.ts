@@ -11,6 +11,7 @@ export * from "./addInstructionBody";
 export * from "./addKnowledgeBody";
 export * from "./addKnowledgeBodyType";
 export * from "./agent";
+export * from "./agentMemory";
 export * from "./authStatus";
 export * from "./chatMessage";
 export * from "./chatMessageRole";

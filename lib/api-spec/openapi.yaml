@@ -23,6 +23,8 @@ tags:
     description: Agent external connections
   - name: activity
     description: Agent activity log
+  - name: memories
+    description: Agent persistent memories
   - name: public
     description: Public agent API
 paths:
@@ -512,6 +514,42 @@ paths:
                 items:
                   $ref: "#/components/schemas/ActivityEntry"
 
+  /agents/{agentId}/memories:
+    get:
+      operationId: listMemories
+      tags: [memories]
+      summary: List memories for an agent
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Memory entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentMemory"
+
+  /memories/{id}:
+    delete:
+      operationId: deleteMemory
+      tags: [memories]
+      summary: Delete a memory entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
   /public/chat:
     post:
       operationId: publicChat
@@ -836,6 +874,23 @@ components:
         - agentId
         - userMessage
         - agentResponse
+        - createdAt
+
+    AgentMemory:
+      type: object
+      properties:
+        id:
+          type: integer
+        agentId:
+          type: integer
+        content:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - agentId
+        - content
         - createdAt
 
     PublicChatBody:
