@@ -99,15 +99,6 @@ export function AgentIntegrations({ agentId }: { agentId: number }) {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-48 text-muted-foreground gap-2">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        <span>Loading integrations…</span>
-      </div>
-    );
-  }
-
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
     if (!q) return catalog;
@@ -119,6 +110,15 @@ export function AgentIntegrations({ agentId }: { agentId: number }) {
         item.toolNames.some(t => t.toLowerCase().includes(q))
     );
   }, [catalog, search]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-48 text-muted-foreground gap-2">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        <span>Loading integrations…</span>
+      </div>
+    );
+  }
 
   const byCategory = filtered.reduce<Record<string, CatalogItem[]>>((acc, item) => {
     (acc[item.category] = acc[item.category] || []).push(item);
