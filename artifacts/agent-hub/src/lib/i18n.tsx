@@ -107,6 +107,12 @@ const translations = {
     noToolsYet: "No tools yet",
     noToolsHint: "Add tools to give this agent the ability to call external APIs",
     usedTool: "Used tool",
+    brain: "Brain",
+    brainDesc: "Knowledge, memory and rules that shape how this agent thinks",
+    settings: "Settings",
+    settingsDesc: "AI model, web search, language and agent status",
+    publicApi: "Public API",
+    publicApiDesc: "Connect external apps to this agent via REST API",
   },
   ar: {
     dashboard: "لوحة التحكم",
@@ -205,6 +211,12 @@ const translations = {
     noToolsYet: "لا توجد أدوات بعد",
     noToolsHint: "أضف أدوات لمنح هذا العميل القدرة على استدعاء واجهات API خارجية",
     usedTool: "استخدمت أداة",
+    brain: "العقل",
+    brainDesc: "المعرفة والذاكرة والقواعد التي تشكل تفكير هذا العميل",
+    settings: "الإعدادات",
+    settingsDesc: "نموذج الذكاء الاصطناعي، البحث على الويب، اللغة وحالة العميل",
+    publicApi: "واجهة API العامة",
+    publicApiDesc: "ربط التطبيقات الخارجية بهذا العميل عبر REST API",
   }
 };
 

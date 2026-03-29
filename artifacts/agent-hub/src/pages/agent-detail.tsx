@@ -11,6 +11,8 @@ import { AgentConnections } from "@/components/agent/AgentConnections";
 import { AgentActivity } from "@/components/agent/AgentActivity";
 import { AgentMemory } from "@/components/agent/AgentMemory";
 import { AgentTools } from "@/components/agent/AgentTools";
+import { AgentSettings } from "@/components/agent/AgentSettings";
+import { AgentPublicAPI } from "@/components/agent/AgentPublicAPI";
 import {
   Loader2,
   Fingerprint,
@@ -21,28 +23,26 @@ import {
   Activity,
   Brain,
   ChevronLeft,
+  ChevronDown,
+  ChevronUp,
   Wrench,
+  Settings,
+  Globe2,
+  Sparkles,
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
-type Section = "identity" | "knowledge" | "memory" | "instructions" | "tools" | "chat" | "connections" | "activity";
-
-const NAV = [
-  { id: "identity" as const,     icon: Fingerprint,  labelKey: "identity" },
-  { id: "knowledge" as const,    icon: Database,      labelKey: "knowledge" },
-  { id: "memory" as const,       icon: Brain,         labelKey: "memory" },
-  { id: "instructions" as const, icon: BookOpen,      labelKey: "instructions" },
-  { id: "tools" as const,        icon: Wrench,        labelKey: "tools" },
-  { id: "chat" as const,         icon: MessageSquare, labelKey: "chat" },
-  { id: "connections" as const,  icon: Network,       labelKey: "connections" },
-  { id: "activity" as const,     icon: Activity,      labelKey: "activity" },
-];
-
-const SECTION_DESCRIPTIONS: Partial<Record<Section, string>> = {
-  instructions: "permanentRulesDesc",
-  memory: "memoryDesc",
-  tools: "toolsDesc",
-};
+type Section =
+  | "chat"
+  | "identity"
+  | "knowledge"
+  | "memory"
+  | "instructions"
+  | "tools"
+  | "connections"
+  | "publicApi"
+  | "activity"
+  | "settings";
 
 export default function AgentDetail() {
   const [, params] = useRoute("/agents/:id");
@@ -50,7 +50,8 @@ export default function AgentDetail() {
   const { data: agent, isLoading } = useGetAgent(agentId, { query: { enabled: !!agentId } });
   const { data: memories } = useListMemories(agentId, { query: { enabled: !!agentId } });
   const { t, dir } = useI18n();
-  const [activeSection, setActiveSection] = useState<Section>("identity");
+  const [activeSection, setActiveSection] = useState<Section>("chat");
+  const [brainOpen, setBrainOpen] = useState(false);
   const memoryCount = memories?.length ?? 0;
 
   if (isLoading) {
@@ -73,70 +74,210 @@ export default function AgentDetail() {
 
   const isChat = activeSection === "chat";
 
+  const navItem = (
+    id: Section,
+    icon: React.ElementType,
+    labelKey: string,
+    badge?: React.ReactNode
+  ) => {
+    const Icon = icon;
+    const active = activeSection === id;
+    return (
+      <button
+        key={id}
+        onClick={() => setActiveSection(id)}
+        className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium transition-all relative group
+          ${active
+            ? "text-primary bg-primary/10 border-e-2 border-primary"
+            : "text-muted-foreground hover:bg-white/5 hover:text-white border-e-2 border-transparent"
+          }`}
+      >
+        <Icon className={`w-4 h-4 shrink-0 ${active ? "text-primary" : "text-muted-foreground group-hover:text-white"}`} />
+        <span className="flex-1 text-start truncate">{t(labelKey)}</span>
+        {badge}
+      </button>
+    );
+  };
+
+  const brainActive = ["knowledge", "memory", "instructions"].includes(activeSection);
+
+  const SECTION_TITLES: Record<Section, string> = {
+    chat: "chat",
+    identity: "identity",
+    knowledge: "knowledge",
+    memory: "memory",
+    instructions: "instructions",
+    tools: "tools",
+    connections: "connections",
+    publicApi: "publicApi",
+    activity: "activity",
+    settings: "settings",
+  };
+
+  const SECTION_DESCS: Partial<Record<Section, string>> = {
+    identity: "identityHint",
+    memory: "memoryDesc",
+    instructions: "permanentRulesDesc",
+    tools: "toolsDesc",
+    settings: "settingsDesc",
+    publicApi: "publicApiDesc",
+    brain: "brainDesc",
+  } as any;
+
   return (
     <Layout noPadding>
       <div className="flex flex-col h-full overflow-hidden" dir={dir}>
 
-        {/* ── Agent Header (full-width, above both columns) ── */}
-        <div className="shrink-0 flex items-center gap-4 px-6 py-4 border-b border-white/5 bg-black/15">
+        {/* ── Agent Header ── */}
+        <div className="shrink-0 flex items-center gap-4 px-5 py-3.5 border-b border-white/5 bg-black/20">
           {agent.avatarUrl ? (
             <img
               src={agent.avatarUrl}
               alt={agent.name}
-              className="w-12 h-12 rounded-xl object-cover border-2 border-primary/60 shadow-[0_0_14px_rgba(0,190,255,0.18)]"
+              className="w-10 h-10 rounded-xl object-cover border-2 border-primary/50 shadow-[0_0_12px_rgba(0,190,255,0.16)]"
             />
           ) : (
-            <div className="w-12 h-12 rounded-xl bg-primary/10 border-2 border-primary/60 flex items-center justify-center text-primary text-base font-bold shadow-[0_0_14px_rgba(0,190,255,0.15)]">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 border-2 border-primary/50 flex items-center justify-center text-primary text-sm font-bold shadow-[0_0_12px_rgba(0,190,255,0.12)]">
               {agent.name.substring(0, 2).toUpperCase()}
             </div>
           )}
-          <div>
-            <h2 className="text-xl font-bold text-white leading-tight">{agent.name}</h2>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-base font-bold text-white leading-tight truncate">{agent.name}</h2>
             <div className="flex items-center gap-1.5 mt-0.5">
-              <span
-                className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                  agent.isActive ? "bg-green-500 shadow-[0_0_4px_#22c55e]" : "bg-red-500"
-                }`}
-              />
-              <span className="text-xs text-muted-foreground">
-                {agent.isActive ? t("active") : t("inactive")}
-              </span>
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${agent.isActive ? "bg-green-500 shadow-[0_0_4px_#22c55e]" : "bg-red-500"}`} />
+              <span className="text-[11px] text-muted-foreground">{agent.isActive ? t("active") : t("inactive")}</span>
             </div>
           </div>
         </div>
 
-        {/* ── 2-column area ── */}
+        {/* ── 2-column layout ── */}
         <div className="flex flex-1 overflow-hidden">
 
-          {/* Left Sidebar */}
-          <aside className="w-56 shrink-0 flex flex-col border-e border-white/5 bg-black/20 overflow-y-auto">
+          {/* ── Sidebar ── */}
+          <aside className="w-56 shrink-0 flex flex-col border-e border-white/5 bg-black/25 overflow-y-auto">
 
-            {/* Nav Items */}
-            <nav className="flex-1 py-2">
-              {NAV.map(({ id, icon: Icon, labelKey }) => {
-                const isActive = activeSection === id;
-                const showBadge = id === "memory" && memoryCount > 0;
-                return (
-                  <button
-                    key={id}
-                    onClick={() => setActiveSection(id)}
-                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium transition-colors relative
-                      ${
-                        isActive
-                          ? "text-primary bg-primary/10 border-e-2 border-primary"
-                          : "text-muted-foreground hover:bg-white/5 hover:text-white border-e-2 border-transparent"
-                      }`}
-                  >
-                    <Icon className="w-4 h-4 shrink-0" />
-                    <span className="flex-1 text-start">{t(labelKey)}</span>
-                    {showBadge && (
-                      <span className="text-[10px] font-mono bg-primary/20 text-primary rounded-full px-1.5 py-0.5 leading-none">
-                        {memoryCount}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+            {/* ── CHAT — featured primary button ── */}
+            <div className="p-3 shrink-0">
+              <button
+                onClick={() => setActiveSection("chat")}
+                className={`w-full flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${
+                  isChat
+                    ? "bg-primary text-primary-foreground shadow-[0_0_20px_rgba(0,190,255,0.25)]"
+                    : "bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20"
+                }`}
+              >
+                <MessageSquare className="w-4 h-4 shrink-0" />
+                <span>{t("chat")}</span>
+                {isChat && <Sparkles className="w-3.5 h-3.5 ms-auto animate-pulse" />}
+              </button>
+            </div>
+
+            <div className="border-t border-white/5 mx-3" />
+
+            {/* ── MAIN NAV ── */}
+            <nav className="flex-1 py-2 space-y-0.5">
+
+              {/* Identity */}
+              {navItem("identity", Fingerprint, "identity")}
+
+              {/* ── BRAIN GROUP ── */}
+              <div>
+                <button
+                  onClick={() => {
+                    setBrainOpen(v => !v);
+                    if (!brainOpen && !brainActive) setActiveSection("knowledge");
+                  }}
+                  className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium transition-all
+                    ${brainActive
+                      ? "text-primary bg-primary/8"
+                      : "text-muted-foreground hover:bg-white/5 hover:text-white"
+                    }`}
+                >
+                  <Brain className={`w-4 h-4 shrink-0 ${brainActive ? "text-primary" : ""}`} />
+                  <span className="flex-1 text-start">{t("brain")}</span>
+                  {brainOpen
+                    ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
+                    : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                  }
+                </button>
+
+                <AnimatePresence initial={false}>
+                  {brainOpen && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.18 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="ps-4 border-s border-primary/15 ms-6 my-1 space-y-0.5">
+                        {/* Knowledge */}
+                        <button
+                          onClick={() => setActiveSection("knowledge")}
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-all rounded-lg
+                            ${activeSection === "knowledge"
+                              ? "text-primary bg-primary/10 font-medium"
+                              : "text-muted-foreground hover:text-white hover:bg-white/5"
+                            }`}
+                        >
+                          <Database className="w-3.5 h-3.5 shrink-0" />
+                          <span>{t("knowledge")}</span>
+                        </button>
+
+                        {/* Memory */}
+                        <button
+                          onClick={() => setActiveSection("memory")}
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-all rounded-lg
+                            ${activeSection === "memory"
+                              ? "text-primary bg-primary/10 font-medium"
+                              : "text-muted-foreground hover:text-white hover:bg-white/5"
+                            }`}
+                        >
+                          <Brain className="w-3.5 h-3.5 shrink-0" />
+                          <span className="flex-1 text-start">{t("memory")}</span>
+                          {memoryCount > 0 && (
+                            <span className="text-[9px] font-mono bg-primary/20 text-primary rounded-full px-1.5 py-0.5 leading-none">
+                              {memoryCount}
+                            </span>
+                          )}
+                        </button>
+
+                        {/* Permanent Rules */}
+                        <button
+                          onClick={() => setActiveSection("instructions")}
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-all rounded-lg
+                            ${activeSection === "instructions"
+                              ? "text-primary bg-primary/10 font-medium"
+                              : "text-muted-foreground hover:text-white hover:bg-white/5"
+                            }`}
+                        >
+                          <BookOpen className="w-3.5 h-3.5 shrink-0" />
+                          <span>{t("instructions")}</span>
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* Tools */}
+              {navItem("tools", Wrench, "tools")}
+
+              <div className="mx-4 border-t border-white/5 my-1" />
+
+              {/* Connections */}
+              {navItem("connections", Network, "connections")}
+
+              {/* Public API */}
+              {navItem("publicApi", Globe2, "publicApi")}
+
+              <div className="mx-4 border-t border-white/5 my-1" />
+
+              {/* Activity */}
+              {navItem("activity", Activity, "activity")}
+
+              {/* Settings */}
+              {navItem("settings", Settings, "settings")}
             </nav>
 
             {/* Back link */}
@@ -151,7 +292,7 @@ export default function AgentDetail() {
             </div>
           </aside>
 
-          {/* Right Content */}
+          {/* ── Content area ── */}
           <div className={`flex-1 ${isChat ? "overflow-hidden" : "overflow-y-auto"}`}>
             {isChat ? (
               <AgentChat agent={agent} fullHeight />
@@ -160,17 +301,16 @@ export default function AgentDetail() {
                 key={activeSection}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.2 }}
+                transition={{ duration: 0.18 }}
                 className="p-7 max-w-3xl"
               >
-                {/* Section heading */}
                 <div className="mb-6">
                   <h3 className="text-lg font-bold text-white">
-                    {t(NAV.find((n) => n.id === activeSection)?.labelKey ?? "")}
+                    {t(SECTION_TITLES[activeSection])}
                   </h3>
-                  {SECTION_DESCRIPTIONS[activeSection] && (
+                  {SECTION_DESCS[activeSection] && (
                     <p className="text-sm text-muted-foreground mt-1">
-                      {t(SECTION_DESCRIPTIONS[activeSection]!)}
+                      {t(SECTION_DESCS[activeSection]!)}
                     </p>
                   )}
                 </div>
@@ -181,7 +321,9 @@ export default function AgentDetail() {
                 {activeSection === "instructions" && <AgentInstructions agent={agent} />}
                 {activeSection === "tools" && <AgentTools agentId={agent.id} />}
                 {activeSection === "connections" && <AgentConnections agent={agent} />}
+                {activeSection === "publicApi" && <AgentPublicAPI agent={agent} />}
                 {activeSection === "activity" && <AgentActivity agent={agent} />}
+                {activeSection === "settings" && <AgentSettings agent={agent} />}
               </motion.div>
             )}
           </div>
