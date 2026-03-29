@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, asc } from "drizzle-orm";
-import { db, agentsTable, chatMessagesTable, knowledgeTable, instructionsTable, agentMemoriesTable, agentToolsTable } from "@workspace/db";
+import { db, agentsTable, chatMessagesTable, knowledgeTable, instructionsTable, agentMemoriesTable, agentToolsTable, activityTable } from "@workspace/db";
 import { openrouter } from "@workspace/integrations-openrouter-ai";
 import { requireAuth } from "../middlewares/auth";
 import { braveWebSearch, formatSearchResultsForPrompt, type SearchResult } from "../services/search";
@@ -219,11 +219,20 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
         let args: Record<string, unknown> = {};
         try { args = JSON.parse(tc.argsRaw); } catch { args = {}; }
 
-        const result = toolDef
-          ? await callToolWebhook(toolDef.webhookUrl, tc.name, args)
-          : JSON.stringify({ error: `Unknown tool: ${tc.name}` });
+        let result: string;
+        if (toolDef) {
+          result = await callToolWebhook(toolDef.webhookUrl, tc.name, args);
+        } else {
+          result = JSON.stringify({ error: `Unknown tool: ${tc.name}` });
+        }
 
         usedTools.push(tc.name);
+
+        await db.insert(activityTable).values({
+          agentId,
+          userMessage: `[TOOL_CALL] ${tc.name} args:${JSON.stringify(args).slice(0, 500)}`,
+          agentResponse: result.slice(0, 2000),
+        });
 
         toolResultMsgs.push({
           role: "tool" as const,

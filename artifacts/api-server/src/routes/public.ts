@@ -135,9 +135,20 @@ router.post("/public/chat", async (req, res): Promise<void> => {
         let args: Record<string, unknown> = {};
         try { args = JSON.parse(tc.function.arguments); } catch { args = {}; }
 
-        const result = toolDef
-          ? await callToolWebhook(toolDef.webhookUrl, tc.function.name, args)
-          : JSON.stringify({ error: `Unknown tool: ${tc.function.name}` });
+        let result: string;
+        if (toolDef) {
+          result = await callToolWebhook(toolDef.webhookUrl, tc.function.name, args);
+        } else {
+          result = JSON.stringify({ error: `Unknown tool: ${tc.function.name}` });
+        }
+
+        await db.insert(activityTable).values({
+          agentId: agent.id,
+          connectionId: connection.id,
+          appName: connection.appName,
+          userMessage: `[TOOL_CALL] ${tc.function.name} args:${JSON.stringify(args).slice(0, 500)}`,
+          agentResponse: result.slice(0, 2000),
+        });
 
         toolResultMsgs.push({
           role: "tool",
