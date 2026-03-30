@@ -341,7 +341,7 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
 
     // Apply growth: update agent field and log it
     await db.update(agentsTable).set({ [colKey]: newValue }).where(eq(agentsTable.id, agentId));
-    await db.insert(agentGrowthLogTable).values({ agentId, field: rawField, oldValue, newValue });
+    await db.insert(agentGrowthLogTable).values({ agentId, field: colKey, oldValue, newValue });
     // Reflect in local agent for activityLastActivity update
     (agent as Record<string, unknown>)[colKey] = newValue;
   }
