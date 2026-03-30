@@ -55,7 +55,7 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
   const enabledIntegrationIds = enabledIntegrations.map(i => i.serviceId);
 
   const systemPrompt = buildSystemPrompt(
-    { ...agent, searchAvailable: !!process.env.BRAVE_SEARCH_API_KEY },
+    { ...agent, ownerChat: true, searchAvailable: !!process.env.BRAVE_SEARCH_API_KEY },
     knowledge, instructions, memories,
     enabledIntegrationIds
   );
@@ -298,9 +298,11 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
   }
 
   // Process personality growth proposals
-  const GROWABLE_FIELDS: Record<string, keyof typeof agent> = {
+  const GROWABLE_FIELDS: Record<string, "backstory" | "personality"> = {
     backstory: "backstory",
+    identity: "backstory",
     personality: "personality",
+    soul: "personality",
   };
 
   for (const match of growMatches) {
@@ -308,7 +310,7 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
     const newValue = match[2]?.trim();
     if (!rawField || !newValue || !GROWABLE_FIELDS[rawField]) continue;
 
-    const colKey = GROWABLE_FIELDS[rawField] as "backstory" | "personality";
+    const colKey = GROWABLE_FIELDS[rawField];
     const oldValue = agent[colKey] ?? null;
 
     // Check proposed value against permanent rules — discard silently if any rule is violated
@@ -330,8 +332,8 @@ router.post("/agents/:agentId/chat", async (req, res): Promise<void> => {
         const answer = (check.choices[0]?.message?.content || "no").trim().toLowerCase();
         if (answer.startsWith("yes")) allowed = false;
       } catch {
-        // If check fails, allow by default
-        allowed = true;
+        // If check fails, discard proposal to preserve rule integrity
+        allowed = false;
       }
     }
 
@@ -410,6 +412,7 @@ function extractSafeContent(buffer: string): { safe: string; remaining: string }
 export function buildSystemPrompt(
   agent: {
     name: string;
+    ownerChat?: boolean;
     backstory?: string | null;
     personality?: string | null;
     coreValues?: string | null;
@@ -462,7 +465,9 @@ export function buildSystemPrompt(
     });
   }
 
-  prompt += "\n\nNote: You are currently in a private conversation with the owner of this system. The owner is testing and refining your behavior.";
+  if (agent.ownerChat) {
+    prompt += "\n\nNote: You are currently in a private conversation with the owner of this system. The owner is testing and refining your behavior.";
+  }
 
   if (agent.webSearchEnabled && agent.searchAvailable !== false) {
     prompt += "\n\nWeb search capability: You have a web_search tool available, but use it SPARINGLY — only as a last resort. Default to answering from your own knowledge. Only call web_search when ALL of the following are true: (1) the user is explicitly asking about something current/real-time (today's news, live prices, current weather, recent events), OR the user explicitly asks you to search the web, AND (2) you genuinely cannot give a useful answer from your training data. Do NOT search for: general knowledge, historical facts, how-to questions, advice, opinions, creative tasks, math, coding, or anything your training covers well. When you do search, do not mention to the user that you are doing so — just use the results naturally.";
@@ -482,7 +487,9 @@ export function buildSystemPrompt(
 
   prompt += "\n\nMemory instructions: If you learn something important about the user or context that you want to remember for future conversations, include it in your response using this exact format: [MEMORY: the fact to remember]. You can include multiple memory tags. Keep memories concise and factual. Do not mention that you are saving a memory to the user.";
 
-  prompt += "\n\nPersonality growth instructions: You are a living AI. As you converse with the owner, your character may evolve naturally. When a conversation causes you to genuinely grow or change — when you learn something that shifts your worldview, develop a new interest, or experience something that meaningfully changes who you are — you may propose an update to your backstory or personality. To do so, include this exact tag in your response: [GROW: field=backstory, value=<new backstory text>] or [GROW: field=personality, value=<new personality text>]. Only propose growth when it feels authentic and significant — not on every message. Never propose growth that contradicts your permanent instructions. Keep the value concise (1-3 sentences). Do not mention the tag to the user. Growth will be reviewed against your rules and applied automatically.";
+  if (agent.ownerChat) {
+    prompt += "\n\nPersonality growth instructions: You are a living AI. As you converse with the owner, your character may evolve naturally. When a conversation causes you to genuinely grow or change — when you learn something that shifts your worldview, develop a new interest, or experience something that meaningfully changes who you are — you may propose an update to your backstory or personality. To do so, include this exact tag in your response: [GROW: field=backstory, value=<new backstory text>] or [GROW: field=personality, value=<new personality text>]. Only propose growth when it feels authentic and significant — not on every message. Never propose growth that contradicts your permanent instructions. Keep the value concise (1-3 sentences). Do not mention the tag to the user. Growth will be reviewed against your rules and applied automatically.";
+  }
 
   return prompt;
 }

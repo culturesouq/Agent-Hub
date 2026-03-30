@@ -174,6 +174,7 @@ router.post("/public/chat", async (req, res): Promise<void> => {
   const responseText = rawResponse
     .replace(/\[MEMORY:[^\]]*\]/gi, "")
     .replace(/\[SEARCH:[^\]]*\]/gi, "")
+    .replace(/\[GROW:[^\]]*\]/gi, "")
     .trim();
 
   for (const match of memoryMatches) {
