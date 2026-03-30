@@ -57,8 +57,7 @@ router.post("/agents/:agentId/growth/:id/revert", async (req, res): Promise<void
     newValue: entry.oldValue ?? "",
   });
 
-  const [updated] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
-  res.json({ success: true, agent: updated });
+  res.json({ success: true });
 });
 
 export default router;
