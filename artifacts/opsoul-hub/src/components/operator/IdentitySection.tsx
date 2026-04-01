@@ -92,28 +92,28 @@ export default function IdentitySection({ operator, panel }: Props) {
             </h3>
             {isLocked ? (
               <div className="flex items-center gap-1.5 text-xs font-mono text-primary font-bold tracking-widest uppercase bg-primary/10 px-2 py-1 rounded">
-                <Lock className="w-3 h-3" /> Locked
+                <Lock className="w-3 h-3" /> Self-modification locked
               </div>
             ) : (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="outline" size="sm" className="font-mono text-xs border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground">
-                    <Lock className="w-3 h-3 mr-1.5" /> Lock forever
+                    <Lock className="w-3 h-3 mr-1.5" /> Prevent operator from self-modifying
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent className="border-primary/20">
                   <AlertDialogHeader>
                     <AlertDialogTitle className="font-mono text-primary flex items-center gap-2">
-                      <Lock className="w-5 h-5" /> Lock identity permanently?
+                      <Lock className="w-5 h-5" /> Prevent operator from self-modifying?
                     </AlertDialogTitle>
                     <AlertDialogDescription className="font-mono">
-                      Identity will become permanently read-only. This cannot be undone.
+                      Your operator will not be able to change its own identity. You as the owner can always edit it here.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel className="font-mono">Cancel</AlertDialogCancel>
                     <AlertDialogAction onClick={() => lockCore.mutate()} className="font-mono font-bold">
-                      Lock forever
+                      Lock it
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
@@ -128,21 +128,18 @@ export default function IdentitySection({ operator, panel }: Props) {
             <Textarea
               value={identityDesc}
               onChange={e => setIdentityDesc(e.target.value)}
-              disabled={isLocked}
-              className="font-mono h-36 bg-background/50 disabled:opacity-70 disabled:border-transparent resize-none"
+              className="font-mono h-36 bg-background/50 resize-none"
               placeholder="Describe your operator in your own words — their name, what they do, how they think."
             />
           </div>
 
-          {!isLocked && (
-            <Button
-              onClick={() => updateIdentity.mutate(identityDesc)}
-              disabled={updateIdentity.isPending}
-              className="w-full font-mono"
-            >
-              {updateIdentity.isPending ? "Saving..." : "Save"}
-            </Button>
-          )}
+          <Button
+            onClick={() => updateIdentity.mutate(identityDesc)}
+            disabled={updateIdentity.isPending}
+            className="w-full font-mono"
+          >
+            {updateIdentity.isPending ? "Saving..." : "Save"}
+          </Button>
         </div>
       )}
 
