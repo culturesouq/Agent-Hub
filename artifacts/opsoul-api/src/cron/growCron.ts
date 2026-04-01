@@ -1,7 +1,7 @@
 import { db } from '@workspace/db';
 import { operatorsTable } from '@workspace/db';
 import { inArray } from 'drizzle-orm';
-import { runGrowCycle } from '../utils/growEngine.js';
+import { runGrowCycle, retryPendingProposals } from '../utils/growEngine.js';
 
 const GROWABLE_LOCK_LEVELS = ['OPEN', 'CONTROLLED'];
 
@@ -29,7 +29,8 @@ export async function runDailyGrowCycle(): Promise<void> {
       } else {
         console.log(
           `[GROW] ${op.name} (${op.id}): proposal=${result.proposalId} status=${result.status} ` +
-          `applied=${result.changesApplied} blocked=${result.fieldsBlocked} needsReview=${result.needsOwnerReview}`,
+          `applied=${result.changesApplied} blocked=${result.fieldsBlocked} ` +
+          `semanticGuard=${result.semanticGuardTriggered} l1Violations=${result.layer1ViolationsBlocked}`,
         );
       }
     } catch (err) {
@@ -41,16 +42,25 @@ export async function runDailyGrowCycle(): Promise<void> {
 }
 
 export function startGrowCron(): void {
-  const CRON_SCHEDULE = process.env.GROW_CRON_SCHEDULE ?? '0 2 * * *';
+  const DAILY_SCHEDULE = process.env.GROW_CRON_SCHEDULE ?? '0 2 * * *';
+  const RETRY_SCHEDULE = process.env.GROW_RETRY_SCHEDULE ?? '0 * * * *';
 
-  console.log(`[GROW] Cron scheduled: "${CRON_SCHEDULE}" (UTC)`);
+  console.log(`[GROW] Daily cron scheduled: "${DAILY_SCHEDULE}" (UTC)`);
+  console.log(`[GROW] Retry cron scheduled: "${RETRY_SCHEDULE}" (UTC) — retries at 1hr/2hr/4hr, escalates to manual_review after ${3} failed attempts`);
 
   import('node-cron').then(({ default: cron }) => {
-    cron.schedule(CRON_SCHEDULE, () => {
+    cron.schedule(DAILY_SCHEDULE, () => {
       runDailyGrowCycle().catch((err) => {
         console.error('[GROW] Unhandled error in daily cycle:', err);
       });
     }, { timezone: 'UTC' });
+
+    cron.schedule(RETRY_SCHEDULE, () => {
+      retryPendingProposals().catch((err) => {
+        console.error('[GROW-RETRY] Unhandled error in retry cycle:', err);
+      });
+    }, { timezone: 'UTC' });
+
   }).catch((err) => {
     console.error('[GROW] Failed to start cron — node-cron not available:', err.message);
   });
