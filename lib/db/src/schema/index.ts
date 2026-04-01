@@ -11,3 +11,4 @@ export * from "./integrations";
 export * from "./oauthConnections";
 export * from "./serviceApiKeys";
 export * from "./growth";
+export * from "./channels";
