@@ -16,6 +16,8 @@ import { lockLayer1IfUnlocked } from '../utils/lockLayer1.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { buildSystemPrompt } from '../utils/systemPrompt.js';
 import type { ActiveSkill, ActiveMissionContext } from '../utils/systemPrompt.js';
+import { searchMemory, buildMemoryContext } from '../utils/memoryEngine.js';
+import type { MemoryHit } from '../utils/memoryEngine.js';
 import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import type { ChatMessage } from '../utils/openrouter.js';
 import type { Layer2Soul } from '../validation/operator.js';
@@ -132,13 +134,20 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   ]);
 
   let kbContext = '';
+  let memoryHits: MemoryHit[] = [];
+
   if (kbSearch) {
     try {
       const queryEmbedding = await embed(message);
-      const hits = await searchBothKbs(operator.id, queryEmbedding, kbTopN, kbMinConfidence);
-      kbContext = buildRagContext(hits);
+      const [kbHits, memHits] = await Promise.all([
+        searchBothKbs(operator.id, queryEmbedding, kbTopN, kbMinConfidence),
+        searchMemory(operator.id, queryEmbedding),
+      ]);
+      kbContext = buildRagContext(kbHits);
+      memoryHits = memHits;
     } catch {
       kbContext = '';
+      memoryHits = [];
     }
   }
 
@@ -154,6 +163,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     kbContext,
     skills,
     missionContext,
+    memoryHits,
   );
 
   const history = await buildMessageHistory(conv.id);
@@ -223,6 +233,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         usage: { promptTokens, completionTokens },
         activeSkillCount: skills.length,
         missionContext: missionContext?.name ?? null,
+        memoryCount: memoryHits.length,
       })}\n\n`);
       res.end();
     } catch (err) {
@@ -263,6 +274,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         },
         activeSkillCount: skills.length,
         missionContext: missionContext?.name ?? null,
+        memoryCount: memoryHits.length,
         layer1WasLocked: operator.layer1LockedAt === null,
       });
     } catch (err) {

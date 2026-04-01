@@ -1,4 +1,7 @@
 import type { Layer2Soul } from '../validation/operator.js';
+import type { MemoryHit } from './memoryEngine.js';
+
+export type { MemoryHit };
 
 export interface OperatorIdentity {
   name: string;
@@ -46,6 +49,7 @@ export function buildSystemPrompt(
   kbContext?: string,
   skills?: ActiveSkill[],
   missionContext?: ActiveMissionContext | null,
+  memories?: MemoryHit[],
 ): string {
   const soul = operator.layer2Soul;
   const parts: string[] = [];
@@ -95,7 +99,20 @@ export function buildSystemPrompt(
   parts.push('');
   parts.push('## Layer 3 — Dynamic Context (Current session)');
 
+  if (memories && memories.length > 0) {
+    parts.push('### Remembered Context');
+    parts.push('The following was recalled from long-term memory. Use it to personalise your response and maintain continuity with this user:');
+    parts.push('');
+    memories.forEach((m) => {
+      parts.push(
+        `[${m.memoryType}] (weight: ${m.weight.toFixed(2)}) ${m.content}`,
+      );
+    });
+    parts.push('');
+  }
+
   if (kbContext && kbContext.trim()) {
+    parts.push('### Knowledge Base Context');
     parts.push('The following knowledge was retrieved from your knowledge base for this conversation:');
     parts.push('');
     parts.push(kbContext);
