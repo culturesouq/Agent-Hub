@@ -130,7 +130,7 @@ All stored as Replit Secrets:
 
 - **Phase 1 (complete):** Environment validation, shared utilities, full DB schema (23 tables), JWT auth API
 - **Phase 2 (complete):** Operator CRUD, 5-layer identity management, Layer 1 lock logic, soul field-level updates, GROW lock control
-- **Phase 3 (pending):** Dual KB ingestion, pgvector semantic search, RAG pipeline
+- **Phase 3 (complete):** Dual KB ingestion (owner + operator), pgvector semantic search, confidence/verification filtering, RAG context assembly
 - **Phase 4 (pending):** Chat engine (OpenRouter), conversation management, auto Layer 1 lock on first message
 - **Phase 5 (pending):** GROW self-evolution system, cron scheduler (02:00 UTC daily)
 - **Phase 6 (pending):** Skills engine, integrations, mission contexts

@@ -9,6 +9,9 @@ import { pool } from '@workspace/db';
 import { ADMIN_AUDIT_LOG_TRIGGER_SQL } from '@workspace/db';
 import authRouter from './routes/auth.js';
 import operatorsRouter from './routes/operators.js';
+import ownerKbRouter from './routes/owner-kb.js';
+import operatorKbRouter from './routes/operator-kb.js';
+import kbRouter from './routes/kb-search.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
@@ -22,9 +25,12 @@ app.use(cors({
 
 app.use('/api/auth', authRouter);
 app.use('/api/operators', operatorsRouter);
+app.use('/api/operators/:operatorId/owner-kb', ownerKbRouter);
+app.use('/api/operators/:operatorId/operator-kb', operatorKbRouter);
+app.use('/api/operators/:operatorId/kb', kbRouter);
 
 app.get('/api/healthz', (_req, res) => {
-  res.json({ status: 'ok', service: 'opsoul-api', phase: 2 });
+  res.json({ status: 'ok', service: 'opsoul-api', phase: 3 });
 });
 
 async function setupDatabase(): Promise<void> {
@@ -46,9 +52,12 @@ async function start(): Promise<void> {
   await setupDatabase();
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[opsoul-api] Phase 2 running on port ${PORT}`);
+    console.log(`[opsoul-api] Phase 3 running on port ${PORT}`);
     console.log(`[opsoul-api] Auth: /api/auth/{register,login,refresh,logout,change-password,me}`);
     console.log(`[opsoul-api] Operators: /api/operators — CRUD, lock-layer1, soul, soul/reset, grow-lock`);
+    console.log(`[opsoul-api] Owner KB: /api/operators/:id/owner-kb — ingest, list, get, delete`);
+    console.log(`[opsoul-api] Operator KB: /api/operators/:id/operator-kb — ingest, list, get, patch, delete`);
+    console.log(`[opsoul-api] KB Search: POST /api/operators/:id/kb/search — pgvector semantic search + RAG`);
   });
 }
 

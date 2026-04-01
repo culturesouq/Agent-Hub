@@ -15,6 +15,7 @@ export const operatorKbTable = pgTable('operator_kb', {
   probationRunCount: integer('probation_run_count').default(0),
   lastVerifiedAt: timestamp('last_verified_at'),
   flagReason: text('flag_reason'),
+  chunkIndex: integer('chunk_index'),
   intakeTags: text('intake_tags').array().default([]),
   isPipelineIntake: boolean('is_pipeline_intake').default(false),
   privacyCleared: boolean('privacy_cleared').default(false),
