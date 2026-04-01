@@ -13,9 +13,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
-import { Search, Database, Plus, Trash2, ShieldCheck, Sparkles } from "lucide-react";
+import { Search, Database, Plus, Trash2, ShieldCheck } from "lucide-react";
 import { format } from "date-fns";
-import SkillsSection from "@/components/operator/SkillsSection";
 
 export default function KbSection({ operatorId }: { operatorId: string }) {
   const { toast } = useToast();
@@ -182,7 +181,7 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4 bg-card/50 border border-border/50 mb-6 h-auto p-1">
+        <TabsList className="grid w-full grid-cols-3 bg-card/50 border border-border/50 mb-6 h-auto p-1">
           <TabsTrigger value="owner" className="font-mono text-xs py-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
             Your Facts
           </TabsTrigger>
@@ -191,9 +190,6 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
           </TabsTrigger>
           <TabsTrigger value="search" className="font-mono text-xs py-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
             <Search className="w-3 h-3 mr-1.5" /> Search
-          </TabsTrigger>
-          <TabsTrigger value="skills" className="font-mono text-xs py-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-            <Sparkles className="w-3 h-3 mr-1.5" /> Skills
           </TabsTrigger>
         </TabsList>
 
@@ -337,10 +333,6 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
           )}
         </TabsContent>
 
-        {/* Skills */}
-        <TabsContent value="skills" className="m-0">
-          <SkillsSection operatorId={operatorId} />
-        </TabsContent>
       </Tabs>
     </div>
   );

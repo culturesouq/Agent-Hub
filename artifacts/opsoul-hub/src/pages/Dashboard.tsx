@@ -5,7 +5,7 @@ import { apiFetch } from "@/lib/api";
 import { Operator, HealthScore } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { LogOut, Plus, Activity, Cpu } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import CreateAgentChat from "@/components/operator/CreateAgentChat";
@@ -110,13 +110,6 @@ export default function Dashboard() {
                     {operator.mandate}
                   </p>
                 </CardContent>
-                <CardFooter className="pt-3 border-t border-border/20 flex items-center justify-between text-xs text-muted-foreground font-mono">
-                  <span>ID: {operator.id.substring(0, 8)}</span>
-                  <span className="flex items-center gap-1.5">
-                    <div className={`w-2 h-2 rounded-full ${operator.layer1LockedAt ? 'bg-primary' : 'bg-amber-500 animate-pulse'}`} />
-                    {operator.layer1LockedAt ? 'Locked' : 'Unlocked'}
-                  </span>
-                </CardFooter>
               </Card>
             ))}
           </div>

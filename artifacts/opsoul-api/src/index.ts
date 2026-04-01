@@ -21,6 +21,7 @@ import integrationsRouter from './routes/integrations.js';
 import missionContextsRouter from './routes/mission-contexts.js';
 import memoryRouter from './routes/memory.js';
 import capabilityRequestsRouter from './routes/capability-requests.js';
+import tasksRouter from './routes/tasks.js';
 import { startGrowCron } from './cron/growCron.js';
 import { startMemoryCron } from './cron/memoryCron.js';
 
@@ -47,6 +48,7 @@ app.use('/api/operators/:operatorId/integrations', integrationsRouter);
 app.use('/api/operators/:operatorId/mission-contexts', missionContextsRouter);
 app.use('/api/operators/:operatorId/memory', memoryRouter);
 app.use('/api/operators/:operatorId/capability-requests', capabilityRequestsRouter);
+app.use('/api/operators/:operatorId/tasks', tasksRouter);
 app.use('/api/platform-skills', platformSkillsRouter);
 
 app.get('/api/healthz', (_req, res) => {

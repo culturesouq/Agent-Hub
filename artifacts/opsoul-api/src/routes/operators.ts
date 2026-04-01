@@ -390,4 +390,113 @@ router.patch('/:id/grow-lock', async (req: Request, res: Response): Promise<void
   });
 });
 
+router.patch('/:id/identity-from-description', async (req: Request, res: Response): Promise<void> => {
+  const [op] = await db
+    .select()
+    .from(operatorsTable)
+    .where(and(eq(operatorsTable.id, req.params.id), ownerFilter(req)));
+
+  if (!op) { res.status(404).json({ error: 'Operator not found' }); return; }
+  if (op.layer1LockedAt !== null) {
+    res.status(423).json({ error: 'Identity is locked and cannot be edited.' });
+    return;
+  }
+
+  const { description } = req.body as { description?: string };
+  if (!description || description.trim().length === 0) {
+    res.status(400).json({ error: 'description is required' });
+    return;
+  }
+
+  let parsed: { name: string; mandate: string; coreValues: string[]; ethicalBoundaries: string[] };
+  try {
+    const raw = await chatCompletion([
+      {
+        role: 'system',
+        content: 'You extract structured operator identity fields from a user description. Return ONLY valid JSON, no markdown.',
+      },
+      {
+        role: 'user',
+        content: `Extract these fields from the description below:\n\n"${description}"\n\nReturn JSON: { "name": "short name for the operator", "mandate": "concise purpose statement (1-2 sentences)", "coreValues": ["up to 4 values"], "ethicalBoundaries": ["up to 3 things it won't do"] }`,
+      },
+    ]);
+    parsed = JSON.parse(raw);
+  } catch {
+    const words = description.split(/\s+/);
+    parsed = {
+      name: words.slice(0, 3).join(' '),
+      mandate: description.substring(0, 300),
+      coreValues: [],
+      ethicalBoundaries: [],
+    };
+  }
+
+  const [updated] = await db
+    .update(operatorsTable)
+    .set({
+      name: parsed.name ?? op.name,
+      mandate: parsed.mandate ?? op.mandate,
+      coreValues: parsed.coreValues ?? op.coreValues,
+      ethicalBoundaries: parsed.ethicalBoundaries ?? op.ethicalBoundaries,
+    })
+    .where(eq(operatorsTable.id, op.id))
+    .returning();
+
+  res.json(serializeOperator(updated));
+});
+
+router.patch('/:id/soul/from-description', async (req: Request, res: Response): Promise<void> => {
+  const [op] = await db
+    .select()
+    .from(operatorsTable)
+    .where(and(eq(operatorsTable.id, req.params.id), ownerFilter(req)));
+
+  if (!op) { res.status(404).json({ error: 'Operator not found' }); return; }
+
+  const { description } = req.body as { description?: string };
+  if (!description || description.trim().length === 0) {
+    res.status(400).json({ error: 'description is required' });
+    return;
+  }
+
+  const currentSoul = (op.layer2Soul ?? {}) as Layer2Soul;
+
+  let parsed: Partial<Layer2Soul>;
+  try {
+    const raw = await chatCompletion([
+      {
+        role: 'system',
+        content: 'You extract personality/communication fields from a user description. Return ONLY valid JSON, no markdown.',
+      },
+      {
+        role: 'user',
+        content: `Extract communication/personality fields from:\n\n"${description}"\n\nReturn JSON: { "communicationStyle": "one sentence", "personalityTraits": ["up to 4 traits"], "toneProfile": "one sentence about tone", "emotionalRange": "one sentence", "decisionMakingStyle": "one sentence", "conflictResolution": "one sentence", "quirks": ["up to 2 quirks"] }`,
+      },
+    ]);
+    parsed = JSON.parse(raw);
+  } catch {
+    parsed = { communicationStyle: description.substring(0, 300) };
+  }
+
+  const mergedSoul: Layer2Soul = {
+    ...currentSoul,
+    ...(parsed.communicationStyle && { communicationStyle: parsed.communicationStyle }),
+    ...(parsed.personalityTraits && { personalityTraits: parsed.personalityTraits }),
+    ...(parsed.toneProfile && { toneProfile: parsed.toneProfile }),
+    ...(parsed.emotionalRange && { emotionalRange: parsed.emotionalRange }),
+    ...(parsed.decisionMakingStyle && { decisionMakingStyle: parsed.decisionMakingStyle }),
+    ...(parsed.conflictResolution && { conflictResolution: parsed.conflictResolution }),
+    ...(parsed.quirks && { quirks: parsed.quirks }),
+  };
+
+  const [updated] = await db
+    .update(operatorsTable)
+    .set({ layer2Soul: mergedSoul })
+    .where(eq(operatorsTable.id, op.id))
+    .returning();
+
+  res.json(serializeOperator(updated));
+});
+
 export default router;
+

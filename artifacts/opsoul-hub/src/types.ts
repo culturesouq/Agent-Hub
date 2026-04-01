@@ -141,3 +141,14 @@ export interface CapabilityRequest {
   ownerResponse: string;
   createdAt: string;
 }
+
+export interface Task {
+  id: string;
+  operatorId: string;
+  name: string;
+  schedule: "daily" | "weekly" | "custom";
+  description: string;
+  customSchedule?: string;
+  status: string;
+  createdAt: string;
+}

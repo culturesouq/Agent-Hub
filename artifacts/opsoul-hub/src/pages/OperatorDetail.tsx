@@ -1,14 +1,20 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiFetch } from "@/lib/api";
-import { Operator, HealthScore } from "@/types";
+import { Operator, HealthScore, CapabilityRequest } from "@/types";
 import {
   ArrowLeft, MessageSquare, Brain, Activity,
   BookOpen, User, Smile, BookMarked, Zap, Archive, Network,
   CheckSquare, FileText, Settings2, Key, Code2, ShieldCheck, AlertTriangle,
-  Radio, MessageCircle, Send, GraduationCap, Star, ChevronRight,
+  Radio, MessageCircle, Send, GraduationCap, Star, ChevronRight, Bell,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
 
 import ChatSection from "@/components/operator/ChatSection";
 import KbSection from "@/components/operator/KbSection";
@@ -17,6 +23,7 @@ import IntegrationsSection from "@/components/operator/IntegrationsSection";
 import SettingsSection from "@/components/operator/SettingsSection";
 import IdentitySection from "@/components/operator/IdentitySection";
 import SkillsSection from "@/components/operator/SkillsSection";
+import TasksSection from "@/components/operator/TasksSection";
 
 function OperatorAvatar({ name }: { name: string }) {
   const letter = name.charAt(0).toUpperCase();
@@ -65,10 +72,14 @@ function SidebarLeaf({
   item,
   activeTab,
   onSelect,
+  badgeCount,
+  onBadgeClick,
 }: {
   item: NavLeaf;
   activeTab: string;
   onSelect: (id: string) => void;
+  badgeCount?: number;
+  onBadgeClick?: () => void;
 }) {
   const isActive = activeTab === item.id;
   const pl = item.depth === 0 ? "pl-3" : item.depth === 1 ? "pl-7" : "pl-10";
@@ -83,7 +94,19 @@ function SidebarLeaf({
         }`}
     >
       <item.icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? "text-primary" : ""}`} />
-      <span className="truncate">{item.label}</span>
+      <span className="truncate flex-1">{item.label}</span>
+      {badgeCount !== undefined && badgeCount > 0 && (
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={e => { e.stopPropagation(); onBadgeClick?.(); }}
+          onKeyDown={e => { if (e.key === "Enter") { e.stopPropagation(); onBadgeClick?.(); } }}
+          className="ml-auto flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-white text-[10px] font-bold shrink-0 hover:bg-amber-400 transition-colors"
+          title={`${badgeCount} pending request${badgeCount > 1 ? "s" : ""}`}
+        >
+          {badgeCount}
+        </span>
+      )}
     </button>
   );
 }
@@ -185,8 +208,11 @@ const SETTINGS_LEAVES = ["settings.secrets", "settings.api", "settings.evolution
 const CHANNELS_LEAVES = ["channels.whatsapp", "channels.telegram"];
 
 export default function OperatorDetail({ id }: { id: string }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("chat");
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(["brain"]));
+  const [capDialogOpen, setCapDialogOpen] = useState(false);
 
   const { data: operator, isLoading } = useQuery({
     queryKey: ["operators", id],
@@ -201,6 +227,38 @@ export default function OperatorDetail({ id }: { id: string }) {
     refetchInterval: 60000,
   });
 
+  const { data: capabilityRequests = [] } = useQuery({
+    queryKey: ["operators", id, "capability-requests"],
+    queryFn: () => apiFetch<CapabilityRequest[]>(`/operators/${id}/capability-requests`),
+    enabled: !!id,
+    refetchInterval: 30000,
+  });
+
+  const pendingRequests = Array.isArray(capabilityRequests)
+    ? capabilityRequests.filter((r: CapabilityRequest) => !r.ownerResponse)
+    : [];
+
+  const approveRequest = useMutation({
+    mutationFn: (reqId: string) =>
+      apiFetch(`/operators/${id}/capability-requests/${reqId}/respond`, {
+        method: "PATCH",
+        body: JSON.stringify({ ownerResponse: "Approved" }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["operators", id, "capability-requests"] });
+      toast({ title: "Request approved" });
+    },
+  });
+
+  const dismissRequest = useMutation({
+    mutationFn: (reqId: string) =>
+      apiFetch(`/operators/${id}/capability-requests/${reqId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["operators", id, "capability-requests"] });
+      toast({ title: "Request dismissed" });
+    },
+  });
+
   useEffect(() => {
     setOpenGroups(prev => {
       const next = new Set(prev);
@@ -212,11 +270,11 @@ export default function OperatorDetail({ id }: { id: string }) {
     });
   }, [activeTab]);
 
-  const toggleGroup = (id: string) => {
+  const toggleGroup = (gid: string) => {
     setOpenGroups(prev => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(gid)) next.delete(gid);
+      else next.add(gid);
       return next;
     });
   };
@@ -251,7 +309,7 @@ export default function OperatorDetail({ id }: { id: string }) {
       case "skills":         return <SkillsSection operatorId={id} />;
       case "memory":         return <MemorySection operatorId={id} />;
       case "integrations":   return <IntegrationsSection operatorId={id} />;
-      case "tasks":          return <ComingSoon title="Tasks" />;
+      case "tasks":          return <TasksSection operatorId={id} />;
       case "files":          return <ComingSoon title="Files" />;
       case "settings.secrets":   return <SettingsSection operator={operator} section="secrets" />;
       case "settings.api":       return <SettingsSection operator={operator} section="api" />;
@@ -266,10 +324,21 @@ export default function OperatorDetail({ id }: { id: string }) {
   }
 
   const renderNavItems = (items: NavItem[]) =>
-    items.map(item =>
-      item.kind === "leaf" ? (
-        <SidebarLeaf key={item.id} item={item} activeTab={activeTab} onSelect={handleSelect} />
-      ) : (
+    items.map(item => {
+      if (item.kind === "leaf") {
+        const isChatItem = item.id === "chat";
+        return (
+          <SidebarLeaf
+            key={item.id}
+            item={item}
+            activeTab={activeTab}
+            onSelect={handleSelect}
+            badgeCount={isChatItem ? pendingRequests.length : undefined}
+            onBadgeClick={isChatItem ? () => setCapDialogOpen(true) : undefined}
+          />
+        );
+      }
+      return (
         <SidebarGroup
           key={item.id}
           item={item}
@@ -278,8 +347,8 @@ export default function OperatorDetail({ id }: { id: string }) {
           openGroups={openGroups}
           toggleGroup={toggleGroup}
         />
-      )
-    );
+      );
+    });
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -324,7 +393,7 @@ export default function OperatorDetail({ id }: { id: string }) {
           </div>
         </aside>
 
-        {/* Mobile nav (horizontal scroll) */}
+        {/* Mobile nav */}
         <div className="md:hidden w-full absolute top-12 left-0 right-0 z-30 bg-background border-b border-border/50 overflow-x-auto flex items-center px-2 py-2 gap-2 no-scrollbar">
           {["chat", "identity", "personality", "owner-kb", "skills", "memory", "integrations", "tasks", "files"].map(tab => (
             <button
@@ -348,6 +417,55 @@ export default function OperatorDetail({ id }: { id: string }) {
           </div>
         </main>
       </div>
+
+      {/* Capability Requests Dialog */}
+      <Dialog open={capDialogOpen} onOpenChange={setCapDialogOpen}>
+        <DialogContent className="border-amber-500/30 bg-card/95 backdrop-blur max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="font-mono text-base flex items-center gap-2">
+              <Bell className="w-4 h-4 text-amber-500" />
+              Your assistant is asking for permission
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            {pendingRequests.length === 0 ? (
+              <p className="font-mono text-sm text-muted-foreground text-center py-4">
+                No pending requests.
+              </p>
+            ) : (
+              pendingRequests.map((req: CapabilityRequest) => (
+                <div key={req.id} className="border border-amber-500/30 rounded-lg p-4 space-y-3 bg-amber-500/5">
+                  <div>
+                    <p className="font-mono text-sm font-bold text-foreground">
+                      Wants access to: <span className="text-amber-500">{req.requestedCapability}</span>
+                    </p>
+                    <p className="font-mono text-xs text-muted-foreground mt-1">{req.reason}</p>
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <Button
+                      size="sm"
+                      className="font-mono text-xs font-bold h-8 bg-green-600 hover:bg-green-500 text-white"
+                      onClick={() => approveRequest.mutate(req.id)}
+                      disabled={approveRequest.isPending}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="font-mono text-xs h-8 text-muted-foreground hover:text-destructive"
+                      onClick={() => dismissRequest.mutate(req.id)}
+                      disabled={dismissRequest.isPending}
+                    >
+                      Dismiss
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
