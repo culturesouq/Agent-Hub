@@ -211,14 +211,6 @@ router.patch('/:id', async (req: Request, res: Response): Promise<void> => {
 
   if (!op) { res.status(404).json({ error: 'Operator not found' }); return; }
 
-  if (op.layer1LockedAt !== null) {
-    res.status(423).json({
-      error: 'Layer 1 identity is locked. Use /soul to update Layer 2.',
-      lockedAt: op.layer1LockedAt,
-    });
-    return;
-  }
-
   const parsed = UpdateOperatorLayer1Schema.safeParse(req.body);
   if (!parsed.success) { zodError(res, parsed.error); return; }
 
@@ -415,10 +407,6 @@ router.patch('/:id/identity-from-description', async (req: Request, res: Respons
     .where(and(eq(operatorsTable.id, req.params.id), ownerFilter(req)));
 
   if (!op) { res.status(404).json({ error: 'Operator not found' }); return; }
-  if (op.layer1LockedAt !== null) {
-    res.status(423).json({ error: 'Identity is locked and cannot be edited.' });
-    return;
-  }
 
   const { description } = req.body as { description?: string };
   if (!description || description.trim().length === 0) {
