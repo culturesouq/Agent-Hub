@@ -52,15 +52,18 @@ router.post('/bootstrap-preview', async (req: Request, res: Response): Promise<v
     return;
   }
 
-  const prompt = `You are an AI agent identity designer. Given the following information about an AI agent:
+  const VALID_ARCHETYPES = ['Executor', 'Advisor', 'Expert', 'Connector', 'Creator', 'Guardian'] as const;
+
+  const prompt = `You are designing the identity of an AI operator. Based on the following:
 
 Name: ${name}
 Purpose: ${purpose}
-Personality description: ${personality}
+Personality: ${personality}
 
-Generate a complete identity profile. Return ONLY valid JSON with this exact structure (no markdown, no explanation):
+Return ONLY valid JSON (no markdown, no explanation) with this exact structure:
 {
-  "archetype": "A 2-5 word professional archetype title (e.g. 'Strategic Research Analyst', 'Creative Brand Mentor')",
+  "archetype": "MUST be exactly one of: Executor, Advisor, Expert, Connector, Creator, Guardian",
+  "description": "1-2 warm, human sentences introducing ${name} like you're introducing a real person — no titles, no labels, no jargon. Describe who they are and how they show up.",
   "coreValues": ["value1", "value2", "value3", "value4"],
   "ethicalBoundaries": ["boundary1", "boundary2", "boundary3"],
   "layer2Soul": {
@@ -68,14 +71,22 @@ Generate a complete identity profile. Return ONLY valid JSON with this exact str
     "toneProfile": "one sentence describing the tone",
     "communicationStyle": "one sentence describing how they communicate",
     "quirks": ["quirk1", "quirk2"],
-    "valuesManifestation": ["how value1 shows up in behavior", "how value2 shows up"],
+    "valuesManifestation": ["how a value shows up in behavior", "another example"],
     "emotionalRange": "one sentence describing emotional range",
     "decisionMakingStyle": "one sentence describing how they make decisions",
     "conflictResolution": "one sentence describing conflict resolution approach"
   }
 }
 
-Derive these naturally from the name, purpose, and personality description provided. Make them specific and aligned.`;
+Archetype guide — choose the best fit:
+- Executor: gets things done, action-oriented, implements and delivers
+- Advisor: guides and counsels, strategic, helps people think through decisions
+- Expert: deep domain knowledge, specialist, go-to source of truth
+- Connector: bridges people and ideas, facilitates, coordinates
+- Creator: generates ideas and content, inventive, brings new things into existence
+- Guardian: protects, monitors, enforces safety and boundaries
+
+The archetype field must be exactly one word from the list above. No variations.`;
 
   try {
     const result = await chatCompletion(
@@ -92,8 +103,14 @@ Derive these naturally from the name, purpose, and personality description provi
       return;
     }
 
+    const rawArchetype = (parsed.archetype ?? '').trim();
+    const archetype: string = VALID_ARCHETYPES.find(
+      a => a.toLowerCase() === rawArchetype.toLowerCase()
+    ) ?? 'Advisor';
+
     res.json({
-      archetype: parsed.archetype ?? 'Intelligent Assistant',
+      archetype,
+      description: parsed.description ?? `${name} is ready to help you.`,
       coreValues: parsed.coreValues ?? ['helpfulness', 'honesty'],
       ethicalBoundaries: parsed.ethicalBoundaries ?? ['no harmful content'],
       layer2Soul: parsed.layer2Soul ?? {
@@ -109,7 +126,7 @@ Derive these naturally from the name, purpose, and personality description provi
     });
   } catch (err: any) {
     console.error('[bootstrap-preview] error:', err?.message);
-    res.status(500).json({ error: 'Failed to generate agent profile' });
+    res.status(500).json({ error: 'Failed to generate operator profile' });
   }
 });
 

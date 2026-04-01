@@ -7,17 +7,18 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Send, Sparkles, X, RefreshCw } from "lucide-react";
+import { Send, X, RefreshCw } from "lucide-react";
 
 type Step = "name" | "purpose" | "personality" | "deriving" | "confirm" | "creating";
 
 interface ChatMessage {
-  from: "system" | "user";
+  from: "operator" | "owner";
   text: string;
 }
 
 interface BootstrapPreview {
   archetype: string;
+  description: string;
   coreValues: string[];
   ethicalBoundaries: string[];
   layer2Soul: {
@@ -48,16 +49,13 @@ export default function CreateAgentChat({ open, onClose }: Props) {
   const [inputValue, setInputValue] = useState("");
   const [operatorName, setOperatorName] = useState("");
   const [operatorPurpose, setOperatorPurpose] = useState("");
-  const [operatorPersonality, setOperatorPersonality] = useState("");
   const [preview, setPreview] = useState<BootstrapPreview | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { from: "system", text: "What would you like to call your operator?" },
+    { from: "operator", text: "Hi! What would you like to call me?" },
   ]);
 
   useEffect(() => {
-    if (open) {
-      setTimeout(() => inputRef.current?.focus(), 100);
-    }
+    if (open) setTimeout(() => inputRef.current?.focus(), 100);
   }, [open, step]);
 
   useEffect(() => {
@@ -69,9 +67,8 @@ export default function CreateAgentChat({ open, onClose }: Props) {
     setInputValue("");
     setOperatorName("");
     setOperatorPurpose("");
-    setOperatorPersonality("");
     setPreview(null);
-    setMessages([{ from: "system", text: "What would you like to call your operator?" }]);
+    setMessages([{ from: "operator", text: "Hi! What would you like to call me?" }]);
   };
 
   const handleClose = () => {
@@ -79,9 +76,7 @@ export default function CreateAgentChat({ open, onClose }: Props) {
     onClose();
   };
 
-  const addMessage = (msg: ChatMessage) => {
-    setMessages(prev => [...prev, msg]);
-  };
+  const addMessage = (msg: ChatMessage) => setMessages(prev => [...prev, msg]);
 
   const createMutation = useMutation({
     mutationFn: (data: any) => apiFetch<Operator>("/operators", {
@@ -90,12 +85,12 @@ export default function CreateAgentChat({ open, onClose }: Props) {
     }),
     onSuccess: (newOp) => {
       queryClient.invalidateQueries({ queryKey: ["operators"] });
-      toast({ title: "Operator created!", description: `${newOp.name} is ready.` });
+      toast({ title: `${newOp.name} is ready!` });
       handleClose();
       setLocation(`/operators/${newOp.id}`);
     },
     onError: (err: Error) => {
-      toast({ title: "Failed to create operator", description: err.message, variant: "destructive" });
+      toast({ title: "Something went wrong", description: err.message, variant: "destructive" });
       setStep("confirm");
     },
   });
@@ -107,23 +102,23 @@ export default function CreateAgentChat({ open, onClose }: Props) {
 
     if (step === "name") {
       setOperatorName(text);
-      addMessage({ from: "user", text });
+      addMessage({ from: "owner", text });
       setTimeout(() => {
-        addMessage({ from: "system", text: `Nice! What is ${text} here to do for you?` });
+        addMessage({ from: "operator", text: `Nice to meet you, ${text}! What will I be helping you with?` });
         setStep("purpose");
       }, 300);
+
     } else if (step === "purpose") {
       setOperatorPurpose(text);
-      addMessage({ from: "user", text });
+      addMessage({ from: "owner", text });
       setTimeout(() => {
-        addMessage({ from: "system", text: `How would you describe ${operatorName}'s personality?` });
+        addMessage({ from: "operator", text: "Got it! How would you describe my personality?" });
         setStep("personality");
       }, 300);
+
     } else if (step === "personality") {
-      setOperatorPersonality(text);
-      addMessage({ from: "user", text });
+      addMessage({ from: "owner", text });
       setStep("deriving");
-      addMessage({ from: "system", text: `Let me think about the best way to set up ${operatorName}...` });
 
       try {
         const result = await apiFetch<BootstrapPreview>("/operators/bootstrap-preview", {
@@ -132,13 +127,11 @@ export default function CreateAgentChat({ open, onClose }: Props) {
         });
         setPreview(result);
         setStep("confirm");
-        addMessage({
-          from: "system",
-          text: `I'd describe ${operatorName} as a **${result.archetype}**. Ready to create them?`,
-        });
+        addMessage({ from: "operator", text: result.description });
       } catch (err: any) {
         toast({ title: "Something went wrong", description: err.message, variant: "destructive" });
         setStep("personality");
+        addMessage({ from: "operator", text: "Sorry, I ran into a problem. Can you try describing my personality again?" });
       }
     }
   };
@@ -146,7 +139,12 @@ export default function CreateAgentChat({ open, onClose }: Props) {
   const handleConfirm = () => {
     if (!preview) return;
     setStep("creating");
-    const slug = operatorName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").substring(0, 50) + "-" + Math.random().toString(36).substring(2, 6);
+    const slug = operatorName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .substring(0, 50) + "-" + Math.random().toString(36).substring(2, 6);
+
     createMutation.mutate({
       name: operatorName,
       slug,
@@ -165,40 +163,36 @@ export default function CreateAgentChat({ open, onClose }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
-      <DialogContent className="max-w-lg p-0 gap-0 border-primary/20 bg-background overflow-hidden [&>button:last-of-type]:hidden">
+      <DialogContent className="max-w-lg p-0 gap-0 border-border/50 bg-background overflow-hidden [&>button:last-of-type]:hidden">
         <DialogTitle className="sr-only">Create New Operator</DialogTitle>
+
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border/50 bg-card/50">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-primary" />
-            <span className="font-mono font-bold text-sm">New Operator</span>
-          </div>
-          <button onClick={handleClose} className="text-muted-foreground hover:text-foreground transition-colors">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-border/50 bg-card/40">
+          <span className="font-mono font-semibold text-sm text-foreground">New Operator</span>
+          <button onClick={handleClose} className="text-muted-foreground hover:text-foreground transition-colors p-0.5">
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Chat area */}
-        <div className="flex flex-col gap-3 p-5 min-h-[300px] max-h-[400px] overflow-y-auto">
+        {/* Chat */}
+        <div className="flex flex-col gap-3 p-5 min-h-[300px] max-h-[420px] overflow-y-auto bg-background">
           {messages.map((msg, i) => (
-            <div key={i} className={`flex ${msg.from === "user" ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm font-mono leading-relaxed
-                ${msg.from === "system"
-                  ? "bg-card border border-border/50 text-foreground rounded-tl-sm"
-                  : "bg-primary text-primary-foreground rounded-tr-sm"
+            <div key={i} className={`flex ${msg.from === "owner" ? "justify-end" : "justify-start"}`}>
+              <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed
+                ${msg.from === "operator"
+                  ? "bg-card border border-border/50 text-foreground rounded-tl-none"
+                  : "bg-primary text-primary-foreground rounded-tr-none font-mono"
                 }`}>
-                {msg.text.split("**").map((part, j) =>
-                  j % 2 === 1 ? <strong key={j}>{part}</strong> : part
-                )}
+                {msg.text}
               </div>
             </div>
           ))}
 
           {step === "deriving" && (
             <div className="flex justify-start">
-              <div className="bg-card border border-border/50 rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-2">
+              <div className="bg-card border border-border/50 rounded-2xl rounded-tl-none px-4 py-3 flex items-center gap-2.5">
                 <RefreshCw className="w-3.5 h-3.5 text-primary animate-spin" />
-                <span className="text-xs font-mono text-muted-foreground">Thinking...</span>
+                <span className="text-sm text-muted-foreground">Thinking...</span>
               </div>
             </div>
           )}
@@ -206,18 +200,25 @@ export default function CreateAgentChat({ open, onClose }: Props) {
           <div ref={chatEndRef} />
         </div>
 
-        {/* Action area */}
-        <div className="border-t border-border/50 bg-card/30">
+        {/* Bottom area */}
+        <div className="border-t border-border/50 bg-card/20">
           {step === "confirm" && preview && (
-            <div className="p-5 space-y-3">
-              <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 font-mono text-xs text-primary/80">
-                <span className="font-bold">{operatorName}</span> · {preview.archetype}
-              </div>
-              <div className="flex gap-3">
-                <Button variant="outline" size="sm" onClick={resetState} className="font-mono text-xs flex-1">
+            <div className="p-4 space-y-3">
+              <p className="font-mono text-xs text-muted-foreground text-center">Ready to create {operatorName}?</p>
+              <div className="flex gap-2.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={resetState}
+                  className="font-mono text-xs flex-1 border-border/50"
+                >
                   Start over
                 </Button>
-                <Button size="sm" onClick={handleConfirm} className="font-mono text-xs font-bold flex-2 flex-1 bg-primary hover:bg-primary/90">
+                <Button
+                  size="sm"
+                  onClick={handleConfirm}
+                  className="font-mono text-xs font-bold flex-1"
+                >
                   Create {operatorName}
                 </Button>
               </div>
@@ -225,28 +226,27 @@ export default function CreateAgentChat({ open, onClose }: Props) {
           )}
 
           {step === "creating" && (
-            <div className="p-5 flex items-center justify-center gap-2 text-sm font-mono text-muted-foreground">
+            <div className="p-5 flex items-center justify-center gap-2 text-sm text-muted-foreground">
               <RefreshCw className="w-4 h-4 animate-spin text-primary" />
-              Creating your operator...
+              <span className="font-mono">Creating {operatorName}...</span>
             </div>
           )}
 
           {isInputActive && (
-            <div className="flex items-center gap-3 p-4">
+            <div className="flex items-center gap-2.5 p-3.5">
               <Input
                 ref={inputRef}
                 value={inputValue}
                 onChange={e => setInputValue(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") handleSend(); }}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) handleSend(); }}
                 placeholder="Type your answer..."
-                className="font-mono text-sm bg-background/50 border-border/50 flex-1"
-                autoFocus
+                className="font-mono text-sm bg-background border-border/50 flex-1"
               />
               <Button
                 size="icon"
                 onClick={handleSend}
                 disabled={!inputValue.trim()}
-                className="shrink-0 bg-primary hover:bg-primary/90"
+                className="shrink-0"
               >
                 <Send className="w-4 h-4" />
               </Button>
