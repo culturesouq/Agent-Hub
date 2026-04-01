@@ -8,16 +8,18 @@
     "start": "tsx src/index.ts"
   },
   "dependencies": {
+    "@types/node-cron": "^3.0.11",
     "@workspace/db": "workspace:*",
     "@workspace/opsoul-utils": "workspace:*",
     "bcrypt": "^5.1.1",
-    "drizzle-orm": "catalog:",
-    "zod": "catalog:",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
+    "drizzle-orm": "catalog:",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
-    "openai": "^6.27.0"
+    "node-cron": "^4.2.1",
+    "openai": "^6.27.0",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",

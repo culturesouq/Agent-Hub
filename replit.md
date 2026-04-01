@@ -132,5 +132,5 @@ All stored as Replit Secrets:
 - **Phase 2 (complete):** Operator CRUD, 5-layer identity management, Layer 1 lock logic, soul field-level updates, GROW lock control
 - **Phase 3 (complete):** Dual KB ingestion (owner + operator), pgvector semantic search, confidence/verification filtering, RAG context assembly
 - **Phase 4 (complete):** OpenRouter streaming/sync chat (Llama 3.3 70B), SSE, conversation CRUD, message history, KB RAG context injection, auto Layer 1 lock on first message
-- **Phase 5 (pending):** GROW self-evolution system, cron scheduler (02:00 UTC daily)
+- **Phase 5 (complete):** GROW self-evolution system — Claude Sonnet 4-5 soul evaluation, proposal lifecycle (queued→evaluating→applied/rejected/needs_owner_review), owner decide flow, self-awareness state, daily cron 02:00 UTC, FROZEN/LOCKED guards
 - **Phase 6 (pending):** Skills engine, integrations, mission contexts

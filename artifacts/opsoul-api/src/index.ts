@@ -14,6 +14,8 @@ import operatorKbRouter from './routes/operator-kb.js';
 import kbRouter from './routes/kb-search.js';
 import conversationsRouter from './routes/conversations.js';
 import chatRouter from './routes/chat.js';
+import growRouter from './routes/grow.js';
+import { startGrowCron } from './cron/growCron.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
@@ -32,9 +34,10 @@ app.use('/api/operators/:operatorId/operator-kb', operatorKbRouter);
 app.use('/api/operators/:operatorId/kb', kbRouter);
 app.use('/api/operators/:operatorId/conversations', conversationsRouter);
 app.use('/api/operators/:operatorId/conversations/:convId/messages', chatRouter);
+app.use('/api/operators/:operatorId/grow', growRouter);
 
 app.get('/api/healthz', (_req, res) => {
-  res.json({ status: 'ok', service: 'opsoul-api', phase: 4 });
+  res.json({ status: 'ok', service: 'opsoul-api', phase: 5 });
 });
 
 async function setupDatabase(): Promise<void> {
@@ -56,7 +59,7 @@ async function start(): Promise<void> {
   await setupDatabase();
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[opsoul-api] Phase 4 running on port ${PORT}`);
+    console.log(`[opsoul-api] Phase 5 running on port ${PORT}`);
     console.log(`[opsoul-api] Auth: /api/auth/{register,login,refresh,logout,change-password,me}`);
     console.log(`[opsoul-api] Operators: /api/operators — CRUD, lock-layer1, soul, soul/reset, grow-lock`);
     console.log(`[opsoul-api] Owner KB: /api/operators/:id/owner-kb — ingest, list, get, delete`);
@@ -64,7 +67,10 @@ async function start(): Promise<void> {
     console.log(`[opsoul-api] KB Search: POST /api/operators/:id/kb/search — pgvector semantic search + RAG`);
     console.log(`[opsoul-api] Conversations: /api/operators/:id/conversations — CRUD + message history`);
     console.log(`[opsoul-api] Chat: POST /api/operators/:id/conversations/:convId/messages — OpenRouter stream/sync`);
+    console.log(`[opsoul-api] GROW: /api/operators/:id/grow — trigger, proposals, decide, self-awareness`);
   });
+
+  startGrowCron();
 }
 
 start().catch((err) => {
