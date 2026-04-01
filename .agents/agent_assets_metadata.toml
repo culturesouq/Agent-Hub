@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "QUWzJK67wK2iTc6lOZSDj"
+uri = "file://opsoul-v2.4.tar.gz"
+type = "unspecified"
+title = "OpSoul v2.4 — Source Code"
