@@ -301,12 +301,14 @@ function computeHealthScore(
   const mandateGapPenalty = Math.min(mandateGaps.length * 10, 40);
   const soulIntegrity = getSoulIntegrityScore(identityState);
 
+  const mandateGapsScore = 100 - mandateGapPenalty;
+
   const rawScore =
     mandateCoverage * 0.30 +
-    growActivity * 0.20 +
-    kbConfidence * 0.20 +
-    soulIntegrity * 0.20 +
-    (100 - mandateGapPenalty) * 0.10;
+    mandateGapsScore * 0.20 +
+    kbConfidence * 0.25 +
+    growActivity * 0.15 +
+    soulIntegrity * 0.10;
 
   const score = Math.round(Math.max(0, Math.min(100, rawScore)));
 
@@ -320,9 +322,9 @@ function computeHealthScore(
     label,
     components: {
       mandateCoverage,
-      growActivity,
+      mandateGaps: mandateGapsScore,
       kbConfidence,
-      mandateGapPenalty,
+      growActivity,
       soulIntegrity,
     },
   };
