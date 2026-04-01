@@ -1,6 +1,20 @@
-# OpSoul v2.4
+# OpSoul v2.4 — Complete
 
-AI agent platform with 5-layer identity architecture, dual knowledge bases, GROW self-evolution system, multi-tenant JWT auth, and pgvector semantic search.
+AI operator platform with 5-layer identity architecture, dual knowledge bases, GROW self-evolution system, multi-tenant JWT auth, and pgvector semantic search.
+
+## v2.4 Session Completed Features
+
+- **T2 Arabic detection** — Unicode `/[\u0600-\u06FF...]` detected in chat.ts → `languageInstruction` injected silently into system prompt
+- **T3 API Reference** — Full code examples (curl, JS, Python) with copy buttons in Settings → API
+- **T4 Connector Cards** — 5 connector cards (Gmail, GCal, Outlook, OneDrive, LinkedIn) with connect/disconnect in Integrations
+- **T5 GROW Test Mode** — `POST /operators/:id/grow/test-proposal/:proposalId` runs 3 test messages through current vs proposed soul; before/after preview panel in GrowSection
+- **T6 Behavior Diff Card** — Human-readable proposal cards: field names humanized, plain language rationale, confidence badge
+- **T7 Safe Mode** — `PATCH /:id/safe-mode` backend; toggle in Settings → Safe Mode; amber badge in header; growCron filters `safeMode = false`
+- **T8 Drift Cron** — `driftCron.ts` runs every 90 days (`0 3 1 */3 *`); computes `semanticDistance(soulOriginal, soulCurrent)` → stored in `soulState`; alerts if drift > 0.30
+- **T9 Theme** — Sidebar 14% lightness vs 10% for main; `--radius: 0.5rem`; thin custom scrollbars
+- **T10 Mobile Nav** — Hamburger button → slide-in overlay with full sidebar nav; replaced horizontal tab bar
+- **T11 GitHub** — Committed as "OpSoul v2.4 Complete"; push with `git push origin main` (requires GitHub credentials)
+- **T12 Text** — All UI "assistant" strings replaced with "operator"
 
 ## Architecture
 
