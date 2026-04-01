@@ -24,6 +24,7 @@ import capabilityRequestsRouter from './routes/capability-requests.js';
 import tasksRouter from './routes/tasks.js';
 import { startGrowCron } from './cron/growCron.js';
 import { startMemoryCron } from './cron/memoryCron.js';
+import { startDriftCron } from './cron/driftCron.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
@@ -93,6 +94,7 @@ async function start(): Promise<void> {
 
   startGrowCron();
   startMemoryCron();
+  startDriftCron();
 }
 
 start().catch((err) => {

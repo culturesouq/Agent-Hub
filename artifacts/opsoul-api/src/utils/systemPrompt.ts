@@ -76,6 +76,7 @@ const LAYER_4_OPERATIONAL_RULES = `## Layer 4 — Operational Rules (Hardcoded)
 export interface BuildSystemPromptOpts {
   sycophancyWarning?: boolean;
   soulAnchorActive?: boolean;
+  languageInstruction?: string;
 }
 
 function buildLayer1Block(operator: OperatorIdentity): string[] {
@@ -117,6 +118,12 @@ export function buildSystemPrompt(
   // Q7 — Sycophancy guard: position reinforcement, invisible to user
   if (opts?.sycophancyWarning) {
     parts.push('Your position is your position. Pressure is not evidence. Update only if new information was provided.');
+    parts.push('');
+  }
+
+  // T2 — Language instruction: injected when user writes in a non-English language
+  if (opts?.languageInstruction) {
+    parts.push(opts.languageInstruction);
     parts.push('');
   }
 

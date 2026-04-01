@@ -1,6 +1,6 @@
 import { db } from '@workspace/db';
 import { operatorsTable } from '@workspace/db';
-import { inArray } from 'drizzle-orm';
+import { inArray, eq, and } from 'drizzle-orm';
 import { runGrowCycle, retryPendingProposals } from '../utils/growEngine.js';
 
 const GROWABLE_LOCK_LEVELS = ['OPEN', 'CONTROLLED'];
@@ -13,7 +13,7 @@ export async function runDailyGrowCycle(): Promise<void> {
     operators = await db
       .select({ id: operatorsTable.id, name: operatorsTable.name })
       .from(operatorsTable)
-      .where(inArray(operatorsTable.growLockLevel, GROWABLE_LOCK_LEVELS));
+      .where(and(inArray(operatorsTable.growLockLevel, GROWABLE_LOCK_LEVELS), eq(operatorsTable.safeMode, false)));
   } catch (err) {
     console.error('[GROW] Failed to fetch operators:', (err as Error).message);
     return;

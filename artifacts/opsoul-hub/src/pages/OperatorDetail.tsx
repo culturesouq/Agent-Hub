@@ -8,6 +8,7 @@ import {
   BookOpen, User, Smile, BookMarked, Zap, Archive, Network,
   CheckSquare, FileText, Settings2, Key, Code2, ShieldCheck, AlertTriangle,
   Radio, MessageCircle, Send, GraduationCap, Star, ChevronRight, Bell,
+  Shield, Menu, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +25,7 @@ import SettingsSection from "@/components/operator/SettingsSection";
 import IdentitySection from "@/components/operator/IdentitySection";
 import SkillsSection from "@/components/operator/SkillsSection";
 import TasksSection from "@/components/operator/TasksSection";
+import GrowSection from "@/components/operator/GrowSection";
 
 function OperatorAvatar({ name }: { name: string }) {
   const letter = name.charAt(0).toUpperCase();
@@ -51,29 +53,12 @@ function ComingSoon({ title }: { title: string }) {
   );
 }
 
-type NavLeaf = {
-  kind: "leaf";
-  id: string;
-  label: string;
-  icon: React.ElementType;
-  depth: number;
-};
-type NavGroup = {
-  kind: "group";
-  id: string;
-  label: string;
-  icon: React.ElementType;
-  depth: number;
-  children: NavItem[];
-};
+type NavLeaf = { kind: "leaf"; id: string; label: string; icon: React.ElementType; depth: number };
+type NavGroup = { kind: "group"; id: string; label: string; icon: React.ElementType; depth: number; children: NavItem[] };
 type NavItem = NavLeaf | NavGroup;
 
 function SidebarLeaf({
-  item,
-  activeTab,
-  onSelect,
-  badgeCount,
-  onBadgeClick,
+  item, activeTab, onSelect, badgeCount, onBadgeClick,
 }: {
   item: NavLeaf;
   activeTab: string;
@@ -112,11 +97,7 @@ function SidebarLeaf({
 }
 
 function SidebarGroup({
-  item,
-  activeTab,
-  onSelect,
-  openGroups,
-  toggleGroup,
+  item, activeTab, onSelect, openGroups, toggleGroup,
 }: {
   item: NavGroup;
   activeTab: string;
@@ -130,8 +111,7 @@ function SidebarGroup({
     <div>
       <button
         onClick={() => toggleGroup(item.id)}
-        className={`flex items-center gap-2.5 ${pl} pr-3 py-2 rounded-md text-sm font-mono w-full text-left transition-all
-          text-muted-foreground hover:bg-white/5 hover:text-foreground border border-transparent`}
+        className={`flex items-center gap-2.5 ${pl} pr-3 py-2 rounded-md text-sm font-mono w-full text-left transition-all text-muted-foreground hover:bg-white/5 hover:text-foreground border border-transparent`}
       >
         <item.icon className="w-3.5 h-3.5 shrink-0" />
         <span className="truncate flex-1">{item.label}</span>
@@ -139,18 +119,11 @@ function SidebarGroup({
       </button>
       {isOpen && (
         <div className="mt-0.5 space-y-0.5">
-          {item.children.map((child) =>
+          {item.children.map(child =>
             child.kind === "leaf" ? (
               <SidebarLeaf key={child.id} item={child} activeTab={activeTab} onSelect={onSelect} />
             ) : (
-              <SidebarGroup
-                key={child.id}
-                item={child}
-                activeTab={activeTab}
-                onSelect={onSelect}
-                openGroups={openGroups}
-                toggleGroup={toggleGroup}
-              />
+              <SidebarGroup key={child.id} item={child} activeTab={activeTab} onSelect={onSelect} openGroups={openGroups} toggleGroup={toggleGroup} />
             )
           )}
         </div>
@@ -160,21 +133,22 @@ function SidebarGroup({
 }
 
 const NAV_MAIN: NavItem[] = [
-  { kind: "leaf", id: "chat", label: "Chat", icon: MessageSquare, depth: 0 },
+  { kind: "leaf", id: "chat",  label: "Chat",   icon: MessageSquare, depth: 0 },
   {
     kind: "group", id: "brain", label: "Brain", icon: Brain, depth: 0,
     children: [
       {
         kind: "group", id: "knowledge", label: "Knowledge", icon: BookOpen, depth: 1,
         children: [
-          { kind: "leaf", id: "identity", label: "Identity", icon: User, depth: 2 },
-          { kind: "leaf", id: "personality", label: "Personality", icon: Smile, depth: 2 },
-          { kind: "leaf", id: "owner-kb", label: "Owner Knowledge", icon: BookMarked, depth: 2 },
-          { kind: "leaf", id: "skills", label: "Skills", icon: Zap, depth: 2 },
+          { kind: "leaf", id: "identity",    label: "Identity",        icon: User,       depth: 2 },
+          { kind: "leaf", id: "personality", label: "Personality",     icon: Smile,      depth: 2 },
+          { kind: "leaf", id: "owner-kb",    label: "Owner Knowledge", icon: BookMarked, depth: 2 },
+          { kind: "leaf", id: "skills",      label: "Skills",          icon: Zap,        depth: 2 },
         ],
       },
-      { kind: "leaf", id: "memory", label: "Memory", icon: Archive, depth: 1 },
+      { kind: "leaf", id: "memory",       label: "Memory",       icon: Archive, depth: 1 },
       { kind: "leaf", id: "integrations", label: "Integrations", icon: Network, depth: 1 },
+      { kind: "leaf", id: "grow",         label: "Growth",       icon: Activity, depth: 1 },
     ],
   },
   { kind: "leaf", id: "tasks", label: "Tasks", icon: CheckSquare, depth: 0 },
@@ -182,10 +156,11 @@ const NAV_MAIN: NavItem[] = [
   {
     kind: "group", id: "settings", label: "Settings", icon: Settings2, depth: 0,
     children: [
-      { kind: "leaf", id: "settings.secrets", label: "Secrets & Keys", icon: Key, depth: 1 },
-      { kind: "leaf", id: "settings.api", label: "API", icon: Code2, depth: 1 },
-      { kind: "leaf", id: "settings.evolution", label: "Evolution Lock", icon: ShieldCheck, depth: 1 },
-      { kind: "leaf", id: "settings.danger", label: "Danger Zone", icon: AlertTriangle, depth: 1 },
+      { kind: "leaf", id: "settings.secrets",   label: "Secrets & Keys", icon: Key,           depth: 1 },
+      { kind: "leaf", id: "settings.api",       label: "API",            icon: Code2,         depth: 1 },
+      { kind: "leaf", id: "settings.safemode",  label: "Safe Mode",      icon: Shield,        depth: 1 },
+      { kind: "leaf", id: "settings.evolution", label: "Evolution Lock", icon: ShieldCheck,   depth: 1 },
+      { kind: "leaf", id: "settings.danger",    label: "Danger Zone",    icon: AlertTriangle, depth: 1 },
     ],
   },
 ];
@@ -198,14 +173,14 @@ const NAV_BOTTOM: NavItem[] = [
       { kind: "leaf", id: "channels.telegram", label: "Telegram", icon: Send, depth: 1 },
     ],
   },
-  { kind: "leaf", id: "learn", label: "Learn", icon: GraduationCap, depth: 0 },
-  { kind: "leaf", id: "feedback", label: "Leave feedback", icon: Star, depth: 0 },
+  { kind: "leaf", id: "learn",    label: "Learn",           icon: GraduationCap, depth: 0 },
+  { kind: "leaf", id: "feedback", label: "Leave feedback",  icon: Star,          depth: 0 },
 ];
 
-const BRAIN_LEAVES = ["identity", "personality", "owner-kb", "skills", "memory", "integrations"];
+const BRAIN_LEAVES     = ["identity", "personality", "owner-kb", "skills", "memory", "integrations", "grow"];
 const KNOWLEDGE_LEAVES = ["identity", "personality", "owner-kb", "skills"];
-const SETTINGS_LEAVES = ["settings.secrets", "settings.api", "settings.evolution", "settings.danger"];
-const CHANNELS_LEAVES = ["channels.whatsapp", "channels.telegram"];
+const SETTINGS_LEAVES  = ["settings.secrets", "settings.api", "settings.safemode", "settings.evolution", "settings.danger"];
+const CHANNELS_LEAVES  = ["channels.whatsapp", "channels.telegram"];
 
 export default function OperatorDetail({ id }: { id: string }) {
   const { toast } = useToast();
@@ -213,6 +188,7 @@ export default function OperatorDetail({ id }: { id: string }) {
   const [activeTab, setActiveTab] = useState("chat");
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(["brain"]));
   const [capDialogOpen, setCapDialogOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const { data: operator, isLoading } = useQuery({
     queryKey: ["operators", id],
@@ -262,10 +238,10 @@ export default function OperatorDetail({ id }: { id: string }) {
   useEffect(() => {
     setOpenGroups(prev => {
       const next = new Set(prev);
-      if (BRAIN_LEAVES.includes(activeTab)) next.add("brain");
+      if (BRAIN_LEAVES.includes(activeTab))     next.add("brain");
       if (KNOWLEDGE_LEAVES.includes(activeTab)) next.add("knowledge");
-      if (SETTINGS_LEAVES.includes(activeTab)) next.add("settings");
-      if (CHANNELS_LEAVES.includes(activeTab)) next.add("channels");
+      if (SETTINGS_LEAVES.includes(activeTab))  next.add("settings");
+      if (CHANNELS_LEAVES.includes(activeTab))  next.add("channels");
       return next;
     });
   }, [activeTab]);
@@ -273,13 +249,15 @@ export default function OperatorDetail({ id }: { id: string }) {
   const toggleGroup = (gid: string) => {
     setOpenGroups(prev => {
       const next = new Set(prev);
-      if (next.has(gid)) next.delete(gid);
-      else next.add(gid);
+      if (next.has(gid)) next.delete(gid); else next.add(gid);
       return next;
     });
   };
 
-  const handleSelect = (tab: string) => setActiveTab(tab);
+  const handleSelect = (tab: string) => {
+    setActiveTab(tab);
+    setMobileNavOpen(false);
+  };
 
   const healthScore = saData?.healthScore;
 
@@ -302,24 +280,26 @@ export default function OperatorDetail({ id }: { id: string }) {
   function renderContent() {
     if (!operator) return null;
     switch (activeTab) {
-      case "chat":           return <ChatSection operatorId={id} />;
-      case "identity":       return <IdentitySection operator={operator} panel="identity" />;
-      case "personality":    return <IdentitySection operator={operator} panel="personality" />;
-      case "owner-kb":       return <KbSection operatorId={id} />;
-      case "skills":         return <SkillsSection operatorId={id} />;
-      case "memory":         return <MemorySection operatorId={id} />;
-      case "integrations":   return <IntegrationsSection operatorId={id} />;
-      case "tasks":          return <TasksSection operatorId={id} />;
-      case "files":          return <ComingSoon title="Files" />;
-      case "settings.secrets":   return <SettingsSection operator={operator} section="secrets" />;
-      case "settings.api":       return <SettingsSection operator={operator} section="api" />;
-      case "settings.evolution": return <SettingsSection operator={operator} section="evolution" />;
-      case "settings.danger":    return <SettingsSection operator={operator} section="danger" />;
-      case "channels.whatsapp":  return <ComingSoon title="WhatsApp" />;
-      case "channels.telegram":  return <ComingSoon title="Telegram" />;
-      case "learn":          return <ComingSoon title="Learn" />;
-      case "feedback":       return <ComingSoon title="Leave feedback" />;
-      default:               return <ChatSection operatorId={id} />;
+      case "chat":                return <ChatSection operatorId={id} />;
+      case "identity":            return <IdentitySection operator={operator} panel="identity" />;
+      case "personality":         return <IdentitySection operator={operator} panel="personality" />;
+      case "owner-kb":            return <KbSection operatorId={id} />;
+      case "skills":              return <SkillsSection operatorId={id} />;
+      case "memory":              return <MemorySection operatorId={id} />;
+      case "integrations":        return <IntegrationsSection operatorId={id} />;
+      case "grow":                return <GrowSection operatorId={id} saData={saData} />;
+      case "tasks":               return <TasksSection operatorId={id} />;
+      case "files":               return <ComingSoon title="Files" />;
+      case "settings.secrets":    return <SettingsSection operator={operator} section="secrets" />;
+      case "settings.api":        return <SettingsSection operator={operator} section="api" />;
+      case "settings.safemode":   return <SettingsSection operator={operator} section="safemode" />;
+      case "settings.evolution":  return <SettingsSection operator={operator} section="evolution" />;
+      case "settings.danger":     return <SettingsSection operator={operator} section="danger" />;
+      case "channels.whatsapp":   return <ComingSoon title="WhatsApp" />;
+      case "channels.telegram":   return <ComingSoon title="Telegram" />;
+      case "learn":               return <ComingSoon title="Learn" />;
+      case "feedback":            return <ComingSoon title="Leave feedback" />;
+      default:                    return <ChatSection operatorId={id} />;
     }
   }
 
@@ -334,7 +314,7 @@ export default function OperatorDetail({ id }: { id: string }) {
             activeTab={activeTab}
             onSelect={handleSelect}
             badgeCount={isChatItem ? pendingRequests.length : undefined}
-            onBadgeClick={isChatItem ? () => setCapDialogOpen(true) : undefined}
+            onBadgeClick={isChatItem ? () => { setMobileNavOpen(false); setCapDialogOpen(true); } : undefined}
           />
         );
       }
@@ -353,65 +333,88 @@ export default function OperatorDetail({ id }: { id: string }) {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       {/* Header */}
-      <header className="h-12 border-b border-border/50 bg-card/50 flex items-center px-4 shrink-0 justify-between sticky top-0 z-40 backdrop-blur-sm">
-        <Link href="/" className="text-muted-foreground hover:text-foreground transition-colors p-1" data-testid="link-back">
-          <ArrowLeft className="w-4 h-4" />
-        </Link>
-        {healthScore && (
-          <div className="flex items-center gap-2 font-mono text-xs border border-border/50 rounded px-2.5 py-1 bg-background/50">
-            <Activity className="w-3 h-3 text-muted-foreground" />
-            <span className="text-muted-foreground hidden sm:inline">Health:</span>
-            <span className={
-              healthScore.score >= 80 ? "text-green-500 font-bold" :
-              healthScore.score >= 50 ? "text-amber-500 font-bold" : "text-destructive font-bold"
-            }>
-              {healthScore.score}%
-            </span>
-          </div>
-        )}
+      <header className="h-12 border-b border-border/50 bg-card/50 flex items-center px-3 shrink-0 justify-between sticky top-0 z-40 backdrop-blur-sm gap-2">
+        <div className="flex items-center gap-2">
+          {/* Mobile hamburger */}
+          <button
+            className="md:hidden p-1.5 rounded text-muted-foreground hover:text-foreground transition-colors"
+            onClick={() => setMobileNavOpen(o => !o)}
+            aria-label="Toggle navigation"
+          >
+            {mobileNavOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+          </button>
+          <Link href="/" className="text-muted-foreground hover:text-foreground transition-colors p-1" data-testid="link-back">
+            <ArrowLeft className="w-4 h-4" />
+          </Link>
+          {/* Operator name on mobile */}
+          <span className="md:hidden font-mono font-bold text-sm truncate max-w-32">{operator.name}</span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {operator.safeMode && (
+            <div className="flex items-center gap-1.5 font-mono text-xs border border-amber-500/30 rounded px-2 py-0.5 bg-amber-500/10 text-amber-500">
+              <Shield className="w-3 h-3" />
+              <span className="hidden sm:inline">Safe Mode</span>
+            </div>
+          )}
+          {healthScore && (
+            <div className="flex items-center gap-2 font-mono text-xs border border-border/50 rounded px-2.5 py-1 bg-background/50">
+              <Activity className="w-3 h-3 text-muted-foreground" />
+              <span className="text-muted-foreground hidden sm:inline">Health:</span>
+              <span className={
+                healthScore.score >= 80 ? "text-green-500 font-bold" :
+                healthScore.score >= 50 ? "text-amber-500 font-bold" : "text-destructive font-bold"
+              }>
+                {healthScore.score}%
+              </span>
+            </div>
+          )}
+        </div>
       </header>
 
+      {/* Mobile nav overlay */}
+      {mobileNavOpen && (
+        <div className="md:hidden fixed inset-0 z-30 top-12">
+          <div
+            className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+            onClick={() => setMobileNavOpen(false)}
+          />
+          <aside className="absolute left-0 top-0 bottom-0 w-64 bg-card border-r border-border/50 flex flex-col overflow-y-auto shadow-xl">
+            <div className="p-4 border-b border-border/30 flex items-center gap-3">
+              <OperatorAvatar name={operator.name} />
+              <div className="min-w-0">
+                <div className="font-mono font-bold text-sm truncate leading-tight">{operator.name}</div>
+              </div>
+            </div>
+            <div className="p-2 flex flex-col gap-0.5 flex-1 overflow-y-auto">
+              {renderNavItems(NAV_MAIN)}
+            </div>
+            <div className="p-2 border-t border-border/30 flex flex-col gap-0.5">
+              {renderNavItems(NAV_BOTTOM)}
+            </div>
+          </aside>
+        </div>
+      )}
+
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
+        {/* Desktop Sidebar */}
         <aside className="w-56 border-r border-border/50 bg-card/30 flex-col shrink-0 overflow-y-auto hidden md:flex">
-          {/* Avatar + Name */}
           <div className="p-4 border-b border-border/30 flex items-center gap-3">
             <OperatorAvatar name={operator.name} />
             <div className="min-w-0">
               <div className="font-mono font-bold text-sm truncate leading-tight">{operator.name}</div>
             </div>
           </div>
-
-          {/* Main nav */}
           <div className="p-2 flex flex-col gap-0.5 flex-1 overflow-y-auto">
             {renderNavItems(NAV_MAIN)}
           </div>
-
-          {/* Bottom nav */}
           <div className="p-2 border-t border-border/30 flex flex-col gap-0.5">
             {renderNavItems(NAV_BOTTOM)}
           </div>
         </aside>
 
-        {/* Mobile nav */}
-        <div className="md:hidden w-full absolute top-12 left-0 right-0 z-30 bg-background border-b border-border/50 overflow-x-auto flex items-center px-2 py-2 gap-2 no-scrollbar">
-          {["chat", "identity", "personality", "owner-kb", "skills", "memory", "integrations", "tasks", "files"].map(tab => (
-            <button
-              key={tab}
-              onClick={() => handleSelect(tab)}
-              className={`flex items-center px-3 py-1.5 rounded-md text-xs font-mono whitespace-nowrap shrink-0
-                ${activeTab === tab
-                  ? "bg-primary/10 text-primary border border-primary/20"
-                  : "text-muted-foreground border border-border/50"
-                }`}
-            >
-              {tab.replace("-", " ").replace("owner-kb", "Knowledge")}
-            </button>
-          ))}
-        </div>
-
         {/* Content */}
-        <main className="flex-1 overflow-y-auto bg-background md:pt-0 pt-14 relative">
+        <main className="flex-1 overflow-y-auto bg-background relative">
           <div className="p-4 md:p-8 max-w-5xl mx-auto h-full w-full">
             {renderContent()}
           </div>
@@ -424,7 +427,7 @@ export default function OperatorDetail({ id }: { id: string }) {
           <DialogHeader>
             <DialogTitle className="font-mono text-base flex items-center gap-2">
               <Bell className="w-4 h-4 text-amber-500" />
-              Your assistant is asking for permission
+              Your operator is asking for permission
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-2">

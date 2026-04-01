@@ -84,7 +84,7 @@ export default function TasksSection({ operatorId }: { operatorId: string }) {
             <CheckSquare className="w-6 h-6" /> Automations
           </h2>
           <p className="text-muted-foreground font-mono text-sm mt-1">
-            Scheduled tasks your assistant runs automatically
+            Scheduled tasks your operator runs automatically
           </p>
         </div>
 
@@ -146,7 +146,7 @@ export default function TasksSection({ operatorId }: { operatorId: string }) {
                   onChange={e => setAddForm({ ...addForm, description: e.target.value })}
                   required
                   className="font-mono min-h-[100px] resize-none"
-                  placeholder="Describe what your assistant should do when this task runs..."
+                  placeholder="Describe what your operator should do when this task runs..."
                 />
               </div>
 
@@ -169,7 +169,7 @@ export default function TasksSection({ operatorId }: { operatorId: string }) {
           <Clock className="w-10 h-10 text-muted-foreground mx-auto mb-3 opacity-30" />
           <p className="font-mono text-sm text-muted-foreground">No automations yet.</p>
           <p className="font-mono text-xs text-muted-foreground/60 mt-1">
-            Add one to have your assistant run tasks automatically.
+            Add one to have your operator run tasks automatically.
           </p>
         </div>
       ) : (

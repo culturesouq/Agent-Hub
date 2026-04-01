@@ -5,14 +5,20 @@ import {
   operatorsTable,
   growProposalsTable,
   selfAwarenessStateTable,
+  conversationsTable,
+  messagesTable,
 } from '@workspace/db';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, asc } from 'drizzle-orm';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { runGrowCycle } from '../utils/growEngine.js';
 import {
   buildSelfAwarenessState,
   recomputeSelfAwareness,
 } from '../utils/selfAwarenessEngine.js';
+import { buildSystemPrompt } from '../utils/systemPrompt.js';
+import type { OperatorIdentity } from '../utils/systemPrompt.js';
+import { chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
+import type { Layer2Soul } from '../validation/operator.js';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -199,6 +205,90 @@ router.post('/self-awareness/recompute', async (req: Request, res: Response): Pr
     res.json({ ok: true, state: updated });
   } catch (err) {
     res.status(502).json({ error: 'Recompute failed', detail: (err as Error).message });
+  }
+});
+
+// T5 — GROW Test Mode: preview before/after with 3 real conversation messages
+router.post('/test-proposal/:proposalId', async (req: Request, res: Response): Promise<void> => {
+  const operatorId = await resolveOperator(req, res);
+  if (!operatorId) return;
+
+  const [proposal] = await db
+    .select()
+    .from(growProposalsTable)
+    .where(and(eq(growProposalsTable.id, req.params.proposalId), eq(growProposalsTable.operatorId, operatorId)));
+  if (!proposal) { res.status(404).json({ error: 'Proposal not found' }); return; }
+
+  const [operator] = await db.select().from(operatorsTable).where(eq(operatorsTable.id, operatorId));
+  if (!operator) { res.status(404).json({ error: 'Operator not found' }); return; }
+
+  // Get recent user messages across conversations — pick 3 with temporal spread
+  const convIds = (await db
+    .select({ id: conversationsTable.id })
+    .from(conversationsTable)
+    .where(eq(conversationsTable.operatorId, operatorId))
+    .orderBy(desc(conversationsTable.lastMessageAt))
+    .limit(5)).map(c => c.id);
+
+  let testPrompts: string[] = [];
+  if (convIds.length > 0) {
+    const recentUserMsgs = await db
+      .select({ content: messagesTable.content, createdAt: messagesTable.createdAt })
+      .from(messagesTable)
+      .where(and(
+        eq(messagesTable.operatorId, operatorId),
+        eq(messagesTable.role, 'user'),
+      ))
+      .orderBy(desc(messagesTable.createdAt))
+      .limit(9);
+    // pick 3 with temporal spread: latest, middle, oldest of these 9
+    const msgs = recentUserMsgs.map(m => m.content);
+    if (msgs.length >= 3) {
+      testPrompts = [msgs[0], msgs[Math.floor(msgs.length / 2)], msgs[msgs.length - 1]];
+    } else {
+      testPrompts = msgs;
+    }
+  }
+
+  if (testPrompts.length === 0) {
+    res.json({ testPrompts: [], results: [], message: 'No conversation history yet to test against.' });
+    return;
+  }
+
+  const currentSoul = operator.layer2Soul as Layer2Soul;
+  const proposedChanges = (proposal.proposedChanges ?? {}) as Partial<Layer2Soul>;
+  const proposedSoul: Layer2Soul = { ...currentSoul, ...proposedChanges };
+
+  const opIdentity: OperatorIdentity = {
+    name: operator.name,
+    archetype: operator.archetype,
+    mandate: operator.mandate,
+    coreValues: operator.coreValues,
+    ethicalBoundaries: operator.ethicalBoundaries,
+    layer2Soul: currentSoul,
+  };
+
+  const currentSystemPrompt = buildSystemPrompt(opIdentity);
+  const proposedSystemPrompt = buildSystemPrompt({ ...opIdentity, layer2Soul: proposedSoul });
+
+  try {
+    const results = await Promise.all(
+      testPrompts.map(async (prompt) => {
+        const [currentRes, proposedRes] = await Promise.all([
+          chatCompletion([{ role: 'system', content: currentSystemPrompt }, { role: 'user', content: prompt }], CHAT_MODEL),
+          chatCompletion([{ role: 'system', content: proposedSystemPrompt }, { role: 'user', content: prompt }], CHAT_MODEL),
+        ]);
+        return {
+          prompt,
+          current: currentRes.content,
+          proposed: proposedRes.content,
+        };
+      }),
+    );
+
+    res.json({ testPrompts, results, proposalId: proposal.id });
+  } catch (err) {
+    res.status(502).json({ error: 'Test generation failed', detail: (err as Error).message });
   }
 });
 

@@ -173,7 +173,13 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   const historyTokenEstimate = history.reduce((sum, m) => sum + Math.ceil(m.content.length / 4), 0);
   const soulAnchorActive = historyTokenEstimate > ANCHOR_THRESHOLD;
 
-  const promptOpts: BuildSystemPromptOpts = { sycophancyWarning, soulAnchorActive };
+  // T2 — Language detection: Arabic Unicode blocks (Arabic, Arabic Supplement, Arabic Extended-A)
+  const hasArabic = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/.test(message);
+  const languageInstruction = hasArabic
+    ? 'The user is writing in Arabic. Respond in Arabic. Match their dialect if possible.'
+    : undefined;
+
+  const promptOpts: BuildSystemPromptOpts = { sycophancyWarning, soulAnchorActive, languageInstruction };
 
   let kbContext = '';
   let memoryHits: MemoryHit[] = [];
@@ -279,7 +285,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       })}\n\n`);
       res.end();
 
-      triggerSelfAwareness(operator.id, 'conversation_end').catch(() => {});
+      if (!operator.safeMode) triggerSelfAwareness(operator.id, 'conversation_end').catch(() => {});
     } catch (err) {
       res.write(`data: ${JSON.stringify({ error: (err as Error).message })}\n\n`);
       res.end();
@@ -322,7 +328,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         layer1WasLocked: operator.layer1LockedAt === null,
       });
 
-      triggerSelfAwareness(operator.id, 'conversation_end').catch(() => {});
+      if (!operator.safeMode) triggerSelfAwareness(operator.id, 'conversation_end').catch(() => {});
     } catch (err) {
       res.status(502).json({ error: 'AI backend error', detail: (err as Error).message });
     }

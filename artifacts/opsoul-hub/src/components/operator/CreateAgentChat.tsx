@@ -104,7 +104,7 @@ export default function CreateAgentChat({ open, onClose }: Props) {
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
       <DialogContent className="max-w-md border-border/50 bg-background">
-        <DialogTitle className="font-mono text-lg font-bold">New Assistant</DialogTitle>
+        <DialogTitle className="font-mono text-lg font-bold">New Operator</DialogTitle>
 
         <div className="space-y-5 mt-2">
           <div className="space-y-2">
@@ -146,7 +146,7 @@ export default function CreateAgentChat({ open, onClose }: Props) {
                 Setting up...
               </>
             ) : (
-              `Create ${name.trim() || "assistant"}`
+              `Create ${name.trim() || "operator"}`
             )}
           </Button>
         </div>

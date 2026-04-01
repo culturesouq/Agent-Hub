@@ -5,7 +5,8 @@ import { apiFetch } from "@/lib/api";
 import { Operator } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Lock, AlertTriangle, RefreshCw, Key, Globe, ShieldCheck } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Lock, AlertTriangle, RefreshCw, Key, Globe, ShieldCheck, Copy, Shield } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -17,33 +18,90 @@ const EVOLUTION_OPTIONS: { value: EvolutionLevel; label: string; description: st
   {
     value: "LOCKED",
     label: "Locked",
-    description: "No changes at all — your assistant stays exactly as it is.",
+    description: "No changes at all — your operator stays exactly as it is.",
     color: "border-red-500/40 text-red-500",
   },
   {
     value: "CONTROLLED",
     label: "Controlled",
-    description: "Your assistant can improve, but changes need your approval first.",
+    description: "Your operator can improve, but changes need your approval first.",
     color: "border-amber-500/40 text-amber-500",
   },
   {
     value: "OPEN",
     label: "Open",
-    description: "Your assistant learns and improves on its own over time.",
+    description: "Your operator learns and improves on its own over time.",
     color: "border-green-500/40 text-green-500",
   },
 ];
 
-export default function SettingsSection({ operator, section }: { operator: Operator; section?: "secrets" | "api" | "evolution" | "danger" }) {
+function CodeBlock({ code, onCopy }: { code: string; onCopy: () => void }) {
+  return (
+    <div className="relative group">
+      <pre className="font-mono text-xs bg-background/80 border border-border/30 rounded-lg p-4 overflow-x-auto text-muted-foreground leading-relaxed whitespace-pre-wrap break-all">
+        {code}
+      </pre>
+      <button
+        onClick={onCopy}
+        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded border border-border/30 bg-card hover:bg-card/80 text-muted-foreground hover:text-foreground"
+      >
+        <Copy className="w-3 h-3" />
+      </button>
+    </div>
+  );
+}
+
+export default function SettingsSection({ operator, section }: { operator: Operator; section?: "secrets" | "api" | "evolution" | "danger" | "safemode" }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
+  const [safeMode, setSafeMode] = useState(operator.safeMode ?? false);
 
   const currentLevel = (["OPEN", "CONTROLLED", "LOCKED"].includes(operator.growLockLevel ?? "")
     ? operator.growLockLevel
     : "CONTROLLED") as EvolutionLevel;
 
   const [evolutionMode, setEvolutionMode] = useState<EvolutionLevel>(currentLevel);
+
+  const copy = (text: string, label = "Copied") => {
+    navigator.clipboard.writeText(text);
+    toast({ title: label });
+  };
+
+  const baseUrl = `${window.location.origin}/api`;
+  const chatEndpoint = `${baseUrl}/operators/${operator.id}/conversations`;
+  const messagesEndpoint = `${baseUrl}/operators/${operator.id}/conversations/{conversationId}/messages`;
+
+  const curlExample = `curl -X POST "${messagesEndpoint.replace('{conversationId}', '<CONVERSATION_ID>')}" \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer <YOUR_TOKEN>" \\
+  -d '{"message": "Hello", "stream": false}'`;
+
+  const jsExample = `const response = await fetch(
+  "${messagesEndpoint.replace('{conversationId}', '<CONVERSATION_ID>')}",
+  {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer <YOUR_TOKEN>",
+    },
+    body: JSON.stringify({ message: "Hello", stream: false }),
+  }
+);
+const data = await response.json();
+console.log(data.content);`;
+
+  const pythonExample = `import requests
+
+response = requests.post(
+    "${messagesEndpoint.replace('{conversationId}', '<CONVERSATION_ID>')}",
+    headers={
+        "Content-Type": "application/json",
+        "Authorization": "Bearer <YOUR_TOKEN>",
+    },
+    json={"message": "Hello", "stream": False},
+)
+print(response.json()["content"])`;
 
   const updateEvolutionMode = useMutation({
     mutationFn: (level: EvolutionLevel) => apiFetch(`/operators/${operator.id}/grow-lock`, {
@@ -56,6 +114,19 @@ export default function SettingsSection({ operator, section }: { operator: Opera
       toast({ title: "Evolution setting saved" });
     },
     onError: (err: Error) => toast({ title: "Save failed", description: err.message, variant: "destructive" }),
+  });
+
+  const toggleSafeMode = useMutation({
+    mutationFn: (enabled: boolean) => apiFetch(`/operators/${operator.id}/safe-mode`, {
+      method: "PATCH",
+      body: JSON.stringify({ enabled }),
+    }),
+    onSuccess: (_, enabled) => {
+      setSafeMode(enabled);
+      queryClient.invalidateQueries({ queryKey: ["operators", operator.id] });
+      toast({ title: enabled ? "Safe Mode enabled" : "Safe Mode disabled" });
+    },
+    onError: (err: Error) => toast({ title: "Failed to update Safe Mode", description: err.message, variant: "destructive" }),
   });
 
   const lockIdentity = useMutation({
@@ -85,7 +156,7 @@ export default function SettingsSection({ operator, section }: { operator: Opera
 
   const isLocked = !!operator.layer1LockedAt;
 
-  const show = (s: "secrets" | "api" | "evolution" | "danger") => !section || section === s;
+  const show = (s: "secrets" | "api" | "evolution" | "danger" | "safemode") => !section || section === s;
 
   return (
     <div className="space-y-10 animate-in fade-in zoom-in-95 duration-300 max-w-2xl">
@@ -100,49 +171,113 @@ export default function SettingsSection({ operator, section }: { operator: Opera
             <Key className="w-8 h-8 text-muted-foreground/40 mx-auto" />
             <p className="font-mono text-sm font-medium">Store private keys and tokens</p>
             <p className="font-mono text-xs text-muted-foreground max-w-sm mx-auto">
-              Save API keys and tokens that only your assistant can access during conversations. Coming soon.
+              Save API keys and tokens that only your operator can access during conversations. Coming soon.
             </p>
           </div>
         </section>
       )}
 
       {show("api") && (
-        <section className="space-y-4">
+        <section className="space-y-5">
           <div className="flex items-center gap-2 border-b border-border/50 pb-3">
             <Globe className="w-4 h-4 text-muted-foreground" />
-            <h2 className="font-mono font-bold text-base">API Access</h2>
+            <h2 className="font-mono font-bold text-base">API Reference</h2>
           </div>
-          <div className="space-y-3">
-            <p className="font-mono text-xs text-muted-foreground">
-              Use your assistant from any app or script by calling the API with your auth token.
-            </p>
-            <div className="rounded-lg border border-border/40 bg-card/50 p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">ID</span>
-                <button
-                  onClick={() => { navigator.clipboard.writeText(operator.id); toast({ title: "Copied" }); }}
-                  className="font-mono text-xs text-primary hover:underline"
-                >
-                  Copy
-                </button>
-              </div>
-              <div className="font-mono text-sm bg-background/60 border border-border/30 rounded px-3 py-2 break-all select-all">
-                {operator.id}
-              </div>
+
+          <p className="font-mono text-xs text-muted-foreground">
+            Connect your operator to any app, script, or automation using the REST API below.
+          </p>
+
+          <div className="space-y-1">
+            <div className="flex items-center justify-between mb-1">
+              <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">Operator ID</span>
+              <button onClick={() => copy(operator.id)} className="font-mono text-xs text-primary hover:underline flex items-center gap-1">
+                <Copy className="w-3 h-3" /> Copy
+              </button>
             </div>
-            <div className="rounded-lg border border-border/40 bg-card/50 p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">Chat endpoint</span>
-                <button
-                  onClick={() => { navigator.clipboard.writeText(`/api/operators/${operator.id}/conversations`); toast({ title: "Copied" }); }}
-                  className="font-mono text-xs text-primary hover:underline"
-                >
-                  Copy
-                </button>
+            <div className="font-mono text-sm bg-background/60 border border-border/30 rounded-lg px-3 py-2.5 break-all select-all text-primary/80">
+              {operator.id}
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex items-center justify-between mb-1">
+              <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">Authentication header</span>
+              <button onClick={() => copy("Authorization: Bearer <YOUR_TOKEN>")} className="font-mono text-xs text-primary hover:underline flex items-center gap-1">
+                <Copy className="w-3 h-3" /> Copy
+              </button>
+            </div>
+            <div className="font-mono text-sm bg-background/60 border border-border/30 rounded-lg px-3 py-2.5 text-muted-foreground">
+              Authorization: Bearer {"<YOUR_TOKEN>"}
+            </div>
+            <p className="font-mono text-[10px] text-muted-foreground">Use the token from your login response or refresh token endpoint.</p>
+          </div>
+
+          <div className="space-y-2">
+            <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">Chat endpoint</span>
+            <div className="font-mono text-xs bg-background/60 border border-border/30 rounded-lg px-3 py-2.5 text-muted-foreground">
+              POST {chatEndpoint}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">curl</span>
+              <button onClick={() => copy(curlExample)} className="font-mono text-xs text-primary hover:underline flex items-center gap-1">
+                <Copy className="w-3 h-3" /> Copy
+              </button>
+            </div>
+            <CodeBlock code={curlExample} onCopy={() => copy(curlExample)} />
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">JavaScript</span>
+              <button onClick={() => copy(jsExample)} className="font-mono text-xs text-primary hover:underline flex items-center gap-1">
+                <Copy className="w-3 h-3" /> Copy
+              </button>
+            </div>
+            <CodeBlock code={jsExample} onCopy={() => copy(jsExample)} />
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">Python</span>
+              <button onClick={() => copy(pythonExample)} className="font-mono text-xs text-primary hover:underline flex items-center gap-1">
+                <Copy className="w-3 h-3" /> Copy
+              </button>
+            </div>
+            <CodeBlock code={pythonExample} onCopy={() => copy(pythonExample)} />
+          </div>
+        </section>
+      )}
+
+      {show("safemode") && (
+        <section className="space-y-4">
+          <div className="flex items-center gap-2 border-b border-border/50 pb-3">
+            <Shield className="w-4 h-4 text-muted-foreground" />
+            <h2 className="font-mono font-bold text-base">Safe Mode</h2>
+          </div>
+          <div className="rounded-lg border border-border/40 bg-card/30 p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <p className="font-mono text-sm font-bold">Enable Safe Mode</p>
+                <p className="font-mono text-xs text-muted-foreground mt-1 leading-relaxed">
+                  When on: growth is paused, integrations become read-only, and nothing new is learned.
+                  Use this when you want the operator to stay exactly as it is, without any changes.
+                </p>
+                {safeMode && (
+                  <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-500 font-mono text-xs font-bold">
+                    <Shield className="w-3 h-3" /> Safe Mode is active
+                  </div>
+                )}
               </div>
-              <div className="font-mono text-sm bg-background/60 border border-border/30 rounded px-3 py-2 break-all select-all text-muted-foreground">
-                POST /api/operators/{operator.id}/conversations
-              </div>
+              <Switch
+                checked={safeMode}
+                onCheckedChange={(checked) => toggleSafeMode.mutate(checked)}
+                disabled={toggleSafeMode.isPending}
+                className="mt-1 shrink-0"
+              />
             </div>
           </div>
         </section>
@@ -155,7 +290,7 @@ export default function SettingsSection({ operator, section }: { operator: Opera
             <h2 className="font-mono font-bold text-base">Evolution Lock</h2>
           </div>
           <p className="font-mono text-xs text-muted-foreground">
-            Choose how much your assistant is allowed to learn and adapt over time.
+            Choose how much your operator is allowed to learn and adapt over time.
           </p>
           <div className="space-y-3">
             {EVOLUTION_OPTIONS.map((opt) => {
@@ -260,7 +395,7 @@ export default function SettingsSection({ operator, section }: { operator: Opera
               <div>
                 <p className="font-mono text-sm font-bold text-destructive">Delete {operator.name}</p>
                 <p className="font-mono text-xs text-muted-foreground mt-0.5">
-                  Permanently deletes this assistant along with all memory, knowledge, and chat history.
+                  Permanently deletes this operator along with all memory, knowledge, and chat history.
                 </p>
               </div>
               <AlertDialog>

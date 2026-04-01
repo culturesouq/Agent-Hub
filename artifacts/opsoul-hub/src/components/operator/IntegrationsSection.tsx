@@ -6,192 +6,212 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Network, Plus, Trash2, Key, CheckCircle2, XCircle } from "lucide-react";
-import { format } from "date-fns";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { CheckCircle2, XCircle, Network, Trash2, Plug } from "lucide-react";
+
+const CONNECTORS = [
+  {
+    id: "gmail",
+    name: "Gmail",
+    description: "Read and send emails on behalf of your operator",
+    icon: "✉️",
+    color: "from-red-500/10 to-red-500/5",
+    border: "border-red-500/20 hover:border-red-500/40",
+    iconBg: "bg-red-500/10",
+  },
+  {
+    id: "google_calendar",
+    name: "Google Calendar",
+    description: "View and create calendar events",
+    icon: "📅",
+    color: "from-blue-500/10 to-blue-500/5",
+    border: "border-blue-500/20 hover:border-blue-500/40",
+    iconBg: "bg-blue-500/10",
+  },
+  {
+    id: "outlook",
+    name: "Outlook",
+    description: "Connect Microsoft Outlook for email and calendar",
+    icon: "📧",
+    color: "from-sky-500/10 to-sky-500/5",
+    border: "border-sky-500/20 hover:border-sky-500/40",
+    iconBg: "bg-sky-500/10",
+  },
+  {
+    id: "onedrive",
+    name: "OneDrive",
+    description: "Access and manage files in OneDrive",
+    icon: "☁️",
+    color: "from-cyan-500/10 to-cyan-500/5",
+    border: "border-cyan-500/20 hover:border-cyan-500/40",
+    iconBg: "bg-cyan-500/10",
+  },
+  {
+    id: "linkedin",
+    name: "LinkedIn",
+    description: "Access LinkedIn profile and connections",
+    icon: "💼",
+    color: "from-indigo-500/10 to-indigo-500/5",
+    border: "border-indigo-500/20 hover:border-indigo-500/40",
+    iconBg: "bg-indigo-500/10",
+  },
+] as const;
 
 export default function IntegrationsSection({ operatorId }: { operatorId: string }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [addForm, setAddForm] = useState({ integrationType: "", integrationLabel: "", token: "", scopes: "" });
-  const [editId, setEditId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ integrationLabel: "", scopes: "" });
+  const [connectingTo, setConnectingTo] = useState<string | null>(null);
+  const [tokenInput, setTokenInput] = useState("");
 
   const { data: integrations = [], isLoading } = useQuery({
     queryKey: ["operators", operatorId, "integrations"],
-    queryFn: () => apiFetch<any>(`/operators/${operatorId}/integrations`).then(r => r.integrations ?? []),
+    queryFn: () => apiFetch<{ integrations: Integration[] }>(`/operators/${operatorId}/integrations`).then(r => r.integrations ?? []),
   });
 
   const addIntegration = useMutation({
-    mutationFn: (data: any) => apiFetch(`/operators/${operatorId}/integrations`, { method: "POST", body: JSON.stringify(data) }),
+    mutationFn: (data: { integrationType: string; integrationLabel: string; token: string; scopes: string[] }) =>
+      apiFetch(`/operators/${operatorId}/integrations`, { method: "POST", body: JSON.stringify(data) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "integrations"] });
-      setIsAddOpen(false);
-      setAddForm({ integrationType: "", integrationLabel: "", token: "", scopes: "" });
-      toast({ title: "Integration added" });
-    }
-  });
-
-  const updateIntegration = useMutation({
-    mutationFn: ({ id, data }: { id: string, data: any }) => apiFetch(`/operators/${operatorId}/integrations/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "integrations"] });
-      setEditId(null);
-      toast({ title: "Integration updated" });
-    }
+      setConnectingTo(null);
+      setTokenInput("");
+      toast({ title: "Connected successfully" });
+    },
+    onError: (err: Error) => toast({ title: "Connection failed", description: err.message, variant: "destructive" }),
   });
 
   const deleteIntegration = useMutation({
-    mutationFn: (id: string) => apiFetch(`/operators/${operatorId}/integrations/${id}`, { method: "DELETE" }),
+    mutationFn: (integrationId: string) => apiFetch(`/operators/${operatorId}/integrations/${integrationId}`, { method: "DELETE" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "integrations"] });
-      toast({ title: "Integration removed" });
-    }
+      toast({ title: "Disconnected" });
+    },
   });
 
-  const handleAddSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    addIntegration.mutate({
-      ...addForm,
-      scopes: addForm.scopes.split(",").map(s => s.trim()).filter(Boolean)
-    });
+  const getConnected = (type: string): Integration | undefined =>
+    (integrations as Integration[]).find((i: Integration) => i.integrationType === type);
+
+  const handleConnect = (connector: typeof CONNECTORS[number]) => {
+    if (getConnected(connector.id)) return;
+    setConnectingTo(connector.id);
+    setTokenInput("");
   };
 
-  const handleEditSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editId) return;
-    updateIntegration.mutate({
-      id: editId,
-      data: {
-        integrationLabel: editForm.integrationLabel,
-        scopes: editForm.scopes.split(",").map(s => s.trim()).filter(Boolean)
-      }
+  const handleSubmitToken = () => {
+    const connector = CONNECTORS.find(c => c.id === connectingTo);
+    if (!connector || !tokenInput.trim()) return;
+    addIntegration.mutate({
+      integrationType: connector.id,
+      integrationLabel: connector.name,
+      token: tokenInput.trim(),
+      scopes: ["read", "write"],
     });
   };
 
   return (
     <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-border/50 pb-4">
+      <div className="flex items-center gap-2 border-b border-border/50 pb-4">
+        <Network className="w-5 h-5 text-primary" />
         <div>
-          <h2 className="text-2xl font-bold font-mono tracking-tight text-primary flex items-center gap-2">
-            <Network className="w-6 h-6" /> External Integrations
-          </h2>
-          <p className="text-muted-foreground font-mono text-sm mt-1">API connections and third-party access</p>
+          <h2 className="font-mono font-bold text-lg text-primary">Integrations</h2>
+          <p className="font-mono text-xs text-muted-foreground mt-0.5">Connect external services your operator can use</p>
         </div>
-        
-        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-          <DialogTrigger asChild>
-            <Button className="font-mono font-bold text-xs tracking-wider">
-              <Plus className="w-4 h-4 mr-2" /> ADD CONNECTION
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="border-primary/20 bg-card/95 backdrop-blur">
-            <DialogHeader>
-              <DialogTitle className="font-mono text-xl">New API Connection</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleAddSubmit} className="space-y-4 mt-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="font-mono text-xs uppercase text-muted-foreground">Type (e.g. github)</Label>
-                  <Input value={addForm.integrationType} onChange={e => setAddForm({...addForm, integrationType: e.target.value})} required className="font-mono" />
-                </div>
-                <div className="space-y-2">
-                  <Label className="font-mono text-xs uppercase text-muted-foreground">Label</Label>
-                  <Input value={addForm.integrationLabel} onChange={e => setAddForm({...addForm, integrationLabel: e.target.value})} required className="font-mono" />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label className="font-mono text-xs uppercase text-muted-foreground">Access Token / Key</Label>
-                <Input value={addForm.token} onChange={e => setAddForm({...addForm, token: e.target.value})} type="password" placeholder="Leave blank if OAuth" className="font-mono" />
-              </div>
-              <div className="space-y-2">
-                <Label className="font-mono text-xs uppercase text-muted-foreground">Scopes (comma separated)</Label>
-                <Input value={addForm.scopes} onChange={e => setAddForm({...addForm, scopes: e.target.value})} className="font-mono" placeholder="read:user, repo" />
-              </div>
-              <Button type="submit" className="w-full font-mono font-bold mt-4" disabled={addIntegration.isPending}>
-                INITIALIZE CONNECTION
-              </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
       </div>
 
       {isLoading ? (
-        <div className="text-center p-8 font-mono text-primary animate-pulse">CHECKING CONNECTIONS...</div>
-      ) : integrations?.length === 0 ? (
-        <div className="text-center p-12 border border-dashed border-border/50 rounded-lg bg-card/20 text-muted-foreground font-mono text-sm">
-          No external integrations configured.
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="h-36 rounded-xl border border-border/30 bg-card/20 animate-pulse" />
+          ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {integrations?.map(int => (
-            <Card key={int.id} className="bg-card/30 border-border/50 flex flex-col">
-              <CardHeader className="p-4 pb-2">
-                <div className="flex justify-between items-start">
-                  <Badge variant="outline" className={`font-mono text-[10px] uppercase tracking-widest ${int.status === 'active' ? 'text-green-500 border-green-500/30 bg-green-500/10' : 'text-amber-500 border-amber-500/30 bg-amber-500/10'}`}>
-                    {int.status}
-                  </Badge>
-                  <div className="flex gap-1">
-                    <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-primary" onClick={() => {
-                      setEditForm({ integrationLabel: int.integrationLabel, scopes: int.scopes.join(", ") });
-                      setEditId(int.id);
-                    }}>
-                      <Plus className="w-3 h-3" /> {/* Use Plus as edit icon placeholder or pencil if available */}
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => deleteIntegration.mutate(int.id)}>
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {CONNECTORS.map((connector) => {
+            const connected = getConnected(connector.id);
+            return (
+              <div
+                key={connector.id}
+                className={`rounded-xl border bg-gradient-to-br ${connector.color} ${connector.border} p-5 flex flex-col gap-4 transition-all`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className={`w-10 h-10 rounded-lg ${connector.iconBg} flex items-center justify-center text-xl shrink-0`}>
+                    {connector.icon}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-mono font-bold text-sm text-foreground">{connector.name}</p>
+                    <p className="font-mono text-[11px] text-muted-foreground leading-snug mt-0.5">{connector.description}</p>
                   </div>
                 </div>
-                <CardTitle className="font-mono text-lg mt-2">{int.integrationLabel}</CardTitle>
-                <div className="font-mono text-[10px] text-muted-foreground uppercase">{int.integrationType}</div>
-              </CardHeader>
-              <CardContent className="p-4 pt-2 flex-1">
-                <div className="flex items-center gap-2 text-xs font-mono mb-3">
-                  <Key className="w-3 h-3 text-muted-foreground" />
-                  {int.hasToken ? (
-                    <span className="text-green-500 flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> Token Stored</span>
+
+                <div className="flex items-center justify-between pt-2 border-t border-border/20 mt-auto">
+                  {connected ? (
+                    <>
+                      <div className="flex items-center gap-1.5 text-green-500 font-mono text-xs font-medium">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Connected
+                      </div>
+                      <button
+                        onClick={() => deleteIntegration.mutate(connected.id)}
+                        disabled={deleteIntegration.isPending}
+                        className="font-mono text-[11px] text-muted-foreground hover:text-destructive flex items-center gap-1 transition-colors"
+                      >
+                        <Trash2 className="w-3 h-3" /> Disconnect
+                      </button>
+                    </>
                   ) : (
-                    <span className="text-amber-500 flex items-center gap-1"><XCircle className="w-3 h-3"/> No Token</span>
+                    <>
+                      <div className="flex items-center gap-1.5 text-muted-foreground font-mono text-xs">
+                        <XCircle className="w-3.5 h-3.5" />
+                        Not connected
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="font-mono text-xs h-7 px-3 border-border/40 hover:bg-primary/10 hover:border-primary/30 hover:text-primary"
+                        onClick={() => handleConnect(connector)}
+                      >
+                        <Plug className="w-3 h-3 mr-1.5" /> Connect
+                      </Button>
+                    </>
                   )}
                 </div>
-                <div className="flex flex-wrap gap-1">
-                  {int.scopes.map(s => (
-                    <span key={s} className="text-[10px] font-mono border border-border/30 px-1.5 py-0.5 rounded bg-background">
-                      {s}
-                    </span>
-                  ))}
-                </div>
-              </CardContent>
-              <CardFooter className="p-4 pt-0 border-t border-border/20 mt-2 text-[10px] font-mono text-muted-foreground">
-                Added: {format(new Date(int.createdAt), 'yy-MM-dd HH:mm')}
-              </CardFooter>
-            </Card>
-          ))}
+              </div>
+            );
+          })}
         </div>
       )}
 
-      <Dialog open={!!editId} onOpenChange={(open) => !open && setEditId(null)}>
-        <DialogContent className="border-primary/20 bg-card/95 backdrop-blur">
+      <Dialog open={!!connectingTo} onOpenChange={(open) => !open && setConnectingTo(null)}>
+        <DialogContent className="border-primary/20 bg-card/95 backdrop-blur max-w-sm">
           <DialogHeader>
-            <DialogTitle className="font-mono text-xl">Modify Connection</DialogTitle>
+            <DialogTitle className="font-mono text-base">
+              Connect {CONNECTORS.find(c => c.id === connectingTo)?.name}
+            </DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleEditSubmit} className="space-y-4 mt-4">
+          <div className="space-y-4 mt-2">
             <div className="space-y-2">
-              <Label className="font-mono text-xs uppercase text-muted-foreground">Label</Label>
-              <Input value={editForm.integrationLabel} onChange={e => setEditForm({...editForm, integrationLabel: e.target.value})} required className="font-mono" />
+              <Label className="font-mono text-xs uppercase text-muted-foreground">API Token / OAuth Token</Label>
+              <Input
+                value={tokenInput}
+                onChange={e => setTokenInput(e.target.value)}
+                placeholder="Paste your token here..."
+                type="password"
+                className="font-mono text-sm"
+                onKeyDown={e => e.key === "Enter" && handleSubmitToken()}
+                autoFocus
+              />
+              <p className="font-mono text-[10px] text-muted-foreground">
+                Your token is encrypted and only accessible by this operator.
+              </p>
             </div>
-            <div className="space-y-2">
-              <Label className="font-mono text-xs uppercase text-muted-foreground">Scopes (comma separated)</Label>
-              <Input value={editForm.scopes} onChange={e => setEditForm({...editForm, scopes: e.target.value})} className="font-mono" />
-            </div>
-            <Button type="submit" className="w-full font-mono font-bold mt-4" disabled={updateIntegration.isPending}>
-              UPDATE CONNECTION
+            <Button
+              onClick={handleSubmitToken}
+              disabled={!tokenInput.trim() || addIntegration.isPending}
+              className="w-full font-mono font-bold"
+            >
+              {addIntegration.isPending ? "Connecting..." : "Connect"}
             </Button>
-          </form>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

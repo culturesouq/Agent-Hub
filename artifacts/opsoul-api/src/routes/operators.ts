@@ -504,5 +504,26 @@ router.patch('/:id/soul/from-description', async (req: Request, res: Response): 
   res.json(serializeOperator(updated));
 });
 
+// T7 — Safe Mode toggle
+router.patch('/:id/safe-mode', async (req: Request, res: Response): Promise<void> => {
+  const [op] = await db
+    .select({ id: operatorsTable.id, ownerId: operatorsTable.ownerId })
+    .from(operatorsTable)
+    .where(and(eq(operatorsTable.id, req.params.id), ownerFilter(req)));
+
+  if (!op) { res.status(404).json({ error: 'Operator not found' }); return; }
+
+  const { enabled } = req.body as { enabled: boolean };
+  if (typeof enabled !== 'boolean') { res.status(400).json({ error: 'enabled (boolean) required' }); return; }
+
+  const [updated] = await db
+    .update(operatorsTable)
+    .set({ safeMode: enabled })
+    .where(eq(operatorsTable.id, op.id))
+    .returning({ id: operatorsTable.id, safeMode: operatorsTable.safeMode });
+
+  res.json({ ok: true, operatorId: updated.id, safeMode: updated.safeMode });
+});
+
 export default router;
 
