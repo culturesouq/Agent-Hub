@@ -123,10 +123,12 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
             if (line.startsWith("data: ")) {
               try {
                 const data = JSON.parse(line.slice(6));
-                if (data.delta) {
+                if (data.error) {
+                  setStreamingMsg("");
+                } else if (data.delta) {
                   currentStream += data.delta;
                   setStreamingMsg(currentStream);
-                } else if (data.done && data.message) {
+                } else if (data.done) {
                   setStreamingMsg("");
                   queryClient.invalidateQueries({
                     queryKey: ["operators", operatorId, "conversations", activeConvId, "messages"],
@@ -141,7 +143,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
       }
     } catch (err) {
       console.error(err);
-      setStreamingMsg("Something went wrong. Please try again.");
+      setStreamingMsg("");
     }
   };
 

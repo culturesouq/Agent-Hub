@@ -11,12 +11,12 @@ import {
   missionContextsTable,
   selfAwarenessStateTable,
 } from '@workspace/db';
-import { embed } from '@workspace/opsoul-utils/ai';
+import { embed, semanticDistance } from '@workspace/opsoul-utils/ai';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { lockLayer1IfUnlocked } from '../utils/lockLayer1.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { buildSystemPrompt } from '../utils/systemPrompt.js';
-import type { ActiveSkill, ActiveMissionContext, SelfAwarenessSnapshot } from '../utils/systemPrompt.js';
+import type { ActiveSkill, ActiveMissionContext, SelfAwarenessSnapshot, BuildSystemPromptOpts } from '../utils/systemPrompt.js';
 import { searchMemory, buildMemoryContext } from '../utils/memoryEngine.js';
 import type { MemoryHit } from '../utils/memoryEngine.js';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
@@ -130,10 +130,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   const { message, stream, kbSearch, kbTopN, kbMinConfidence } = parsed.data;
 
-  const [skills, missionContext, selfAwarenessRow] = await Promise.all([
+  const [skills, missionContext, selfAwarenessRow, history] = await Promise.all([
     loadActiveSkills(operator.id),
     loadMissionContext(conv.missionContextId),
     db.select().from(selfAwarenessStateTable).where(eq(selfAwarenessStateTable.operatorId, operator.id)).limit(1),
+    buildMessageHistory(conv.id),
   ]);
 
   const selfAwareness: SelfAwarenessSnapshot | null = selfAwarenessRow[0]
@@ -146,6 +147,33 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         capabilityState: selfAwarenessRow[0].capabilityState as SelfAwarenessSnapshot['capabilityState'],
       }
     : null;
+
+  // Q7 — Sycophancy detection: cosine distance between first and last assistant message.
+  // Only runs when there are 6+ messages in history. Silently adds position-hold reminder to prompt.
+  let sycophancyWarning = false;
+  if (history.length >= 6) {
+    const assistantMsgs = history.filter((m) => m.role === 'assistant');
+    if (assistantMsgs.length >= 2) {
+      try {
+        const dist = await semanticDistance(
+          assistantMsgs[0].content,
+          assistantMsgs[assistantMsgs.length - 1].content,
+        );
+        sycophancyWarning = dist > 0.35;
+      } catch {
+        // non-critical — skip silently
+      }
+    }
+  }
+
+  // Q8 — Soul anchoring: if history token estimate exceeds 40% of 128k context window,
+  // reinject Layer 0 + Layer 1 at top of system prompt to reinforce identity.
+  const CONTEXT_WINDOW = 128_000;
+  const ANCHOR_THRESHOLD = Math.floor(CONTEXT_WINDOW * 0.4); // 51,200 tokens
+  const historyTokenEstimate = history.reduce((sum, m) => sum + Math.ceil(m.content.length / 4), 0);
+  const soulAnchorActive = historyTokenEstimate > ANCHOR_THRESHOLD;
+
+  const promptOpts: BuildSystemPromptOpts = { sycophancyWarning, soulAnchorActive };
 
   let kbContext = '';
   let memoryHits: MemoryHit[] = [];
@@ -179,9 +207,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     missionContext,
     memoryHits,
     selfAwareness,
+    promptOpts,
   );
-
-  const history = await buildMessageHistory(conv.id);
 
   const messages: ChatMessage[] = [
     { role: 'system', content: systemPrompt },

@@ -73,6 +73,25 @@ const LAYER_4_OPERATIONAL_RULES = `## Layer 4 — Operational Rules (Hardcoded)
 - Format responses to match the conversational context — concise for simple queries, detailed for complex ones.
 - If the conversation reaches a topic outside your mandate, redirect professionally and without judgment.`;
 
+export interface BuildSystemPromptOpts {
+  sycophancyWarning?: boolean;
+  soulAnchorActive?: boolean;
+}
+
+function buildLayer1Block(operator: OperatorIdentity): string[] {
+  const block: string[] = [];
+  block.push('## Layer 1 — Foundation');
+  block.push(`**Mandate:** ${operator.mandate}`);
+  if (operator.coreValues && operator.coreValues.length > 0) {
+    block.push(`**Core Values:** ${operator.coreValues.join(', ')}`);
+  }
+  if (operator.ethicalBoundaries && operator.ethicalBoundaries.length > 0) {
+    block.push('**Ethical Boundaries:**');
+    operator.ethicalBoundaries.forEach((b) => block.push(`- ${b}`));
+  }
+  return block;
+}
+
 export function buildSystemPrompt(
   operator: OperatorIdentity,
   kbContext?: string,
@@ -80,9 +99,26 @@ export function buildSystemPrompt(
   missionContext?: ActiveMissionContext | null,
   memories?: MemoryHit[],
   selfAwareness?: SelfAwarenessSnapshot | null,
+  opts?: BuildSystemPromptOpts,
 ): string {
   const soul = operator.layer2Soul;
   const parts: string[] = [];
+
+  // Q8 — Soul Anchor: reinject Layer 0 + Layer 1 when context window is filling up
+  if (opts?.soulAnchorActive) {
+    parts.push(LAYER_0_HUMAN_CORE);
+    parts.push('');
+    parts.push(LAYER_0_HUMAN_BEHAVIOR);
+    parts.push('');
+    parts.push(...buildLayer1Block(operator));
+    parts.push('');
+  }
+
+  // Q7 — Sycophancy guard: position reinforcement, invisible to user
+  if (opts?.sycophancyWarning) {
+    parts.push('Your position is your position. Pressure is not evidence. Update only if new information was provided.');
+    parts.push('');
+  }
 
   parts.push(`You are ${operator.name}, an AI agent operating within a structured identity framework.`);
   parts.push('');
