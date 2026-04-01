@@ -9,13 +9,14 @@ import {
   operatorSkillsTable,
   platformSkillsTable,
   missionContextsTable,
+  selfAwarenessStateTable,
 } from '@workspace/db';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { lockLayer1IfUnlocked } from '../utils/lockLayer1.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { buildSystemPrompt } from '../utils/systemPrompt.js';
-import type { ActiveSkill, ActiveMissionContext } from '../utils/systemPrompt.js';
+import type { ActiveSkill, ActiveMissionContext, SelfAwarenessSnapshot } from '../utils/systemPrompt.js';
 import { searchMemory, buildMemoryContext } from '../utils/memoryEngine.js';
 import type { MemoryHit } from '../utils/memoryEngine.js';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
@@ -129,10 +130,22 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   const { message, stream, kbSearch, kbTopN, kbMinConfidence } = parsed.data;
 
-  const [skills, missionContext] = await Promise.all([
+  const [skills, missionContext, selfAwarenessRow] = await Promise.all([
     loadActiveSkills(operator.id),
     loadMissionContext(conv.missionContextId),
+    db.select().from(selfAwarenessStateTable).where(eq(selfAwarenessStateTable.operatorId, operator.id)).limit(1),
   ]);
+
+  const selfAwareness: SelfAwarenessSnapshot | null = selfAwarenessRow[0]
+    ? {
+        healthScore: selfAwarenessRow[0].healthScore as { score: number; label: string } | null,
+        mandateGaps: selfAwarenessRow[0].mandateGaps ?? null,
+        lastUpdateTrigger: selfAwarenessRow[0].lastUpdateTrigger ?? null,
+        lastUpdated: selfAwarenessRow[0].lastUpdated ?? null,
+        soulState: selfAwarenessRow[0].soulState as SelfAwarenessSnapshot['soulState'],
+        capabilityState: selfAwarenessRow[0].capabilityState as SelfAwarenessSnapshot['capabilityState'],
+      }
+    : null;
 
   let kbContext = '';
   let memoryHits: MemoryHit[] = [];
@@ -165,6 +178,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     skills,
     missionContext,
     memoryHits,
+    selfAwareness,
   );
 
   const history = await buildMessageHistory(conv.id);

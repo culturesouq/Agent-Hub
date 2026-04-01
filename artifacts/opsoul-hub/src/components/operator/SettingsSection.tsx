@@ -195,9 +195,9 @@ export default function SettingsSection({ operator, section }: { operator: Opera
             {!isLocked && (
               <div className="flex items-start justify-between p-4 border border-border/40 rounded-lg bg-card/20">
                 <div>
-                  <p className="font-mono text-sm font-bold">Lock identity forever</p>
+                  <p className="font-mono text-sm font-bold">Prevent operator from self-modifying</p>
                   <p className="font-mono text-xs text-muted-foreground mt-0.5">
-                    Permanently prevents anyone from changing this assistant's name or purpose. Cannot be undone.
+                    Stops your operator from changing its own identity during conversations. You as the owner can always edit it. Cannot be undone.
                   </p>
                 </div>
                 <AlertDialog>
@@ -209,10 +209,10 @@ export default function SettingsSection({ operator, section }: { operator: Opera
                   <AlertDialogContent className="border-primary/20">
                     <AlertDialogHeader>
                       <AlertDialogTitle className="font-mono text-primary flex items-center gap-2">
-                        <Lock className="w-5 h-5" /> Lock identity permanently?
+                        <Lock className="w-5 h-5" /> Prevent operator from self-modifying?
                       </AlertDialogTitle>
                       <AlertDialogDescription className="font-mono">
-                        Name and purpose will become read-only forever. This cannot be undone.
+                        Your operator will not be able to change its own identity during conversations. You as the owner can always edit it here. Cannot be undone.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

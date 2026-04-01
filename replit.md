@@ -65,7 +65,7 @@ Running on **port 3001**.
 - `POST /` — create operator (validates Layer 1 + Layer 2 soul via Zod)
 - `GET /` — list all operators for authenticated owner
 - `GET /:id` — get single operator with full identity layers
-- `PATCH /:id` — update Layer 1 fields (blocked 423 if `layer1LockedAt` is set)
+- `PATCH /:id` — update Layer 1 fields (owner always allowed; lock only prevents operator self-modification)
 - `DELETE /:id` — permanently delete operator
 - `POST /:id/lock-layer1` — lock Layer 1 identity (idempotent-safe, 409 if already locked)
 - `GET /:id/soul` — get Layer 2 soul + original snapshot
@@ -77,7 +77,8 @@ Running on **port 3001**.
 - `layer1LockedAt` is `null` at creation time
 - Set explicitly via `POST /:id/lock-layer1`
 - Also set automatically on first message sent (via `lockLayer1IfUnlocked` helper, called from Phase 4 chat routes)
-- Once locked: Layer 1 fields (archetype, mandate, coreValues, ethicalBoundaries) are permanently immutable
+- Lock meaning: prevents the **operator** from self-modifying its identity during GROW cycles or conversations
+- Owner (authenticated user) can always update Layer 1 fields via `PATCH /:id` and `PATCH /:id/identity-from-description` regardless of lock status
 
 **Layer 2 Soul schema (Zod-validated):**
 ```

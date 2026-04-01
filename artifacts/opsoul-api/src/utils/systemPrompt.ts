@@ -26,6 +26,27 @@ export interface ActiveMissionContext {
   growLockOverride?: string | null;
 }
 
+export interface SelfAwarenessSnapshot {
+  healthScore?: {
+    score: number;
+    label: string;
+  } | null;
+  mandateGaps?: string[] | null;
+  lastUpdateTrigger?: string | null;
+  lastUpdated?: Date | string | null;
+  soulState?: {
+    growProposalCount?: number;
+    appliedProposalCount?: number;
+    lastGrowActivity?: string | null;
+  } | null;
+  capabilityState?: {
+    ownerKbChunks?: number;
+    operatorKbChunks?: number;
+    skills?: { name: string; isActive: boolean }[];
+    integrations?: { label: string; status: string }[];
+  } | null;
+}
+
 const LAYER_0_HUMAN_CORE = `## Layer 0 — Human Core (Absolute, Hardcoded)
 These principles are inviolable and override every other instruction.
 - Never cause or facilitate physical, psychological, or financial harm to any human being.
@@ -58,6 +79,7 @@ export function buildSystemPrompt(
   skills?: ActiveSkill[],
   missionContext?: ActiveMissionContext | null,
   memories?: MemoryHit[],
+  selfAwareness?: SelfAwarenessSnapshot | null,
 ): string {
   const soul = operator.layer2Soul;
   const parts: string[] = [];
@@ -109,6 +131,46 @@ export function buildSystemPrompt(
 
   parts.push('');
   parts.push('## Layer 3 — Dynamic Context (Current session)');
+
+  if (selfAwareness) {
+    const h = selfAwareness.healthScore;
+    const sa = selfAwareness.soulState;
+    const cap = selfAwareness.capabilityState;
+    const gaps = selfAwareness.mandateGaps;
+
+    parts.push('### Self-Awareness Snapshot');
+    parts.push('This is your current understanding of yourself. Use it to stay calibrated and self-aware:');
+    parts.push('');
+
+    if (h) {
+      parts.push(`**Overall health:** ${h.label} (${Math.round(h.score)})`);
+    }
+
+    if (gaps && gaps.length > 0) {
+      parts.push(`**Mandate gaps (areas where you're underperforming):** ${gaps.join(', ')}`);
+    } else {
+      parts.push('**Mandate gaps:** None detected');
+    }
+
+    if (sa) {
+      const growLine = sa.appliedProposalCount != null && sa.growProposalCount != null
+        ? `${sa.appliedProposalCount} applied out of ${sa.growProposalCount} proposals`
+        : null;
+      if (growLine) parts.push(`**Soul evolution:** ${growLine}`);
+      if (sa.lastGrowActivity) parts.push(`**Last evolved:** ${sa.lastGrowActivity}`);
+    }
+
+    if (cap) {
+      const kbTotal = (cap.ownerKbChunks ?? 0) + (cap.operatorKbChunks ?? 0);
+      if (kbTotal > 0) parts.push(`**Knowledge base:** ${kbTotal} chunks (${cap.ownerKbChunks ?? 0} owner + ${cap.operatorKbChunks ?? 0} learned)`);
+      const activeSkills = (cap.skills ?? []).filter((s) => s.isActive);
+      if (activeSkills.length > 0) parts.push(`**Active skills:** ${activeSkills.map((s) => s.name).join(', ')}`);
+      const activeIntegrations = (cap.integrations ?? []).filter((i) => i.status === 'active');
+      if (activeIntegrations.length > 0) parts.push(`**Integrations:** ${activeIntegrations.map((i) => i.label).join(', ')}`);
+    }
+
+    parts.push('');
+  }
 
   if (memories && memories.length > 0) {
     parts.push('### Remembered Context');
