@@ -30,9 +30,7 @@ export default function IdentitySection({ operator, panel }: Props) {
   const isLocked = !!operator.layer1LockedAt;
 
   const [identityDesc, setIdentityDesc] = useState(
-    operator.mandate
-      ? `${operator.name}. ${operator.mandate}`
-      : operator.name
+    operator.mandate ?? operator.name
   );
 
   const [personalityDesc, setPersonalityDesc] = useState(

@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { db } from '@workspace/db';
 import { conversationsTable, operatorsTable, messagesTable } from '@workspace/db';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -13,9 +13,9 @@ const CreateConversationSchema = z.object({
   contextName: z.string().min(1).max(100).default('default'),
 });
 
-async function resolveOperator(req: Request, res: Response): Promise<string | null> {
+async function resolveOperator(req: Request, res: Response): Promise<{ id: string; soul: any } | null> {
   const [op] = await db
-    .select({ id: operatorsTable.id })
+    .select({ id: operatorsTable.id, soul: operatorsTable.layer2Soul })
     .from(operatorsTable)
     .where(
       and(
@@ -27,12 +27,12 @@ async function resolveOperator(req: Request, res: Response): Promise<string | nu
     res.status(404).json({ error: 'Operator not found' });
     return null;
   }
-  return op.id;
+  return op;
 }
 
 router.post('/', async (req: Request, res: Response): Promise<void> => {
-  const operatorId = await resolveOperator(req, res);
-  if (!operatorId) return;
+  const op = await resolveOperator(req, res);
+  if (!op) return;
 
   const parsed = CreateConversationSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -42,36 +42,51 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   const [conv] = await db.insert(conversationsTable).values({
     id: crypto.randomUUID(),
-    operatorId,
+    operatorId: op.id,
     ownerId: req.owner!.ownerId,
     contextName: parsed.data.contextName,
     messageCount: 0,
   }).returning();
 
+  const openingMessage = (op.soul as any)?.openingMessage as string | undefined;
+  if (openingMessage?.trim()) {
+    await db.insert(messagesTable).values({
+      id: crypto.randomUUID(),
+      conversationId: conv.id,
+      operatorId: op.id,
+      role: 'assistant',
+      content: openingMessage.trim(),
+    });
+    await db
+      .update(conversationsTable)
+      .set({ messageCount: sql`message_count + 1` })
+      .where(eq(conversationsTable.id, conv.id));
+  }
+
   res.status(201).json(conv);
 });
 
 router.get('/', async (req: Request, res: Response): Promise<void> => {
-  const operatorId = await resolveOperator(req, res);
-  if (!operatorId) return;
+  const op = await resolveOperator(req, res);
+  if (!op) return;
 
   const convs = await db
     .select()
     .from(conversationsTable)
     .where(
       and(
-        eq(conversationsTable.operatorId, operatorId),
+        eq(conversationsTable.operatorId, op.id),
         eq(conversationsTable.ownerId, req.owner!.ownerId),
       ),
     )
     .orderBy(desc(conversationsTable.lastMessageAt));
 
-  res.json({ operatorId, count: convs.length, conversations: convs });
+  res.json({ operatorId: op.id, count: convs.length, conversations: convs });
 });
 
 router.get('/:convId', async (req: Request, res: Response): Promise<void> => {
-  const operatorId = await resolveOperator(req, res);
-  if (!operatorId) return;
+  const op = await resolveOperator(req, res);
+  if (!op) return;
 
   const [conv] = await db
     .select()
@@ -79,7 +94,7 @@ router.get('/:convId', async (req: Request, res: Response): Promise<void> => {
     .where(
       and(
         eq(conversationsTable.id, req.params.convId),
-        eq(conversationsTable.operatorId, operatorId),
+        eq(conversationsTable.operatorId, op.id),
       ),
     );
 
@@ -88,8 +103,8 @@ router.get('/:convId', async (req: Request, res: Response): Promise<void> => {
 });
 
 router.get('/:convId/messages', async (req: Request, res: Response): Promise<void> => {
-  const operatorId = await resolveOperator(req, res);
-  if (!operatorId) return;
+  const op = await resolveOperator(req, res);
+  if (!op) return;
 
   const [conv] = await db
     .select({ id: conversationsTable.id })
@@ -97,7 +112,7 @@ router.get('/:convId/messages', async (req: Request, res: Response): Promise<voi
     .where(
       and(
         eq(conversationsTable.id, req.params.convId),
-        eq(conversationsTable.operatorId, operatorId),
+        eq(conversationsTable.operatorId, op.id),
       ),
     );
 
@@ -113,8 +128,8 @@ router.get('/:convId/messages', async (req: Request, res: Response): Promise<voi
 });
 
 router.delete('/:convId', async (req: Request, res: Response): Promise<void> => {
-  const operatorId = await resolveOperator(req, res);
-  if (!operatorId) return;
+  const op = await resolveOperator(req, res);
+  if (!op) return;
 
   const [conv] = await db
     .select({ id: conversationsTable.id })
@@ -122,7 +137,7 @@ router.delete('/:convId', async (req: Request, res: Response): Promise<void> => 
     .where(
       and(
         eq(conversationsTable.id, req.params.convId),
-        eq(conversationsTable.operatorId, operatorId),
+        eq(conversationsTable.operatorId, op.id),
       ),
     );
 

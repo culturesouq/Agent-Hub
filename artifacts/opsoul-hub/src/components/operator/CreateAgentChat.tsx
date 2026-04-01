@@ -13,7 +13,9 @@ import { Loader2 } from "lucide-react";
 
 interface BootstrapPreview {
   archetype: string;
-  description: string;
+  identityParagraph: string;
+  personalityParagraph: string;
+  openingMessage: string;
   coreValues: string[];
   ethicalBoundaries: string[];
   layer2Soul: {
@@ -25,6 +27,7 @@ interface BootstrapPreview {
     emotionalRange: string;
     decisionMakingStyle: string;
     conflictResolution: string;
+    openingMessage: string;
   };
 }
 
@@ -51,14 +54,13 @@ export default function CreateAgentChat({ open, onClose }: Props) {
 
   const handleCreate = async () => {
     const trimmedName = name.trim();
-    const trimmedPurpose = purpose.trim();
-    if (!trimmedName || !trimmedPurpose) return;
+    if (!trimmedName) return;
 
     setIsLoading(true);
     try {
       const preview = await apiFetch<BootstrapPreview>("/operators/bootstrap-preview", {
         method: "POST",
-        body: JSON.stringify({ name: trimmedName, purpose: trimmedPurpose, personality: "" }),
+        body: JSON.stringify({ name: trimmedName, purpose: purpose.trim() || undefined }),
       });
 
       const slug =
@@ -76,7 +78,7 @@ export default function CreateAgentChat({ open, onClose }: Props) {
           name: trimmedName,
           slug,
           archetype: preview.archetype,
-          mandate: trimmedPurpose,
+          mandate: preview.identityParagraph,
           coreValues: preview.coreValues,
           ethicalBoundaries: preview.ethicalBoundaries,
           layer2Soul: preview.layer2Soul,
@@ -97,7 +99,7 @@ export default function CreateAgentChat({ open, onClose }: Props) {
     }
   };
 
-  const canSubmit = name.trim().length > 0 && purpose.trim().length > 0 && !isLoading;
+  const canSubmit = name.trim().length > 0 && !isLoading;
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
@@ -122,7 +124,7 @@ export default function CreateAgentChat({ open, onClose }: Props) {
 
           <div className="space-y-2">
             <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-              What will it help with?
+              What will it help with? <span className="normal-case text-muted-foreground/60">(optional)</span>
             </Label>
             <Textarea
               value={purpose}

@@ -12,6 +12,7 @@ export const Layer2SoulSchema = z.object({
   emotionalRange: z.string().min(1, 'Emotional range required'),
   decisionMakingStyle: z.string().min(1, 'Decision making style required'),
   conflictResolution: z.string().min(1, 'Conflict resolution required'),
+  openingMessage: z.string().optional(),
 });
 
 export type Layer2Soul = z.infer<typeof Layer2SoulSchema>;

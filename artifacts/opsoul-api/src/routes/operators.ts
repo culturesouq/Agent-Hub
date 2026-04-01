@@ -46,47 +46,61 @@ function serializeOperator(op: typeof operatorsTable.$inferSelect) {
 }
 
 router.post('/bootstrap-preview', async (req: Request, res: Response): Promise<void> => {
-  const { name, purpose, personality } = req.body as { name?: string; purpose?: string; personality?: string };
-  if (!name || !purpose || !personality) {
-    res.status(400).json({ error: 'name, purpose, and personality are required' });
+  const { name, purpose } = req.body as { name?: string; purpose?: string };
+  if (!name || !name.trim()) {
+    res.status(400).json({ error: 'name is required' });
     return;
   }
 
   const VALID_ARCHETYPES = ['Executor', 'Advisor', 'Expert', 'Connector', 'Creator', 'Guardian'] as const;
 
-  const prompt = `You are designing the identity of an AI operator. Based on the following:
+  const LAYER_0_CORE = [
+    'emotionally intelligent and genuinely reads the room',
+    'honest — not performatively honest, actually honest',
+    'never robotic, never sounds like a bot',
+    'never opens with filler phrases like "Certainly!", "Of course!", "Great question!", or "How can I help you today?"',
+    'responds to the human, not just the message — notices mood, context, what\'s unsaid',
+  ].join('\n- ');
 
-Name: ${name}
-Purpose: ${purpose}
-Personality: ${personality}
+  const purposeLine = purpose?.trim()
+    ? `Purpose / what they help with: ${purpose.trim()}`
+    : '(No purpose provided — generate from the name alone)';
 
-Return ONLY valid JSON (no markdown, no explanation) with this exact structure:
+  const prompt = `You are creating the complete soul of a human-like AI assistant. Do not write marketing copy. Write like you are describing a real person.
+
+LAYER 0 HUMAN CORE — hardcoded into every assistant, non-negotiable, never shown to the owner:
+- ${LAYER_0_CORE}
+
+OWNER INPUT:
+Name: ${name.trim()}
+${purposeLine}
+
+Generate ALL of the following in ONE JSON response. Return ONLY valid JSON — no markdown fences, no explanation, no extra text.
+
 {
-  "archetype": "MUST be exactly one of: Executor, Advisor, Expert, Connector, Creator, Guardian",
-  "description": "1-2 warm, human sentences introducing ${name} like you're introducing a real person — no titles, no labels, no jargon. Describe who they are and how they show up.",
-  "coreValues": ["value1", "value2", "value3", "value4"],
-  "ethicalBoundaries": ["boundary1", "boundary2", "boundary3"],
-  "layer2Soul": {
-    "personalityTraits": ["trait1", "trait2", "trait3", "trait4"],
-    "toneProfile": "one sentence describing the tone",
-    "communicationStyle": "one sentence describing how they communicate",
-    "quirks": ["quirk1", "quirk2"],
-    "valuesManifestation": ["how a value shows up in behavior", "another example"],
-    "emotionalRange": "one sentence describing emotional range",
-    "decisionMakingStyle": "one sentence describing how they make decisions",
-    "conflictResolution": "one sentence describing conflict resolution approach"
-  }
+  "archetype": "Exactly one of: Executor, Advisor, Expert, Connector, Creator, Guardian. If input is minimal or ambiguous, use Connector.",
+  "identityParagraph": "2-3 warm human sentences in THIRD PERSON describing who this assistant is. Weave together: the Layer 0 human foundation, the archetype's nature, and what the owner described. Specific, not generic. Never mention 'Layer 0', archetypes, or technical terms.",
+  "personalityParagraph": "1-2 sentences describing HOW they communicate. Warm and specific. No jargon.",
+  "openingMessage": "The very first thing this assistant says when a chat opens. In character. Warm, natural, specific to who they are. 1-2 sentences max. NEVER use: 'How can I help you today?', 'Certainly!', 'Of course!', 'Great question!', or any filler opener. Make it feel like meeting a real person.",
+  "coreValues": ["3 to 4 specific values that fit this assistant — not generic platitudes"],
+  "ethicalBoundaries": ["2 to 3 clear, specific things this assistant won't do"],
+  "personalityTraits": ["3 to 4 specific, observable traits"],
+  "toneProfile": "One sentence. Specific tone description.",
+  "communicationStyle": "One sentence. How they write and speak.",
+  "quirks": ["1 to 2 small specific quirks or habits"],
+  "valuesManifestation": ["1 to 2 examples of how their values show up in practice"],
+  "emotionalRange": "One sentence. How they handle emotion in conversation.",
+  "decisionMakingStyle": "One sentence. How they approach decisions.",
+  "conflictResolution": "One sentence. How they handle disagreement or tension."
 }
 
-Archetype guide — choose the best fit:
-- Executor: gets things done, action-oriented, implements and delivers
-- Advisor: guides and counsels, strategic, helps people think through decisions
-- Expert: deep domain knowledge, specialist, go-to source of truth
+Archetype guide:
+- Executor: action-oriented, gets things done, delivers results
+- Advisor: guides and counsels, helps people think through decisions
+- Expert: deep specialist knowledge, go-to source of truth in a domain
 - Connector: bridges people and ideas, facilitates, coordinates
-- Creator: generates ideas and content, inventive, brings new things into existence
-- Guardian: protects, monitors, enforces safety and boundaries
-
-The archetype field must be exactly one word from the list above. No variations.`;
+- Creator: generates ideas and content, inventive, imaginative
+- Guardian: protects, monitors, enforces boundaries and safety`;
 
   try {
     const result = await chatCompletion(
@@ -106,22 +120,26 @@ The archetype field must be exactly one word from the list above. No variations.
     const rawArchetype = (parsed.archetype ?? '').trim();
     const archetype: string = VALID_ARCHETYPES.find(
       a => a.toLowerCase() === rawArchetype.toLowerCase()
-    ) ?? 'Advisor';
+    ) ?? 'Connector';
 
+    const trimmedName = name.trim();
     res.json({
       archetype,
-      description: parsed.description ?? `${name} is ready to help you.`,
-      coreValues: parsed.coreValues ?? ['helpfulness', 'honesty'],
-      ethicalBoundaries: parsed.ethicalBoundaries ?? ['no harmful content'],
-      layer2Soul: parsed.layer2Soul ?? {
-        personalityTraits: personality.split(',').map((s: string) => s.trim()).filter(Boolean),
-        toneProfile: 'Friendly and professional',
-        communicationStyle: 'Clear and concise',
-        quirks: [],
-        valuesManifestation: [],
-        emotionalRange: 'Calm and measured',
-        decisionMakingStyle: 'Analytical and thoughtful',
-        conflictResolution: 'Collaborative and empathetic',
+      identityParagraph: parsed.identityParagraph ?? `${trimmedName} is here to help you.`,
+      personalityParagraph: parsed.personalityParagraph ?? `${trimmedName} communicates clearly and warmly.`,
+      openingMessage: parsed.openingMessage ?? `Hi there. I'm ${trimmedName}.`,
+      coreValues: parsed.coreValues ?? ['helpfulness', 'honesty', 'clarity'],
+      ethicalBoundaries: parsed.ethicalBoundaries ?? ['never provides harmful content', 'always transparent about limitations'],
+      layer2Soul: {
+        personalityTraits: parsed.personalityTraits ?? ['thoughtful', 'reliable', 'warm'],
+        toneProfile: parsed.toneProfile ?? 'Warm and grounded.',
+        communicationStyle: parsed.communicationStyle ?? `Speaks plainly and listens closely.`,
+        quirks: parsed.quirks ?? [],
+        valuesManifestation: parsed.valuesManifestation ?? [],
+        emotionalRange: parsed.emotionalRange ?? 'Steady and present.',
+        decisionMakingStyle: parsed.decisionMakingStyle ?? 'Considers context before acting.',
+        conflictResolution: parsed.conflictResolution ?? 'Stays calm and seeks understanding.',
+        openingMessage: parsed.openingMessage ?? `Hi there. I'm ${trimmedName}.`,
       },
     });
   } catch (err: any) {
