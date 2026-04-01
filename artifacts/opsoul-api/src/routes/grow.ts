@@ -9,6 +9,10 @@ import {
 import { eq, and, desc } from 'drizzle-orm';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { runGrowCycle } from '../utils/growEngine.js';
+import {
+  buildSelfAwarenessState,
+  recomputeSelfAwareness,
+} from '../utils/selfAwarenessEngine.js';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -156,67 +160,45 @@ router.patch('/proposals/:proposalId/decide', async (req: Request, res: Response
     .returning();
 
   res.json({ ok: true, proposalId: proposal.id, status: updated.status });
+
+  recomputeSelfAwareness(operatorId, 'grow_approved').catch(() => {});
 });
 
 router.get('/self-awareness', async (req: Request, res: Response): Promise<void> => {
   const operatorId = await resolveOperator(req, res);
   if (!operatorId) return;
 
-  const [state] = await db
+  const [stored] = await db
     .select()
     .from(selfAwarenessStateTable)
     .where(eq(selfAwarenessStateTable.operatorId, operatorId));
 
-  if (!state) {
-    res.json({ operatorId, state: null, message: 'No self-awareness state yet — will be created after first GROW cycle' });
+  if (stored) {
+    res.json(stored);
     return;
   }
 
-  res.json(state);
+  try {
+    const live = await buildSelfAwarenessState(operatorId);
+    res.json({ ...live, note: 'Live-computed — no cached state yet. POST /self-awareness/recompute to persist.' });
+  } catch (err) {
+    res.status(502).json({ error: 'Failed to compute self-awareness state', detail: (err as Error).message });
+  }
 });
 
-const UpdateSelfAwarenessSchema = z.object({
-  identityState: z.record(z.unknown()).optional(),
-  soulState: z.record(z.unknown()).optional(),
-  capabilityState: z.record(z.unknown()).optional(),
-  taskHistory: z.record(z.unknown()).optional(),
-  mandateGaps: z.array(z.string()).optional(),
-  lastUpdateTrigger: z.string().max(100).optional(),
-});
-
-router.put('/self-awareness', async (req: Request, res: Response): Promise<void> => {
+router.post('/self-awareness/recompute', async (req: Request, res: Response): Promise<void> => {
   const operatorId = await resolveOperator(req, res);
   if (!operatorId) return;
 
-  const parsed = UpdateSelfAwarenessSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: 'Validation failed', issues: parsed.error.flatten().fieldErrors });
-    return;
-  }
-
-  const [existing] = await db
-    .select({ id: selfAwarenessStateTable.id })
-    .from(selfAwarenessStateTable)
-    .where(eq(selfAwarenessStateTable.operatorId, operatorId));
-
-  const payload = {
-    ...parsed.data,
-    lastUpdated: new Date(),
-    lastUpdateTrigger: parsed.data.lastUpdateTrigger ?? 'owner_manual',
-  };
-
-  if (existing) {
-    const [updated] = await db.update(selfAwarenessStateTable)
-      .set(payload)
-      .where(eq(selfAwarenessStateTable.operatorId, operatorId))
-      .returning();
-    res.json(updated);
-  } else {
-    const crypto = await import('crypto');
-    const [created] = await db.insert(selfAwarenessStateTable)
-      .values({ id: crypto.randomUUID(), operatorId, ...payload })
-      .returning();
-    res.status(201).json(created);
+  try {
+    await recomputeSelfAwareness(operatorId, 'force');
+    const [updated] = await db
+      .select()
+      .from(selfAwarenessStateTable)
+      .where(eq(selfAwarenessStateTable.operatorId, operatorId));
+    res.json({ ok: true, state: updated });
+  } catch (err) {
+    res.status(502).json({ error: 'Recompute failed', detail: (err as Error).message });
   }
 });
 

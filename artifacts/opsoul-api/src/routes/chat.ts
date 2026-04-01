@@ -18,6 +18,7 @@ import { buildSystemPrompt } from '../utils/systemPrompt.js';
 import type { ActiveSkill, ActiveMissionContext } from '../utils/systemPrompt.js';
 import { searchMemory, buildMemoryContext } from '../utils/memoryEngine.js';
 import type { MemoryHit } from '../utils/memoryEngine.js';
+import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import type { ChatMessage } from '../utils/openrouter.js';
 import type { Layer2Soul } from '../validation/operator.js';
@@ -236,6 +237,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         memoryCount: memoryHits.length,
       })}\n\n`);
       res.end();
+
+      triggerSelfAwareness(operator.id, 'conversation_end').catch(() => {});
     } catch (err) {
       res.write(`data: ${JSON.stringify({ error: (err as Error).message })}\n\n`);
       res.end();
@@ -277,6 +280,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         memoryCount: memoryHits.length,
         layer1WasLocked: operator.layer1LockedAt === null,
       });
+
+      triggerSelfAwareness(operator.id, 'conversation_end').catch(() => {});
     } catch (err) {
       res.status(502).json({ error: 'AI backend error', detail: (err as Error).message });
     }

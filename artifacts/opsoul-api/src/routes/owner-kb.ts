@@ -6,6 +6,7 @@ import { ownerKbTable, operatorsTable } from '@workspace/db';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { chunkText } from '../utils/chunker.js';
+import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { eq, and } from 'drizzle-orm';
 
 const router = Router({ mergeParams: true });
@@ -82,6 +83,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     chunks: inserted,
     sourceName: sourceName ?? null,
   });
+
+  triggerSelfAwareness(operatorId, 'kb_learn').catch(() => {});
 });
 
 router.get('/', async (req: Request, res: Response): Promise<void> => {

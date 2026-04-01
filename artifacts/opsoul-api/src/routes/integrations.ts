@@ -6,6 +6,7 @@ import { operatorIntegrationsTable, operatorsTable } from '@workspace/db';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { eq, and } from 'drizzle-orm';
 import { encryptToken, decryptToken } from '@workspace/opsoul-utils/crypto';
+import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -78,6 +79,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   }).returning();
 
   res.status(201).json(safeSerialize(integration));
+
+  triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});
 });
 
 router.get('/', async (req: Request, res: Response): Promise<void> => {
@@ -152,6 +155,8 @@ router.patch('/:integrationId', async (req: Request, res: Response): Promise<voi
     .returning();
 
   res.json(safeSerialize(updated));
+
+  triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});
 });
 
 router.delete('/:integrationId', async (req: Request, res: Response): Promise<void> => {
@@ -174,6 +179,8 @@ router.delete('/:integrationId', async (req: Request, res: Response): Promise<vo
     .where(eq(operatorIntegrationsTable.id, req.params.integrationId));
 
   res.json({ ok: true, deleted: req.params.integrationId });
+
+  triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});
 });
 
 export { decryptToken };

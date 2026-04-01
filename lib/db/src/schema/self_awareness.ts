@@ -8,6 +8,7 @@ export const selfAwarenessStateTable = pgTable('self_awareness_state', {
   capabilityState: jsonb('capability_state'),
   taskHistory: jsonb('task_history'),
   mandateGaps: text('mandate_gaps').array(),
+  healthScore: jsonb('health_score'),
   lastUpdated: timestamp('last_updated').defaultNow(),
   lastUpdateTrigger: text('last_update_trigger'),
 });

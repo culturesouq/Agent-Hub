@@ -48,7 +48,7 @@ app.use('/api/operators/:operatorId/memory', memoryRouter);
 app.use('/api/platform-skills', platformSkillsRouter);
 
 app.get('/api/healthz', (_req, res) => {
-  res.json({ status: 'ok', service: 'opsoul-api', phase: 7 });
+  res.json({ status: 'ok', service: 'opsoul-api', phase: 8 });
 });
 
 async function setupDatabase(): Promise<void> {
@@ -70,7 +70,7 @@ async function start(): Promise<void> {
   await setupDatabase();
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[opsoul-api] Phase 7 running on port ${PORT}`);
+    console.log(`[opsoul-api] Phase 8 running on port ${PORT}`);
     console.log(`[opsoul-api] Auth: /api/auth/{register,login,refresh,logout,change-password,me}`);
     console.log(`[opsoul-api] Operators: /api/operators — CRUD, lock-layer1, soul, soul/reset, grow-lock`);
     console.log(`[opsoul-api] Owner KB: /api/operators/:id/owner-kb — ingest, list, get, delete`);
@@ -78,7 +78,8 @@ async function start(): Promise<void> {
     console.log(`[opsoul-api] KB Search: POST /api/operators/:id/kb/search — pgvector semantic search + RAG`);
     console.log(`[opsoul-api] Conversations: /api/operators/:id/conversations — CRUD + message history`);
     console.log(`[opsoul-api] Chat: POST /api/operators/:id/conversations/:convId/messages — OpenRouter stream/sync`);
-    console.log(`[opsoul-api] GROW: /api/operators/:id/grow — trigger, proposals, decide, self-awareness`);
+    console.log(`[opsoul-api] GROW: /api/operators/:id/grow — trigger, proposals, decide`);
+    console.log(`[opsoul-api] Self-Awareness: GET /grow/self-awareness, POST /grow/self-awareness/recompute`);
     console.log(`[opsoul-api] Platform Skills: /api/platform-skills — CRUD skill library`);
     console.log(`[opsoul-api] Operator Skills: /api/operators/:id/skills — install, list, patch, delete`);
     console.log(`[opsoul-api] Integrations: /api/operators/:id/integrations — register, list, patch, delete`);
