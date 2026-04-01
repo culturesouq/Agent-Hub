@@ -22,9 +22,9 @@ export default function MemorySection({ operatorId }: { operatorId: string }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [addForm, setAddForm] = useState({ content: "", memoryType: "fact", weight: 0.5 });
 
-  const { data: memories, isLoading } = useQuery({
+  const { data: memories = [], isLoading } = useQuery({
     queryKey: ["operators", operatorId, "memory"],
-    queryFn: () => apiFetch<Memory[]>(`/operators/${operatorId}/memory`),
+    queryFn: () => apiFetch<any>(`/operators/${operatorId}/memory`).then(r => r.memories ?? []),
   });
 
   const addMemory = useMutation({

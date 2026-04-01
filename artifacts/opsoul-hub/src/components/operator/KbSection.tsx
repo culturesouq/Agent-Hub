@@ -25,14 +25,14 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
-  const { data: ownerKb, isLoading: ownerLoading } = useQuery({
+  const { data: ownerKb = [], isLoading: ownerLoading } = useQuery({
     queryKey: ["operators", operatorId, "owner-kb"],
-    queryFn: () => apiFetch<KbChunk[]>(`/operators/${operatorId}/owner-kb`),
+    queryFn: () => apiFetch<any>(`/operators/${operatorId}/owner-kb`).then(r => r.entries ?? []),
   });
 
-  const { data: opKb, isLoading: opLoading } = useQuery({
+  const { data: opKb = [], isLoading: opLoading } = useQuery({
     queryKey: ["operators", operatorId, "operator-kb"],
-    queryFn: () => apiFetch<KbChunk[]>(`/operators/${operatorId}/operator-kb`),
+    queryFn: () => apiFetch<any>(`/operators/${operatorId}/operator-kb`).then(r => r.entries ?? []),
   });
 
   const [addForm, setAddForm] = useState({ content: "", sourceName: "", sourceType: "manual", confidenceScore: 80 });
@@ -79,10 +79,10 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
     if (!searchQuery.trim()) return;
     setIsSearching(true);
     try {
-      const results = await apiFetch<any[]>(`/operators/${operatorId}/kb/search`, {
+      const res = await apiFetch<any>(`/operators/${operatorId}/kb/search`, {
         method: "POST", body: JSON.stringify({ query: searchQuery })
       });
-      setSearchResults(results);
+      setSearchResults(res.results ?? []);
     } catch (err: any) {
       toast({ title: "Search failed", description: err.message, variant: "destructive" });
     } finally {

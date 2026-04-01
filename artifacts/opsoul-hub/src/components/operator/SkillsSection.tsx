@@ -14,14 +14,14 @@ export default function SkillsSection({ operatorId }: { operatorId: string }) {
   const queryClient = useQueryClient();
   const [selectedPlatformSkill, setSelectedPlatformSkill] = useState<PlatformSkill | null>(null);
 
-  const { data: platformSkills, isLoading: platLoading } = useQuery({
+  const { data: platformSkills = [], isLoading: platLoading } = useQuery({
     queryKey: ["platform-skills"],
-    queryFn: () => apiFetch<PlatformSkill[]>("/platform-skills"),
+    queryFn: () => apiFetch<any>("/platform-skills").then(r => r.skills ?? []),
   });
 
-  const { data: opSkills, isLoading: opLoading } = useQuery({
+  const { data: opSkills = [], isLoading: opLoading } = useQuery({
     queryKey: ["operators", operatorId, "skills"],
-    queryFn: () => apiFetch<OperatorSkill[]>(`/operators/${operatorId}/skills`),
+    queryFn: () => apiFetch<any>(`/operators/${operatorId}/skills`).then(r => r.skills ?? []),
   });
 
   const installSkill = useMutation({

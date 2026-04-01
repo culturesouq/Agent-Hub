@@ -83,7 +83,7 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
   const updateGrowLock = useMutation({
     mutationFn: (level: string) => apiFetch(`/operators/${operator.id}/grow-lock`, { 
       method: "PATCH", 
-      body: JSON.stringify({ lockLevel: level }) 
+      body: JSON.stringify({ level }) 
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operator.id] });

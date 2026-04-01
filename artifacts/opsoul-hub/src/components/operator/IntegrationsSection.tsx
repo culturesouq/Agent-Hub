@@ -20,9 +20,9 @@ export default function IntegrationsSection({ operatorId }: { operatorId: string
   const [editId, setEditId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ integrationLabel: "", scopes: "" });
 
-  const { data: integrations, isLoading } = useQuery({
+  const { data: integrations = [], isLoading } = useQuery({
     queryKey: ["operators", operatorId, "integrations"],
-    queryFn: () => apiFetch<Integration[]>(`/operators/${operatorId}/integrations`),
+    queryFn: () => apiFetch<any>(`/operators/${operatorId}/integrations`).then(r => r.integrations ?? []),
   });
 
   const addIntegration = useMutation({

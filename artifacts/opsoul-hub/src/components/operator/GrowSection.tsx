@@ -14,9 +14,9 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: proposals, isLoading: propsLoading } = useQuery({
+  const { data: proposals = [], isLoading: propsLoading } = useQuery({
     queryKey: ["operators", operatorId, "grow-proposals"],
-    queryFn: () => apiFetch<GrowProposal[]>(`/operators/${operatorId}/grow/proposals`),
+    queryFn: () => apiFetch<any>(`/operators/${operatorId}/grow/proposals`).then(r => r.proposals ?? []),
   });
 
   const triggerGrow = useMutation({
