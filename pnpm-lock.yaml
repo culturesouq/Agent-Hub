@@ -370,6 +370,9 @@ importers:
       jsonwebtoken:
         specifier: ^9.0.2
         version: 9.0.3
+      openai:
+        specifier: ^6.27.0
+        version: 6.33.0(zod@3.25.76)
       zod:
         specifier: 'catalog:'
         version: 3.25.76
@@ -5220,6 +5223,10 @@ snapshots:
   once@1.4.0:
     dependencies:
       wrappy: 1.0.2
+
+  openai@6.33.0(zod@3.25.76):
+    optionalDependencies:
+      zod: 3.25.76
 
   openai@6.33.0(zod@4.3.6):
     optionalDependencies:
