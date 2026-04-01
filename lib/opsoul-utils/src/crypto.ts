@@ -1,11 +1,21 @@
 import crypto from 'crypto';
 
 function deriveKey(): Buffer {
-  const raw = process.env.ENCRYPTION_KEY!;
-  if (!raw) throw new Error('ENCRYPTION_KEY environment variable is required');
-  const buf = Buffer.from(raw, 'hex');
-  if (buf.length === 32) return buf;
-  return crypto.createHash('sha256').update(raw, 'utf8').digest();
+  const raw = process.env.ENCRYPTION_KEY ?? '';
+
+  if (!raw) {
+    throw new Error('[crypto] ENCRYPTION_KEY is not set. Required: 64 lowercase hex characters (32 bytes).');
+  }
+
+  if (!/^[0-9a-f]{64}$/i.test(raw)) {
+    throw new Error(
+      `[crypto] ENCRYPTION_KEY has invalid format (length=${raw.length}). ` +
+      'Required: exactly 64 lowercase hex characters (32 bytes). ' +
+      'Generate with: node -e "process.stdout.write(require(\'crypto\').randomBytes(32).toString(\'hex\'))"',
+    );
+  }
+
+  return Buffer.from(raw, 'hex');
 }
 
 export function encryptToken(plaintext: string): string {
