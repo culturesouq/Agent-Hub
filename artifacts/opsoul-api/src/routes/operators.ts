@@ -10,6 +10,7 @@ import {
   SetGrowLockSchema,
   type Layer2Soul,
 } from '../validation/operator.js';
+import { chatCompletion } from '../utils/openrouter.js';
 import { eq, and } from 'drizzle-orm';
 import { ZodError } from 'zod';
 
@@ -30,16 +31,12 @@ function serializeOperator(op: typeof operatorsTable.$inferSelect) {
     ownerId: op.ownerId,
     slug: op.slug,
     name: op.name,
-    layer1: {
-      archetype: op.archetype,
-      mandate: op.mandate,
-      coreValues: op.coreValues,
-      ethicalBoundaries: op.ethicalBoundaries,
-      lockedAt: op.layer1LockedAt,
-      isLocked: op.layer1LockedAt !== null,
-    },
-    layer2Soul: op.layer2Soul,
-    layer2SoulOriginal: op.layer2SoulOriginal,
+    archetype: op.archetype,
+    mandate: op.mandate,
+    coreValues: op.coreValues,
+    ethicalBoundaries: op.ethicalBoundaries,
+    layer1LockedAt: op.layer1LockedAt,
+    soul: op.layer2Soul,
     growLockLevel: op.growLockLevel,
     lockedUntil: op.lockedUntil,
     safeMode: op.safeMode,
@@ -47,6 +44,74 @@ function serializeOperator(op: typeof operatorsTable.$inferSelect) {
     createdAt: op.createdAt,
   };
 }
+
+router.post('/bootstrap-preview', async (req: Request, res: Response): Promise<void> => {
+  const { name, purpose, personality } = req.body as { name?: string; purpose?: string; personality?: string };
+  if (!name || !purpose || !personality) {
+    res.status(400).json({ error: 'name, purpose, and personality are required' });
+    return;
+  }
+
+  const prompt = `You are an AI agent identity designer. Given the following information about an AI agent:
+
+Name: ${name}
+Purpose: ${purpose}
+Personality description: ${personality}
+
+Generate a complete identity profile. Return ONLY valid JSON with this exact structure (no markdown, no explanation):
+{
+  "archetype": "A 2-5 word professional archetype title (e.g. 'Strategic Research Analyst', 'Creative Brand Mentor')",
+  "coreValues": ["value1", "value2", "value3", "value4"],
+  "ethicalBoundaries": ["boundary1", "boundary2", "boundary3"],
+  "layer2Soul": {
+    "personalityTraits": ["trait1", "trait2", "trait3", "trait4"],
+    "toneProfile": "one sentence describing the tone",
+    "communicationStyle": "one sentence describing how they communicate",
+    "quirks": ["quirk1", "quirk2"],
+    "valuesManifestation": ["how value1 shows up in behavior", "how value2 shows up"],
+    "emotionalRange": "one sentence describing emotional range",
+    "decisionMakingStyle": "one sentence describing how they make decisions",
+    "conflictResolution": "one sentence describing conflict resolution approach"
+  }
+}
+
+Derive these naturally from the name, purpose, and personality description provided. Make them specific and aligned.`;
+
+  try {
+    const result = await chatCompletion(
+      [{ role: 'user', content: prompt }],
+      'anthropic/claude-sonnet-4-5',
+    );
+
+    let parsed: any;
+    try {
+      const cleaned = result.content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      parsed = JSON.parse(cleaned);
+    } catch {
+      res.status(500).json({ error: 'Failed to parse AI response' });
+      return;
+    }
+
+    res.json({
+      archetype: parsed.archetype ?? 'Intelligent Assistant',
+      coreValues: parsed.coreValues ?? ['helpfulness', 'honesty'],
+      ethicalBoundaries: parsed.ethicalBoundaries ?? ['no harmful content'],
+      layer2Soul: parsed.layer2Soul ?? {
+        personalityTraits: personality.split(',').map((s: string) => s.trim()).filter(Boolean),
+        toneProfile: 'Friendly and professional',
+        communicationStyle: 'Clear and concise',
+        quirks: [],
+        valuesManifestation: [],
+        emotionalRange: 'Calm and measured',
+        decisionMakingStyle: 'Analytical and thoughtful',
+        conflictResolution: 'Collaborative and empathetic',
+      },
+    });
+  } catch (err: any) {
+    console.error('[bootstrap-preview] error:', err?.message);
+    res.status(500).json({ error: 'Failed to generate agent profile' });
+  }
+});
 
 router.post('/', async (req: Request, res: Response): Promise<void> => {
   const parsed = CreateOperatorSchema.safeParse(req.body);
