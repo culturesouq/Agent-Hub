@@ -15,6 +15,10 @@ import kbRouter from './routes/kb-search.js';
 import conversationsRouter from './routes/conversations.js';
 import chatRouter from './routes/chat.js';
 import growRouter from './routes/grow.js';
+import platformSkillsRouter from './routes/platform-skills.js';
+import operatorSkillsRouter from './routes/operator-skills.js';
+import integrationsRouter from './routes/integrations.js';
+import missionContextsRouter from './routes/mission-contexts.js';
 import { startGrowCron } from './cron/growCron.js';
 
 const app = express();
@@ -35,9 +39,13 @@ app.use('/api/operators/:operatorId/kb', kbRouter);
 app.use('/api/operators/:operatorId/conversations', conversationsRouter);
 app.use('/api/operators/:operatorId/conversations/:convId/messages', chatRouter);
 app.use('/api/operators/:operatorId/grow', growRouter);
+app.use('/api/operators/:operatorId/skills', operatorSkillsRouter);
+app.use('/api/operators/:operatorId/integrations', integrationsRouter);
+app.use('/api/operators/:operatorId/mission-contexts', missionContextsRouter);
+app.use('/api/platform-skills', platformSkillsRouter);
 
 app.get('/api/healthz', (_req, res) => {
-  res.json({ status: 'ok', service: 'opsoul-api', phase: 5 });
+  res.json({ status: 'ok', service: 'opsoul-api', phase: 6 });
 });
 
 async function setupDatabase(): Promise<void> {
@@ -59,7 +67,7 @@ async function start(): Promise<void> {
   await setupDatabase();
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[opsoul-api] Phase 5 running on port ${PORT}`);
+    console.log(`[opsoul-api] Phase 6 running on port ${PORT}`);
     console.log(`[opsoul-api] Auth: /api/auth/{register,login,refresh,logout,change-password,me}`);
     console.log(`[opsoul-api] Operators: /api/operators — CRUD, lock-layer1, soul, soul/reset, grow-lock`);
     console.log(`[opsoul-api] Owner KB: /api/operators/:id/owner-kb — ingest, list, get, delete`);
@@ -68,6 +76,10 @@ async function start(): Promise<void> {
     console.log(`[opsoul-api] Conversations: /api/operators/:id/conversations — CRUD + message history`);
     console.log(`[opsoul-api] Chat: POST /api/operators/:id/conversations/:convId/messages — OpenRouter stream/sync`);
     console.log(`[opsoul-api] GROW: /api/operators/:id/grow — trigger, proposals, decide, self-awareness`);
+    console.log(`[opsoul-api] Platform Skills: /api/platform-skills — CRUD skill library`);
+    console.log(`[opsoul-api] Operator Skills: /api/operators/:id/skills — install, list, patch, delete`);
+    console.log(`[opsoul-api] Integrations: /api/operators/:id/integrations — register, list, patch, delete`);
+    console.log(`[opsoul-api] Mission Contexts: /api/operators/:id/mission-contexts — CRUD + activate`);
   });
 
   startGrowCron();

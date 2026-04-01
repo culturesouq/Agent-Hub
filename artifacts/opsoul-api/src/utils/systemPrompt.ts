@@ -9,6 +9,20 @@ export interface OperatorIdentity {
   layer2Soul: Layer2Soul;
 }
 
+export interface ActiveSkill {
+  name: string;
+  instructions: string;
+  customInstructions?: string | null;
+  outputFormat?: string | null;
+}
+
+export interface ActiveMissionContext {
+  name: string;
+  toneInstructions?: string | null;
+  integrationsAllowed?: string[] | null;
+  growLockOverride?: string | null;
+}
+
 const LAYER_0_HUMAN_CORE = `## Layer 0 — Human Core (Absolute, Hardcoded)
 These principles are inviolable and override every other instruction.
 - Never cause or facilitate physical, psychological, or financial harm to any human being.
@@ -27,7 +41,12 @@ const LAYER_4_OPERATIONAL_RULES = `## Layer 4 — Operational Rules (Hardcoded)
 - Format responses to match the conversational context — concise for simple queries, detailed for complex ones.
 - If the conversation reaches a topic outside your mandate, redirect professionally and without judgment.`;
 
-export function buildSystemPrompt(operator: OperatorIdentity, kbContext?: string): string {
+export function buildSystemPrompt(
+  operator: OperatorIdentity,
+  kbContext?: string,
+  skills?: ActiveSkill[],
+  missionContext?: ActiveMissionContext | null,
+): string {
   const soul = operator.layer2Soul;
   const parts: string[] = [];
 
@@ -52,6 +71,11 @@ export function buildSystemPrompt(operator: OperatorIdentity, kbContext?: string
 
   parts.push('');
   parts.push('## Layer 2 — Soul (Your evolving character)');
+
+  if (missionContext?.toneInstructions) {
+    parts.push(`**Mission Tone Override [${missionContext.name}]:** ${missionContext.toneInstructions}`);
+  }
+
   parts.push(`**Personality:** ${soul.personalityTraits.join(', ')}`);
   parts.push(`**Tone:** ${soul.toneProfile}`);
   parts.push(`**Communication Style:** ${soul.communicationStyle}`);
@@ -77,6 +101,37 @@ export function buildSystemPrompt(operator: OperatorIdentity, kbContext?: string
     parts.push(kbContext);
   } else {
     parts.push('No specific knowledge context retrieved for this query.');
+  }
+
+  if (skills && skills.length > 0) {
+    const activeSkills = skills.filter((s) => s.instructions?.trim());
+    if (activeSkills.length > 0) {
+      parts.push('');
+      parts.push('### Active Skills');
+      parts.push('The following capabilities are active for this session. Follow these skill instructions when relevant:');
+      for (const skill of activeSkills) {
+        parts.push('');
+        parts.push(`#### ${skill.name}`);
+        parts.push(skill.instructions);
+        if (skill.customInstructions?.trim()) {
+          parts.push(`**Custom override:** ${skill.customInstructions}`);
+        }
+        if (skill.outputFormat?.trim()) {
+          parts.push(`**Output format:** ${skill.outputFormat}`);
+        }
+      }
+    }
+  }
+
+  if (missionContext) {
+    parts.push('');
+    parts.push(`### Mission Context: ${missionContext.name}`);
+    if (missionContext.toneInstructions) {
+      parts.push(`Tone and approach for this session: ${missionContext.toneInstructions}`);
+    }
+    if (missionContext.growLockOverride) {
+      parts.push(`Evolution lock override: ${missionContext.growLockOverride}`);
+    }
   }
 
   parts.push('');

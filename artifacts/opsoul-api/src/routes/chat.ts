@@ -6,12 +6,16 @@ import {
   operatorsTable,
   conversationsTable,
   messagesTable,
+  operatorSkillsTable,
+  platformSkillsTable,
+  missionContextsTable,
 } from '@workspace/db';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { lockLayer1IfUnlocked } from '../utils/lockLayer1.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { buildSystemPrompt } from '../utils/systemPrompt.js';
+import type { ActiveSkill, ActiveMissionContext } from '../utils/systemPrompt.js';
 import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import type { ChatMessage } from '../utils/openrouter.js';
 import type { Layer2Soul } from '../validation/operator.js';
@@ -73,6 +77,41 @@ async function buildMessageHistory(convId: string): Promise<ChatMessage[]> {
   return msgs as ChatMessage[];
 }
 
+async function loadActiveSkills(operatorId: string): Promise<ActiveSkill[]> {
+  const installs = await db
+    .select({
+      customInstructions: operatorSkillsTable.customInstructions,
+      name: platformSkillsTable.name,
+      instructions: platformSkillsTable.instructions,
+      outputFormat: platformSkillsTable.outputFormat,
+    })
+    .from(operatorSkillsTable)
+    .innerJoin(platformSkillsTable, eq(operatorSkillsTable.skillId, platformSkillsTable.id))
+    .where(
+      and(
+        eq(operatorSkillsTable.operatorId, operatorId),
+        eq(operatorSkillsTable.isActive, true),
+      ),
+    );
+
+  return installs;
+}
+
+async function loadMissionContext(missionContextId: string | null | undefined): Promise<ActiveMissionContext | null> {
+  if (!missionContextId) return null;
+  const [ctx] = await db
+    .select({
+      name: missionContextsTable.name,
+      toneInstructions: missionContextsTable.toneInstructions,
+      integrationsAllowed: missionContextsTable.integrationsAllowed,
+      growLockOverride: missionContextsTable.growLockOverride,
+    })
+    .from(missionContextsTable)
+    .where(eq(missionContextsTable.id, missionContextId));
+
+  return ctx ?? null;
+}
+
 router.post('/', async (req: Request, res: Response): Promise<void> => {
   const ctx = await resolveOperatorAndConv(req, res);
   if (!ctx) return;
@@ -86,6 +125,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   }
 
   const { message, stream, kbSearch, kbTopN, kbMinConfidence } = parsed.data;
+
+  const [skills, missionContext] = await Promise.all([
+    loadActiveSkills(operator.id),
+    loadMissionContext(conv.missionContextId),
+  ]);
 
   let kbContext = '';
   if (kbSearch) {
@@ -108,6 +152,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       layer2Soul: operator.layer2Soul as Layer2Soul,
     },
     kbContext,
+    skills,
+    missionContext,
   );
 
   const history = await buildMessageHistory(conv.id);
@@ -175,6 +221,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         messageId: asstMsgId,
         model: CHAT_MODEL,
         usage: { promptTokens, completionTokens },
+        activeSkillCount: skills.length,
+        missionContext: missionContext?.name ?? null,
       })}\n\n`);
       res.end();
     } catch (err) {
@@ -213,6 +261,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           promptTokens: result.promptTokens,
           completionTokens: result.completionTokens,
         },
+        activeSkillCount: skills.length,
+        missionContext: missionContext?.name ?? null,
         layer1WasLocked: operator.layer1LockedAt === null,
       });
     } catch (err) {
