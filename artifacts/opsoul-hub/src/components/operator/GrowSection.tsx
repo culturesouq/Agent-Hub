@@ -336,7 +336,7 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
                 <div className="flex-1 rounded-xl border border-border/40 bg-card/30 p-5 space-y-4">
                   {[
                     { key: "mandateCoverage",  label: "Purpose coverage",       val: saData.healthScore.components.mandateCoverage },
-                    { key: "mandateGaps",      label: "Purpose adherence",      val: 100 - (saData.healthScore.components.mandateGaps ?? 0) },
+                    { key: "mandateGaps",      label: "Purpose adherence",      val: saData.healthScore.components.mandateGaps ?? 0 },
                     { key: "kbConfidence",     label: "Knowledge confidence",   val: saData.healthScore.components.kbConfidence },
                     { key: "growActivity",     label: "Growth activity",        val: saData.healthScore.components.growActivity },
                     { key: "soulIntegrity",    label: "Personality integrity",  val: saData.healthScore.components.soulIntegrity },
@@ -360,10 +360,9 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
                     <AlertCircle className="w-3.5 h-3.5" /> Coverage gaps detected
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {saData.mandateGaps.map((gap: any, i: number) => (
-                      <div key={i} className="p-3 border border-amber-500/20 bg-background/50 rounded-lg space-y-1">
-                        <p className="font-mono text-xs text-foreground/90">{gap.description}</p>
-                        <p className="font-mono text-[10px] text-amber-500/80 uppercase">Severity: {gap.severity}</p>
+                    {saData.mandateGaps.map((gap: string, i: number) => (
+                      <div key={i} className="p-3 border border-amber-500/20 bg-background/50 rounded-lg">
+                        <p className="font-mono text-xs text-foreground/90">{gap}</p>
                       </div>
                     ))}
                   </div>

@@ -30,7 +30,7 @@ export interface HealthScore {
     mandateCoverage: number;
     growActivity: number;
     kbConfidence: number;
-    mandateGapPenalty: number;
+    mandateGaps: number;
     soulIntegrity: number;
   };
 }
