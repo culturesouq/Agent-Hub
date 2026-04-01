@@ -14,7 +14,7 @@ export async function runDailyMemoryDecay(): Promise<void> {
 }
 
 export function startMemoryCron(): void {
-  const DECAY_SCHEDULE = process.env.MEMORY_DECAY_SCHEDULE ?? '0 3 * * *';
+  const DECAY_SCHEDULE = process.env.MEMORY_DECAY_SCHEDULE ?? '0 4 * * *';
 
   console.log(`[MEMORY] Decay cron scheduled: "${DECAY_SCHEDULE}" (UTC) — rate: -0.05/day, archive at ≤0.05`);
 
