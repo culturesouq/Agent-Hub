@@ -8,6 +8,7 @@ import cors from 'cors';
 import { pool } from '@workspace/db';
 import { ADMIN_AUDIT_LOG_TRIGGER_SQL } from '@workspace/db';
 import authRouter from './routes/auth.js';
+import operatorsRouter from './routes/operators.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
@@ -20,9 +21,10 @@ app.use(cors({
 }));
 
 app.use('/api/auth', authRouter);
+app.use('/api/operators', operatorsRouter);
 
 app.get('/api/healthz', (_req, res) => {
-  res.json({ status: 'ok', service: 'opsoul-api', phase: 1 });
+  res.json({ status: 'ok', service: 'opsoul-api', phase: 2 });
 });
 
 async function setupDatabase(): Promise<void> {
@@ -44,8 +46,9 @@ async function start(): Promise<void> {
   await setupDatabase();
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[opsoul-api] Phase 1 running on port ${PORT}`);
-    console.log(`[opsoul-api] Routes: POST /api/auth/register, /api/auth/login, /api/auth/refresh, /api/auth/logout, /api/auth/change-password, GET /api/auth/me`);
+    console.log(`[opsoul-api] Phase 2 running on port ${PORT}`);
+    console.log(`[opsoul-api] Auth: /api/auth/{register,login,refresh,logout,change-password,me}`);
+    console.log(`[opsoul-api] Operators: /api/operators — CRUD, lock-layer1, soul, soul/reset, grow-lock`);
   });
 }
 

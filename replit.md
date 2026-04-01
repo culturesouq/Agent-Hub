@@ -61,6 +61,42 @@ Running on **port 3001**.
 - Refresh token: 30-day, stored as SHA-256 hash in `sessions` table, raw value in httpOnly cookie
 - `requireAuth` middleware validates Bearer token on protected routes
 
+**Operator routes** (`/api/operators/`) — all require Bearer token:
+- `POST /` — create operator (validates Layer 1 + Layer 2 soul via Zod)
+- `GET /` — list all operators for authenticated owner
+- `GET /:id` — get single operator with full identity layers
+- `PATCH /:id` — update Layer 1 fields (blocked 423 if `layer1LockedAt` is set)
+- `DELETE /:id` — permanently delete operator
+- `POST /:id/lock-layer1` — lock Layer 1 identity (idempotent-safe, 409 if already locked)
+- `GET /:id/soul` — get Layer 2 soul + original snapshot
+- `PATCH /:id/soul` — field-level soul update (never deep merge; blocked if FROZEN)
+- `POST /:id/soul/reset` — restore Layer 2 soul to original (blocked if FROZEN)
+- `PATCH /:id/grow-lock` — set GROW lock level (OPEN/CONTROLLED/LOCKED/FROZEN) + optional expiry
+
+**Layer 1 lock behavior:**
+- `layer1LockedAt` is `null` at creation time
+- Set explicitly via `POST /:id/lock-layer1`
+- Also set automatically on first message sent (via `lockLayer1IfUnlocked` helper, called from Phase 4 chat routes)
+- Once locked: Layer 1 fields (archetype, mandate, coreValues, ethicalBoundaries) are permanently immutable
+
+**Layer 2 Soul schema (Zod-validated):**
+```
+personalityTraits  string[]   — e.g. ["analytical","warm","curious"]
+toneProfile        string     — e.g. "calm and professional"
+communicationStyle string     — e.g. "concise, avoids jargon"
+quirks             string[]   — distinctive behaviors
+valuesManifestation string[]  — how core values show up
+emotionalRange     string     — stability profile
+decisionMakingStyle string    — reasoning approach
+conflictResolution string     — de-escalation strategy
+```
+
+**GROW lock levels:**
+- `OPEN` — GROW can freely propose soul changes
+- `CONTROLLED` (default) — GROW proposals allowed at higher confidence threshold
+- `LOCKED` — GROW proposals blocked; only manual soul edits allowed
+- `FROZEN` — No changes at all (manual or GROW) until `lockedUntil` expires
+
 ### Shared Utilities (`lib/opsoul-utils`)
 
 - `validateEnv()` — hard-fails at startup if any required env var is missing
@@ -93,8 +129,8 @@ All stored as Replit Secrets:
 ## Build Phases
 
 - **Phase 1 (complete):** Environment validation, shared utilities, full DB schema (23 tables), JWT auth API
-- **Phase 2 (pending):** Operator CRUD, 5-layer identity management, layer1 lock logic
+- **Phase 2 (complete):** Operator CRUD, 5-layer identity management, Layer 1 lock logic, soul field-level updates, GROW lock control
 - **Phase 3 (pending):** Dual KB ingestion, pgvector semantic search, RAG pipeline
-- **Phase 4 (pending):** Chat engine (OpenRouter), conversation management
-- **Phase 5 (pending):** GROW self-evolution system, cron scheduler
+- **Phase 4 (pending):** Chat engine (OpenRouter), conversation management, auto Layer 1 lock on first message
+- **Phase 5 (pending):** GROW self-evolution system, cron scheduler (02:00 UTC daily)
 - **Phase 6 (pending):** Skills engine, integrations, mission contexts
