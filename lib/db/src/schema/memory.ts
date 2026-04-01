@@ -1,5 +1,5 @@
 import { pgTable, text, real, timestamp } from 'drizzle-orm/pg-core';
-import { vector } from './types.js';
+import { vector } from './types';
 
 export const operatorMemoryTable = pgTable('operator_memory', {
   id: text('id').primaryKey(),

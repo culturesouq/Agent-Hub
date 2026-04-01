@@ -1,5 +1,5 @@
 import { pgTable, text, integer, timestamp } from 'drizzle-orm/pg-core';
-import { conversationsTable } from './conversations.js';
+import { conversationsTable } from './conversations';
 
 export const messagesTable = pgTable('messages', {
   id: text('id').primaryKey(),

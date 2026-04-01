@@ -1,5 +1,5 @@
 import { pgTable, text, integer, timestamp } from 'drizzle-orm/pg-core';
-import { vector } from './types.js';
+import { vector } from './types';
 
 export const ownerKbTable = pgTable('owner_kb', {
   id: text('id').primaryKey(),

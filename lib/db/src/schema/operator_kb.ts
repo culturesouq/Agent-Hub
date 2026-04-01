@@ -1,5 +1,5 @@
 import { pgTable, text, integer, boolean, timestamp } from 'drizzle-orm/pg-core';
-import { vector } from './types.js';
+import { vector } from './types';
 
 export const operatorKbTable = pgTable('operator_kb', {
   id: text('id').primaryKey(),
