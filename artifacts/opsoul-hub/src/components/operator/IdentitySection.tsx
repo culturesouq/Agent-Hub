@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Lock, AlertTriangle, RefreshCw, SlidersHorizontal } from "lucide-react";
+import { Lock, AlertTriangle, RefreshCw, User, Smile } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,7 +20,12 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-export default function IdentitySection({ operator }: { operator: Operator }) {
+interface Props {
+  operator: Operator;
+  panel?: "identity" | "personality";
+}
+
+export default function IdentitySection({ operator, panel }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isLocked = !!operator.layer1LockedAt;
@@ -34,7 +39,6 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
 
   const [personalityData, setPersonalityData] = useState({
     personalityTraits: operator.soul.personalityTraits.join(", "),
-    toneProfile: operator.soul.toneProfile,
     communicationStyle: operator.soul.communicationStyle,
     quirks: operator.soul.quirks.join(", "),
     emotionalRange: operator.soul.emotionalRange,
@@ -88,7 +92,7 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
   const handlePersonalitySubmit = () => {
     updatePersonality.mutate({
       personalityTraits: personalityData.personalityTraits.split(",").map(s => s.trim()).filter(Boolean),
-      toneProfile: personalityData.toneProfile,
+      toneProfile: operator.soul.toneProfile,
       communicationStyle: personalityData.communicationStyle,
       quirks: personalityData.quirks.split(",").map(s => s.trim()).filter(Boolean),
       emotionalRange: personalityData.emotionalRange,
@@ -97,23 +101,17 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
     });
   };
 
+  const showIdentity = !panel || panel === "identity";
+  const showPersonality = !panel || panel === "personality";
+
   return (
     <div className="space-y-8 animate-in fade-in zoom-in-95 duration-300">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-border/50 pb-4">
-        <div>
-          <h2 className="text-2xl font-bold font-mono tracking-tight text-primary flex items-center gap-2">
-            <SlidersHorizontal className="w-6 h-6" /> Instructions
-          </h2>
-          <p className="text-muted-foreground font-mono text-sm mt-1">What this assistant is and how it behaves</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-
-        {/* Identity panel */}
+      {showIdentity && (
         <div className={`border rounded-lg p-6 space-y-4 transition-all ${isLocked ? "border-primary/20 bg-primary/5" : "border-border/50 bg-card/30"}`}>
           <div className="flex items-center justify-between">
-            <h3 className="font-mono text-base font-bold">Identity</h3>
+            <h3 className="font-mono text-base font-bold flex items-center gap-2">
+              <User className="w-4 h-4" /> Identity
+            </h3>
             {isLocked ? (
               <div className="flex items-center gap-1.5 text-xs font-mono text-primary font-bold tracking-widest uppercase bg-primary/10 px-2 py-1 rounded">
                 <Lock className="w-3 h-3" /> Locked
@@ -136,7 +134,9 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel className="font-mono">Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => lockCore.mutate()} className="font-mono font-bold">Lock forever</AlertDialogAction>
+                    <AlertDialogAction onClick={() => lockCore.mutate()} className="font-mono font-bold">
+                      Lock forever
+                    </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
@@ -160,7 +160,7 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
                 value={coreData.mandate}
                 onChange={e => setCoreData({ ...coreData, mandate: e.target.value })}
                 disabled={isLocked}
-                className="font-mono h-24 bg-background/50 disabled:opacity-70 disabled:border-transparent"
+                className="font-mono h-24 bg-background/50 disabled:opacity-70 disabled:border-transparent resize-none"
                 placeholder="What this assistant helps with..."
               />
             </div>
@@ -171,7 +171,7 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
                 value={coreData.coreValues}
                 onChange={e => setCoreData({ ...coreData, coreValues: e.target.value })}
                 disabled={isLocked}
-                className="font-mono h-16 bg-background/50 disabled:opacity-70 disabled:border-transparent"
+                className="font-mono h-16 bg-background/50 disabled:opacity-70 disabled:border-transparent resize-none"
                 placeholder="e.g. Honesty, Clarity, Reliability"
               />
             </div>
@@ -182,23 +182,30 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
                 value={coreData.ethicalBoundaries}
                 onChange={e => setCoreData({ ...coreData, ethicalBoundaries: e.target.value })}
                 disabled={isLocked}
-                className="font-mono h-16 bg-background/50 disabled:opacity-70 disabled:border-transparent"
+                className="font-mono h-16 bg-background/50 disabled:opacity-70 disabled:border-transparent resize-none"
                 placeholder="e.g. Share private data, give medical advice"
               />
             </div>
 
             {!isLocked && (
-              <Button onClick={handleCoreSubmit} disabled={updateCore.isPending} className="w-full font-mono mt-2">
+              <Button
+                onClick={handleCoreSubmit}
+                disabled={updateCore.isPending}
+                className="w-full font-mono"
+              >
                 {updateCore.isPending ? "Saving..." : "Save"}
               </Button>
             )}
           </div>
         </div>
+      )}
 
-        {/* Personality panel */}
+      {showPersonality && (
         <div className="border rounded-lg p-6 space-y-4 border-border/50 bg-card/30">
           <div className="flex items-center justify-between">
-            <h3 className="font-mono text-base font-bold">Personality</h3>
+            <h3 className="font-mono text-base font-bold flex items-center gap-2">
+              <Smile className="w-4 h-4" /> Personality
+            </h3>
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="ghost" size="sm" className="font-mono text-xs text-muted-foreground hover:text-destructive">
@@ -211,12 +218,17 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
                     <AlertTriangle className="w-5 h-5" /> Reset personality?
                   </AlertDialogTitle>
                   <AlertDialogDescription className="font-mono">
-                    All personality changes will be reverted to the original. This cannot be undone.
+                    All personality changes will revert to the original. This cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel className="font-mono">Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => resetPersonality.mutate()} className="bg-destructive text-destructive-foreground font-mono font-bold">Reset</AlertDialogAction>
+                  <AlertDialogAction
+                    onClick={() => resetPersonality.mutate()}
+                    className="bg-destructive text-destructive-foreground font-mono font-bold"
+                  >
+                    Reset
+                  </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
@@ -235,16 +247,7 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Tone</Label>
-                <Input
-                  value={personalityData.toneProfile}
-                  onChange={e => setPersonalityData({ ...personalityData, toneProfile: e.target.value })}
-                  className="font-mono bg-background/50"
-                  placeholder="e.g. Warm and professional"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Style</Label>
+                <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Communication style</Label>
                 <Input
                   value={personalityData.communicationStyle}
                   onChange={e => setPersonalityData({ ...personalityData, communicationStyle: e.target.value })}
@@ -268,7 +271,7 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
                   className="font-mono bg-background/50"
                 />
               </div>
-              <div className="space-y-2 col-span-2">
+              <div className="space-y-2">
                 <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Conflict handling</Label>
                 <Input
                   value={personalityData.conflictResolution}
@@ -287,12 +290,17 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
               </div>
             </div>
 
-            <Button onClick={handlePersonalitySubmit} disabled={updatePersonality.isPending} variant="secondary" className="w-full font-mono border border-secondary-foreground/20 mt-2">
+            <Button
+              onClick={handlePersonalitySubmit}
+              disabled={updatePersonality.isPending}
+              variant="secondary"
+              className="w-full font-mono border border-secondary-foreground/20"
+            >
               {updatePersonality.isPending ? "Saving..." : "Save personality"}
             </Button>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
