@@ -5,50 +5,55 @@ import { apiFetch } from "@/lib/api";
 import { Operator } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Lock, Unlock, AlertTriangle, RefreshCw, Settings } from "lucide-react";
+import { Lock, AlertTriangle, RefreshCw, Key, Globe, ShieldCheck } from "lucide-react";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+
+type EvolutionLevel = "OPEN" | "CONTROLLED" | "LOCKED";
+
+const EVOLUTION_OPTIONS: { value: EvolutionLevel; label: string; description: string; color: string }[] = [
+  {
+    value: "LOCKED",
+    label: "Locked",
+    description: "No changes at all — your operator stays exactly as it is.",
+    color: "border-red-500/40 text-red-500",
+  },
+  {
+    value: "CONTROLLED",
+    label: "Controlled",
+    description: "Changes need your approval before they take effect.",
+    color: "border-amber-500/40 text-amber-500",
+  },
+  {
+    value: "OPEN",
+    label: "Open",
+    description: "Your operator can evolve freely based on what it learns.",
+    color: "border-green-500/40 text-green-500",
+  },
+];
 
 export default function SettingsSection({ operator }: { operator: Operator }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
-  const isLocked = !!operator.layer1LockedAt;
-  const isFrozen = operator.growLockLevel === "FROZEN";
 
-  const [name, setName] = useState(operator.name);
-  const [purpose, setPurpose] = useState(operator.mandate);
-  const [personality, setPersonality] = useState(operator.soul.personalityTraits.join(", "));
-  const [evolutionMode, setEvolutionMode] = useState(operator.growLockLevel);
+  const currentLevel = (["OPEN", "CONTROLLED", "LOCKED"].includes(operator.growLockLevel ?? "")
+    ? operator.growLockLevel
+    : "CONTROLLED") as EvolutionLevel;
 
-  const updateBasics = useMutation({
-    mutationFn: (data: any) => apiFetch(`/operators/${operator.id}`, { method: "PATCH", body: JSON.stringify(data) }),
-    onSuccess: () => {
+  const [evolutionMode, setEvolutionMode] = useState<EvolutionLevel>(currentLevel);
+
+  const updateEvolutionMode = useMutation({
+    mutationFn: (level: EvolutionLevel) => apiFetch(`/operators/${operator.id}/grow-lock`, {
+      method: "PATCH",
+      body: JSON.stringify({ level }),
+    }),
+    onSuccess: (_, level) => {
+      setEvolutionMode(level);
       queryClient.invalidateQueries({ queryKey: ["operators", operator.id] });
-      queryClient.invalidateQueries({ queryKey: ["operators"] });
-      toast({ title: "Settings saved" });
-    },
-    onError: (err: Error) => toast({ title: "Save failed", description: err.message, variant: "destructive" }),
-  });
-
-  const updatePersonality = useMutation({
-    mutationFn: (data: any) => apiFetch(`/operators/${operator.id}/soul`, { method: "PATCH", body: JSON.stringify(data) }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["operators", operator.id] });
-      toast({ title: "Personality saved" });
+      toast({ title: "Evolution setting saved" });
     },
     onError: (err: Error) => toast({ title: "Save failed", description: err.message, variant: "destructive" }),
   });
@@ -57,7 +62,7 @@ export default function SettingsSection({ operator }: { operator: Operator }) {
     mutationFn: () => apiFetch(`/operators/${operator.id}/lock-layer1`, { method: "POST" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operator.id] });
-      toast({ title: "Identity locked permanently" });
+      toast({ title: "Identity locked" });
     },
   });
 
@@ -65,184 +70,171 @@ export default function SettingsSection({ operator }: { operator: Operator }) {
     mutationFn: () => apiFetch(`/operators/${operator.id}/soul/reset`, { method: "POST" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operator.id] });
-      toast({ title: "Personality reset to original" });
+      toast({ title: "Personality reset" });
     },
   });
 
-  const updateEvolutionMode = useMutation({
-    mutationFn: (level: string) => apiFetch(`/operators/${operator.id}/grow-lock`, {
-      method: "PATCH",
-      body: JSON.stringify({ lockLevel: level }),
-    }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["operators", operator.id] });
-      toast({ title: "Auto-evolution updated" });
-    },
-  });
-
-  const deleteAgent = useMutation({
+  const deleteOperator = useMutation({
     mutationFn: () => apiFetch(`/operators/${operator.id}`, { method: "DELETE" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators"] });
-      toast({ title: "Agent deleted" });
+      toast({ title: "Operator deleted" });
       setLocation("/");
     },
   });
 
-  const handleSaveBasics = () => {
-    if (isLocked) return;
-    updateBasics.mutate({
-      name,
-      mandate: purpose,
-    });
-  };
-
-  const handleSavePersonality = () => {
-    if (isFrozen) return;
-    const traits = personality.split(",").map(s => s.trim()).filter(Boolean);
-    updatePersonality.mutate({ personalityTraits: traits });
-  };
+  const isLocked = !!operator.layer1LockedAt;
 
   return (
-    <div className="space-y-8 animate-in fade-in zoom-in-95 duration-300 max-w-2xl">
-      <div className="border-b border-border/50 pb-4">
-        <h2 className="text-2xl font-bold font-mono tracking-tight text-primary flex items-center gap-2">
-          <Settings className="w-6 h-6" /> Settings
-        </h2>
-        <p className="text-muted-foreground font-mono text-sm mt-1">Configure your agent</p>
-      </div>
+    <div className="space-y-10 animate-in fade-in zoom-in-95 duration-300 max-w-2xl">
 
-      {/* Basic info */}
-      <div className="space-y-5">
-        <h3 className="font-mono text-sm font-bold text-muted-foreground uppercase tracking-wider">Basic info</h3>
-
-        <div className="space-y-2">
-          <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Name</Label>
-          <Input
-            value={name}
-            onChange={e => setName(e.target.value)}
-            disabled={isLocked}
-            className="font-mono bg-background/50 disabled:opacity-60 disabled:border-transparent max-w-sm"
-          />
-          {isLocked && (
-            <p className="text-xs font-mono text-primary/60 flex items-center gap-1">
-              <Lock className="w-3 h-3" /> Identity is locked and cannot be edited
-            </p>
-          )}
+      {/* Secrets & Keys */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2 border-b border-border/50 pb-3">
+          <Key className="w-4 h-4 text-muted-foreground" />
+          <h2 className="font-mono font-bold text-base">Secrets & Keys</h2>
         </div>
-
-        <div className="space-y-2">
-          <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Purpose</Label>
-          <Textarea
-            value={purpose}
-            onChange={e => setPurpose(e.target.value)}
-            disabled={isLocked}
-            className="font-mono bg-background/50 disabled:opacity-60 disabled:border-transparent h-28"
-          />
+        <div className="rounded-lg border border-border/40 bg-card/30 p-6 text-center space-y-2">
+          <Key className="w-8 h-8 text-muted-foreground/40 mx-auto" />
+          <p className="font-mono text-sm font-medium">Store private keys and tokens</p>
+          <p className="font-mono text-xs text-muted-foreground max-w-sm mx-auto">
+            Save API keys and tokens that only your operator can access during conversations. Coming soon.
+          </p>
         </div>
+      </section>
 
-        {!isLocked && (
-          <Button onClick={handleSaveBasics} disabled={updateBasics.isPending} className="font-mono text-sm">
-            {updateBasics.isPending ? "Saving..." : "Save changes"}
-          </Button>
-        )}
-      </div>
-
-      {/* Personality */}
-      <div className="space-y-5 pt-6 border-t border-border/30">
-        <h3 className="font-mono text-sm font-bold text-muted-foreground uppercase tracking-wider">Personality</h3>
-
-        <div className="space-y-2">
-          <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Traits (comma-separated)</Label>
-          <Textarea
-            value={personality}
-            onChange={e => setPersonality(e.target.value)}
-            disabled={isFrozen}
-            className="font-mono bg-background/50 disabled:opacity-60 disabled:border-transparent h-20"
-            placeholder="curious, empathetic, direct..."
-          />
-          {isFrozen && (
-            <p className="text-xs font-mono text-muted-foreground">Frozen — personality cannot be changed</p>
-          )}
+      {/* API */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2 border-b border-border/50 pb-3">
+          <Globe className="w-4 h-4 text-muted-foreground" />
+          <h2 className="font-mono font-bold text-base">API Access</h2>
         </div>
+        <div className="space-y-3">
+          <p className="font-mono text-xs text-muted-foreground">
+            Use your operator from any app or script by calling the API with your auth token.
+          </p>
+          <div className="rounded-lg border border-border/40 bg-card/50 p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">Operator ID</span>
+              <button
+                onClick={() => { navigator.clipboard.writeText(operator.id); toast({ title: "Copied" }); }}
+                className="font-mono text-xs text-primary hover:underline"
+              >
+                Copy
+              </button>
+            </div>
+            <div className="font-mono text-sm bg-background/60 border border-border/30 rounded px-3 py-2 break-all select-all">
+              {operator.id}
+            </div>
+          </div>
+          <div className="rounded-lg border border-border/40 bg-card/50 p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">Chat endpoint</span>
+              <button
+                onClick={() => { navigator.clipboard.writeText(`/api/operators/${operator.id}/conversations`); toast({ title: "Copied" }); }}
+                className="font-mono text-xs text-primary hover:underline"
+              >
+                Copy
+              </button>
+            </div>
+            <div className="font-mono text-sm bg-background/60 border border-border/30 rounded px-3 py-2 break-all select-all text-muted-foreground">
+              POST /api/operators/{operator.id}/conversations
+            </div>
+          </div>
+        </div>
+      </section>
 
-        {!isFrozen && (
-          <Button onClick={handleSavePersonality} disabled={updatePersonality.isPending} variant="secondary" className="font-mono text-sm">
-            {updatePersonality.isPending ? "Saving..." : "Save personality"}
-          </Button>
-        )}
-      </div>
-
-      {/* Auto-evolution */}
-      <div className="space-y-5 pt-6 border-t border-border/30">
-        <h3 className="font-mono text-sm font-bold text-muted-foreground uppercase tracking-wider">Auto-evolution</h3>
-        <p className="text-xs font-mono text-muted-foreground leading-relaxed">
-          Control how your agent learns and adapts over time based on conversations and feedback.
+      {/* Evolution Lock */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2 border-b border-border/50 pb-3">
+          <ShieldCheck className="w-4 h-4 text-muted-foreground" />
+          <h2 className="font-mono font-bold text-base">Evolution Lock</h2>
+        </div>
+        <p className="font-mono text-xs text-muted-foreground">
+          Choose how much your operator is allowed to adapt and grow over time.
         </p>
+        <div className="space-y-3">
+          {EVOLUTION_OPTIONS.map((opt) => {
+            const isActive = evolutionMode === opt.value;
+            return (
+              <button
+                key={opt.value}
+                onClick={() => updateEvolutionMode.mutate(opt.value)}
+                disabled={updateEvolutionMode.isPending}
+                className={`w-full text-left p-4 rounded-lg border-2 transition-all font-mono
+                  ${isActive
+                    ? `${opt.color} bg-card/60`
+                    : "border-border/40 text-foreground hover:border-border bg-card/20"
+                  }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className={`font-bold text-sm ${isActive ? "" : "text-foreground"}`}>{opt.label}</span>
+                  {isActive && (
+                    <div className="w-2 h-2 rounded-full bg-current" />
+                  )}
+                </div>
+                <p className={`text-xs mt-1 ${isActive ? "opacity-80" : "text-muted-foreground"}`}>
+                  {opt.description}
+                </p>
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
-        <Select
-          value={evolutionMode}
-          onValueChange={(val) => {
-            setEvolutionMode(val as any);
-            updateEvolutionMode.mutate(val);
-          }}
-        >
-          <SelectTrigger className="w-full max-w-sm font-mono text-sm border-border/50">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="OPEN" className="font-mono text-sm">
-              <span className="text-green-500 font-bold">Open</span> — evolves automatically
-            </SelectItem>
-            <SelectItem value="CONTROLLED" className="font-mono text-sm">
-              <span className="text-amber-500 font-bold">Controlled</span> — needs your approval
-            </SelectItem>
-            <SelectItem value="LOCKED" className="font-mono text-sm">
-              <span className="text-red-500 font-bold">Locked</span> — no AI-driven changes
-            </SelectItem>
-            <SelectItem value="FROZEN" className="font-mono text-sm">
-              <span className="text-muted-foreground font-bold">Frozen</span> — no changes at all
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      {/* Danger Zone */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2 border-b border-destructive/30 pb-3">
+          <AlertTriangle className="w-4 h-4 text-destructive/70" />
+          <h2 className="font-mono font-bold text-base text-destructive/80">Danger Zone</h2>
+        </div>
 
-      {/* Danger zone */}
-      <div className="space-y-4 pt-6 border-t border-destructive/20">
-        <h3 className="font-mono text-sm font-bold text-destructive/70 uppercase tracking-wider">Danger zone</h3>
-
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="space-y-3">
           {!isLocked && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="outline" size="sm" className="font-mono text-xs border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground">
-                  <Lock className="w-3 h-3 mr-2" /> Lock identity forever
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent className="border-primary/20">
-                <AlertDialogHeader>
-                  <AlertDialogTitle className="font-mono text-primary flex items-center gap-2">
-                    <Lock className="w-5 h-5" /> Lock identity permanently?
-                  </AlertDialogTitle>
-                  <AlertDialogDescription className="font-mono">
-                    Name and purpose will become permanently read-only. This cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel className="font-mono">Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => lockIdentity.mutate()} className="font-mono font-bold">
-                    Lock forever
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+            <div className="flex items-start justify-between p-4 border border-border/40 rounded-lg bg-card/20">
+              <div>
+                <p className="font-mono text-sm font-bold">Lock identity forever</p>
+                <p className="font-mono text-xs text-muted-foreground mt-0.5">
+                  Permanently prevents anyone from changing this operator's name or purpose. Cannot be undone.
+                </p>
+              </div>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" size="sm" className="font-mono text-xs border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground ml-4 shrink-0">
+                    <Lock className="w-3 h-3 mr-1.5" /> Lock
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent className="border-primary/20">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="font-mono text-primary flex items-center gap-2">
+                      <Lock className="w-5 h-5" /> Lock identity permanently?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription className="font-mono">
+                      Name and purpose will become read-only forever. This cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel className="font-mono">Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => lockIdentity.mutate()} className="font-mono font-bold">
+                      Lock forever
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
           )}
 
-          {!isFrozen && (
+          <div className="flex items-start justify-between p-4 border border-border/40 rounded-lg bg-card/20">
+            <div>
+              <p className="font-mono text-sm font-bold">Reset personality</p>
+              <p className="font-mono text-xs text-muted-foreground mt-0.5">
+                Reverts all personality changes back to the original. Chat history stays intact.
+              </p>
+            </div>
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="outline" size="sm" className="font-mono text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10">
-                  <RefreshCw className="w-3 h-3 mr-2" /> Reset personality
+                <Button variant="outline" size="sm" className="font-mono text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 ml-4 shrink-0">
+                  <RefreshCw className="w-3 h-3 mr-1.5" /> Reset
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent className="border-amber-500/20">
@@ -251,7 +243,7 @@ export default function SettingsSection({ operator }: { operator: Operator }) {
                     <AlertTriangle className="w-5 h-5" /> Reset personality?
                   </AlertDialogTitle>
                   <AlertDialogDescription className="font-mono">
-                    This reverts all learned personality changes back to the original. Cannot be undone.
+                    All personality changes will be reverted. This cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -262,31 +254,39 @@ export default function SettingsSection({ operator }: { operator: Operator }) {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
-          )}
+          </div>
 
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="outline" size="sm" className="font-mono text-xs border-destructive/30 text-destructive hover:bg-destructive hover:text-destructive-foreground">
-                Delete this agent
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent className="border-destructive/20">
-              <AlertDialogHeader>
-                <AlertDialogTitle className="font-mono text-destructive">Delete {operator.name}?</AlertDialogTitle>
-                <AlertDialogDescription className="font-mono">
-                  This permanently deletes {operator.name} including all memory, knowledge, and chat history. Cannot be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel className="font-mono">Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={() => deleteAgent.mutate()} className="bg-destructive text-destructive-foreground font-mono font-bold">
-                  Delete forever
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          <div className="flex items-start justify-between p-4 border border-destructive/30 rounded-lg bg-destructive/5">
+            <div>
+              <p className="font-mono text-sm font-bold text-destructive">Delete {operator.name}</p>
+              <p className="font-mono text-xs text-muted-foreground mt-0.5">
+                Permanently deletes this operator along with all memory, knowledge, and chat history.
+              </p>
+            </div>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm" className="font-mono text-xs border-destructive/30 text-destructive hover:bg-destructive hover:text-destructive-foreground ml-4 shrink-0">
+                  Delete
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent className="border-destructive/20">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="font-mono text-destructive">Delete {operator.name}?</AlertDialogTitle>
+                  <AlertDialogDescription className="font-mono">
+                    This permanently removes {operator.name} including all memory, knowledge, and conversations. There is no way to undo this.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel className="font-mono">Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => deleteOperator.mutate()} className="bg-destructive text-destructive-foreground font-mono font-bold">
+                    Delete forever
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
         </div>
-      </div>
+      </section>
     </div>
   );
 }

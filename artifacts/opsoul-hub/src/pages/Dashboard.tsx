@@ -21,9 +21,9 @@ function HealthBadge({ operatorId }: { operatorId: string }) {
   if (!data?.healthScore) return null;
 
   const { score, label } = data.healthScore;
-  const colorClass = score >= 80 ? "text-green-500 border-green-500/20 bg-green-500/10" : 
-                     score >= 50 ? "text-amber-500 border-amber-500/20 bg-amber-500/10" : 
-                     "text-red-500 border-red-500/20 bg-red-500/10";
+  const colorClass = score >= 80 ? "text-green-500 border-green-500/20 bg-green-500/10" :
+    score >= 50 ? "text-amber-500 border-amber-500/20 bg-amber-500/10" :
+    "text-red-500 border-red-500/20 bg-red-500/10";
 
   return (
     <Badge variant="outline" className={`${colorClass} font-mono uppercase tracking-wider text-xs px-2 py-0.5`} data-testid={`badge-health-${operatorId}`}>
@@ -59,8 +59,8 @@ export default function Dashboard() {
       <main className="container mx-auto px-4 py-8">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-3xl font-bold font-mono tracking-tight">My Agents</h1>
-            <p className="text-muted-foreground mt-1 font-mono text-sm">Your AI agents</p>
+            <h1 className="text-3xl font-bold font-mono tracking-tight">My Operators</h1>
+            <p className="text-muted-foreground mt-1 font-mono text-sm">Your AI operators</p>
           </div>
 
           <Button
@@ -68,7 +68,7 @@ export default function Dashboard() {
             onClick={() => setIsCreateOpen(true)}
             data-testid="button-create-operator"
           >
-            <Plus className="w-4 h-4 mr-2" /> New Agent
+            <Plus className="w-4 h-4 mr-2" /> New Operator
           </Button>
         </div>
 
@@ -81,12 +81,12 @@ export default function Dashboard() {
         ) : operators?.length === 0 ? (
           <div className="text-center py-24 border border-dashed border-border/50 rounded-lg bg-card/20">
             <Cpu className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-40" />
-            <h3 className="font-mono text-xl font-bold mb-2">No agents yet</h3>
+            <h3 className="font-mono text-xl font-bold mb-2">No operators yet</h3>
             <p className="text-muted-foreground font-mono text-sm mb-6 max-w-md mx-auto">
-              Create your first AI agent to get started.
+              Create your first operator to get started.
             </p>
             <Button onClick={() => setIsCreateOpen(true)} variant="outline" className="font-mono border-primary/30 text-primary hover:bg-primary/10">
-              <Plus className="w-4 h-4 mr-2" /> Create Agent
+              <Plus className="w-4 h-4 mr-2" /> Create Operator
             </Button>
           </div>
         ) : (

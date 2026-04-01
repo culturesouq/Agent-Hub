@@ -6,7 +6,7 @@ import { Operator } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Send, Sparkles, X, RefreshCw } from "lucide-react";
 
 type Step = "name" | "purpose" | "personality" | "deriving" | "confirm" | "creating";
@@ -46,12 +46,12 @@ export default function CreateAgentChat({ open, onClose }: Props) {
 
   const [step, setStep] = useState<Step>("name");
   const [inputValue, setInputValue] = useState("");
-  const [agentName, setAgentName] = useState("");
-  const [agentPurpose, setAgentPurpose] = useState("");
-  const [agentPersonality, setAgentPersonality] = useState("");
+  const [operatorName, setOperatorName] = useState("");
+  const [operatorPurpose, setOperatorPurpose] = useState("");
+  const [operatorPersonality, setOperatorPersonality] = useState("");
   const [preview, setPreview] = useState<BootstrapPreview | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { from: "system", text: "What would you like to call your agent?" },
+    { from: "system", text: "What would you like to call your operator?" },
   ]);
 
   useEffect(() => {
@@ -67,11 +67,11 @@ export default function CreateAgentChat({ open, onClose }: Props) {
   const resetState = () => {
     setStep("name");
     setInputValue("");
-    setAgentName("");
-    setAgentPurpose("");
-    setAgentPersonality("");
+    setOperatorName("");
+    setOperatorPurpose("");
+    setOperatorPersonality("");
     setPreview(null);
-    setMessages([{ from: "system", text: "What would you like to call your agent?" }]);
+    setMessages([{ from: "system", text: "What would you like to call your operator?" }]);
   };
 
   const handleClose = () => {
@@ -90,12 +90,12 @@ export default function CreateAgentChat({ open, onClose }: Props) {
     }),
     onSuccess: (newOp) => {
       queryClient.invalidateQueries({ queryKey: ["operators"] });
-      toast({ title: "Agent created!", description: `${newOp.name} is ready.` });
+      toast({ title: "Operator created!", description: `${newOp.name} is ready.` });
       handleClose();
       setLocation(`/operators/${newOp.id}`);
     },
     onError: (err: Error) => {
-      toast({ title: "Failed to create agent", description: err.message, variant: "destructive" });
+      toast({ title: "Failed to create operator", description: err.message, variant: "destructive" });
       setStep("confirm");
     },
   });
@@ -106,35 +106,35 @@ export default function CreateAgentChat({ open, onClose }: Props) {
     setInputValue("");
 
     if (step === "name") {
-      setAgentName(text);
+      setOperatorName(text);
       addMessage({ from: "user", text });
       setTimeout(() => {
         addMessage({ from: "system", text: `Nice! What is ${text} here to do for you?` });
         setStep("purpose");
       }, 300);
     } else if (step === "purpose") {
-      setAgentPurpose(text);
+      setOperatorPurpose(text);
       addMessage({ from: "user", text });
       setTimeout(() => {
-        addMessage({ from: "system", text: `How would you describe ${agentName}'s personality?` });
+        addMessage({ from: "system", text: `How would you describe ${operatorName}'s personality?` });
         setStep("personality");
       }, 300);
     } else if (step === "personality") {
-      setAgentPersonality(text);
+      setOperatorPersonality(text);
       addMessage({ from: "user", text });
       setStep("deriving");
-      addMessage({ from: "system", text: `Let me think about the best way to set up ${agentName}...` });
+      addMessage({ from: "system", text: `Let me think about the best way to set up ${operatorName}...` });
 
       try {
         const result = await apiFetch<BootstrapPreview>("/operators/bootstrap-preview", {
           method: "POST",
-          body: JSON.stringify({ name: agentName, purpose: agentPurpose, personality: text }),
+          body: JSON.stringify({ name: operatorName, purpose: operatorPurpose, personality: text }),
         });
         setPreview(result);
         setStep("confirm");
         addMessage({
           from: "system",
-          text: `I'd describe ${agentName} as a **${result.archetype}**. Ready to create them?`,
+          text: `I'd describe ${operatorName} as a **${result.archetype}**. Ready to create them?`,
         });
       } catch (err: any) {
         toast({ title: "Something went wrong", description: err.message, variant: "destructive" });
@@ -146,12 +146,12 @@ export default function CreateAgentChat({ open, onClose }: Props) {
   const handleConfirm = () => {
     if (!preview) return;
     setStep("creating");
-    const slug = agentName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").substring(0, 50) + "-" + Math.random().toString(36).substring(2, 6);
+    const slug = operatorName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").substring(0, 50) + "-" + Math.random().toString(36).substring(2, 6);
     createMutation.mutate({
-      name: agentName,
+      name: operatorName,
       slug,
       archetype: preview.archetype,
-      mandate: agentPurpose,
+      mandate: operatorPurpose,
       coreValues: preview.coreValues,
       ethicalBoundaries: preview.ethicalBoundaries,
       layer2Soul: preview.layer2Soul,
@@ -166,11 +166,12 @@ export default function CreateAgentChat({ open, onClose }: Props) {
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
       <DialogContent className="max-w-lg p-0 gap-0 border-primary/20 bg-background overflow-hidden [&>button:last-of-type]:hidden">
+        <DialogTitle className="sr-only">Create New Operator</DialogTitle>
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border/50 bg-card/50">
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-primary" />
-            <span className="font-mono font-bold text-sm">New Agent</span>
+            <span className="font-mono font-bold text-sm">New Operator</span>
           </div>
           <button onClick={handleClose} className="text-muted-foreground hover:text-foreground transition-colors">
             <X className="w-4 h-4" />
@@ -210,14 +211,14 @@ export default function CreateAgentChat({ open, onClose }: Props) {
           {step === "confirm" && preview && (
             <div className="p-5 space-y-3">
               <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 font-mono text-xs text-primary/80">
-                <span className="font-bold">{agentName}</span> · {preview.archetype}
+                <span className="font-bold">{operatorName}</span> · {preview.archetype}
               </div>
               <div className="flex gap-3">
                 <Button variant="outline" size="sm" onClick={resetState} className="font-mono text-xs flex-1">
                   Start over
                 </Button>
                 <Button size="sm" onClick={handleConfirm} className="font-mono text-xs font-bold flex-2 flex-1 bg-primary hover:bg-primary/90">
-                  Create {agentName}
+                  Create {operatorName}
                 </Button>
               </div>
             </div>
@@ -226,7 +227,7 @@ export default function CreateAgentChat({ open, onClose }: Props) {
           {step === "creating" && (
             <div className="p-5 flex items-center justify-center gap-2 text-sm font-mono text-muted-foreground">
               <RefreshCw className="w-4 h-4 animate-spin text-primary" />
-              Creating your agent...
+              Creating your operator...
             </div>
           )}
 
