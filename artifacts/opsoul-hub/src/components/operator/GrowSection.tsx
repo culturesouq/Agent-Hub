@@ -23,7 +23,7 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
     mutationFn: () => apiFetch(`/operators/${operatorId}/grow/trigger`, { method: "POST" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "grow-proposals"] });
-      toast({ title: "GROW cycle initiated", description: "The operator is analyzing its experience for potential growth." });
+      toast({ title: "Growth cycle started", description: "Your agent is analyzing recent experience for potential improvements." });
     }
   });
 
@@ -31,7 +31,7 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
     mutationFn: () => apiFetch(`/operators/${operatorId}/grow/recompute`, { method: "POST" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "self-awareness"] });
-      toast({ title: "Self-Awareness Recomputed" });
+      toast({ title: "Health score refreshed" });
     }
   });
 
@@ -40,7 +40,7 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
       apiFetch(`/operators/${operatorId}/grow/decide/${id}`, { method: "PATCH", body: JSON.stringify({ action }) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "grow-proposals"] });
-      queryClient.invalidateQueries({ queryKey: ["operators", operatorId] }); // Refresh operator state
+      queryClient.invalidateQueries({ queryKey: ["operators", operatorId] });
       toast({ title: "Decision recorded" });
     }
   });
@@ -68,18 +68,18 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-border/50 pb-4">
         <div>
           <h2 className="text-2xl font-bold font-mono tracking-tight text-primary flex items-center gap-2">
-            <Activity className="w-6 h-6" /> GROW Engine
+            <Activity className="w-6 h-6" /> Growth Engine
           </h2>
-          <p className="text-muted-foreground font-mono text-sm mt-1">Autonomous evolution and self-awareness telemetry</p>
+          <p className="text-muted-foreground font-mono text-sm mt-1">Track your agent's health and manage growth proposals</p>
         </div>
         <div className="flex gap-3">
           <Button variant="outline" onClick={() => recomputeSa.mutate()} disabled={recomputeSa.isPending} className="font-mono text-xs border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground">
             <RefreshCw className={`w-4 h-4 mr-2 ${recomputeSa.isPending ? 'animate-spin' : ''}`} />
-            RECOMPUTE STATE
+            Refresh health score
           </Button>
           <Button onClick={() => triggerGrow.mutate()} disabled={triggerGrow.isPending} className="font-mono text-xs font-bold tracking-widest bg-primary text-primary-foreground hover:bg-primary/90">
             <Play className="w-4 h-4 mr-2" />
-            TRIGGER GROW CYCLE
+            Run growth cycle
           </Button>
         </div>
       </div>
@@ -87,10 +87,10 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
       <Tabs defaultValue="awareness" className="w-full">
         <TabsList className="grid w-full max-w-md grid-cols-2 bg-card/50 border border-border/50 mb-6 h-auto p-1">
           <TabsTrigger value="awareness" className="font-mono text-xs py-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-            SELF-AWARENESS
+            Health Overview
           </TabsTrigger>
           <TabsTrigger value="proposals" className="font-mono text-xs py-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-            GROWTH PROPOSALS
+            Growth Proposals
           </TabsTrigger>
         </TabsList>
 
@@ -99,7 +99,7 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <Card className="col-span-1 border-primary/20 bg-card/30 flex flex-col items-center justify-center p-8">
                 <div className="text-center space-y-2">
-                  <div className="text-sm font-mono text-muted-foreground uppercase tracking-widest">System Integrity</div>
+                  <div className="text-sm font-mono text-muted-foreground uppercase tracking-widest">Health Score</div>
                   <div className={`text-7xl font-bold font-mono tracking-tighter ${
                     saData.healthScore.score >= 80 ? 'text-green-500 drop-shadow-[0_0_15px_rgba(34,197,94,0.3)]' : 
                     saData.healthScore.score >= 50 ? 'text-amber-500 drop-shadow-[0_0_15px_rgba(245,158,11,0.3)]' : 
@@ -115,15 +115,15 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
 
               <Card className="col-span-1 md:col-span-2 border-border/50 bg-card/30 p-6">
                 <h3 className="font-mono text-sm font-bold text-primary mb-6 flex items-center gap-2">
-                  <Activity className="w-4 h-4" /> Component Telemetry
+                  <Activity className="w-4 h-4" /> Health breakdown
                 </h3>
                 <div className="space-y-5">
                   {[
-                    { key: 'mandateCoverage', label: 'Mandate Coverage', val: saData.healthScore.components.mandateCoverage },
-                    { key: 'mandateGaps', label: 'Mandate Adherence', val: 100 - saData.healthScore.components.mandateGaps },
-                    { key: 'kbConfidence', label: 'Knowledge Confidence', val: saData.healthScore.components.kbConfidence },
-                    { key: 'growActivity', label: 'Growth Activity', val: saData.healthScore.components.growActivity },
-                    { key: 'soulIntegrity', label: 'Soul Integrity', val: saData.healthScore.components.soulIntegrity },
+                    { key: 'mandateCoverage', label: 'Purpose coverage', val: saData.healthScore.components.mandateCoverage },
+                    { key: 'mandateGaps', label: 'Purpose adherence', val: 100 - saData.healthScore.components.mandateGaps },
+                    { key: 'kbConfidence', label: 'Knowledge confidence', val: saData.healthScore.components.kbConfidence },
+                    { key: 'growActivity', label: 'Growth activity', val: saData.healthScore.components.growActivity },
+                    { key: 'soulIntegrity', label: 'Personality integrity', val: saData.healthScore.components.soulIntegrity },
                   ].map(comp => (
                     <div key={comp.key} className="space-y-1.5">
                       <div className="flex justify-between text-xs font-mono">
@@ -141,7 +141,7 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
               {saData.mandateGaps && saData.mandateGaps.length > 0 && (
                 <Card className="col-span-1 md:col-span-3 border-amber-500/20 bg-amber-500/5 p-6">
                   <h3 className="font-mono text-sm font-bold text-amber-500 mb-4 flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4" /> Detected Mandate Gaps
+                    <AlertCircle className="w-4 h-4" /> Coverage gaps detected
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {saData.mandateGaps.map((gap: any, i: number) => (
@@ -155,24 +155,24 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
               )}
             </div>
           ) : (
-             <div className="text-center p-12 font-mono text-primary animate-pulse">AWAITING TELEMETRY...</div>
+             <div className="text-center p-12 font-mono text-primary animate-pulse">Loading health data...</div>
           )}
         </TabsContent>
 
         <TabsContent value="proposals" className="m-0 space-y-4">
           <div className="bg-primary/5 border border-primary/20 rounded p-3 mb-4">
             <p className="font-mono text-xs text-primary/80">
-              GROW proposals are autonomous suggestions to modify Layer 2 Soul or Operator KB based on experience. 
-              Depending on the lock level, these may apply automatically or require your approval.
+              Growth proposals are suggestions to improve your agent's personality or knowledge based on recent experience. 
+              Depending on your evolution mode, these may apply automatically or need your approval.
             </p>
           </div>
 
           {propsLoading ? (
-            <div className="text-center p-8 font-mono text-primary animate-pulse">LOADING LOGS...</div>
+            <div className="text-center p-8 font-mono text-primary animate-pulse">Loading...</div>
           ) : proposals?.length === 0 ? (
             <div className="text-center p-12 border border-dashed border-border/50 rounded-lg bg-card/20">
               <Activity className="w-8 h-8 text-muted-foreground mx-auto mb-3 opacity-30" />
-              <p className="font-mono text-sm text-muted-foreground">No growth proposals generated yet.</p>
+              <p className="font-mono text-sm text-muted-foreground">No growth proposals yet.</p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -186,7 +186,7 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
                       <span className="font-mono text-xs font-bold text-foreground">Type: {prop.proposalType}</span>
                     </div>
                     <div className="flex gap-3 text-[10px] font-mono text-muted-foreground">
-                      <span>CONF: {prop.confidence}%</span>
+                      <span>Confidence: {prop.confidence}%</span>
                       <span>{format(new Date(prop.createdAt), 'yy-MM-dd HH:mm')}</span>
                     </div>
                   </div>
@@ -194,11 +194,11 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
                   <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-3">
                       <div>
-                        <div className="font-mono text-[10px] text-muted-foreground uppercase mb-1">Target Field</div>
+                        <div className="font-mono text-[10px] text-muted-foreground uppercase mb-1">Target field</div>
                         <div className="font-mono text-sm bg-background/50 p-2 rounded border border-border/30">{prop.targetField}</div>
                       </div>
                       <div>
-                        <div className="font-mono text-[10px] text-muted-foreground uppercase mb-1">Proposed Modification</div>
+                        <div className="font-mono text-[10px] text-muted-foreground uppercase mb-1">Proposed change</div>
                         <pre className="font-mono text-xs bg-primary/5 text-primary p-2 rounded border border-primary/20 whitespace-pre-wrap">
                           {typeof prop.proposedValue === 'object' ? JSON.stringify(prop.proposedValue, null, 2) : String(prop.proposedValue)}
                         </pre>
@@ -207,7 +207,7 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
                     
                     <div className="space-y-3 flex flex-col">
                       <div className="flex-1">
-                        <div className="font-mono text-[10px] text-muted-foreground uppercase mb-1">Rationale / Logic Chain</div>
+                        <div className="font-mono text-[10px] text-muted-foreground uppercase mb-1">Reasoning</div>
                         <div className="font-mono text-xs text-foreground/80 leading-relaxed border-l-2 border-primary/30 pl-3 py-1">
                           {prop.rationale}
                         </div>
@@ -221,7 +221,7 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
                             className="w-full font-mono text-xs bg-green-600 hover:bg-green-700 text-white"
                             onClick={() => decideProposal.mutate({ id: prop.id, action: 'approve' })}
                           >
-                            <CheckCircle2 className="w-3 h-3 mr-2" /> APPROVE
+                            <CheckCircle2 className="w-3 h-3 mr-2" /> Approve
                           </Button>
                           <Button 
                             variant="destructive" 
@@ -229,7 +229,7 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
                             className="w-full font-mono text-xs"
                             onClick={() => decideProposal.mutate({ id: prop.id, action: 'reject' })}
                           >
-                            <XCircle className="w-3 h-3 mr-2" /> REJECT
+                            <XCircle className="w-3 h-3 mr-2" /> Reject
                           </Button>
                         </div>
                       )}

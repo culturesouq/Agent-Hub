@@ -33,7 +33,7 @@ export default function MemorySection({ operatorId }: { operatorId: string }) {
       queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "memory"] });
       setIsAddOpen(false);
       setAddForm({ content: "", memoryType: "fact", weight: 0.5 });
-      toast({ title: "Memory encoded" });
+      toast({ title: "Memory saved" });
     }
   });
 
@@ -46,7 +46,7 @@ export default function MemorySection({ operatorId }: { operatorId: string }) {
     mutationFn: () => apiFetch<{ count: number }>(`/operators/${operatorId}/memory/distill`, { method: "POST" }),
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "memory"] });
-      toast({ title: "Distillation Complete", description: `Distilled ${res.count} items into core patterns.` });
+      toast({ title: "Memories summarized", description: `Summarized ${res.count} memory items.` });
     }
   });
 
@@ -54,7 +54,7 @@ export default function MemorySection({ operatorId }: { operatorId: string }) {
     mutationFn: () => apiFetch<{ archivedCount: number }>(`/operators/${operatorId}/memory/decay`, { method: "POST" }),
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "memory"] });
-      toast({ title: "Decay Cycle Complete", description: `Archived ${res.archivedCount} low-weight memories.` });
+      toast({ title: "Old memories archived", description: `Archived ${res.archivedCount} memories.` });
     }
   });
 
@@ -76,27 +76,27 @@ export default function MemorySection({ operatorId }: { operatorId: string }) {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-border/50 pb-4">
         <div>
           <h2 className="text-2xl font-bold font-mono tracking-tight text-primary flex items-center gap-2">
-            <Brain className="w-6 h-6" /> Memory Matrix
+            <Brain className="w-6 h-6" /> Memory
           </h2>
-          <p className="text-muted-foreground font-mono text-sm mt-1">Short/medium term state & contextual preferences</p>
+          <p className="text-muted-foreground font-mono text-sm mt-1">Your agent's stored knowledge and preferences</p>
         </div>
         
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={() => runDecay.mutate()} disabled={runDecay.isPending} className="font-mono text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10">
-            <ArrowDownToLine className="w-4 h-4 mr-2" /> DECAY CYCLE
+            <ArrowDownToLine className="w-4 h-4 mr-2" /> Archive old memories
           </Button>
           <Button variant="outline" onClick={() => distillMemory.mutate()} disabled={distillMemory.isPending} className="font-mono text-xs border-purple-500/30 text-purple-500 hover:bg-purple-500/10">
-            <Zap className="w-4 h-4 mr-2" /> AI DISTILL
+            <Zap className="w-4 h-4 mr-2" /> Summarize memories
           </Button>
           <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
             <DialogTrigger asChild>
               <Button className="font-mono font-bold text-xs tracking-wider">
-                <Plus className="w-4 h-4 mr-2" /> ENCODE
+                <Plus className="w-4 h-4 mr-2" /> Add memory
               </Button>
             </DialogTrigger>
             <DialogContent className="border-primary/20 bg-card/95 backdrop-blur">
               <DialogHeader>
-                <DialogTitle className="font-mono text-xl">Encode New Memory</DialogTitle>
+                <DialogTitle className="font-mono text-xl">Add a new memory</DialogTitle>
               </DialogHeader>
               <form onSubmit={(e) => { e.preventDefault(); addMemory.mutate(addForm); }} className="space-y-4 mt-4">
                 <div className="space-y-2">
@@ -109,22 +109,22 @@ export default function MemorySection({ operatorId }: { operatorId: string }) {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="font-mono text-xs uppercase text-muted-foreground">Memory Type</Label>
+                  <Label className="font-mono text-xs uppercase text-muted-foreground">Memory type</Label>
                   <Select value={addForm.memoryType} onValueChange={(val) => setAddForm({...addForm, memoryType: val})}>
                     <SelectTrigger className="font-mono">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="fact">Fact (Episodic)</SelectItem>
-                      <SelectItem value="preference">Preference (Owner)</SelectItem>
-                      <SelectItem value="pattern">Pattern (Semantic)</SelectItem>
-                      <SelectItem value="instruction">Instruction (Procedural)</SelectItem>
+                      <SelectItem value="fact">Fact</SelectItem>
+                      <SelectItem value="preference">Preference</SelectItem>
+                      <SelectItem value="pattern">Pattern</SelectItem>
+                      <SelectItem value="instruction">Instruction</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-4 pt-2">
                   <div className="flex justify-between items-center">
-                    <Label className="font-mono text-xs uppercase text-muted-foreground">Retention Weight</Label>
+                    <Label className="font-mono text-xs uppercase text-muted-foreground">Importance</Label>
                     <span className="font-mono text-sm text-primary font-bold">{addForm.weight.toFixed(2)}</span>
                   </div>
                   <Slider 
@@ -134,7 +134,7 @@ export default function MemorySection({ operatorId }: { operatorId: string }) {
                   />
                 </div>
                 <Button type="submit" className="w-full font-mono font-bold mt-4" disabled={addMemory.isPending}>
-                  COMMIT TO MATRIX
+                  Save memory
                 </Button>
               </form>
             </DialogContent>
@@ -153,13 +153,13 @@ export default function MemorySection({ operatorId }: { operatorId: string }) {
       </div>
 
       {isLoading ? (
-        <div className="text-center p-8 font-mono text-primary animate-pulse">READING MATRIX...</div>
+        <div className="text-center p-8 font-mono text-primary animate-pulse">Loading...</div>
       ) : (
         <div className="space-y-8">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredMemories?.length === 0 ? (
               <div className="col-span-full text-center p-8 border border-dashed border-border/50 rounded-lg text-muted-foreground font-mono text-sm">
-                No active memories match the criteria.
+                No memories match the filter.
               </div>
             ) : (
               filteredMemories?.map(mem => (
@@ -179,7 +179,7 @@ export default function MemorySection({ operatorId }: { operatorId: string }) {
                   <CardFooter className="p-3 pt-0 border-t border-border/20 mt-2 flex justify-between items-center">
                     <div className="text-[10px] font-mono text-muted-foreground">{format(new Date(mem.createdAt), 'MM/dd HH:mm')}</div>
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono text-primary/60">WT: {mem.weight.toFixed(2)}</span>
+                      <span className="text-[10px] font-mono text-primary/60">Weight: {mem.weight.toFixed(2)}</span>
                       <div className="w-16 h-1 bg-background rounded overflow-hidden border border-border/30">
                         <div className="h-full bg-primary" style={{ width: `${mem.weight * 100}%` }} />
                       </div>
@@ -192,7 +192,7 @@ export default function MemorySection({ operatorId }: { operatorId: string }) {
 
           {archivedMemories && archivedMemories.length > 0 && (
             <div className="pt-6 border-t border-border/50">
-              <h3 className="font-mono text-sm font-bold text-muted-foreground mb-4">Archived (Decayed)</h3>
+              <h3 className="font-mono text-sm font-bold text-muted-foreground mb-4">Archived memories</h3>
               <div className="flex flex-wrap gap-2 opacity-50">
                 {archivedMemories.map(mem => (
                   <div key={mem.id} className="text-[10px] font-mono border border-border/30 px-2 py-1 rounded bg-background line-clamp-1 max-w-[200px]" title={mem.content}>

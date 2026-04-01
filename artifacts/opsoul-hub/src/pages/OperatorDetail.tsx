@@ -34,22 +34,22 @@ export default function OperatorDetail({ id }: { id: string }) {
   });
 
   if (isLoadingOperator) {
-    return <div className="min-h-screen flex items-center justify-center bg-background text-primary font-mono tracking-widest animate-pulse">CONNECTING...</div>;
+    return <div className="min-h-screen flex items-center justify-center bg-background text-primary font-mono tracking-widest animate-pulse">Loading...</div>;
   }
 
   if (!operator) {
-    return <div className="min-h-screen flex items-center justify-center bg-background text-destructive font-mono text-xl">OPERATOR NOT FOUND</div>;
+    return <div className="min-h-screen flex items-center justify-center bg-background text-destructive font-mono text-xl">Agent not found</div>;
   }
 
   const navItems = [
     { id: "identity", label: "Identity & Soul", icon: Fingerprint },
-    { id: "chat", label: "Comms Link", icon: MessageSquare },
+    { id: "chat", label: "Chat", icon: MessageSquare },
     { id: "kb", label: "Knowledge Base", icon: Database },
-    { id: "grow", label: "GROW & Health", icon: Activity },
-    { id: "memory", label: "Memory Matrix", icon: Brain },
+    { id: "grow", label: "Growth & Health", icon: Activity },
+    { id: "memory", label: "Memory", icon: Brain },
     { id: "integrations", label: "Integrations", icon: Network },
-    { id: "contexts", label: "Mission Contexts", icon: LayoutGrid },
-    { id: "skills", label: "Skills Engine", icon: Sparkles },
+    { id: "contexts", label: "Contexts", icon: LayoutGrid },
+    { id: "skills", label: "Skills", icon: Sparkles },
     { id: "requests", label: "Capability Requests", icon: ShieldAlert },
   ];
 
@@ -74,7 +74,7 @@ export default function OperatorDetail({ id }: { id: string }) {
         <div className="flex items-center gap-4">
           {saData?.healthScore && (
             <div className="flex items-center gap-2 font-mono text-sm border border-border/50 rounded px-3 py-1 bg-background/50">
-              <span className="text-muted-foreground">Integrity:</span>
+              <span className="text-muted-foreground">Health:</span>
               <span className={
                 saData.healthScore.score >= 80 ? "text-green-500" :
                 saData.healthScore.score >= 50 ? "text-amber-500" : "text-destructive"
@@ -84,7 +84,7 @@ export default function OperatorDetail({ id }: { id: string }) {
             </div>
           )}
           <Badge variant="outline" className={`font-mono text-xs uppercase ${operator.layer1LockedAt ? 'text-primary border-primary/30 bg-primary/5' : 'text-amber-500 border-amber-500/30 bg-amber-500/5'}`}>
-            {operator.layer1LockedAt ? 'L1: SECURED' : 'L1: UNLOCKED'}
+            {operator.layer1LockedAt ? 'Identity Locked' : 'Identity Unlocked'}
           </Badge>
         </div>
       </header>
@@ -111,7 +111,7 @@ export default function OperatorDetail({ id }: { id: string }) {
           </div>
         </aside>
 
-        {/* Mobile Nav (Dropdown or Scrollable row - simplifying to scrollable row for speed) */}
+        {/* Mobile Nav */}
         <div className="md:hidden absolute top-0 left-0 right-0 z-30 bg-background border-b border-border/50 overflow-x-auto no-scrollbar flex items-center px-2 py-2 gap-2">
            {navItems.map((item) => (
               <button

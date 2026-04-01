@@ -39,19 +39,19 @@ export default function Login() {
               <Activity className="w-6 h-6 text-primary" />
             </div>
           </div>
-          <CardTitle className="text-2xl tracking-tight font-bold">OpSoul Command</CardTitle>
+          <CardTitle className="text-2xl tracking-tight font-bold">Welcome to OpSoul</CardTitle>
           <CardDescription>
-            {isLogin ? "Authenticate to access sovereign operations" : "Initialize new sovereign admin"}
+            {isLogin ? "Sign in to your account" : "Create your account"}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             {!isLogin && (
               <div className="space-y-2">
-                <Label htmlFor="name">Designation</Label>
+                <Label htmlFor="name">Name</Label>
                 <Input
                   id="name"
-                  placeholder="Admin designation"
+                  placeholder="Your name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required={!isLogin}
@@ -61,11 +61,11 @@ export default function Login() {
               </div>
             )}
             <div className="space-y-2">
-              <Label htmlFor="email">Access ID</Label>
+              <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="admin@opsoul.local"
+                placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -74,7 +74,7 @@ export default function Login() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Passphrase</Label>
+              <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
                 type="password"
@@ -86,7 +86,7 @@ export default function Login() {
               />
             </div>
             <Button type="submit" className="w-full font-bold tracking-widest uppercase" disabled={loading} data-testid="button-submit">
-              {loading ? "Authenticating..." : isLogin ? "Initialize Session" : "Create Admin"}
+              {loading ? "Signing in..." : isLogin ? "Sign In" : "Create Account"}
             </Button>
           </form>
           <div className="mt-4 text-center text-sm">
@@ -96,7 +96,7 @@ export default function Login() {
               className="text-muted-foreground hover:text-primary transition-colors"
               data-testid="button-toggle-auth"
             >
-              {isLogin ? "Request new admin authorization" : "Return to existing session"}
+              {isLogin ? "Create an account" : "Already have an account? Sign in"}
             </button>
           </div>
         </CardContent>

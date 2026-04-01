@@ -52,7 +52,7 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
     mutationFn: (data: any) => apiFetch(`/operators/${operator.id}`, { method: "PATCH", body: JSON.stringify(data) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operator.id] });
-      toast({ title: "Layer 1 Updated", description: "Identity parameters updated." });
+      toast({ title: "Identity updated", description: "Changes saved." });
     },
   });
 
@@ -60,7 +60,7 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
     mutationFn: () => apiFetch(`/operators/${operator.id}/lock-layer1`, { method: "POST" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operator.id] });
-      toast({ title: "Layer 1 Secured", description: "Identity parameters are now immutable." });
+      toast({ title: "Identity locked", description: "The core identity is now locked permanently." });
     },
   });
 
@@ -68,7 +68,7 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
     mutationFn: (data: any) => apiFetch(`/operators/${operator.id}/soul`, { method: "PATCH", body: JSON.stringify(data) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operator.id] });
-      toast({ title: "Layer 2 Updated", description: "Soul parameters updated." });
+      toast({ title: "Personality updated", description: "Changes saved." });
     },
   });
 
@@ -76,7 +76,7 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
     mutationFn: () => apiFetch(`/operators/${operator.id}/soul/reset`, { method: "POST" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operator.id] });
-      toast({ title: "Soul Reset", description: "Soul parameters reverted to baseline." });
+      toast({ title: "Personality reset", description: "Reverted to original." });
     },
   });
 
@@ -87,7 +87,7 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operator.id] });
-      toast({ title: "GROW Lock Updated" });
+      toast({ title: "Evolution mode updated" });
     },
   });
 
@@ -120,58 +120,58 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
     <div className="space-y-8 animate-in fade-in zoom-in-95 duration-300">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-border/50 pb-4">
         <div>
-          <h2 className="text-2xl font-bold font-mono tracking-tight text-primary">Identity Matrix</h2>
-          <p className="text-muted-foreground font-mono text-sm">Core parameters and behavioral guardrails</p>
+          <h2 className="text-2xl font-bold font-mono tracking-tight text-primary">Identity & Personality</h2>
+          <p className="text-muted-foreground font-mono text-sm">Edit core identity and personality traits</p>
         </div>
         <div className="flex items-center gap-3 border border-border/50 p-2 rounded-md bg-card/30">
-          <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">GROW State:</Label>
+          <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Evolution mode</Label>
           <Select 
             value={lockLevel} 
             onValueChange={(val) => { setLockLevel(val as any); updateGrowLock.mutate(val); }}
           >
-            <SelectTrigger className="w-40 font-mono h-8 text-xs border-primary/20">
+            <SelectTrigger className="w-52 font-mono h-8 text-xs border-primary/20">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="OPEN" className="font-mono text-xs text-green-500">OPEN (Auto)</SelectItem>
-              <SelectItem value="CONTROLLED" className="font-mono text-xs text-amber-500">CONTROLLED (Review)</SelectItem>
-              <SelectItem value="LOCKED" className="font-mono text-xs text-red-500">LOCKED (No AI Edits)</SelectItem>
-              <SelectItem value="FROZEN" className="font-mono text-xs text-muted-foreground">FROZEN (Absolute)</SelectItem>
+              <SelectItem value="OPEN" className="font-mono text-xs text-green-500">Open — evolves automatically</SelectItem>
+              <SelectItem value="CONTROLLED" className="font-mono text-xs text-amber-500">Controlled — needs your approval</SelectItem>
+              <SelectItem value="LOCKED" className="font-mono text-xs text-red-500">Locked — no AI changes</SelectItem>
+              <SelectItem value="FROZEN" className="font-mono text-xs text-muted-foreground">Frozen — no changes at all</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Layer 1 Panel */}
+        {/* Core Identity Panel */}
         <div className={`border rounded-lg p-6 relative overflow-hidden transition-all ${isL1Locked ? 'border-primary/20 bg-primary/5' : 'border-border/50 bg-card/30'}`}>
           <div className="flex items-center justify-between mb-6">
             <h3 className="font-mono text-lg font-bold flex items-center gap-2">
-              <span className="text-primary">L1</span> Foundational Code
+              <span className="text-primary">L1</span> Core Identity
             </h3>
             {isL1Locked ? (
               <div className="flex items-center gap-1.5 text-xs font-mono text-primary font-bold tracking-widest uppercase bg-primary/10 px-2 py-1 rounded">
-                <Lock className="w-3 h-3" /> Immutable
+                <Lock className="w-3 h-3" /> Locked forever
               </div>
             ) : (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="outline" size="sm" className="font-mono text-xs border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground">
-                    <Unlock className="w-3 h-3 mr-2" /> Lock L1
+                    <Unlock className="w-3 h-3 mr-2" /> Lock identity
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent className="border-primary/20">
                   <AlertDialogHeader>
                     <AlertDialogTitle className="font-mono text-primary flex items-center gap-2">
-                      <Lock className="w-5 h-5" /> Secure Layer 1 Code?
+                      <Lock className="w-5 h-5" /> Lock core identity permanently?
                     </AlertDialogTitle>
                     <AlertDialogDescription className="font-mono">
-                      Locking Layer 1 will make Name, Archetype, Mandate, Core Values, and Ethical Boundaries permanently read-only. This simulates hard-coding the operator's core directives. This action CANNOT BE REVERSED.
+                      Locking the core identity will make Name, Archetype, Purpose, Core Values, and Ethical Limits permanently read-only. This action CANNOT BE REVERSED.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel className="font-mono">Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => lockL1.mutate()} className="font-mono font-bold">SECURE IMMUTABLY</AlertDialogAction>
+                    <AlertDialogAction onClick={() => lockL1.mutate()} className="font-mono font-bold">Lock forever</AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
@@ -180,7 +180,7 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Designation</Label>
+              <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Name</Label>
               <Input 
                 value={l1Data.name} 
                 onChange={e => setL1Data({...l1Data, name: e.target.value})} 
@@ -198,7 +198,7 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
               />
             </div>
             <div className="space-y-2">
-              <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Primary Mandate</Label>
+              <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Purpose</Label>
               <Textarea 
                 value={l1Data.mandate} 
                 onChange={e => setL1Data({...l1Data, mandate: e.target.value})} 
@@ -207,7 +207,7 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
               />
             </div>
             <div className="space-y-2">
-              <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Core Values (CSV)</Label>
+              <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Core values (comma-separated)</Label>
               <Textarea 
                 value={l1Data.coreValues} 
                 onChange={e => setL1Data({...l1Data, coreValues: e.target.value})} 
@@ -216,7 +216,7 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
               />
             </div>
             <div className="space-y-2">
-              <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Ethical Boundaries (CSV)</Label>
+              <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Ethical limits (comma-separated)</Label>
               <Textarea 
                 value={l1Data.ethicalBoundaries} 
                 onChange={e => setL1Data({...l1Data, ethicalBoundaries: e.target.value})} 
@@ -227,17 +227,17 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
             
             {!isL1Locked && (
               <Button onClick={handleL1Submit} disabled={updateL1.isPending} className="w-full font-mono mt-4">
-                {updateL1.isPending ? "WRITING..." : "UPDATE L1"}
+                {updateL1.isPending ? "Saving..." : "Save changes"}
               </Button>
             )}
           </div>
         </div>
 
-        {/* Layer 2 Panel */}
+        {/* Personality Panel */}
         <div className={`border rounded-lg p-6 relative overflow-hidden transition-all ${isFrozen ? 'border-border/20 bg-muted/5' : 'border-border/50 bg-card/30'}`}>
           <div className="flex items-center justify-between mb-6">
             <h3 className="font-mono text-lg font-bold flex items-center gap-2">
-              <span className="text-secondary-foreground">L2</span> Soul Parameters
+              <span className="text-secondary-foreground">L2</span> Personality
             </h3>
             {isFrozen ? (
               <div className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground font-bold tracking-widest uppercase bg-muted/10 px-2 py-1 rounded">
@@ -247,21 +247,21 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="ghost" size="sm" className="font-mono text-xs text-muted-foreground hover:text-destructive">
-                    <RefreshCw className="w-3 h-3 mr-2" /> Reset Soul
+                    <RefreshCw className="w-3 h-3 mr-2" /> Reset to original
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent className="border-destructive/20">
                   <AlertDialogHeader>
                     <AlertDialogTitle className="font-mono text-destructive flex items-center gap-2">
-                      <AlertTriangle className="w-5 h-5" /> Wipe Soul Data?
+                      <AlertTriangle className="w-5 h-5" /> Reset personality?
                     </AlertDialogTitle>
                     <AlertDialogDescription className="font-mono">
-                      This will reset all learned personality traits, quirks, and communication styles back to baseline defaults. It essentially wipes the operator's developed persona.
+                      This will reset all learned personality traits, quirks, and communication styles back to the starting point. This reverts all learned personality changes.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel className="font-mono">Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => resetSoul.mutate()} className="bg-destructive text-destructive-foreground font-mono font-bold">INITIATE WIPE</AlertDialogAction>
+                    <AlertDialogAction onClick={() => resetSoul.mutate()} className="bg-destructive text-destructive-foreground font-mono font-bold">Reset</AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
@@ -271,7 +271,7 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2 col-span-2">
-                <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Personality Traits (CSV)</Label>
+                <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Personality traits (comma-separated)</Label>
                 <Input 
                   value={l2Data.personalityTraits} 
                   onChange={e => setL2Data({...l2Data, personalityTraits: e.target.value})} 
@@ -280,7 +280,7 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
                 />
               </div>
               <div className="space-y-2">
-                <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Tone Profile</Label>
+                <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Tone</Label>
                 <Input 
                   value={l2Data.toneProfile} 
                   onChange={e => setL2Data({...l2Data, toneProfile: e.target.value})} 
@@ -289,7 +289,7 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
                 />
               </div>
               <div className="space-y-2">
-                <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Comms Style</Label>
+                <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Communication style</Label>
                 <Input 
                   value={l2Data.communicationStyle} 
                   onChange={e => setL2Data({...l2Data, communicationStyle: e.target.value})} 
@@ -298,7 +298,7 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
                 />
               </div>
               <div className="space-y-2">
-                <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Emotional Range</Label>
+                <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Emotional range</Label>
                 <Input 
                   value={l2Data.emotionalRange} 
                   onChange={e => setL2Data({...l2Data, emotionalRange: e.target.value})} 
@@ -307,7 +307,7 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
                 />
               </div>
               <div className="space-y-2">
-                <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Decision Style</Label>
+                <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Decision-making style</Label>
                 <Input 
                   value={l2Data.decisionMakingStyle} 
                   onChange={e => setL2Data({...l2Data, decisionMakingStyle: e.target.value})} 
@@ -316,7 +316,7 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
                 />
               </div>
               <div className="space-y-2 col-span-2">
-                <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Conflict Resolution</Label>
+                <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Conflict resolution</Label>
                 <Input 
                   value={l2Data.conflictResolution} 
                   onChange={e => setL2Data({...l2Data, conflictResolution: e.target.value})} 
@@ -325,7 +325,7 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
                 />
               </div>
               <div className="space-y-2 col-span-2">
-                <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Quirks (CSV)</Label>
+                <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Quirks (comma-separated)</Label>
                 <Input 
                   value={l2Data.quirks} 
                   onChange={e => setL2Data({...l2Data, quirks: e.target.value})} 
@@ -334,7 +334,7 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
                 />
               </div>
               <div className="space-y-2 col-span-2">
-                <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Values Manifestation (CSV)</Label>
+                <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Values in action (comma-separated)</Label>
                 <Textarea 
                   value={l2Data.valuesManifestation} 
                   onChange={e => setL2Data({...l2Data, valuesManifestation: e.target.value})} 
@@ -346,7 +346,7 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
             
             {!isFrozen && (
               <Button onClick={handleL2Submit} disabled={updateL2.isPending} variant="secondary" className="w-full font-mono mt-4 border border-secondary-foreground/20">
-                {updateL2.isPending ? "WRITING..." : "UPDATE L2 SOUL"}
+                {updateL2.isPending ? "Saving..." : "Save personality"}
               </Button>
             )}
           </div>

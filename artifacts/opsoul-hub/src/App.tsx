@@ -21,7 +21,7 @@ function ProtectedRoute({ component: Component, ...rest }: any) {
   const { token, isLoading } = useAuth();
   
   if (isLoading) {
-    return <div className="min-h-screen flex items-center justify-center bg-background text-primary font-mono tracking-widest">INITIALIZING...</div>;
+    return <div className="min-h-screen flex items-center justify-center bg-background text-primary font-mono tracking-widest">Loading...</div>;
   }
   
   if (!token) {

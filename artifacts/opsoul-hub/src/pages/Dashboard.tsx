@@ -64,19 +64,19 @@ export default function Dashboard() {
     onSuccess: (newOp) => {
       queryClient.invalidateQueries({ queryKey: ["operators"] });
       setIsCreateOpen(false);
-      toast({ title: "Operator initialized", description: `${newOp.name} is now online.` });
+      toast({ title: "Agent created", description: `${newOp.name} is ready.` });
       setLocation(`/operators/${newOp.id}`);
     },
-    onError: (err: Error) => toast({ title: "Initialization failed", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => toast({ title: "Failed to create agent", description: err.message, variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => apiFetch(`/operators/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators"] });
-      toast({ title: "Operator terminated" });
+      toast({ title: "Agent deleted" });
     },
-    onError: (err: Error) => toast({ title: "Termination failed", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => toast({ title: "Failed to delete agent", description: err.message, variant: "destructive" }),
   });
 
   const handleCreate = (e: React.FormEvent) => {
@@ -110,7 +110,7 @@ export default function Dashboard() {
             <span className="font-mono text-xl font-bold tracking-tight text-primary">OpSoul Hub</span>
           </div>
           <Button variant="ghost" size="sm" onClick={logout} className="font-mono text-muted-foreground hover:text-foreground" data-testid="button-logout">
-            <LogOut className="w-4 h-4 mr-2" /> Disconnect
+            <LogOut className="w-4 h-4 mr-2" /> Sign out
           </Button>
         </div>
       </header>
@@ -118,87 +118,87 @@ export default function Dashboard() {
       <main className="container mx-auto px-4 py-8">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-3xl font-bold font-mono tracking-tight">Operator Fleet</h1>
-            <p className="text-muted-foreground mt-1 font-mono text-sm">Active autonomous instances</p>
+            <h1 className="text-3xl font-bold font-mono tracking-tight">My Agents</h1>
+            <p className="text-muted-foreground mt-1 font-mono text-sm">Your AI agents</p>
           </div>
           
           <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
             <DialogTrigger asChild>
               <Button className="font-mono font-bold tracking-wider" data-testid="button-create-operator">
-                <Plus className="w-4 h-4 mr-2" /> Initialize Operator
+                <Plus className="w-4 h-4 mr-2" /> New Agent
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto border-primary/20 bg-background/95 backdrop-blur">
               <DialogHeader>
-                <DialogTitle className="font-mono text-2xl">New Operator Instance</DialogTitle>
+                <DialogTitle className="font-mono text-2xl">Create a New Agent</DialogTitle>
               </DialogHeader>
               <form onSubmit={handleCreate} className="space-y-6 mt-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Layer 1 */}
+                  {/* Identity */}
                   <div className="space-y-4">
-                    <h3 className="font-mono font-bold text-primary border-b border-border/50 pb-2">Layer 1: Identity</h3>
+                    <h3 className="font-mono font-bold text-primary border-b border-border/50 pb-2">Identity</h3>
                     <div className="space-y-2">
-                      <Label>Designation (Name)</Label>
+                      <Label>Name</Label>
                       <Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required className="font-mono text-sm" />
                     </div>
                     <div className="space-y-2">
                       <Label>Archetype</Label>
-                      <Input value={formData.archetype} onChange={e => setFormData({...formData, archetype: e.target.value})} required className="font-mono text-sm" placeholder="e.g. Protocol Enforcer" />
+                      <Input value={formData.archetype} onChange={e => setFormData({...formData, archetype: e.target.value})} required className="font-mono text-sm" placeholder="e.g. Wise Counselor" />
                     </div>
                     <div className="space-y-2">
-                      <Label>Mandate</Label>
+                      <Label>Purpose</Label>
                       <Textarea value={formData.mandate} onChange={e => setFormData({...formData, mandate: e.target.value})} required className="font-mono text-sm h-24" />
                     </div>
                     <div className="space-y-2">
-                      <Label>Core Values (comma separated)</Label>
+                      <Label>Core values (comma-separated)</Label>
                       <Input value={formData.coreValues} onChange={e => setFormData({...formData, coreValues: e.target.value})} required className="font-mono text-sm" />
                     </div>
                     <div className="space-y-2">
-                      <Label>Ethical Boundaries (comma separated)</Label>
+                      <Label>Ethical limits (comma-separated)</Label>
                       <Input value={formData.ethicalBoundaries} onChange={e => setFormData({...formData, ethicalBoundaries: e.target.value})} required className="font-mono text-sm" />
                     </div>
                   </div>
                   
-                  {/* Layer 2 */}
+                  {/* Personality */}
                   <div className="space-y-4">
-                    <h3 className="font-mono font-bold text-primary border-b border-border/50 pb-2">Layer 2: Soul</h3>
+                    <h3 className="font-mono font-bold text-primary border-b border-border/50 pb-2">Personality</h3>
                     <div className="space-y-2">
-                      <Label>Personality Traits (comma separated)</Label>
+                      <Label>Personality traits (comma-separated)</Label>
                       <Input value={formData.personalityTraits} onChange={e => setFormData({...formData, personalityTraits: e.target.value})} required className="font-mono text-sm" />
                     </div>
                     <div className="space-y-2">
-                      <Label>Tone Profile</Label>
+                      <Label>Tone</Label>
                       <Input value={formData.toneProfile} onChange={e => setFormData({...formData, toneProfile: e.target.value})} required className="font-mono text-sm" />
                     </div>
                     <div className="space-y-2">
-                      <Label>Communication Style</Label>
+                      <Label>Communication style</Label>
                       <Input value={formData.communicationStyle} onChange={e => setFormData({...formData, communicationStyle: e.target.value})} required className="font-mono text-sm" />
                     </div>
                     <div className="space-y-2">
-                      <Label>Emotional Range</Label>
+                      <Label>Emotional range</Label>
                       <Input value={formData.emotionalRange} onChange={e => setFormData({...formData, emotionalRange: e.target.value})} required className="font-mono text-sm" />
                     </div>
                     <div className="space-y-2">
-                      <Label>Decision Making Style</Label>
+                      <Label>Decision-making style</Label>
                       <Input value={formData.decisionMakingStyle} onChange={e => setFormData({...formData, decisionMakingStyle: e.target.value})} required className="font-mono text-sm" />
                     </div>
                     <div className="space-y-2">
-                      <Label>Conflict Resolution</Label>
+                      <Label>Conflict resolution</Label>
                       <Input value={formData.conflictResolution} onChange={e => setFormData({...formData, conflictResolution: e.target.value})} required className="font-mono text-sm" />
                     </div>
                     <div className="space-y-2">
-                      <Label>Quirks (comma separated)</Label>
+                      <Label>Quirks (comma-separated)</Label>
                       <Input value={formData.quirks} onChange={e => setFormData({...formData, quirks: e.target.value})} required className="font-mono text-sm" />
                     </div>
                     <div className="space-y-2">
-                      <Label>Values Manifestation (comma separated)</Label>
+                      <Label>Values in action (comma-separated)</Label>
                       <Input value={formData.valuesManifestation} onChange={e => setFormData({...formData, valuesManifestation: e.target.value})} required className="font-mono text-sm" />
                     </div>
                   </div>
                 </div>
                 <div className="flex justify-end pt-4 border-t border-border/50">
                   <Button type="submit" disabled={createMutation.isPending} className="font-mono font-bold tracking-wider w-full md:w-auto">
-                    {createMutation.isPending ? "INITIALIZING..." : "INITIALIZE OPERATOR"}
+                    {createMutation.isPending ? "Creating..." : "Create Agent"}
                   </Button>
                 </div>
               </form>
@@ -215,12 +215,12 @@ export default function Dashboard() {
         ) : operators?.length === 0 ? (
           <div className="text-center py-20 border border-dashed border-border/50 rounded-lg bg-card/20">
             <Cpu className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-50" />
-            <h3 className="font-mono text-xl font-bold mb-2">No Active Operators</h3>
+            <h3 className="font-mono text-xl font-bold mb-2">No agents yet</h3>
             <p className="text-muted-foreground font-mono text-sm mb-6 max-w-md mx-auto">
-              The fleet is empty. Initialize your first operator to begin autonomous operations.
+              Create your first AI agent to get started.
             </p>
             <Button onClick={() => setIsCreateOpen(true)} variant="outline" className="font-mono border-primary/30 text-primary hover:bg-primary/10">
-              <Plus className="w-4 h-4 mr-2" /> Initialize
+              <Plus className="w-4 h-4 mr-2" /> Create Agent
             </Button>
           </div>
         ) : (
@@ -238,15 +238,15 @@ export default function Dashboard() {
                     </AlertDialogTrigger>
                     <AlertDialogContent onClick={(e) => e.stopPropagation()} className="border-destructive/20">
                       <AlertDialogHeader>
-                        <AlertDialogTitle className="font-mono text-destructive">Terminate Operator?</AlertDialogTitle>
+                        <AlertDialogTitle className="font-mono text-destructive">Delete this agent?</AlertDialogTitle>
                         <AlertDialogDescription className="font-mono">
-                          This action will permanently delete <span className="font-bold text-foreground">{operator.name}</span>, erasing all memory, knowledge base, and identity data. This cannot be undone.
+                          This will permanently delete <span className="font-bold text-foreground">{operator.name}</span>, including all memory, knowledge, and identity data. This cannot be undone.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel className="font-mono">Cancel</AlertDialogCancel>
                         <AlertDialogAction onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(operator.id); }} className="bg-destructive text-destructive-foreground hover:bg-destructive/90 font-mono font-bold tracking-wider">
-                          TERMINATE
+                          Delete
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
@@ -268,7 +268,7 @@ export default function Dashboard() {
                   <span>ID: {operator.id.substring(0, 8)}</span>
                   <span className="flex items-center gap-1.5">
                     <div className={`w-2 h-2 rounded-full ${operator.layer1LockedAt ? 'bg-primary' : 'bg-amber-500 animate-pulse'}`} />
-                    {operator.layer1LockedAt ? 'SECURE' : 'UNLOCKED'}
+                    {operator.layer1LockedAt ? 'Locked' : 'Unlocked'}
                   </span>
                 </CardFooter>
               </Card>
