@@ -17,19 +17,19 @@ const EVOLUTION_OPTIONS: { value: EvolutionLevel; label: string; description: st
   {
     value: "LOCKED",
     label: "Locked",
-    description: "No changes at all — your operator stays exactly as it is.",
+    description: "No changes at all — your assistant stays exactly as it is.",
     color: "border-red-500/40 text-red-500",
   },
   {
     value: "CONTROLLED",
     label: "Controlled",
-    description: "Changes need your approval before they take effect.",
+    description: "Your assistant can improve, but changes need your approval first.",
     color: "border-amber-500/40 text-amber-500",
   },
   {
     value: "OPEN",
     label: "Open",
-    description: "Your operator can evolve freely based on what it learns.",
+    description: "Your assistant learns and improves on its own over time.",
     color: "border-green-500/40 text-green-500",
   },
 ];
@@ -98,7 +98,7 @@ export default function SettingsSection({ operator }: { operator: Operator }) {
           <Key className="w-8 h-8 text-muted-foreground/40 mx-auto" />
           <p className="font-mono text-sm font-medium">Store private keys and tokens</p>
           <p className="font-mono text-xs text-muted-foreground max-w-sm mx-auto">
-            Save API keys and tokens that only your operator can access during conversations. Coming soon.
+            Save API keys and tokens that only your assistant can access during conversations. Coming soon.
           </p>
         </div>
       </section>
@@ -111,7 +111,7 @@ export default function SettingsSection({ operator }: { operator: Operator }) {
         </div>
         <div className="space-y-3">
           <p className="font-mono text-xs text-muted-foreground">
-            Use your operator from any app or script by calling the API with your auth token.
+            Use your assistant from any app or script by calling the API with your auth token.
           </p>
           <div className="rounded-lg border border-border/40 bg-card/50 p-4 space-y-2">
             <div className="flex items-center justify-between">
@@ -144,14 +144,14 @@ export default function SettingsSection({ operator }: { operator: Operator }) {
         </div>
       </section>
 
-      {/* Evolution Lock */}
+      {/* Growth settings */}
       <section className="space-y-4">
         <div className="flex items-center gap-2 border-b border-border/50 pb-3">
           <ShieldCheck className="w-4 h-4 text-muted-foreground" />
-          <h2 className="font-mono font-bold text-base">Evolution Lock</h2>
+          <h2 className="font-mono font-bold text-base">How it grows</h2>
         </div>
         <p className="font-mono text-xs text-muted-foreground">
-          Choose how much your operator is allowed to adapt and grow over time.
+          Choose how much your assistant is allowed to learn and adapt over time.
         </p>
         <div className="space-y-3">
           {EVOLUTION_OPTIONS.map((opt) => {
@@ -195,7 +195,7 @@ export default function SettingsSection({ operator }: { operator: Operator }) {
               <div>
                 <p className="font-mono text-sm font-bold">Lock identity forever</p>
                 <p className="font-mono text-xs text-muted-foreground mt-0.5">
-                  Permanently prevents anyone from changing this operator's name or purpose. Cannot be undone.
+                  Permanently prevents anyone from changing this assistant's name or purpose. Cannot be undone.
                 </p>
               </div>
               <AlertDialog>
@@ -260,7 +260,7 @@ export default function SettingsSection({ operator }: { operator: Operator }) {
             <div>
               <p className="font-mono text-sm font-bold text-destructive">Delete {operator.name}</p>
               <p className="font-mono text-xs text-muted-foreground mt-0.5">
-                Permanently deletes this operator along with all memory, knowledge, and chat history.
+                Permanently deletes this assistant along with all memory, knowledge, and chat history.
               </p>
             </div>
             <AlertDialog>

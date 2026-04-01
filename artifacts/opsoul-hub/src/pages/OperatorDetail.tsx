@@ -3,13 +3,14 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiFetch } from "@/lib/api";
 import { Operator, HealthScore } from "@/types";
-import { ArrowLeft, MessageSquare, Database, Brain, Network, Settings, BookOpen, Activity } from "lucide-react";
+import { ArrowLeft, MessageSquare, Database, Brain, Network, Settings, BookOpen, Activity, SlidersHorizontal } from "lucide-react";
 
 import ChatSection from "@/components/operator/ChatSection";
 import KbSection from "@/components/operator/KbSection";
 import MemorySection from "@/components/operator/MemorySection";
 import IntegrationsSection from "@/components/operator/IntegrationsSection";
 import SettingsSection from "@/components/operator/SettingsSection";
+import IdentitySection from "@/components/operator/IdentitySection";
 
 function OperatorAvatar({ name }: { name: string }) {
   const letter = name.charAt(0).toUpperCase();
@@ -51,6 +52,7 @@ export default function OperatorDetail({ id }: { id: string }) {
 
   const navItems = [
     { id: "chat",         label: "Chat",         icon: MessageSquare },
+    { id: "instructions", label: "Instructions", icon: SlidersHorizontal },
     { id: "knowledge",   label: "Knowledge",    icon: Database },
     { id: "memory",      label: "Memory",       icon: Brain },
     { id: "integrations",label: "Integrations", icon: Network },
@@ -89,7 +91,7 @@ export default function OperatorDetail({ id }: { id: string }) {
             <OperatorAvatar name={operator.name} />
             <div className="min-w-0">
               <div className="font-mono font-bold text-sm truncate leading-tight">{operator.name}</div>
-              <div className="font-mono text-[10px] text-muted-foreground truncate mt-0.5">{operator.archetype}</div>
+              <div className="font-mono text-[10px] text-muted-foreground truncate mt-0.5 opacity-60">{operator.mandate?.substring(0, 30)}{operator.mandate?.length > 30 ? "…" : ""}</div>
             </div>
           </div>
 
@@ -147,11 +149,12 @@ export default function OperatorDetail({ id }: { id: string }) {
         {/* Content */}
         <main className="flex-1 overflow-y-auto bg-background md:pt-0 pt-14 relative">
           <div className="p-4 md:p-8 max-w-5xl mx-auto h-full w-full">
-            {activeTab === "chat"         && <ChatSection operatorId={id} />}
-            {activeTab === "knowledge"   && <KbSection operatorId={id} />}
-            {activeTab === "memory"      && <MemorySection operatorId={id} />}
-            {activeTab === "integrations"&& <IntegrationsSection operatorId={id} />}
-            {activeTab === "settings"    && <SettingsSection operator={operator} />}
+            {activeTab === "chat"          && <ChatSection operatorId={id} />}
+            {activeTab === "instructions"  && <IdentitySection operator={operator} />}
+            {activeTab === "knowledge"    && <KbSection operatorId={id} />}
+            {activeTab === "memory"       && <MemorySection operatorId={id} />}
+            {activeTab === "integrations" && <IntegrationsSection operatorId={id} />}
+            {activeTab === "settings"     && <SettingsSection operator={operator} />}
           </div>
         </main>
       </div>

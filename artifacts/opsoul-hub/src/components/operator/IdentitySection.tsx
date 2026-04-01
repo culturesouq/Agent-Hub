@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { Operator } from "@/types";
@@ -7,8 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Lock, Unlock, AlertTriangle, RefreshCw } from "lucide-react";
+import { Lock, AlertTriangle, RefreshCw, SlidersHorizontal } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,95 +23,77 @@ import {
 export default function IdentitySection({ operator }: { operator: Operator }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const isL1Locked = !!operator.layer1LockedAt;
-  const isFrozen = operator.growLockLevel === "FROZEN";
+  const isLocked = !!operator.layer1LockedAt;
 
-  const [l1Data, setL1Data] = useState({
+  const [coreData, setCoreData] = useState({
     name: operator.name,
-    archetype: operator.archetype,
     mandate: operator.mandate,
     coreValues: operator.coreValues.join(", "),
-    ethicalBoundaries: operator.ethicalBoundaries.join(", ")
+    ethicalBoundaries: operator.ethicalBoundaries.join(", "),
   });
 
-  const [l2Data, setL2Data] = useState({
+  const [personalityData, setPersonalityData] = useState({
     personalityTraits: operator.soul.personalityTraits.join(", "),
     toneProfile: operator.soul.toneProfile,
     communicationStyle: operator.soul.communicationStyle,
     quirks: operator.soul.quirks.join(", "),
-    valuesManifestation: operator.soul.valuesManifestation.join(", "),
     emotionalRange: operator.soul.emotionalRange,
     decisionMakingStyle: operator.soul.decisionMakingStyle,
-    conflictResolution: operator.soul.conflictResolution
+    conflictResolution: operator.soul.conflictResolution,
   });
 
-  const [lockLevel, setLockLevel] = useState(operator.growLockLevel);
-
-  const updateL1 = useMutation({
+  const updateCore = useMutation({
     mutationFn: (data: any) => apiFetch(`/operators/${operator.id}`, { method: "PATCH", body: JSON.stringify(data) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operator.id] });
-      toast({ title: "Identity updated", description: "Changes saved." });
+      toast({ title: "Saved" });
     },
   });
 
-  const lockL1 = useMutation({
-    mutationFn: () => apiFetch(`/operators/${operator.id}/lock-layer1`, { method: "POST" }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["operators", operator.id] });
-      toast({ title: "Identity locked", description: "The core identity is now locked permanently." });
-    },
-  });
-
-  const updateL2 = useMutation({
+  const updatePersonality = useMutation({
     mutationFn: (data: any) => apiFetch(`/operators/${operator.id}/soul`, { method: "PATCH", body: JSON.stringify(data) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operator.id] });
-      toast({ title: "Personality updated", description: "Changes saved." });
+      toast({ title: "Saved" });
     },
   });
 
-  const resetSoul = useMutation({
+  const resetPersonality = useMutation({
     mutationFn: () => apiFetch(`/operators/${operator.id}/soul/reset`, { method: "POST" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operator.id] });
-      toast({ title: "Personality reset", description: "Reverted to original." });
+      toast({ title: "Personality reset to original" });
     },
   });
 
-  const updateGrowLock = useMutation({
-    mutationFn: (level: string) => apiFetch(`/operators/${operator.id}/grow-lock`, { 
-      method: "PATCH", 
-      body: JSON.stringify({ level }) 
-    }),
+  const lockCore = useMutation({
+    mutationFn: () => apiFetch(`/operators/${operator.id}/lock-layer1`, { method: "POST" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operator.id] });
-      toast({ title: "Evolution mode updated" });
+      toast({ title: "Identity locked" });
     },
   });
 
-  const handleL1Submit = () => {
-    if (isL1Locked) return;
-    updateL1.mutate({
-      name: l1Data.name,
-      archetype: l1Data.archetype,
-      mandate: l1Data.mandate,
-      coreValues: l1Data.coreValues.split(",").map(s=>s.trim()).filter(Boolean),
-      ethicalBoundaries: l1Data.ethicalBoundaries.split(",").map(s=>s.trim()).filter(Boolean),
+  const handleCoreSubmit = () => {
+    if (isLocked) return;
+    updateCore.mutate({
+      name: coreData.name,
+      mandate: coreData.mandate,
+      archetype: operator.archetype,
+      coreValues: coreData.coreValues.split(",").map(s => s.trim()).filter(Boolean),
+      ethicalBoundaries: coreData.ethicalBoundaries.split(",").map(s => s.trim()).filter(Boolean),
     });
   };
 
-  const handleL2Submit = () => {
-    if (isFrozen) return;
-    updateL2.mutate({
-      personalityTraits: l2Data.personalityTraits.split(",").map(s=>s.trim()).filter(Boolean),
-      toneProfile: l2Data.toneProfile,
-      communicationStyle: l2Data.communicationStyle,
-      quirks: l2Data.quirks.split(",").map(s=>s.trim()).filter(Boolean),
-      valuesManifestation: l2Data.valuesManifestation.split(",").map(s=>s.trim()).filter(Boolean),
-      emotionalRange: l2Data.emotionalRange,
-      decisionMakingStyle: l2Data.decisionMakingStyle,
-      conflictResolution: l2Data.conflictResolution
+  const handlePersonalitySubmit = () => {
+    updatePersonality.mutate({
+      personalityTraits: personalityData.personalityTraits.split(",").map(s => s.trim()).filter(Boolean),
+      toneProfile: personalityData.toneProfile,
+      communicationStyle: personalityData.communicationStyle,
+      quirks: personalityData.quirks.split(",").map(s => s.trim()).filter(Boolean),
+      emotionalRange: personalityData.emotionalRange,
+      decisionMakingStyle: personalityData.decisionMakingStyle,
+      conflictResolution: personalityData.conflictResolution,
     });
   };
 
@@ -120,58 +101,42 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
     <div className="space-y-8 animate-in fade-in zoom-in-95 duration-300">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-border/50 pb-4">
         <div>
-          <h2 className="text-2xl font-bold font-mono tracking-tight text-primary">Identity & Personality</h2>
-          <p className="text-muted-foreground font-mono text-sm">Edit core identity and personality traits</p>
-        </div>
-        <div className="flex items-center gap-3 border border-border/50 p-2 rounded-md bg-card/30">
-          <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Evolution mode</Label>
-          <Select 
-            value={lockLevel} 
-            onValueChange={(val) => { setLockLevel(val as any); updateGrowLock.mutate(val); }}
-          >
-            <SelectTrigger className="w-52 font-mono h-8 text-xs border-primary/20">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="OPEN" className="font-mono text-xs text-green-500">Open — evolves automatically</SelectItem>
-              <SelectItem value="CONTROLLED" className="font-mono text-xs text-amber-500">Controlled — needs your approval</SelectItem>
-              <SelectItem value="LOCKED" className="font-mono text-xs text-red-500">Locked — no AI changes</SelectItem>
-              <SelectItem value="FROZEN" className="font-mono text-xs text-muted-foreground">Frozen — no changes at all</SelectItem>
-            </SelectContent>
-          </Select>
+          <h2 className="text-2xl font-bold font-mono tracking-tight text-primary flex items-center gap-2">
+            <SlidersHorizontal className="w-6 h-6" /> Instructions
+          </h2>
+          <p className="text-muted-foreground font-mono text-sm mt-1">What this assistant is and how it behaves</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Core Identity Panel */}
-        <div className={`border rounded-lg p-6 relative overflow-hidden transition-all ${isL1Locked ? 'border-primary/20 bg-primary/5' : 'border-border/50 bg-card/30'}`}>
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="font-mono text-lg font-bold flex items-center gap-2">
-              <span className="text-primary">L1</span> Core Identity
-            </h3>
-            {isL1Locked ? (
+
+        {/* Identity panel */}
+        <div className={`border rounded-lg p-6 space-y-4 transition-all ${isLocked ? "border-primary/20 bg-primary/5" : "border-border/50 bg-card/30"}`}>
+          <div className="flex items-center justify-between">
+            <h3 className="font-mono text-base font-bold">Identity</h3>
+            {isLocked ? (
               <div className="flex items-center gap-1.5 text-xs font-mono text-primary font-bold tracking-widest uppercase bg-primary/10 px-2 py-1 rounded">
-                <Lock className="w-3 h-3" /> Locked forever
+                <Lock className="w-3 h-3" /> Locked
               </div>
             ) : (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="outline" size="sm" className="font-mono text-xs border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground">
-                    <Unlock className="w-3 h-3 mr-2" /> Lock identity
+                    <Lock className="w-3 h-3 mr-1.5" /> Lock forever
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent className="border-primary/20">
                   <AlertDialogHeader>
                     <AlertDialogTitle className="font-mono text-primary flex items-center gap-2">
-                      <Lock className="w-5 h-5" /> Lock core identity permanently?
+                      <Lock className="w-5 h-5" /> Lock identity permanently?
                     </AlertDialogTitle>
                     <AlertDialogDescription className="font-mono">
-                      Locking the core identity will make Name, Archetype, Purpose, Core Values, and Ethical Limits permanently read-only. This action CANNOT BE REVERSED.
+                      Name and purpose will become permanently read-only. This cannot be undone.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel className="font-mono">Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => lockL1.mutate()} className="font-mono font-bold">Lock forever</AlertDialogAction>
+                    <AlertDialogAction onClick={() => lockCore.mutate()} className="font-mono font-bold">Lock forever</AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
@@ -181,174 +146,150 @@ export default function IdentitySection({ operator }: { operator: Operator }) {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Name</Label>
-              <Input 
-                value={l1Data.name} 
-                onChange={e => setL1Data({...l1Data, name: e.target.value})} 
-                disabled={isL1Locked}
-                className="font-mono bg-background/50 disabled:opacity-70 disabled:border-transparent" 
+              <Input
+                value={coreData.name}
+                onChange={e => setCoreData({ ...coreData, name: e.target.value })}
+                disabled={isLocked}
+                className="font-mono bg-background/50 disabled:opacity-70 disabled:border-transparent"
               />
             </div>
-            <div className="space-y-2">
-              <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Archetype</Label>
-              <Input 
-                value={l1Data.archetype} 
-                onChange={e => setL1Data({...l1Data, archetype: e.target.value})} 
-                disabled={isL1Locked}
-                className="font-mono bg-background/50 disabled:opacity-70 disabled:border-transparent" 
-              />
-            </div>
+
             <div className="space-y-2">
               <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Purpose</Label>
-              <Textarea 
-                value={l1Data.mandate} 
-                onChange={e => setL1Data({...l1Data, mandate: e.target.value})} 
-                disabled={isL1Locked}
-                className="font-mono h-24 bg-background/50 disabled:opacity-70 disabled:border-transparent" 
+              <Textarea
+                value={coreData.mandate}
+                onChange={e => setCoreData({ ...coreData, mandate: e.target.value })}
+                disabled={isLocked}
+                className="font-mono h-24 bg-background/50 disabled:opacity-70 disabled:border-transparent"
+                placeholder="What this assistant helps with..."
               />
             </div>
+
             <div className="space-y-2">
               <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Core values (comma-separated)</Label>
-              <Textarea 
-                value={l1Data.coreValues} 
-                onChange={e => setL1Data({...l1Data, coreValues: e.target.value})} 
-                disabled={isL1Locked}
-                className="font-mono h-20 bg-background/50 disabled:opacity-70 disabled:border-transparent" 
+              <Textarea
+                value={coreData.coreValues}
+                onChange={e => setCoreData({ ...coreData, coreValues: e.target.value })}
+                disabled={isLocked}
+                className="font-mono h-16 bg-background/50 disabled:opacity-70 disabled:border-transparent"
+                placeholder="e.g. Honesty, Clarity, Reliability"
               />
             </div>
+
             <div className="space-y-2">
-              <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Ethical limits (comma-separated)</Label>
-              <Textarea 
-                value={l1Data.ethicalBoundaries} 
-                onChange={e => setL1Data({...l1Data, ethicalBoundaries: e.target.value})} 
-                disabled={isL1Locked}
-                className="font-mono h-20 bg-background/50 disabled:opacity-70 disabled:border-transparent" 
+              <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">What it won't do (comma-separated)</Label>
+              <Textarea
+                value={coreData.ethicalBoundaries}
+                onChange={e => setCoreData({ ...coreData, ethicalBoundaries: e.target.value })}
+                disabled={isLocked}
+                className="font-mono h-16 bg-background/50 disabled:opacity-70 disabled:border-transparent"
+                placeholder="e.g. Share private data, give medical advice"
               />
             </div>
-            
-            {!isL1Locked && (
-              <Button onClick={handleL1Submit} disabled={updateL1.isPending} className="w-full font-mono mt-4">
-                {updateL1.isPending ? "Saving..." : "Save changes"}
+
+            {!isLocked && (
+              <Button onClick={handleCoreSubmit} disabled={updateCore.isPending} className="w-full font-mono mt-2">
+                {updateCore.isPending ? "Saving..." : "Save"}
               </Button>
             )}
           </div>
         </div>
 
-        {/* Personality Panel */}
-        <div className={`border rounded-lg p-6 relative overflow-hidden transition-all ${isFrozen ? 'border-border/20 bg-muted/5' : 'border-border/50 bg-card/30'}`}>
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="font-mono text-lg font-bold flex items-center gap-2">
-              <span className="text-secondary-foreground">L2</span> Personality
-            </h3>
-            {isFrozen ? (
-              <div className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground font-bold tracking-widest uppercase bg-muted/10 px-2 py-1 rounded">
-                <Lock className="w-3 h-3" /> Frozen
-              </div>
-            ) : (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="ghost" size="sm" className="font-mono text-xs text-muted-foreground hover:text-destructive">
-                    <RefreshCw className="w-3 h-3 mr-2" /> Reset to original
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent className="border-destructive/20">
-                  <AlertDialogHeader>
-                    <AlertDialogTitle className="font-mono text-destructive flex items-center gap-2">
-                      <AlertTriangle className="w-5 h-5" /> Reset personality?
-                    </AlertDialogTitle>
-                    <AlertDialogDescription className="font-mono">
-                      This will reset all learned personality traits, quirks, and communication styles back to the starting point. This reverts all learned personality changes.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel className="font-mono">Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => resetSoul.mutate()} className="bg-destructive text-destructive-foreground font-mono font-bold">Reset</AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
+        {/* Personality panel */}
+        <div className="border rounded-lg p-6 space-y-4 border-border/50 bg-card/30">
+          <div className="flex items-center justify-between">
+            <h3 className="font-mono text-base font-bold">Personality</h3>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="ghost" size="sm" className="font-mono text-xs text-muted-foreground hover:text-destructive">
+                  <RefreshCw className="w-3 h-3 mr-1.5" /> Reset
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent className="border-destructive/20">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="font-mono text-destructive flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5" /> Reset personality?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription className="font-mono">
+                    All personality changes will be reverted to the original. This cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel className="font-mono">Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => resetPersonality.mutate()} className="bg-destructive text-destructive-foreground font-mono font-bold">Reset</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
 
           <div className="space-y-4">
+            <div className="space-y-2">
+              <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Traits (comma-separated)</Label>
+              <Input
+                value={personalityData.personalityTraits}
+                onChange={e => setPersonalityData({ ...personalityData, personalityTraits: e.target.value })}
+                className="font-mono bg-background/50"
+                placeholder="e.g. Friendly, concise, patient"
+              />
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2 col-span-2">
-                <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Personality traits (comma-separated)</Label>
-                <Input 
-                  value={l2Data.personalityTraits} 
-                  onChange={e => setL2Data({...l2Data, personalityTraits: e.target.value})} 
-                  disabled={isFrozen}
-                  className="font-mono bg-background/50" 
-                />
-              </div>
               <div className="space-y-2">
                 <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Tone</Label>
-                <Input 
-                  value={l2Data.toneProfile} 
-                  onChange={e => setL2Data({...l2Data, toneProfile: e.target.value})} 
-                  disabled={isFrozen}
-                  className="font-mono bg-background/50" 
+                <Input
+                  value={personalityData.toneProfile}
+                  onChange={e => setPersonalityData({ ...personalityData, toneProfile: e.target.value })}
+                  className="font-mono bg-background/50"
+                  placeholder="e.g. Warm and professional"
                 />
               </div>
               <div className="space-y-2">
-                <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Communication style</Label>
-                <Input 
-                  value={l2Data.communicationStyle} 
-                  onChange={e => setL2Data({...l2Data, communicationStyle: e.target.value})} 
-                  disabled={isFrozen}
-                  className="font-mono bg-background/50" 
+                <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Style</Label>
+                <Input
+                  value={personalityData.communicationStyle}
+                  onChange={e => setPersonalityData({ ...personalityData, communicationStyle: e.target.value })}
+                  className="font-mono bg-background/50"
+                  placeholder="e.g. Direct, structured"
                 />
               </div>
               <div className="space-y-2">
                 <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Emotional range</Label>
-                <Input 
-                  value={l2Data.emotionalRange} 
-                  onChange={e => setL2Data({...l2Data, emotionalRange: e.target.value})} 
-                  disabled={isFrozen}
-                  className="font-mono bg-background/50" 
+                <Input
+                  value={personalityData.emotionalRange}
+                  onChange={e => setPersonalityData({ ...personalityData, emotionalRange: e.target.value })}
+                  className="font-mono bg-background/50"
                 />
               </div>
               <div className="space-y-2">
-                <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Decision-making style</Label>
-                <Input 
-                  value={l2Data.decisionMakingStyle} 
-                  onChange={e => setL2Data({...l2Data, decisionMakingStyle: e.target.value})} 
-                  disabled={isFrozen}
-                  className="font-mono bg-background/50" 
+                <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Decision making</Label>
+                <Input
+                  value={personalityData.decisionMakingStyle}
+                  onChange={e => setPersonalityData({ ...personalityData, decisionMakingStyle: e.target.value })}
+                  className="font-mono bg-background/50"
                 />
               </div>
               <div className="space-y-2 col-span-2">
-                <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Conflict resolution</Label>
-                <Input 
-                  value={l2Data.conflictResolution} 
-                  onChange={e => setL2Data({...l2Data, conflictResolution: e.target.value})} 
-                  disabled={isFrozen}
-                  className="font-mono bg-background/50" 
+                <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Conflict handling</Label>
+                <Input
+                  value={personalityData.conflictResolution}
+                  onChange={e => setPersonalityData({ ...personalityData, conflictResolution: e.target.value })}
+                  className="font-mono bg-background/50"
                 />
               </div>
               <div className="space-y-2 col-span-2">
                 <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Quirks (comma-separated)</Label>
-                <Input 
-                  value={l2Data.quirks} 
-                  onChange={e => setL2Data({...l2Data, quirks: e.target.value})} 
-                  disabled={isFrozen}
-                  className="font-mono bg-background/50" 
-                />
-              </div>
-              <div className="space-y-2 col-span-2">
-                <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Values in action (comma-separated)</Label>
-                <Textarea 
-                  value={l2Data.valuesManifestation} 
-                  onChange={e => setL2Data({...l2Data, valuesManifestation: e.target.value})} 
-                  disabled={isFrozen}
-                  className="font-mono h-16 bg-background/50" 
+                <Input
+                  value={personalityData.quirks}
+                  onChange={e => setPersonalityData({ ...personalityData, quirks: e.target.value })}
+                  className="font-mono bg-background/50"
+                  placeholder="e.g. Uses analogies, starts with a summary"
                 />
               </div>
             </div>
-            
-            {!isFrozen && (
-              <Button onClick={handleL2Submit} disabled={updateL2.isPending} variant="secondary" className="w-full font-mono mt-4 border border-secondary-foreground/20">
-                {updateL2.isPending ? "Saving..." : "Save personality"}
-              </Button>
-            )}
+
+            <Button onClick={handlePersonalitySubmit} disabled={updatePersonality.isPending} variant="secondary" className="w-full font-mono border border-secondary-foreground/20 mt-2">
+              {updatePersonality.isPending ? "Saving..." : "Save personality"}
+            </Button>
           </div>
         </div>
       </div>

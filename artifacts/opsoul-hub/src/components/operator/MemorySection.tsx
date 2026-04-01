@@ -78,7 +78,7 @@ export default function MemorySection({ operatorId }: { operatorId: string }) {
           <h2 className="text-2xl font-bold font-mono tracking-tight text-primary flex items-center gap-2">
             <Brain className="w-6 h-6" /> Memory
           </h2>
-          <p className="text-muted-foreground font-mono text-sm mt-1">Your agent's stored knowledge and preferences</p>
+          <p className="text-muted-foreground font-mono text-sm mt-1">What your assistant remembers across conversations</p>
         </div>
         
         <div className="flex flex-wrap gap-2">

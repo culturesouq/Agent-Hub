@@ -104,9 +104,6 @@ export default function Dashboard() {
 
                 <CardHeader className="pb-3 pt-4">
                   <CardTitle className="font-mono text-xl pr-24 truncate">{operator.name}</CardTitle>
-                  <CardDescription className="font-mono text-xs uppercase tracking-wider text-primary/70">
-                    {operator.archetype}
-                  </CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow">
                   <p className="text-sm text-muted-foreground line-clamp-3 font-mono leading-relaxed opacity-80">
