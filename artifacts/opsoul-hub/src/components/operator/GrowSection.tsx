@@ -260,7 +260,7 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
 
   const decideProposal = useMutation({
     mutationFn: ({ id, action }: { id: string; action: "approve" | "reject" }) =>
-      apiFetch(`/operators/${operatorId}/grow/decide/${id}`, { method: "PATCH", body: JSON.stringify({ action }) }),
+      apiFetch(`/operators/${operatorId}/grow/proposals/${id}/decide`, { method: "PATCH", body: JSON.stringify({ action }) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "grow-proposals"] });
       queryClient.invalidateQueries({ queryKey: ["operators", operatorId] });
