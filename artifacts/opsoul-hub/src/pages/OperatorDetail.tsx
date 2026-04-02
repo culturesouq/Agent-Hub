@@ -379,8 +379,8 @@ export default function OperatorDetail({ id }: { id: string }) {
             className="absolute inset-0 bg-background/80 backdrop-blur-sm"
             onClick={() => setMobileNavOpen(false)}
           />
-          <aside className="absolute left-0 top-0 bottom-0 w-64 bg-card border-r border-border/50 flex flex-col overflow-y-auto shadow-xl">
-            <div className="p-4 border-b border-border/30 flex items-center gap-3">
+          <aside className="absolute left-0 top-0 bottom-0 w-64 bg-sidebar border-r border-sidebar-border flex flex-col overflow-y-auto shadow-xl">
+            <div className="p-4 border-b border-sidebar-border flex items-center gap-3">
               <OperatorAvatar name={operator.name} />
               <div className="min-w-0">
                 <div className="font-mono font-bold text-sm truncate leading-tight">{operator.name}</div>
@@ -389,7 +389,7 @@ export default function OperatorDetail({ id }: { id: string }) {
             <div className="p-2 flex flex-col gap-0.5 flex-1 overflow-y-auto">
               {renderNavItems(NAV_MAIN)}
             </div>
-            <div className="p-2 border-t border-border/30 flex flex-col gap-0.5">
+            <div className="p-2 border-t border-sidebar-border flex flex-col gap-0.5">
               {renderNavItems(NAV_BOTTOM)}
             </div>
           </aside>
@@ -398,8 +398,8 @@ export default function OperatorDetail({ id }: { id: string }) {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Desktop Sidebar */}
-        <aside className="w-56 border-r border-border/50 bg-card/30 flex-col shrink-0 overflow-y-auto hidden md:flex">
-          <div className="p-4 border-b border-border/30 flex items-center gap-3">
+        <aside className="w-56 border-r border-sidebar-border bg-sidebar flex-col shrink-0 overflow-y-auto hidden md:flex">
+          <div className="p-4 border-b border-sidebar-border flex items-center gap-3">
             <OperatorAvatar name={operator.name} />
             <div className="min-w-0">
               <div className="font-mono font-bold text-sm truncate leading-tight">{operator.name}</div>
@@ -408,7 +408,7 @@ export default function OperatorDetail({ id }: { id: string }) {
           <div className="p-2 flex flex-col gap-0.5 flex-1 overflow-y-auto">
             {renderNavItems(NAV_MAIN)}
           </div>
-          <div className="p-2 border-t border-border/30 flex flex-col gap-0.5">
+          <div className="p-2 border-t border-sidebar-border flex flex-col gap-0.5">
             {renderNavItems(NAV_BOTTOM)}
           </div>
         </aside>
