@@ -279,7 +279,7 @@ router.post('/test-proposal/:proposalId', async (req: Request, res: Response): P
           chatCompletion([{ role: 'system', content: proposedSystemPrompt }, { role: 'user', content: prompt }], CHAT_MODEL),
         ]);
         return {
-          prompt,
+          message: prompt,
           current: currentRes.content,
           proposed: proposedRes.content,
         };
