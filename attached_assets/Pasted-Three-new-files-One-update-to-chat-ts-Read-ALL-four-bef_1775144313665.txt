@@ -1,0 +1,182 @@
+Three new files. One update to chat.ts. Read ALL four before touching anything.
+
+Overview: Right now Operators know what skills they have (self-awareness) but cannot use them. This adds the execution bridge. When an Operator's response signals intent to use a skill — the skill runs, the result comes back, the Operator responds with real data.
+
+File 1 — Create artifacts/opsoul-api/src/utils/skillTriggerEngine.ts
+
+import { embed } from '@workspace/opsoul-utils/ai';
+
+export interface InstalledSkill {
+  installId: string;
+  skillId:   string;
+  name:      string;
+  triggerDescription: string;
+  instructions:       string;
+  outputFormat:       string | null;
+  customInstructions: string | null;
+}
+
+export interface SkillTrigger {
+  installId:   string;
+  skillId:     string;
+  name:        string;
+  instructions: string;
+  outputFormat: string | null;
+  customInstructions: string | null;
+  extractedParams: string;
+}
+
+// Returns the first skill triggered by the Operator response, or null.
+// Checks each installed skill's triggerDescription against the response.
+// Uses semantic similarity — threshold 0.55 (loose enough to catch intent, tight enough to avoid false positives).
+export async function detectSkillTrigger(
+  operatorResponse: string,
+  installedSkills: InstalledSkill[],
+): Promise<SkillTrigger | null> {
+  if (!installedSkills.length) return null;
+
+  const [responseEmbed] = await Promise.all([embed(operatorResponse)]);
+
+  for (const skill of installedSkills) {
+    if (!skill.triggerDescription) continue;
+    const triggerEmbed = await embed(skill.triggerDescription);
+    const dot  = responseEmbed.reduce((sum, v, i) => sum + v * triggerEmbed[i], 0);
+    const magA = Math.sqrt(responseEmbed.reduce((s, v) => s + v * v, 0));
+    const magB = Math.sqrt(triggerEmbed.reduce((s, v) => s + v * v, 0));
+    const similarity = dot / (magA * magB);
+
+    if (similarity >= 0.55) {
+      return {
+        installId:   skill.installId,
+        skillId:     skill.skillId,
+        name:        skill.name,
+        instructions: skill.instructions,
+        outputFormat: skill.outputFormat,
+        customInstructions: skill.customInstructions,
+        extractedParams: operatorResponse, // full response as context for executor
+      };
+    }
+  }
+
+  return null;
+}
+File 2 — Create artifacts/opsoul-api/src/utils/skillExecutor.ts
+
+import { chatCompletion } from './openrouter.js';
+import type { SkillTrigger } from './skillTriggerEngine.js';
+
+export interface SkillResult {
+  skillName:  string;
+  output:     string;
+  success:    boolean;
+  error?:     string;
+}
+
+export async function executeSkill(
+  trigger: SkillTrigger,
+  model: string,
+): Promise<SkillResult> {
+  const instructions = trigger.customInstructions
+    ? `${trigger.instructions}\n\nAdditional instructions: ${trigger.customInstructions}`
+    : trigger.instructions;
+
+  const outputFormatLine = trigger.outputFormat
+    ? `\n\nReturn your response in this format: ${trigger.outputFormat}`
+    : '';
+
+  const prompt = `You are executing a skill on behalf of an Operator.
+
+Skill: ${trigger.name}
+Instructions: ${instructions}${outputFormatLine}
+
+Context from the Operator's response (what triggered this skill):
+${trigger.extractedParams}
+
+Execute the skill now. Return only the result — no explanation, no preamble.`;
+
+  try {
+    const result = await chatCompletion(
+      [{ role: 'user', content: prompt }],
+      model,
+    );
+    return {
+      skillName: trigger.name,
+      output:    result.content,
+      success:   true,
+    };
+  } catch (err: any) {
+    console.error(`[skillExecutor] failed for skill ${trigger.name}:`, err?.message);
+    return {
+      skillName: trigger.name,
+      output:    '',
+      success:   false,
+      error:     err?.message ?? 'Unknown error',
+    };
+  }
+}
+File 3 — Update artifacts/opsoul-api/src/routes/chat.ts
+
+Find the loadActiveSkills function — it already exists. Now find the section in the POST handler where the Operator's response is assembled (after streamChat or chatCompletion returns). Add this block AFTER the response is received and BEFORE it is saved to the messages table:
+
+import { detectSkillTrigger, type InstalledSkill } from '../utils/skillTriggerEngine.js';
+import { executeSkill } from '../utils/skillExecutor.js';
+
+// --- AGENCY LAYER ---
+// After Operator responds — check if a skill should fire
+const installedSkillsForAgency: InstalledSkill[] = activeSkills.map((s: any) => ({
+  installId:          s.id ?? s.skillId,
+  skillId:            s.skillId,
+  name:               s.name ?? s.skillName,
+  triggerDescription: s.triggerDescription ?? '',
+  instructions:       s.instructions ?? s.skillInstructions ?? '',
+  outputFormat:       s.outputFormat ?? s.skillOutputFormat ?? null,
+  customInstructions: s.customInstructions ?? null,
+}));
+
+const skillTrigger = await detectSkillTrigger(assistantContent, installedSkillsForAgency);
+
+if (skillTrigger) {
+  console.log(`[agency] skill triggered: ${skillTrigger.name}`);
+  const skillResult = await executeSkill(skillTrigger, usedModel);
+
+  if (skillResult.success) {
+    // Inject result as a system message so Operator can respond with real data
+    const skillSystemMsg = `[Skill: ${skillResult.skillName}] Result:\n${skillResult.output}`;
+
+    // Save skill result as system message in conversation
+    await db.insert(messagesTable).values({
+      id:             crypto.randomUUID(),
+      conversationId: conv.id,
+      role:           'system',
+      content:        skillSystemMsg,
+      createdAt:      new Date(),
+    });
+
+    // Create task record
+    await db.insert(tasksTable).values({
+      id:             crypto.randomUUID(),
+      operatorId:     operator.id,
+      conversationId: conv.id,
+      contextName:    skillTrigger.name,
+      taskType:       'skill_execution',
+      integrationLabel: 'platform_skill',
+      payload:        { skillId: skillTrigger.skillId, result: skillResult.output },
+      status:         'completed',
+      summary:        `Executed ${skillTrigger.name}`,
+      completedAt:    new Date(),
+    });
+
+    console.log(`[agency] skill ${skillTrigger.name} executed and logged`);
+  }
+}
+// --- END AGENCY LAYER ---
+Make sure tasksTable is imported in chat.ts — check the existing imports at the top. If it's not there, add it to the import from @workspace/db.
+
+After all three changes:
+
+Restart the API
+Do NOT test yet — show me:
+The detectSkillTrigger function signature (first 5 lines)
+The executeSkill function signature (first 5 lines)
+The agency layer block location in chat.ts (what line it's after, what line it's before)
+I will confirm before any testing

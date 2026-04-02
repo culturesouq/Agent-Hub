@@ -10,7 +10,11 @@ import {
   platformSkillsTable,
   missionContextsTable,
   selfAwarenessStateTable,
+  tasksTable,
 } from '@workspace/db';
+import { detectSkillTrigger } from '../utils/skillTriggerEngine.js';
+import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
+import { executeSkill } from '../utils/skillExecutor.js';
 import { embed, semanticDistance } from '@workspace/opsoul-utils/ai';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { lockLayer1IfUnlocked } from '../utils/lockLayer1.js';
@@ -85,10 +89,13 @@ async function buildMessageHistory(convId: string): Promise<ChatMessage[]> {
 async function loadActiveSkills(operatorId: string): Promise<ActiveSkill[]> {
   const installs = await db
     .select({
+      id: operatorSkillsTable.id,
+      skillId: operatorSkillsTable.skillId,
       customInstructions: operatorSkillsTable.customInstructions,
       name: platformSkillsTable.name,
       instructions: platformSkillsTable.instructions,
       outputFormat: platformSkillsTable.outputFormat,
+      triggerDescription: platformSkillsTable.triggerDescription,
     })
     .from(operatorSkillsTable)
     .innerJoin(platformSkillsTable, eq(operatorSkillsTable.skillId, platformSkillsTable.id))
@@ -99,7 +106,7 @@ async function loadActiveSkills(operatorId: string): Promise<ActiveSkill[]> {
       ),
     );
 
-  return installs;
+  return installs as unknown as ActiveSkill[];
 }
 
 async function loadMissionContext(missionContextId: string | null | undefined): Promise<ActiveMissionContext | null> {
@@ -284,6 +291,45 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         }
       }
 
+      // --- AGENCY LAYER ---
+      const installedSkillsForAgency: InstalledSkill[] = skills.map((s: any) => ({
+        installId:          s.id ?? s.skillId,
+        skillId:            s.skillId,
+        name:               s.name ?? s.skillName,
+        triggerDescription: s.triggerDescription ?? '',
+        instructions:       s.instructions ?? s.skillInstructions ?? '',
+        outputFormat:       s.outputFormat ?? s.skillOutputFormat ?? null,
+        customInstructions: s.customInstructions ?? null,
+      }));
+      const skillTrigger = await detectSkillTrigger(fullContent, installedSkillsForAgency);
+      if (skillTrigger) {
+        console.log(`[agency] skill triggered: ${skillTrigger.name}`);
+        const skillResult = await executeSkill(skillTrigger, chatModel);
+        if (skillResult.success) {
+          const skillSystemMsg = `[Skill: ${skillResult.skillName}] Result:\n${skillResult.output}`;
+          await db.insert(messagesTable).values({
+            id:             crypto.randomUUID(),
+            conversationId: conv.id,
+            role:           'system',
+            content:        skillSystemMsg,
+          });
+          await db.insert(tasksTable).values({
+            id:               crypto.randomUUID(),
+            operatorId:       operator.id,
+            conversationId:   conv.id,
+            contextName:      skillTrigger.name,
+            taskType:         'skill_execution',
+            integrationLabel: 'platform_skill',
+            payload:          { skillId: skillTrigger.skillId, result: skillResult.output },
+            status:           'completed',
+            summary:          `Executed ${skillTrigger.name}`,
+            completedAt:      new Date(),
+          });
+          console.log(`[agency] skill ${skillTrigger.name} executed and logged`);
+        }
+      }
+      // --- END AGENCY LAYER ---
+
       const asstMsgId = crypto.randomUUID();
       await db.insert(messagesTable).values({
         id: asstMsgId,
@@ -324,6 +370,45 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   } else {
     try {
       const result = await chatCompletion(messages, chatOpts);
+
+      // --- AGENCY LAYER ---
+      const installedSkillsForAgency: InstalledSkill[] = skills.map((s: any) => ({
+        installId:          s.id ?? s.skillId,
+        skillId:            s.skillId,
+        name:               s.name ?? s.skillName,
+        triggerDescription: s.triggerDescription ?? '',
+        instructions:       s.instructions ?? s.skillInstructions ?? '',
+        outputFormat:       s.outputFormat ?? s.skillOutputFormat ?? null,
+        customInstructions: s.customInstructions ?? null,
+      }));
+      const skillTrigger = await detectSkillTrigger(result.content, installedSkillsForAgency);
+      if (skillTrigger) {
+        console.log(`[agency] skill triggered: ${skillTrigger.name}`);
+        const skillResult = await executeSkill(skillTrigger, chatModel);
+        if (skillResult.success) {
+          const skillSystemMsg = `[Skill: ${skillResult.skillName}] Result:\n${skillResult.output}`;
+          await db.insert(messagesTable).values({
+            id:             crypto.randomUUID(),
+            conversationId: conv.id,
+            role:           'system',
+            content:        skillSystemMsg,
+          });
+          await db.insert(tasksTable).values({
+            id:               crypto.randomUUID(),
+            operatorId:       operator.id,
+            conversationId:   conv.id,
+            contextName:      skillTrigger.name,
+            taskType:         'skill_execution',
+            integrationLabel: 'platform_skill',
+            payload:          { skillId: skillTrigger.skillId, result: skillResult.output },
+            status:           'completed',
+            summary:          `Executed ${skillTrigger.name}`,
+            completedAt:      new Date(),
+          });
+          console.log(`[agency] skill ${skillTrigger.name} executed and logged`);
+        }
+      }
+      // --- END AGENCY LAYER ---
 
       const asstMsgId = crypto.randomUUID();
       await db.insert(messagesTable).values({
