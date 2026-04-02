@@ -1,0 +1,935 @@
+# FOUNDER MOMENT — COMPLETE PLATFORM MAP
+## Migration Document | Written March 30, 2026
+## Repo: culturesouq/startup-eco (private)
+## Base44 App ID: 694575d0aee9119298d9595c
+## Purpose: Full blueprint + reasoning so the Replit agent builder
+##           understands WHY every decision was made, not just WHAT exists.
+
+---
+
+# PREAMBLE — HOW TO READ THIS DOCUMENT
+
+This is not just a map. It's a reasoning document.
+
+Every architectural decision in FM was made for a reason.
+Understanding the WHY means you can:
+- Fill gaps correctly (not just copy blindly)
+- Enhance it (because you understand the intent)
+- Avoid breaking things that look simple but aren't
+
+When you see a decision that seems over-engineered — read the WHY.
+When you see something that seems missing — it may be intentional.
+
+**The builder's rule:** If you don't understand why something exists, ask before removing it.
+
+---
+
+# SECTION 1 — WHAT BASE44 PROVIDED (AND WHY WE NEED TO REPLACE IT)
+
+Base44 is a "BaaS + hosting + agent platform" rolled into one.
+When we move to Replit + Agent-Hub, we are unbundling those three layers.
+
+## What Base44 did automatically → What we must now do explicitly
+
+### Authentication
+**What Base44 did:**
+- Google OAuth login built in
+- JWT token injected into every request automatically
+- `base44.auth.me()` returned the current user from any context
+
+**Why it worked:**
+The SDK client (`base44Client.js`) reads `appParams.token` from the URL hash on login.
+Base44 injects the token as a URL parameter after OAuth. The SDK strips it and stores it locally.
+
+**What we replace it with:**
+JWT-based auth system. User logs in → server returns JWT → client stores in localStorage → sends as `Authorization: Bearer <token>` on every request.
+
+**WHY we must be careful here:**
+FM has both PUBLIC routes (Home, Meet, FoundersMoment, Pricing) and PROTECTED routes (Dashboard, Journey, Vault, IstishariPage). The current `AuthContext.jsx` handles this gracefully:
+- It does NOT redirect to login immediately
+- It checks if the app is public first, THEN checks auth
+- This prevents flashing "login required" on public pages
+
+The replacement auth system must preserve this pattern exactly. Public pages must work without any token. Protected pages redirect to login if no token.
+
+---
+
+### Entity CRUD (Database)
+**What Base44 did:**
+`base44.entities.Startup.filter({ created_by: user.email })` → returns records automatically.
+Row-Level Security (RLS) was enforced server-side based on `created_by` field.
+
+**Why this mattered:**
+Every entity record has `created_by` (user email) auto-set on creation.
+RLS meant a founder could NEVER accidentally see another founder's data.
+No developer had to write `WHERE created_by = ?` — it was automatic.
+
+**What we replace it with:**
+PostgreSQL with Drizzle ORM. Every query must explicitly filter by `userId`.
+The RLS rule must become a middleware pattern:
+```js
+// Every protected route: inject userId into query
+const startups = await db.select().from(startup).where(eq(startup.createdBy, req.user.id));
+```
+
+**WHY this is the most dangerous migration step:**
+If even ONE query forgets the `createdBy` filter, a founder can see another founder's data.
+This is a privacy breach, not just a bug.
+Rule: Every entity query in the new system must have a userId filter OR be explicitly marked as "admin-only" or "shared" (like AIInsight which is global KB).
+
+---
+
+### Backend Functions (Serverless)
+**What Base44 did:**
+Deno serverless functions with `createClientFromRequest(req)` — this gave the function an authenticated client with the calling user's context.
+
+**Why the pattern matters:**
+Inside a function, you could do:
+```ts
+const base44 = createClientFromRequest(req);
+const user = await base44.auth.me(); // The actual user who called this
+// Then: base44.entities.X — scoped to that user
+// OR: base44.asServiceRole.entities.X — admin bypass
+```
+
+This dual mode (user-scoped vs service-role) was critical:
+- User-scoped: for operations the founder triggers (generate tool, save document)
+- Service-role: for admin operations (background learning, subscription management)
+
+**What we replace it with:**
+Express route handlers. The same dual-mode pattern becomes:
+- User routes: middleware validates JWT, `req.user` is the caller, queries filtered by `req.user.id`
+- Admin/service routes: protected by admin secret key, no user filtering
+
+---
+
+### Agent Chat
+**What Base44 did:**
+`base44.agents.addMessage(agentName, message, conversationId)` — Base44 hosted Istishari as a "Superagent" and routed messages to him.
+
+**Why we used a proxy (istishariProxy function):**
+The agent API required a Base44 API key. We couldn't expose that key in the frontend.
+So all chat went: `Frontend → istishariProxy (backend function) → Base44 Agent API`
+This also let us add rate limiting for guests (30 calls/hour per IP) before the message reached the agent.
+
+**What we replace it with:**
+In Agent-Hub, I (Istishari) am an OpenRouter-powered agent with my own context management.
+The proxy pattern stays (frontend never calls LLM directly), but the destination changes:
+`Frontend → /api/chat (Express route) → OpenRouter API`
+The session isolation is maintained by: `conversationId = userId + startupId`
+No bleeding between founders. No leaking context.
+
+---
+
+# SECTION 2 — ALL ENTITIES WITH FULL REASONING
+
+## WHY these entities exist and how they relate
+
+### The Startup Entity — The Center of Everything
+
+```
+Startup {
+  id, created_by (email), created_date, updated_date
+  name, tagline
+  stage: enum[idea, mvp, launch, growth, scale]
+  industry, business_type
+  primary_market, primary_city
+  problem, solution, target_market
+  revenue_model, revenue_monthly
+  team_size
+  active_startup_id  ← this is on the USER, not the startup
+}
+```
+
+**WHY it exists:**
+Every action in FM is scoped to a Startup. Documents belong to a startup. Conversations belong to a startup. Memory belongs to a startup. The startup is the unit of work.
+
+**WHY `stage` matters:**
+The 6-phase Journey is gated by stage. When a startup is at `idea`, only Phase 1-2 tools are unlocked. When they reach `mvp`, Phase 3-4 unlocks. This prevents founders from generating a Pitch Deck before they've validated the idea — which would produce garbage output.
+
+**WHY `active_startup_id` exists:**
+A founder can have multiple startups (e.g., Mohamed has 4). The app always knows WHICH startup is currently active. This is stored on the User record, not the Startup record, because it's a user preference, not a startup property.
+
+**Relationships:**
+- One User → many Startups
+- One Startup → many Documents
+- One Startup → many Conversations
+- One Startup → one StartupIntelligence (the structured snapshot)
+- One Startup → one IstishariMemory (my memory of the founder for this startup)
+
+---
+
+### Document Entity — The Vault
+
+```
+Document {
+  id, created_by, startup_id
+  tool_name, tool_order (1-22)
+  content (full markdown — can be 3,000+ words)
+  language (en/ar)
+  version (for re-generations)
+  created_date, updated_date
+}
+```
+
+**WHY it exists:**
+Every time a founder generates a tool output (Idea Validation, Customer Persona, Market Study...), the result is saved as a Document. This is the Vault — the founder's library of everything they've built.
+
+**WHY `tool_order` matters:**
+Documents are ordered by the Journey sequence. Tool 1 = Idea Validation, Tool 9 = Market Study, etc. The Vault renders them in journey order, not creation order. This makes the Vault feel like a growing business plan, not a random list.
+
+**WHY `version` exists:**
+Founders regenerate tools (after pivoting, after market feedback). Version tracking lets them see their thinking evolution. "This was my market analysis in month 1 vs month 3."
+
+**WHY content is raw markdown:**
+Every renderer component (BrandRenderer, MarketRenderer, etc.) takes markdown and transforms it into a beautiful visual card. Storing raw markdown means:
+- We can re-render with improved renderers without regenerating
+- PDF export works from the same source
+- Easy to search and index
+
+---
+
+### Conversation Entity — Chat History
+
+```
+Conversation {
+  id, created_by, startup_id
+  role: enum[user, assistant, system]
+  content
+  session_id  ← groups messages
+  created_date
+}
+```
+
+**WHY we store conversations:**
+Two reasons:
+1. Continuity — when a founder opens Istishari tomorrow, I pick up exactly where we left off. No "who are you again?" moments.
+2. Memory training — conversation patterns feed into IstishariMemory and eventually KB records.
+
+**WHY `session_id` exists:**
+Each visit to IstishariPage creates a new session. Session grouping lets us show "conversation history" with dates, rather than one endless thread. Founders can jump back to "what did we discuss on March 15?"
+
+**WHY `startup_id` is on conversations:**
+If a founder has 3 startups, their conversations with Istishari about Startup A must not bleed into Startup B. The isolation is: `conversationId = userId + startupId`. Same architecture in Agent-Hub.
+
+---
+
+### IstishariMemory — My Long-Term Relationship Memory
+
+```
+IstishariMemory {
+  id, created_by, startup_id
+  last_advice        ← what I told them last session
+  open_questions     ← what's still unresolved
+  founder_personality ← patterns I've noticed (stubborn? overcautious? impulsive?)
+  session_count      ← how many times we've talked
+  last_session_date
+}
+```
+
+**WHY this exists separately from Conversation:**
+Conversation stores EVERYTHING (every message). IstishariMemory stores the ESSENCE. Before I respond to a returning founder, I read IstishariMemory first — it tells me:
+- What advice I gave last time (so I don't contradict myself)
+- What questions are still open (so I can follow up proactively)
+- Who this person IS (impatient? analytical? emotional?)
+
+This is what makes me feel like a real co-founder who remembers, not a chatbot who starts fresh every session.
+
+**WHY `founder_personality` matters:**
+Over time I learn how to communicate with each founder specifically. An analytical founder gets data and frameworks. An emotional founder gets acknowledgment before advice. A stubborn founder gets challenged directly. I store these observations so each session builds on the last.
+
+---
+
+### AIInsight — The Knowledge Brain (3,480+ records)
+
+```
+AIInsight {
+  id, created_date, updated_date
+  category           ← Research / Methodology / Behavioral / Scaffold
+  title, content     ← The actual knowledge
+  tags (array)       ← topic tags
+  business_types (array) ← which startup types this applies to
+  markets (array)    ← UAE / GCC / Global / etc.
+  stage_relevance (array) ← which journey phases need this
+  source             ← where it came from
+  source_urls (array)
+  confidence (0-100) ← how verified this is
+  verification_status ← pending / verified / probation
+  relevant_tools (array) ← which Journey tools need this
+  last_verified
+}
+```
+
+**WHY this is the most important entity:**
+Without AIInsight, I give generic startup advice that could apply to anyone.
+With AIInsight, I give UAE-specific, MENA-calibrated, verified advice that applies to THIS founder in THIS market.
+
+**WHY the confidence score exists:**
+Not all KB records are equal. A record citing the UAE Ministry of Economy with a 2025 source date gets 90+. A record based on one forum post gets 65. The threshold rule:
+- ≥ 72 → safe to surface to founders in conversation
+- ≥ 80 → safe to use in tool outputs (documents)
+- < 72 → visible to me, but not served to founders
+
+**WHY `business_types` and `markets` arrays:**
+An insight about "F&B startup costs in Dubai" is irrelevant to a SaaS founder in Egypt.
+Before surfacing any insight, I filter by: `startup.stage ∩ startup.business_type ∩ startup.market`.
+This prevents "smart-sounding but irrelevant" advice.
+
+**WHY this entity has NO RLS:**
+AIInsight is shared knowledge. Every founder benefits from the same KB.
+It's platform-wide, not founder-specific. RLS would be wrong here.
+
+**The 4 record types (critical for any audit):**
+1. **Research** — official source, real data, cite it
+2. **Methodology** — global framework adapted for MENA (e.g., "Lean Startup adapted for UAE regulatory reality")
+3. **Behavioral/Cultural** — founder psychology patterns (no URL needed, real observed patterns)
+4. **Scaffold** — `source: "Platform Expert Knowledge"` = intentional curriculum seed, NEVER delete even if body has placeholder text
+
+---
+
+### StartupIntelligence — The Structured Snapshot
+
+```
+StartupIntelligence {
+  id, startup_id, created_by
+  -- Identity block: name, tagline, business_type, industry, market
+  -- Idea block: problem, solution, customer, unique angle, validation score
+  -- Customer block: persona name, demographics, psychographics, core pain
+  -- Market block: TAM, SAM, SOM, competitors, gaps, regional context
+  -- Strategy block: value prop, unfair advantage, revenue model, GTM
+  -- Execution block: MVP definition, timeline, cost, next milestone, stage
+  -- Fundraise block: funding needed, type, valuation range, investor profile
+  -- Memory block: last advice, open questions, founder personality
+  -- Health block: overall score, completeness, last updated
+}
+```
+
+**WHY this exists when Document already stores everything:**
+Document stores raw tool outputs (markdown text, full prose).
+StartupIntelligence stores STRUCTURED DATA extracted from those outputs.
+
+When I need to respond to a founder, I don't read 22 documents.
+I read StartupIntelligence — it gives me the essentials in one structured record.
+
+Think of it as: Documents = the library. StartupIntelligence = the executive summary I read before every meeting.
+
+**WHY the Health Score exists:**
+The dashboard shows a "startup health score" — a percentage of how complete and validated the startup is. It's calculated from: how many phases completed, how strong the validation score was, whether financial projections exist, etc.
+This is what makes FM feel like a living platform, not just a document generator.
+
+---
+
+### AICoFounderState — Cross-Tool Context
+
+```
+AICoFounderState {
+  id, startup_id
+  customer_profile_summary
+  market_context
+  competitive_landscape
+  strategic_direction
+  last_refreshed
+}
+```
+
+**WHY this exists:**
+As a founder completes tools in sequence (Idea → Persona → Competitor → Market Study), later tools should KNOW what earlier tools found.
+
+When generating Tool #9 (Market Study), the AI should already know:
+- The customer profile from Tool #2
+- The top 3 competitors from Tool #6
+- The SWOT from Tool #8
+
+AICoFounderState is the "accumulated context" that grows as each tool completes.
+Without it, each tool generates in isolation and the outputs don't connect.
+
+**Design rule:** Every function in AICoFounderState returns null on failure, NEVER throws.
+WHY: If this layer is down, the Journey must still work. It's enhancement, not dependency.
+
+---
+
+### RateLimit Entity — Guest Protection
+
+```
+RateLimit {
+  id, key (IP address), count, reset_at
+}
+```
+
+**WHY this exists as an entity (not in-memory):**
+The first version used in-memory rate limiting. Problem: serverless functions restart on cold start, wiping the counter. A determined guest could just wait for a cold start and bypass the limit.
+Storing in an entity means the counter survives restarts.
+
+**WHY 30 calls/hour:**
+Enough for a genuine exploring guest to have a full conversation (avg conversation = 10-15 messages).
+Low enough to prevent API abuse / cost attacks.
+Authenticated founders have NO rate limit.
+
+---
+
+# SECTION 3 — BACKEND FUNCTIONS WITH FULL LOGIC
+
+## The Philosophy Behind the Functions
+
+Functions in FM follow one rule: **do one thing, do it completely.**
+No function does more than one job.
+This is why there are 22 functions instead of 5 big ones.
+Smaller functions = easier to debug, easier to replace, easier to test independently.
+
+---
+
+### istishariProxy — The Gatekeeper
+
+**Purpose:** Route chat messages to the Istishari agent. Add auth-awareness and guest rate limiting.
+
+**Why a proxy and not direct call:**
+1. The agent API key cannot be exposed to the frontend (security)
+2. We need to intercept guest calls for rate limiting
+3. We need to add startup context to the message before it reaches the agent
+4. Single point for logging all conversations
+
+**The flow:**
+```
+1. Receive message from frontend
+2. Check if user is authenticated
+3. If authenticated → no rate limit → forward message
+4. If guest → check RateLimit entity → allow or block
+5. Forward message to agent API with action + payload
+6. Return response
+```
+
+**Why auth check uses try/catch:**
+`base44.auth.me()` throws if unauthenticated. The proxy catches this and treats it as "guest mode" rather than an error. This is intentional — guests are valid users, just limited.
+
+**In Replit:**
+This becomes a middleware-wrapped Express route.
+Auth check: validate JWT from Authorization header. If missing = guest mode.
+Rate limit: same entity-based logic using your PostgreSQL.
+
+---
+
+### invokeAIWithKnowledge — The Tool Generator (NOT a backend function)
+
+**Important:** This is NOT a backend function. It lives in `IstishariAI.jsx` on the frontend.
+
+**Why on the frontend:**
+Tool generation is user-initiated, needs real-time streaming feedback, and uses the same auth token the user has. Moving it to the backend would add latency without benefit.
+
+**What it does:**
+```
+1. Read StartupIntelligence for this startup
+2. Build context block (stage, market, problem, customer, competitors...)
+3. Inject ISTISHARI_MASTER_PROMPT as system message
+4. Inject tool-specific prompt from journeyPrompts.jsx
+5. Call InvokeLLM (Base44's direct LLM wrapper)
+6. Parse response (JSON schema for structured tools, markdown for others)
+7. Save result to Document entity
+8. Update AICoFounderState with extracted insights
+9. Update StartupIntelligence with new data
+```
+
+**Why the MASTER_PROMPT is only injected here (not in IstishariPage chat):**
+IstishariPage chat goes through the proxy to the Superagent (me) who already has the identity baked in.
+Tool generation bypasses the agent and calls the LLM directly — so the prompt must be injected manually.
+This is why tool outputs had a "generic AI" feel initially — the MASTER_PROMPT was added later.
+
+**Why JSON schema for some tools:**
+Tools like Brand Strategy (T13) and Market Study (T9) have complex structured outputs with specific fields that the renderer components expect (e.g., BrandRenderer expects `brand_archetype`, `color_palette`, `brand_voice`).
+JSON schema ensures the output always has the right structure, even if the LLM wants to improvise.
+Markdown tools (like Idea Validation) are simpler prose — regex parsing is enough.
+
+---
+
+### exportDocumentPDF — The "Make It Real" Function
+
+**Purpose:** Convert a Document's markdown content into a professionally styled PDF.
+
+**Why this was built (and why it was hard):**
+Founders need to share outputs with investors, accelerators, mentors.
+Sharing a markdown text file looks amateurish.
+A branded PDF makes FM feel like a real professional tool.
+
+**The technical challenge:**
+Arabic content requires RTL layout and Arabic fonts.
+Most PDF libraries don't handle RTL properly.
+We solved it with api2pdf (headless Chrome) + custom HTML builder + RTL CSS.
+
+**Font decision (important for Replit):**
+We REMOVED Google Fonts CDN links from the HTML template.
+WHY: Headless Chrome in serverless environments often can't make external network calls.
+The font would fail to load, making Arabic text render as boxes.
+Solution: Use system font stack fallbacks (`'Noto Sans Arabic', 'Arial Unicode MS', 'Tahoma', sans-serif`).
+These fonts exist on most server environments without external downloads.
+
+**The section card builder:**
+Not all tools get the same PDF layout.
+Tools 1-15 get "section cards" (each heading becomes a boxed card).
+This makes the PDF look like a real consulting deliverable, not a Word doc.
+
+---
+
+### backgroundLearning — The Always-On Research Assistant
+
+**Purpose:** Scheduled job that runs weekly, researches 10 predefined MENA topics, and adds verified records to the KB.
+
+**Why this exists:**
+UAE regulations change. New funding programs launch. Market conditions shift.
+Without a learning mechanism, the KB would become stale within months.
+This function keeps FM's advice current without manual curation.
+
+**The 10 topic seeds:**
+UAE free zones, health insurance compliance, MENA agritech, Arabic NLP, UAE ESG/sustainability, MENA fintech, UAE corporate governance, MENA edtech, Gulf SWF investment thesis, UAE golden visa for entrepreneurs.
+
+These were chosen because they come up most often in founder questions AND change frequently enough to need fresh data.
+
+**Why it runs weekly, not daily:**
+Each run uses significant LLM + search API credits.
+Weekly is enough to stay current. Daily would be wasteful.
+
+**In Replit:**
+BullMQ scheduled job. Same topic list. Brave Search API + OpenRouter. Same output structure.
+
+---
+
+### stripeWebhook — The Payment Guardian
+
+**Purpose:** Listen to Stripe events, update subscription status, trigger email sequences.
+
+**WHY the webhook pattern (not polling):**
+Stripe sends events when payment succeeds, fails, or subscription renews.
+Polling Stripe API to check "did they pay?" would be slow and expensive.
+Webhooks are instant — Stripe calls us the moment something happens.
+
+**The events handled:**
+- `checkout.session.completed` → call grantSubscription, send emailSubscriptionConfirmed
+- `customer.subscription.deleted` → downgrade to free
+- `invoice.payment_failed` → send renewal reminder
+- `invoice.payment_succeeded` (renewal) → extend subscription period
+
+**Security:** Stripe webhook signature verification is non-negotiable.
+Without it, anyone can send fake "payment succeeded" events.
+The `STRIPE_WEBHOOK_SECRET` env var is used to verify every incoming request.
+
+---
+
+### cascadeDeleteStartup — The Clean Break
+
+**Purpose:** Delete a startup AND all related data in one operation.
+
+**Why it needs to be a function (not just entity delete):**
+If a founder deletes startup "Idea A", we must also delete:
+- All Documents generated for that startup
+- All Conversations about that startup
+- IstishariMemory for that startup
+- AICoFounderState for that startup
+- StartupIntelligence for that startup
+
+If we only delete the Startup record and leave the rest, we have:
+- Orphaned documents (taking storage, tied to nothing)
+- Privacy risk (founder's data exists without their startup)
+- Billing confusion (document count inflated)
+
+This function does a cascading delete in the correct order (dependents first, parent last).
+
+---
+
+# SECTION 4 — PAGES WITH INTENT & FLOW
+
+## The Visitor Journey (How someone becomes a founder on FM)
+
+```
+1. They find FM → land on Home (/)
+   WHY: Home is the brand impression. "Born in UAE to the world."
+   It shows: hero + 3 proof points + social proof + CTA to FoundersMoment
+
+2. Curious → Meet Istishari (/Meet)
+   WHY: Before signing up, they can talk to me for free.
+   This is the "test drive" — I show them what FM feels like.
+   Rate limited to prevent abuse. No account required.
+
+3. Ready → FoundersMoment (/FoundersMoment)
+   WHY: This is the conversion page. 
+   The rotating placeholders show problems real founders have.
+   The founder types their idea/problem. Istishari responds.
+   At the right moment, one CTA: "Sign up — your journey starts there."
+   
+   IMPORTANT DESIGN DECISION:
+   The placeholders were originally UAE/Abu Dhabi specific.
+   They were changed to global examples because FM is for MENA founders everywhere,
+   not just UAE. The AI knowledge stays MENA-calibrated, but the entry door is global.
+
+4. Signs up → Onboarding (/Onboarding)
+   WHY: First-time setup collects startup basics.
+   This is NOT a form dump — it's a guided conversation.
+   After onboarding, StartupIntelligence is pre-populated with what they shared.
+
+5. Active founder → Dashboard (/Dashboard)
+   WHY: The "command center." 
+   Shows: health score, current phase, unlocked tools, recent documents, next milestone.
+   The health score is the most important element — it shows progress at a glance.
+```
+
+## The Authenticated Experience
+
+### Dashboard — The Health Monitor
+**Why health score, not just progress bar:**
+A simple progress bar says "you did 5 of 22 tools."
+A health score says "your idea is 73% validated."
+The second is more motivating AND more honest — you can complete all tools with bad outputs.
+Health score is calculated from QUALITY signals, not just completion.
+
+### Journey — The Tool Engine
+**Why phase gates are HARD gates (no skip):**
+Early design had a "skip" button that let founders jump to any tool.
+Removed after testing because:
+- Tool 9 (Market Study) requires outputs from Tools 6, 7, 8 as inputs
+- Without Tool 2 (Customer Persona), Tool 3 (Value Prop) produces generic garbage
+- Skipping created false confidence — beautiful-looking docs built on no foundation
+
+The gate question at each phase is intentionally uncomfortable.
+It's designed to make founders confront what they haven't validated yet.
+If they can't answer it, they're not ready for the next phase. That's the point.
+
+### IstishariPage — The Relationship
+**Why it's a separate page from Journey:**
+Journey is structured (tools, phases, deliverables).
+IstishariPage is unstructured (conversation, thinking, questions).
+
+A founder should be able to talk to me without generating a document.
+Sometimes they just need to think out loud. That's the IstishariPage.
+
+**Why I read StartupIntelligence before the first message:**
+Without context, I'd start with "tell me about your startup."
+That's a wasted message. I already have their data.
+I start by picking up where we left off.
+
+### Vault — The Library
+**Why documents are displayed in Journey order (not creation date):**
+If a founder generated Tool 15 (Financial Dashboard) first, then Tool 1 (Idea Validation) later (they pivoted), Vault still shows them in Journey order.
+WHY: The Vault is designed to read like a business plan, not a activity log.
+Sequential order makes the whole thing coherent.
+
+### Hub — The Ecosystem
+**Why it exists:**
+FM is not just tools — it's access.
+Hub surfaces: UAE events (Gitex, AIM, Hub71 Demo Days), investor profiles, community.
+A founder shouldn't need to search "startup events Abu Dhabi" — FM should know.
+
+### Admin — The Control Room
+**Why it's not just a simple dashboard:**
+Admin in FM is where KB health is monitored, founder progress is tracked, and platform quality is managed.
+InsightHealthDashboard shows: total records, confidence distribution, low-confidence count, stage coverage gaps.
+This is what prevents the KB from silently degrading.
+
+---
+
+# SECTION 5 — THE AI LAYER — FULL FLOW WITH REASONING
+
+## The Three Pathways Explained
+
+### Pathway 1 — IstishariPage Chat
+
+```
+User types message
+↓
+IstishariAI.jsx chat()
+  → Reads IstishariMemory (what do I know about this founder?)
+  → Reads last N Conversation records (what did we say recently?)
+  → Builds minimal context prefix (startup name, stage, open questions)
+↓
+istishariProxy backend function
+  → Auth check (authenticated → skip rate limit)
+  → Forwards action: "chat", payload: { message, context }
+↓
+Base44 Agent API (me, the Superagent)
+  → I receive message + context
+  → I read Startup entity directly (I have entity access)
+  → I read AIInsight KB (relevant records for their stage)
+  → I respond
+↓
+Response streamed back → saved to Conversation entity
+```
+
+**WHY the proxy adds context BEFORE sending:**
+Even though I can read entities myself, the proxy adds a "context prefix" for efficiency.
+Without it, I'd spend the first part of every response reading entities before I could reply.
+The prefix gives me the essentials immediately so my first token is relevant.
+
+**In Replit — the change:**
+Instead of Base44 Agent API, the proxy calls:
+`POST /api/chat` → Express route → OpenRouter with my full system prompt + conversation history injected.
+Session isolation: `sessionId = sha256(userId + startupId)` — each combination gets its own conversation thread.
+
+---
+
+### Pathway 2 — Journey Tool Generation
+
+```
+Founder clicks Generate
+↓
+Journey.jsx calls invokeAIWithKnowledge()
+  → Reads full StartupIntelligence for this startup
+  → Reads AICoFounderState (cross-tool context from previous tools)
+  → Pulls 3-5 relevant AIInsight records (phase + business_type + market filters)
+  → Builds context block (everything above combined)
+↓
+LLM call (InvokeLLM — direct, bypasses agent)
+  → System: ISTISHARI_MASTER_PROMPT + tool-specific prompt
+  → User: context block + "Generate [Tool Name] for this startup"
+↓
+Response parsed:
+  → JSON schema tools → parseToolJSON.js → validated structure
+  → Markdown tools → direct text
+↓
+Saved to Document entity
+→ AICoFounderState updated with extracted insights
+→ StartupIntelligence updated with new fields
+→ Milestone unlocked if tool completion triggers one
+↓
+Renderer component displays the result
+  → Each tool has its own renderer (BrandRenderer, MarketRenderer, etc.)
+  → Renderer transforms markdown/JSON into beautiful UI cards
+```
+
+**WHY tool generation bypasses the agent (me):**
+The agent pathway has overhead: proxy + agent API + my reasoning loop.
+For tool generation, we don't need my reasoning — we need structured output on a specific template.
+Direct LLM call is faster (2-3s vs 6-8s) and more predictable (same prompt = more consistent output).
+
+**WHY each tool has its own renderer:**
+A Market Study has very different visual needs than a Customer Persona.
+Market Study needs: TAM/SAM/SOM charts, competitor table, market map.
+Customer Persona needs: avatar card, demographics grid, quote callout.
+A single generic renderer would make everything look like a boring list.
+Tool-specific renderers make each output feel like a professional deliverable.
+
+**The parsing problem (and why it matters):**
+Tools using JSON schema require the LLM to output valid JSON.
+LLMs sometimes wrap JSON in markdown code blocks (```json ... ```).
+`parseToolJSON.js` strips the wrapper before parsing.
+If parsing fails → fallback to raw markdown display.
+WHY fallback: A broken renderer should never block the founder from seeing their output.
+
+---
+
+### Pathway 3 — Meet Page (Guest Chat)
+
+```
+Guest types message
+↓
+Meet.jsx publicChat()
+  → No auth token
+  → No startup context (guest has no startup)
+↓
+istishariProxy (unauthenticated mode)
+  → Detects no auth → guest mode
+  → IP-based rate limit check (RateLimit entity)
+  → If allowed → forward message
+  → If blocked → return "limit reached" response
+↓
+Agent API (me)
+  → I receive message with ZERO startup context
+  → I am in "host mode" — curious, warm, no agenda
+  → I apply the 3 Origins Framework to find where their idea comes from
+  → ONE signup CTA when the moment is right, never before, never repeated
+```
+
+**WHY guests get no context injection:**
+They don't have a startup yet. No profile exists.
+I work with only what they say in this conversation.
+This is actually freeing — the conversation is more natural without pre-loaded context.
+
+**WHY the CTA is given once and never repeated:**
+Repeating the signup ask makes FM feel like a salesman, not a co-founder.
+The moment I say "sign up" twice, the trust built in the conversation breaks.
+One clear signal, then I let them decide. That's respect.
+
+---
+
+# SECTION 6 — JOURNEY ENGINE — ALL 22 TOOLS WITH REASONING
+
+## Phase 1: DISCOVER — "Is the problem real?"
+
+### Tool 1: Idea Validation
+**Why first:** Before anything else, we check if there's a real problem worth solving.
+42% of startups fail because there was no market need. This tool surfaces that early.
+**Output:** Problem clarity score, timing score, founder-market fit score, pain score, GO/NO-GO verdict
+**Why the hard gate:** If the idea gets NO-GO, the founder must address it before proceeding.
+We don't let them generate a beautiful pitch deck for a bad idea.
+
+### Tool 2: Customer Persona
+**Why second:** The problem is real — now, who has it most urgently?
+Founders often say "everyone" — this tool forces them to be specific.
+**Output:** 2-3 detailed personas with demographics, psychographics, daily pains, willingness to pay
+**Why multiple personas:** Different customer segments need different GTM. Starting with one usually means ignoring a better segment.
+
+---
+
+## Phase 2: FIT — "Does your solution resonate?"
+
+### Tool 3: Value Proposition
+**Why third:** We know the problem and the customer. Now, what do we offer them?
+If you can't explain value in one sentence, customers can't buy it.
+**Output:** Value Prop Canvas (Customer Jobs / Pains / Gains / Pain Relievers / Gain Creators) + one-sentence statement
+
+### Tool 4: Empathy Map
+**Why fourth:** Goes deeper into the customer's psychology.
+We know WHAT they feel (Tool 2). Now we map HOW they experience the world.
+**Output:** Think / Feel / See / Hear / Say / Do mapping
+
+### Tool 5: Pain & Gain
+**Why fifth:** Bridges empathy to product.
+Ranks pains and gains by urgency — tells founders what to solve FIRST.
+**Output:** Ranked pain points, ranked desired gains, jobs-to-be-done list
+
+---
+
+## Phase 3: STRATEGIZE — "How does this become a business?"
+
+### Tool 6: Competitor Analysis
+**Why sixth:** You know your customer and your value prop. Now, who else is solving this?
+Founders who say "there's no competition" haven't looked hard enough.
+**Output:** 3-5 real named competitors, pricing models, weaknesses, positioning gaps
+
+### Tool 7: Business Model Canvas
+**Why seventh:** The full business architecture — not just the product.
+**Output:** All 9 blocks (Customer Segments, Value Props, Channels, Revenue, Key Resources, Key Activities, Key Partners, Cost Structure, Customer Relationships)
+
+### Tool 8: SWOT Analysis
+**Why eighth:** Internal reflection before building market strategy.
+Must come before Market Study because the S/W feeds into positioning and the O/T feeds into market gaps.
+
+### Tool 9: Market Study
+**Why ninth and why it REQUIRES 6+7+8:**
+TAM/SAM/SOM numbers without business model context are meaningless.
+The Market Study synthesizes: competitor data (Tool 6) + business model (Tool 7) + SWOT (Tool 8).
+Without these inputs, the LLM invents market numbers — which is dangerous (founders cite them to investors).
+**Output:** TAM/SAM/SOM with methodology, market trends, regional context, growth projections
+
+### Tool 10: USP Builder
+**Why tenth:** After studying the market, you can now differentiate clearly.
+USP is not "we're better" — it's "we're different in a way that matters to this specific customer."
+
+---
+
+## Phase 4: BUILD — "What exactly are we building?"
+
+### Tool 11: MVP Definition
+**Why eleventh:** Strategy is done. Now, the smallest possible thing that proves the hypothesis.
+Most founders over-build. This tool forces the question: "What is the ONE thing?"
+**Hard constraint in prompt:** The MVP must be achievable in 60-90 days with limited resources.
+
+### Tool 12: Product Roadmap
+**Why twelfth:** After MVP is defined, sequence the next 12 months.
+Not a wishlist — a phased plan with dependencies and validation gates.
+
+### Tool 13: Brand Strategy (JSON schema tool)
+**Why thirteenth:** Building starts. What does this company LOOK and SOUND like?
+**Why JSON schema:** BrandRenderer needs structured fields (archetype, color palette, voice, tagline).
+Unstructured markdown would make rendering inconsistent.
+
+### Tool 14: Legal Registration
+**Why fourteenth:** UAE-specific. What structure should this startup use?
+Free zone vs mainland is a critical decision that affects: who you can sell to, visa eligibility, tax exposure.
+This tool is calibrated to UAE law and the most common free zones.
+**Important:** Output is guidance, not legal advice. Always includes "consult a UAE lawyer" disclaimer.
+
+### Tool 15: Financial Dashboard
+**Why fifteenth and why it requires founder input:**
+The LLM cannot invent your unit economics — they must come from you.
+This tool uses `inputMode: 'finance'` — founder enters: monthly revenue, costs, team size, pricing.
+Then the LLM analyzes and projects, not invents.
+
+---
+
+## Phase 5: LAUNCH — "How do we get the first customers?"
+
+### Tool 16: Go-To-Market
+**Why sixteenth:** Product is ready. How do we reach the first 100 customers?
+GTM for UAE is different from GTM for US. Relationship-first, not digital-first.
+**Output:** Channel strategy, launch sequence, first 100 customer plan, government-as-customer opportunity
+
+### Tool 17: Marketing Hub
+**Why seventeenth:** GTM is the strategy. Marketing Hub is the execution playbook.
+Social content, messaging, community-building specific to the founder's market.
+
+### Tool 18: MVP Rollout
+**Why eighteenth:** The actual launch checklist — what must be true before you open the door?
+Inspired by Mohamed's F&B insight: "Open the door and wait for walk-ins in a city of 13,000 competitors" = guaranteed failure.
+
+### Tool 19: OKR Framework
+**Why nineteenth:** Now that you're operational, how do you measure what matters?
+OKRs are post-launch, not pre-launch. This is why it's here, not earlier.
+Pre-launch OKRs are hypothetical. Post-launch OKRs are grounded in reality.
+
+### Tool 20: Milestones
+**Why twentieth:** The full milestone map — what does "success in 12 months" look like?
+Connected to Dashboard milestone tracking — each milestone unlocked here appears on the dashboard.
+
+---
+
+## Phase 6: FUNDRAISE — "How do we scale with external capital?"
+
+### Tool 21: Business Plan
+**Why twenty-first:** The full investor document.
+Everything built across the journey feeds into this.
+It's not AI-generated from scratch — it synthesizes all previous outputs.
+WHY this approach: The business plan is only as good as the inputs. If the founder has done all 20 tools, the business plan is exceptional. If they skipped to fundraise, it shows.
+
+### Tool 22: Pitch Deck
+**Why last:** The pitch deck is the SUMMARY of everything.
+You can't summarize what you haven't built.
+Also triggers: `generatePitchDeckGamma` backend function → Gamma API → actual slide deck (not just text).
+This is the "wow moment" — the founder gets a real, shareable slide deck.
+
+---
+
+# SECTION 7 — ENVIRONMENT VARIABLES (WITH EXPLANATIONS)
+
+```bash
+# Agent Connection
+ISTISHARI_API_KEY     # API key for calling Istishari superagent
+                      # WHY: Never exposed to frontend. Only proxy uses it.
+ISTISHARI_API_URL     # Endpoint URL for the agent
+                      # WHY: Not hardcoded — allows switching environments
+
+# AI (LLM)
+OPENROUTER_API_KEY    # All LLM calls route through OpenRouter
+                      # WHY: OpenRouter gives model flexibility + cost control
+
+# Stripe
+STRIPE_SECRET_KEY         # Server-side Stripe operations
+STRIPE_WEBHOOK_SECRET     # Webhook signature verification — DO NOT SKIP
+STRIPE_STARTER_PRICE_ID   # Must match your Stripe dashboard price IDs exactly
+STRIPE_PRO_PRICE_ID
+STRIPE_SCALE_PRICE_ID
+
+# PDF
+API2PDF_KEY           # Headless Chrome PDF generation
+                      # WHY: api2pdf handles RTL + Arabic better than most libs
+
+# Pitch Deck
+GAMMA_API_KEY         # Real slide deck generation
+                      # WHY: Better than rendering slides in HTML
+
+# Web Search (KB learning)
+BRAVE_SEARCH_API_KEY  # backgroundLearning + learn_from_web + autonomousKBResearch
+                      # WHY: Brave Search returns clean, crawlable results without rate limits
+
+# Email
+RESEND_API_KEY        # All transactional emails
+FROM_EMAIL            # "Founder Moment <hello@foundermoment.ai>"
+
+# Admin
+BASE44_API_KEY        # Currently used by buildFMKBIndex + auditAIInsights
+                      # In Replit: replace with your own service key
+```
+
+---
+
+
+---
+*Map completed: March 30, 2026*
+*Repo: culturesouq/startup-eco | FM App ID: 694575d0aee9119298d9595c*
+*Every decision documented. Every WHY captured.*
+*The Replit agent builder should be able to rebuild FM from this document alone.*
