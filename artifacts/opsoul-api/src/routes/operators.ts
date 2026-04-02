@@ -10,7 +10,8 @@ import {
   SetGrowLockSchema,
   type Layer2Soul,
 } from '../validation/operator.js';
-import { chatCompletion } from '../utils/openrouter.js';
+import { chatCompletion, MODEL_OPTIONS, CHAT_MODEL } from '../utils/openrouter.js';
+import { encryptToken, decryptToken } from '@workspace/opsoul-utils/crypto';
 import { eq, and } from 'drizzle-orm';
 import { ZodError } from 'zod';
 
@@ -42,6 +43,8 @@ function serializeOperator(op: typeof operatorsTable.$inferSelect) {
     lockedUntil: op.lockedUntil,
     safeMode: op.safeMode,
     toolUsePolicy: op.toolUsePolicy,
+    hasCustomApiKey: !!op.openrouterApiKey,
+    defaultModel: op.defaultModel ?? null,
     createdAt: op.createdAt,
   };
 }
@@ -532,6 +535,82 @@ router.patch('/:id/soul/from-description', async (req: Request, res: Response): 
     .returning();
 
   res.json(serializeOperator(updated));
+});
+
+// Model Settings — save API key + default model per operator
+router.get('/:id/model-settings/options', async (_req: Request, res: Response): Promise<void> => {
+  res.json({ models: MODEL_OPTIONS, defaultFallback: CHAT_MODEL });
+});
+
+router.patch('/:id/model-settings', async (req: Request, res: Response): Promise<void> => {
+  const [op] = await db
+    .select({ id: operatorsTable.id, ownerId: operatorsTable.ownerId })
+    .from(operatorsTable)
+    .where(and(eq(operatorsTable.id, req.params.id), ownerFilter(req)));
+
+  if (!op) { res.status(404).json({ error: 'Operator not found' }); return; }
+
+  const { apiKey, model, clearApiKey } = req.body as {
+    apiKey?: string;
+    model?: string | null;
+    clearApiKey?: boolean;
+  };
+
+  const validModelIds = MODEL_OPTIONS.map((m) => m.id);
+  if (model && !validModelIds.includes(model as typeof validModelIds[number])) {
+    res.status(400).json({ error: 'Invalid model. Must be one of: ' + validModelIds.join(', ') });
+    return;
+  }
+
+  const update: Partial<typeof operatorsTable.$inferInsert> = {};
+
+  if (clearApiKey) {
+    update.openrouterApiKey = null;
+  } else if (apiKey && apiKey.trim()) {
+    update.openrouterApiKey = encryptToken(apiKey.trim());
+  }
+
+  if (model !== undefined) {
+    update.defaultModel = model || null;
+  }
+
+  const [updated] = await db
+    .update(operatorsTable)
+    .set(update)
+    .where(eq(operatorsTable.id, op.id))
+    .returning();
+
+  res.json({
+    ok: true,
+    hasCustomApiKey: !!updated.openrouterApiKey,
+    defaultModel: updated.defaultModel ?? null,
+  });
+});
+
+// Verify that an OpenRouter key works before saving
+router.post('/:id/model-settings/verify-key', async (req: Request, res: Response): Promise<void> => {
+  const [op] = await db
+    .select({ id: operatorsTable.id })
+    .from(operatorsTable)
+    .where(and(eq(operatorsTable.id, req.params.id), ownerFilter(req)));
+
+  if (!op) { res.status(404).json({ error: 'Operator not found' }); return; }
+
+  const { apiKey } = req.body as { apiKey?: string };
+  if (!apiKey?.trim()) { res.status(400).json({ error: 'apiKey required' }); return; }
+
+  try {
+    const { chatCompletion: cc } = await import('../utils/openrouter.js');
+    const result = await cc(
+      [{ role: 'user', content: 'Reply with the single word: verified' }],
+      { apiKey: apiKey.trim(), model: 'meta-llama/llama-3.3-70b-instruct' },
+    );
+    const valid = result.content.toLowerCase().includes('verified');
+    res.json({ ok: valid, message: valid ? 'Key is working' : 'Key responded but got unexpected output' });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(400).json({ ok: false, error: 'Key verification failed', detail: message });
+  }
 });
 
 // T7 — Safe Mode toggle

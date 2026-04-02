@@ -6,11 +6,32 @@ import { Operator } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Lock, AlertTriangle, RefreshCw, Key, Globe, ShieldCheck, Copy, Shield } from "lucide-react";
+import { Lock, AlertTriangle, RefreshCw, Key, Globe, ShieldCheck, Copy, Shield, Cpu, Eye, EyeOff, Check, Loader2, ChevronDown, Info } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+
+const MODELS = [
+  {
+    id: "anthropic/claude-haiku-4-5",
+    label: "Claude Haiku",
+    description: "Fast and balanced — great for most conversations",
+    badge: "Balanced",
+  },
+  {
+    id: "anthropic/claude-sonnet-4-5",
+    label: "Claude Sonnet",
+    description: "Best quality — deeper reasoning and richer responses",
+    badge: "Best Quality",
+  },
+  {
+    id: "meta-llama/llama-3.3-70b-instruct",
+    label: "Llama 3.3 70B",
+    description: "Solid performance at no extra cost",
+    badge: "Free Tier",
+  },
+] as const;
 
 type EvolutionLevel = "OPEN" | "CONTROLLED" | "LOCKED";
 
@@ -51,11 +72,51 @@ function CodeBlock({ code, onCopy }: { code: string; onCopy: () => void }) {
   );
 }
 
-export default function SettingsSection({ operator, section }: { operator: Operator; section?: "secrets" | "api" | "evolution" | "danger" | "safemode" }) {
+export default function SettingsSection({ operator, section }: { operator: Operator; section?: "model" | "secrets" | "api" | "evolution" | "danger" | "safemode" }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const [safeMode, setSafeMode] = useState(operator.safeMode ?? false);
+
+  const defaultModelId = operator.defaultModel ?? "meta-llama/llama-3.3-70b-instruct";
+  const [selectedModel, setSelectedModel] = useState<string>(defaultModelId);
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [showKey, setShowKey] = useState(false);
+  const [verifyStatus, setVerifyStatus] = useState<"idle" | "verifying" | "ok" | "fail">("idle");
+  const [showModelDropdown, setShowModelDropdown] = useState(false);
+
+  const selectedModelInfo = MODELS.find((m) => m.id === selectedModel) ?? MODELS[2];
+
+  const saveModelSettings = useMutation({
+    mutationFn: (payload: { apiKey?: string; model?: string; clearApiKey?: boolean }) =>
+      apiFetch(`/operators/${operator.id}/model-settings`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["operators", operator.id] });
+      toast({ title: "Model settings saved" });
+      setApiKeyInput("");
+    },
+    onError: (err: Error) => toast({ title: "Save failed", description: err.message, variant: "destructive" }),
+  });
+
+  const verifyKey = async () => {
+    if (!apiKeyInput.trim()) return;
+    setVerifyStatus("verifying");
+    try {
+      const r = await apiFetch(`/operators/${operator.id}/model-settings/verify-key`, {
+        method: "POST",
+        body: JSON.stringify({ apiKey: apiKeyInput.trim() }),
+      });
+      setVerifyStatus(r.ok ? "ok" : "fail");
+      if (r.ok) toast({ title: "Key verified — it's working" });
+      else toast({ title: "Key responded but check failed", variant: "destructive" });
+    } catch {
+      setVerifyStatus("fail");
+      toast({ title: "Key verification failed — check the key and try again", variant: "destructive" });
+    }
+  };
 
   const currentLevel = (["OPEN", "CONTROLLED", "LOCKED"].includes(operator.growLockLevel ?? "")
     ? operator.growLockLevel
@@ -156,10 +217,158 @@ print(response.json()["content"])`;
 
   const isLocked = !!operator.layer1LockedAt;
 
-  const show = (s: "secrets" | "api" | "evolution" | "danger" | "safemode") => !section || section === s;
+  const show = (s: "model" | "secrets" | "api" | "evolution" | "danger" | "safemode") => !section || section === s;
 
   return (
     <div className="space-y-10 animate-in fade-in zoom-in-95 duration-300 max-w-2xl">
+
+      {show("model") && (
+        <section className="space-y-5">
+          <div className="flex items-center gap-2 border-b border-border/50 pb-3">
+            <Cpu className="w-4 h-4 text-muted-foreground" />
+            <h2 className="font-mono font-bold text-base">Model & AI</h2>
+          </div>
+
+          {!operator.hasCustomApiKey && (
+            <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3">
+              <Info className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+              <div className="space-y-0.5">
+                <p className="font-mono text-xs font-bold text-amber-500">Using OpSoul's shared key</p>
+                <p className="font-mono text-[11px] text-muted-foreground leading-relaxed">
+                  Your operator runs on OpSoul's OpenRouter key. Add your own key to get full model access and remove usage limits.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {operator.hasCustomApiKey && (
+            <div className="flex items-start gap-3 rounded-lg border border-green-500/30 bg-green-500/5 px-4 py-3">
+              <Check className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
+              <div className="space-y-0.5">
+                <p className="font-mono text-xs font-bold text-green-500">Custom OpenRouter key active</p>
+                <p className="font-mono text-[11px] text-muted-foreground">Your operator uses your own API key.</p>
+              </div>
+              <button
+                onClick={() => saveModelSettings.mutate({ clearApiKey: true })}
+                className="ml-auto font-mono text-[10px] text-muted-foreground hover:text-destructive transition-colors shrink-0"
+              >
+                Remove key
+              </button>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <label className="font-mono text-xs text-muted-foreground uppercase tracking-wider">Default Model</label>
+            <div className="relative">
+              <button
+                onClick={() => setShowModelDropdown(!showModelDropdown)}
+                className="w-full flex items-center justify-between p-4 rounded-lg border-2 border-border/40 bg-card/20 hover:border-border transition-all font-mono text-left"
+              >
+                <div>
+                  <div className="text-sm font-bold">{selectedModelInfo.label}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{selectedModelInfo.description}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                    {selectedModelInfo.badge}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${showModelDropdown ? "rotate-180" : ""}`} />
+                </div>
+              </button>
+
+              {showModelDropdown && (
+                <div className="absolute top-full left-0 right-0 mt-1 rounded-lg border border-border/40 bg-card shadow-xl z-20 overflow-hidden">
+                  {MODELS.map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => { setSelectedModel(m.id); setShowModelDropdown(false); }}
+                      className={`w-full flex items-center justify-between px-4 py-3 font-mono text-left hover:bg-card/80 transition-colors border-b border-border/20 last:border-0
+                        ${selectedModel === m.id ? "bg-primary/5" : ""}`}
+                    >
+                      <div>
+                        <div className="text-sm font-bold">{m.label}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">{m.description}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-muted/30 text-muted-foreground border border-border/20">
+                          {m.badge}
+                        </span>
+                        {selectedModel === m.id && <Check className="w-4 h-4 text-primary" />}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="font-mono text-xs text-muted-foreground uppercase tracking-wider">
+              OpenRouter API Key {operator.hasCustomApiKey ? "(replace)" : "(paste yours)"}
+            </label>
+            <div className="relative">
+              <input
+                type={showKey ? "text" : "password"}
+                value={apiKeyInput}
+                onChange={(e) => { setApiKeyInput(e.target.value); setVerifyStatus("idle"); }}
+                placeholder={operator.hasCustomApiKey ? "Paste new key to replace..." : "sk-or-v1-..."}
+                className="w-full font-mono text-sm bg-background/60 border border-border/40 rounded-lg px-3 py-2.5 pr-20 focus:outline-none focus:border-primary/50 placeholder:text-muted-foreground/40"
+              />
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setShowKey(!showKey)}
+                  className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            </div>
+            <p className="font-mono text-[10px] text-muted-foreground">
+              Get your key at{" "}
+              <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                openrouter.ai/keys
+              </a>
+              . It's never shown again after saving.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 flex-wrap">
+            {apiKeyInput.trim() && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={verifyKey}
+                disabled={verifyStatus === "verifying"}
+                className="font-mono text-xs"
+              >
+                {verifyStatus === "verifying" ? (
+                  <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> Verifying...</>
+                ) : verifyStatus === "ok" ? (
+                  <><Check className="w-3 h-3 mr-1.5 text-green-500" /> Verified</>
+                ) : verifyStatus === "fail" ? (
+                  <><AlertTriangle className="w-3 h-3 mr-1.5 text-destructive" /> Failed</>
+                ) : (
+                  "Verify Key"
+                )}
+              </Button>
+            )}
+
+            <Button
+              size="sm"
+              onClick={() => {
+                const payload: { apiKey?: string; model?: string } = { model: selectedModel };
+                if (apiKeyInput.trim()) payload.apiKey = apiKeyInput.trim();
+                saveModelSettings.mutate(payload);
+              }}
+              disabled={saveModelSettings.isPending}
+              className="font-mono text-xs"
+            >
+              {saveModelSettings.isPending ? <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> Saving...</> : "Save Settings"}
+            </Button>
+          </div>
+        </section>
+      )}
 
       {show("secrets") && (
         <section className="space-y-4">

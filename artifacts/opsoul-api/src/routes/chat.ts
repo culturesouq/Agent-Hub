@@ -21,6 +21,7 @@ import { searchMemory, buildMemoryContext, distillMemoriesFromConversations } fr
 import type { MemoryHit } from '../utils/memoryEngine.js';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
+import { decryptToken } from '@workspace/opsoul-utils/crypto';
 import type { ChatMessage } from '../utils/openrouter.js';
 import type { Layer2Soul } from '../validation/operator.js';
 import { eq, and, asc } from 'drizzle-orm';
@@ -129,6 +130,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   }
 
   const { message, stream, kbSearch, kbTopN, kbMinConfidence } = parsed.data;
+
+  const chatApiKey = operator.openrouterApiKey
+    ? (() => { try { return decryptToken(operator.openrouterApiKey!); } catch { return undefined; } })()
+    : undefined;
+  const chatModel = operator.defaultModel || CHAT_MODEL;
+  const chatOpts = { apiKey: chatApiKey, model: chatModel };
 
   const [skills, missionContext, selfAwarenessRow, history] = await Promise.all([
     loadActiveSkills(operator.id),
@@ -266,7 +273,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     let promptTokens = 0;
 
     try {
-      for await (const chunk of streamChat(messages, CHAT_MODEL)) {
+      for await (const chunk of streamChat(messages, chatOpts)) {
         if (chunk.delta) {
           fullContent += chunk.delta;
           res.write(`data: ${JSON.stringify({ delta: chunk.delta })}\n\n`);
@@ -297,7 +304,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       res.write(`data: ${JSON.stringify({
         done: true,
         messageId: asstMsgId,
-        model: CHAT_MODEL,
+        model: chatModel,
         usage: { promptTokens, completionTokens },
         activeSkillCount: skills.length,
         missionContext: missionContext?.name ?? null,
@@ -316,7 +323,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   } else {
     try {
-      const result = await chatCompletion(messages, CHAT_MODEL);
+      const result = await chatCompletion(messages, chatOpts);
 
       const asstMsgId = crypto.randomUUID();
       await db.insert(messagesTable).values({
@@ -340,7 +347,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         conversationId: conv.id,
         role: 'assistant',
         content: result.content,
-        model: CHAT_MODEL,
+        model: chatModel,
         usage: {
           promptTokens: result.promptTokens,
           completionTokens: result.completionTokens,

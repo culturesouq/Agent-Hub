@@ -8,7 +8,7 @@ import {
   BookOpen, User, Smile, BookMarked, Zap, Archive, Network,
   CheckSquare, FileText, Settings2, Key, Code2, ShieldCheck, AlertTriangle,
   Radio, MessageCircle, Send, GraduationCap, Star, ChevronRight, Bell,
-  Shield, Menu, X,
+  Shield, Menu, X, Cpu,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -156,6 +156,7 @@ const NAV_MAIN: NavItem[] = [
   {
     kind: "group", id: "settings", label: "Settings", icon: Settings2, depth: 0,
     children: [
+      { kind: "leaf", id: "settings.model",     label: "Model & AI",     icon: Cpu,           depth: 1 },
       { kind: "leaf", id: "settings.secrets",   label: "Secrets & Keys", icon: Key,           depth: 1 },
       { kind: "leaf", id: "settings.api",       label: "API",            icon: Code2,         depth: 1 },
       { kind: "leaf", id: "settings.safemode",  label: "Safe Mode",      icon: Shield,        depth: 1 },
@@ -179,7 +180,7 @@ const NAV_BOTTOM: NavItem[] = [
 
 const BRAIN_LEAVES     = ["identity", "personality", "owner-kb", "skills", "memory", "integrations", "grow"];
 const KNOWLEDGE_LEAVES = ["identity", "personality", "owner-kb", "skills"];
-const SETTINGS_LEAVES  = ["settings.secrets", "settings.api", "settings.safemode", "settings.evolution", "settings.danger"];
+const SETTINGS_LEAVES  = ["settings.model", "settings.secrets", "settings.api", "settings.safemode", "settings.evolution", "settings.danger"];
 const CHANNELS_LEAVES  = ["channels.whatsapp", "channels.telegram"];
 
 export default function OperatorDetail({ id }: { id: string }) {
@@ -290,6 +291,7 @@ export default function OperatorDetail({ id }: { id: string }) {
       case "grow":                return <GrowSection operatorId={id} saData={saData} />;
       case "tasks":               return <TasksSection operatorId={id} />;
       case "files":               return <ComingSoon title="Files" />;
+      case "settings.model":      return <SettingsSection operator={operator} section="model" />;
       case "settings.secrets":    return <SettingsSection operator={operator} section="secrets" />;
       case "settings.api":        return <SettingsSection operator={operator} section="api" />;
       case "settings.safemode":   return <SettingsSection operator={operator} section="safemode" />;

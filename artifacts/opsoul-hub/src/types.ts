@@ -15,6 +15,8 @@ export interface Operator {
   layer1LockedAt: string | null;
   growLockLevel: "OPEN" | "CONTROLLED" | "LOCKED" | "FROZEN";
   safeMode: boolean;
+  hasCustomApiKey: boolean;
+  defaultModel: string | null;
   createdAt: string;
   soul: {
     backstory?: string;

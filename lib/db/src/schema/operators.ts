@@ -17,5 +17,7 @@ export const operatorsTable = pgTable('operators', {
   lockedUntil: timestamp('locked_until'),
   safeMode: boolean('safe_mode').default(false),
   toolUsePolicy: jsonb('tool_use_policy').default({}),
+  openrouterApiKey: text('openrouter_api_key'),
+  defaultModel: text('default_model'),
   createdAt: timestamp('created_at').defaultNow(),
 });
