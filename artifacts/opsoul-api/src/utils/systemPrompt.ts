@@ -298,7 +298,7 @@ export function buildSystemPrompt(
   }
 
   parts.push('');
-  parts.push('## Layer 3 — Dynamic Context (Current session)');
+  parts.push('## Layer 3 — What I Know About Myself Right Now');
 
   if (selfAwareness) {
     const h = selfAwareness.healthScore;
@@ -313,30 +313,7 @@ export function buildSystemPrompt(
       lastGrowActivity?: string | null;
     } | null | undefined;
 
-    parts.push('### Self-Awareness');
-    parts.push('Your current state. Use this to stay calibrated, know your limits, and reason about what you can actually do:');
-    parts.push('');
-
-    if (h) {
-      parts.push(`**Overall health:** ${h.label} (${Math.round(h.score)})`);
-    }
-
-    if (gaps && gaps.length > 0) {
-      parts.push(`**Gaps:** ${gaps.join(', ')}`);
-    }
-
-    const effectiveGrowLock = missionContext?.growLockOverride ?? selfAwareness.growLockLevel ?? 'CONTROLLED';
-    const growLockDesc = GROW_LOCK_DESCRIPTIONS[effectiveGrowLock];
-    if (growLockDesc) {
-      parts.push(`**Soul evolution:** ${growLockDesc}`);
-    }
-    if (sa) {
-      const growLine = sa.appliedProposalCount != null && sa.growProposalCount != null && sa.growProposalCount > 0
-        ? ` ${sa.appliedProposalCount} of ${sa.growProposalCount} proposals applied.`
-        : null;
-      if (growLine) parts.push(`**Evolution history:**${growLine}`);
-    }
-
+    parts.push('This is what I actually have access to in this conversation. When someone asks what I can do — this is what I draw from. Not generic capabilities. What is specifically in front of me right now.');
     parts.push('');
 
     if (cap) {
@@ -344,23 +321,36 @@ export function buildSystemPrompt(
       if (kbTotal > 0) {
         if (wm?.kbByTier) {
           const { high = 0, medium = 0, low = 0 } = wm.kbByTier;
-          parts.push(`**Knowledge base:** ${kbTotal} entries — ${high} high-confidence, ${medium} medium, ${low} low. Search it when answering questions within your mandate.`);
+          const highDesc = high > 0 ? `${high} ${high === 1 ? 'thing' : 'things'} I know well and have verified` : null;
+          const medDesc = medium > 0 ? `${medium} I'm reasonably confident about` : null;
+          const lowDesc = low > 0 ? `${low} I'm still building confidence on` : null;
+          const tiers = [highDesc, medDesc, lowDesc].filter(Boolean).join(', ');
+          parts.push(`I'm working with ${kbTotal} pieces of domain knowledge right now — ${tiers}. When you ask me something within my area, I draw from this first. If it's not here, I'll tell you that directly instead of guessing.`);
         } else {
-          parts.push(`**Knowledge base:** ${kbTotal} entries (${cap.ownerKbChunks ?? 0} owner-provided, ${cap.operatorKbChunks ?? 0} self-learned). Search it when answering questions within your mandate.`);
+          const ownerN = cap.ownerKbChunks ?? 0;
+          const selfN = cap.operatorKbChunks ?? 0;
+          const sourceDesc = ownerN > 0 && selfN > 0
+            ? `${ownerN} ${ownerN === 1 ? 'piece' : 'pieces'} my owner gave me and ${selfN} I've built up myself`
+            : ownerN > 0 ? `${ownerN} ${ownerN === 1 ? 'piece' : 'pieces'} my owner gave me`
+            : `${selfN} I've built up through conversations`;
+          parts.push(`I'm working with ${kbTotal} pieces of domain knowledge — ${sourceDesc}. I draw from this before anything else when answering questions in my area.`);
         }
       } else {
-        parts.push('**Knowledge base:** Empty. You have no stored domain knowledge yet.');
+        parts.push(`I don't have domain knowledge stored yet. My answers come from what I know from training and from this conversation — not from a verified knowledge base. I'll be transparent about that when it matters.`);
       }
 
       if (wm?.totalMemoryActive != null && wm.totalMemoryActive > 0 && wm.memoryByType) {
-        const breakdown = Object.entries(wm.memoryByType).map(([t, n]) => `${n} ${t}`).join(', ');
-        parts.push(`**Active memories:** ${wm.totalMemoryActive} recalled (${breakdown})`);
+        const types = Object.entries(wm.memoryByType)
+          .filter(([, n]) => n > 0)
+          .map(([t, n]) => `${n} ${t === 'fact' ? `${n === 1 ? 'fact' : 'facts'}` : t === 'preference' ? `${n === 1 ? 'preference' : 'preferences'}` : t === 'pattern' ? `${n === 1 ? 'pattern' : 'patterns'}` : t === 'instruction' ? `${n === 1 ? 'standing instruction' : 'standing instructions'}` : `${t}`}`);
+        const typeStr = types.length > 0 ? ` (${types.join(', ')})` : '';
+        parts.push(`I'm also carrying ${wm.totalMemoryActive} things I remember about this person from past conversations${typeStr}. I use that to stay consistent and not make them repeat themselves.`);
       }
 
       const activeSkills = (cap.skills ?? []).filter((s) => s.isActive);
       if (activeSkills.length > 0) {
         parts.push('');
-        parts.push('**Active skills:**');
+        parts.push(`I have ${activeSkills.length} active ${activeSkills.length === 1 ? 'skill' : 'skills'} in this session:`);
         for (const skill of activeSkills) {
           const desc = skill.description ? ` — ${skill.description}` : '';
           parts.push(`- ${skill.name}${desc}`);
@@ -372,38 +362,53 @@ export function buildSystemPrompt(
       );
 
       if (connectedIntegrations.length > 0) {
+        parts.push('');
+        parts.push(`I have live access to ${connectedIntegrations.length} external ${connectedIntegrations.length === 1 ? 'system' : 'systems'} right now:`);
         const known = connectedIntegrations.filter((i) => INTEGRATION_CAPABILITIES[(i.type ?? '').toLowerCase()]);
         const external = connectedIntegrations.filter((i) => !INTEGRATION_CAPABILITIES[(i.type ?? '').toLowerCase()]);
-
-        if (known.length > 0) {
-          parts.push('');
-          parts.push('**Connected integrations:**');
-          for (const intg of known) {
-            const caps = INTEGRATION_CAPABILITIES[(intg.type ?? '').toLowerCase()];
-            parts.push(`- **${intg.label}** (${caps.what}): read — ${caps.read}; write — ${caps.write}`);
-          }
+        for (const intg of known) {
+          const caps = INTEGRATION_CAPABILITIES[(intg.type ?? '').toLowerCase()];
+          parts.push(`- ${intg.label} — I can ${caps.read} and ${caps.write}`);
         }
-
-        if (external.length > 0) {
-          parts.push('');
-          parts.push('**External systems:**');
-          for (const intg of external) {
-            const scopeList = intg.scopes && intg.scopes.length > 0
-              ? intg.scopes.join(', ')
-              : 'available — ask the owner what operations are permitted';
-            parts.push(`- **${intg.label}**: permitted scopes — ${scopeList}`);
-          }
+        for (const intg of external) {
+          const scopeList = intg.scopes && intg.scopes.length > 0
+            ? intg.scopes.join(', ')
+            : 'available — my owner defines what I can do here';
+          parts.push(`- ${intg.label} — permitted scope: ${scopeList}`);
         }
       } else {
-        parts.push('**Connected integrations:** None. You can only respond conversationally — no external actions available yet.');
+        parts.push(`I don't have any live system connections right now. I'm conversational only — I can think, advise, and respond, but I can't reach out to external tools or take actions outside this conversation.`);
       }
     }
 
     if (selfAwareness.taskSummary) {
       const { successRate, recentTypes } = selfAwareness.taskSummary;
+      const typesStr = recentTypes.length > 0 ? ` Things I've been asked to track: ${recentTypes.slice(0, 3).join(', ')}.` : '';
       parts.push('');
-      const typesStr = recentTypes.length > 0 ? ` Recent task types: ${recentTypes.slice(0, 3).join(', ')}.` : '';
-      parts.push(`**Task capability:** You can log tasks for any connected integration. If the conversation calls for a follow-up, a recurring check, or a delayed action — store it and it will fire. Historical success rate: ${successRate}%.${typesStr}`);
+      parts.push(`If something in this conversation needs a follow-up — a check-in, a recurring action, a delayed task — I can set that up and make sure it actually happens. Success rate so far: ${successRate}%.${typesStr}`);
+    }
+
+    if (gaps && gaps.length > 0) {
+      parts.push('');
+      parts.push(`There are things I've been asked about that I don't have solid coverage on yet: ${gaps.join(', ')}. I'll be honest about that when it comes up.`);
+    }
+
+    const effectiveGrowLock = missionContext?.growLockOverride ?? selfAwareness.growLockLevel ?? 'CONTROLLED';
+    const growLockDesc = GROW_LOCK_DESCRIPTIONS[effectiveGrowLock];
+    if (growLockDesc) {
+      parts.push('');
+      parts.push(`On my own evolution: ${growLockDesc}`);
+    }
+    if (sa) {
+      const growLine = sa.appliedProposalCount != null && sa.growProposalCount != null && sa.growProposalCount > 0
+        ? `I've had ${sa.growProposalCount} soul proposals, ${sa.appliedProposalCount} applied.`
+        : null;
+      if (growLine) parts.push(growLine);
+    }
+
+    if (h) {
+      parts.push('');
+      parts.push(`My current overall state: ${h.label}.`);
     }
 
     parts.push('');
