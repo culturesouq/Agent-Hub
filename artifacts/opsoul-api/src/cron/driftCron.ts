@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { db } from '@workspace/db';
 import { operatorsTable, selfAwarenessStateTable } from '@workspace/db';
 import { eq, isNotNull } from 'drizzle-orm';
@@ -53,6 +54,12 @@ async function runDriftCheck(): Promise<void> {
             },
           })
           .where(eq(selfAwarenessStateTable.id, existing.id));
+      } else {
+        await db.insert(selfAwarenessStateTable).values({
+          id: crypto.randomUUID(),
+          operatorId: op.id,
+          soulState: { driftScore, driftFlagged: flagged, driftCheckedAt: new Date().toISOString() },
+        });
       }
 
       if (flagged) {
@@ -70,7 +77,6 @@ async function runDriftCheck(): Promise<void> {
 
 function soulToText(soul: Layer2Soul): string {
   const parts: string[] = [];
-  if (soul.backstory) parts.push(soul.backstory);
   if (soul.personalityTraits?.length) parts.push(`Personality: ${soul.personalityTraits.join(', ')}`);
   if (soul.toneProfile) parts.push(`Tone: ${soul.toneProfile}`);
   if (soul.communicationStyle) parts.push(`Style: ${soul.communicationStyle}`);

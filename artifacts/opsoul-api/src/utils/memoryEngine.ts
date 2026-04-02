@@ -253,6 +253,22 @@ export async function distillMemoriesFromConversations(
   let stored = 0;
   for (const m of highConfidence) {
     try {
+      const embedding = await embed(m.content);
+      const vecStr = `[${embedding.join(',')}]`;
+      const dupCheck = await pool.query<{ distance: number }>(
+        `SELECT (embedding <=> $1::vector) AS distance
+         FROM operator_memory
+         WHERE operator_id = $2
+           AND embedding IS NOT NULL
+           AND archived_at IS NULL
+         ORDER BY distance ASC
+         LIMIT 1`,
+        [vecStr, operatorId],
+      );
+      if (dupCheck.rows.length > 0 && (1 - dupCheck.rows[0].distance) > 0.92) {
+        console.log(`[memory] skipped duplicate — similarity: ${(1 - dupCheck.rows[0].distance).toFixed(3)}`);
+        continue;
+      }
       await storeMemory(operatorId, ownerId, m.content, m.memoryType, 'ai_distilled', m.confidence);
       stored++;
     } catch {

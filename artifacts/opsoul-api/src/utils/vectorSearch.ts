@@ -38,6 +38,7 @@ export async function searchOwnerKb(
      FROM owner_kb
      WHERE operator_id = $2
        AND embedding IS NOT NULL
+       AND (embedding <=> $1::vector) < 0.7
      ORDER BY distance ASC
      LIMIT $3`,
     [vecStr, operatorId, limit],
