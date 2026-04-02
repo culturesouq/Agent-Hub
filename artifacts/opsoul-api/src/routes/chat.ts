@@ -17,7 +17,7 @@ import { lockLayer1IfUnlocked } from '../utils/lockLayer1.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { buildSystemPrompt } from '../utils/systemPrompt.js';
 import type { ActiveSkill, ActiveMissionContext, SelfAwarenessSnapshot, BuildSystemPromptOpts } from '../utils/systemPrompt.js';
-import { searchMemory, buildMemoryContext } from '../utils/memoryEngine.js';
+import { searchMemory, buildMemoryContext, distillMemoriesFromConversations } from '../utils/memoryEngine.js';
 import type { MemoryHit } from '../utils/memoryEngine.js';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
@@ -285,7 +285,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       })}\n\n`);
       res.end();
 
-      if (!operator.safeMode) triggerSelfAwareness(operator.id, 'conversation_end').catch(() => {});
+      if (!operator.safeMode) {
+        triggerSelfAwareness(operator.id, 'conversation_end').catch(() => {});
+        distillMemoriesFromConversations(operator.id, operator.ownerId, operator.name).catch(() => {});
+      }
     } catch (err) {
       res.write(`data: ${JSON.stringify({ error: (err as Error).message })}\n\n`);
       res.end();
@@ -328,7 +331,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         layer1WasLocked: operator.layer1LockedAt === null,
       });
 
-      if (!operator.safeMode) triggerSelfAwareness(operator.id, 'conversation_end').catch(() => {});
+      if (!operator.safeMode) {
+        triggerSelfAwareness(operator.id, 'conversation_end').catch(() => {});
+        distillMemoriesFromConversations(operator.id, operator.ownerId, operator.name).catch(() => {});
+      }
     } catch (err) {
       res.status(502).json({ error: 'AI backend error', detail: (err as Error).message });
     }

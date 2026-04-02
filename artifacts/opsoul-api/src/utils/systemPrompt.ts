@@ -262,6 +262,36 @@ export function buildSystemPrompt(
       if (activeIntegrations.length > 0) parts.push(`**Integrations:** ${activeIntegrations.map((i) => i.label).join(', ')}`);
     }
 
+    const wm = (selfAwareness as unknown as Record<string, unknown>).workspaceManifest as {
+      kbByTier?: { high?: number; medium?: number; low?: number };
+      memoryByType?: Record<string, number>;
+      totalMemoryActive?: number;
+      lastConversationAt?: string | null;
+      lastGrowActivity?: string | null;
+    } | null | undefined;
+
+    if (wm) {
+      parts.push('');
+      parts.push('### Workspace Index');
+      parts.push('A structured map of what you currently know and have experienced:');
+      if (wm.kbByTier) {
+        const { high = 0, medium = 0, low = 0 } = wm.kbByTier;
+        if (high + medium + low > 0) {
+          parts.push(`**Learned knowledge:** ${high} high-confidence, ${medium} medium, ${low} low entries`);
+        }
+      }
+      if (wm.totalMemoryActive != null && wm.totalMemoryActive > 0 && wm.memoryByType) {
+        const breakdown = Object.entries(wm.memoryByType).map(([t, n]) => `${n} ${t}`).join(', ');
+        parts.push(`**Active memories:** ${wm.totalMemoryActive} total (${breakdown})`);
+      }
+      if (wm.lastConversationAt) {
+        parts.push(`**Last conversation:** ${new Date(wm.lastConversationAt).toDateString()}`);
+      }
+      if (wm.lastGrowActivity) {
+        parts.push(`**Last soul evolution:** ${new Date(wm.lastGrowActivity).toDateString()}`);
+      }
+    }
+
     parts.push('');
   }
 

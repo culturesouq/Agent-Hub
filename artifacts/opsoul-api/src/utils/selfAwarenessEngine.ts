@@ -9,10 +9,12 @@ import {
   platformSkillsTable,
   operatorKbTable,
   ownerKbTable,
+  operatorMemoryTable,
+  conversationsTable,
   tasksTable,
   opsLogsTable,
 } from '@workspace/db';
-import { eq, and, count, avg, desc, not, isNull, inArray, sql } from 'drizzle-orm';
+import { eq, and, count, avg, desc, not, isNull, inArray, sql, gte, lt, isNotNull } from 'drizzle-orm';
 
 export type SelfAwarenessTrigger =
   | 'conversation_end'
@@ -91,6 +93,15 @@ export interface TaskHistorySummary {
   taskTypeBreakdown: Record<string, { total: number; succeeded: number; failed: number }>;
 }
 
+export interface WorkspaceManifest {
+  kbByTier: { high: number; medium: number; low: number };
+  memoryByType: Record<string, number>;
+  totalMemoryActive: number;
+  lastConversationAt: string | null;
+  lastGrowActivity: string | null;
+  generatedAt: string;
+}
+
 export interface SelfAwarenessState {
   operatorId: string;
   identityState: IdentityState;
@@ -99,8 +110,50 @@ export interface SelfAwarenessState {
   taskHistory: TaskHistorySummary;
   mandateGaps: string[];
   healthScore: HealthScore;
+  workspaceManifest: WorkspaceManifest;
   lastUpdated: string;
   lastUpdateTrigger: SelfAwarenessTrigger;
+}
+
+async function buildWorkspaceManifest(operatorId: string): Promise<WorkspaceManifest> {
+  const [kbHigh, kbMedium, kbLow, memoryRows, lastGrow, lastConv] = await Promise.all([
+    db.select({ total: count() }).from(operatorKbTable)
+      .where(and(eq(operatorKbTable.operatorId, operatorId), gte(operatorKbTable.confidenceScore, 80))),
+    db.select({ total: count() }).from(operatorKbTable)
+      .where(and(eq(operatorKbTable.operatorId, operatorId), gte(operatorKbTable.confidenceScore, 50), lt(operatorKbTable.confidenceScore, 80))),
+    db.select({ total: count() }).from(operatorKbTable)
+      .where(and(eq(operatorKbTable.operatorId, operatorId), lt(operatorKbTable.confidenceScore, 50))),
+    db.select({ memoryType: operatorMemoryTable.memoryType, total: count() })
+      .from(operatorMemoryTable)
+      .where(and(eq(operatorMemoryTable.operatorId, operatorId), isNull(operatorMemoryTable.archivedAt)))
+      .groupBy(operatorMemoryTable.memoryType),
+    db.select({ lastActivity: sql<string>`MAX(created_at)::text` })
+      .from(growProposalsTable)
+      .where(and(eq(growProposalsTable.operatorId, operatorId), sql`status = 'applied'`)),
+    db.select({ lastAt: sql<string>`MAX(last_message_at)::text` })
+      .from(conversationsTable)
+      .where(eq(conversationsTable.operatorId, operatorId)),
+  ]);
+
+  const memoryByType: Record<string, number> = {};
+  let totalMemoryActive = 0;
+  for (const row of memoryRows) {
+    memoryByType[row.memoryType] = Number(row.total);
+    totalMemoryActive += Number(row.total);
+  }
+
+  return {
+    kbByTier: {
+      high: Number(kbHigh[0]?.total ?? 0),
+      medium: Number(kbMedium[0]?.total ?? 0),
+      low: Number(kbLow[0]?.total ?? 0),
+    },
+    memoryByType,
+    totalMemoryActive,
+    lastConversationAt: lastConv[0]?.lastAt ?? null,
+    lastGrowActivity: lastGrow[0]?.lastActivity ?? null,
+    generatedAt: new Date().toISOString(),
+  };
 }
 
 async function buildIdentityState(op: typeof operatorsTable.$inferSelect): Promise<IdentityState> {
@@ -340,11 +393,12 @@ export async function buildSelfAwarenessState(
 
   if (!op) throw new Error(`Operator ${operatorId} not found`);
 
-  const [identityState, soulState, capabilityState, taskHistory] = await Promise.all([
+  const [identityState, soulState, capabilityState, taskHistory, workspaceManifest] = await Promise.all([
     buildIdentityState(op),
     buildSoulState(operatorId, op),
     buildCapabilityState(operatorId),
     buildTaskHistory(operatorId),
+    buildWorkspaceManifest(operatorId),
   ]);
 
   const mandateGaps = computeMandateGaps(taskHistory);
@@ -358,6 +412,7 @@ export async function buildSelfAwarenessState(
     taskHistory,
     mandateGaps,
     healthScore,
+    workspaceManifest,
     lastUpdated: new Date().toISOString(),
     lastUpdateTrigger: 'force',
   };
@@ -386,6 +441,7 @@ export async function recomputeSelfAwareness(
       taskHistory: computed.taskHistory as unknown as Record<string, unknown>,
       mandateGaps: computed.mandateGaps,
       healthScore: computed.healthScore as unknown as Record<string, unknown>,
+      workspaceManifest: computed.workspaceManifest as unknown as Record<string, unknown>,
       lastUpdated: new Date(),
       lastUpdateTrigger: trigger,
     };
