@@ -222,6 +222,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     {
       name: operator.name,
       archetype: operator.archetype,
+      rawIdentity: operator.rawIdentity ?? undefined,
       mandate: operator.mandate,
       coreValues: operator.coreValues,
       ethicalBoundaries: operator.ethicalBoundaries,

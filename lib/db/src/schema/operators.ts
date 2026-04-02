@@ -9,6 +9,7 @@ export const operatorsTable = pgTable('operators', {
   mandate: text('mandate').notNull(),
   coreValues: text('core_values').array(),
   ethicalBoundaries: text('ethical_boundaries').array(),
+  rawIdentity: text('raw_identity'),
   layer1LockedAt: timestamp('layer1_locked_at'),
   layer2Soul: jsonb('layer2_soul').notNull(),
   layer2SoulOriginal: jsonb('layer2_soul_original').notNull(),

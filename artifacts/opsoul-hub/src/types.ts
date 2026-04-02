@@ -9,6 +9,7 @@ export interface Operator {
   name: string;
   archetype: string;
   mandate: string;
+  rawIdentity?: string;
   coreValues: string[];
   ethicalBoundaries: string[];
   layer1LockedAt: string | null;

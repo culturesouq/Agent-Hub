@@ -33,6 +33,7 @@ function serializeOperator(op: typeof operatorsTable.$inferSelect) {
     name: op.name,
     archetype: op.archetype,
     mandate: op.mandate,
+    rawIdentity: op.rawIdentity,
     coreValues: op.coreValues,
     ethicalBoundaries: op.ethicalBoundaries,
     layer1LockedAt: op.layer1LockedAt,
@@ -469,6 +470,7 @@ router.patch('/:id/identity-from-description', async (req: Request, res: Respons
     .update(operatorsTable)
     .set({
       name: agentName,
+      rawIdentity: description,
       mandate: parsed.mandate ?? op.mandate,
       coreValues: parsed.coreValues ?? op.coreValues,
       ethicalBoundaries: parsed.ethicalBoundaries ?? op.ethicalBoundaries,

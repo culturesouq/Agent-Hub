@@ -6,6 +6,7 @@ export type { MemoryHit };
 export interface OperatorIdentity {
   name: string;
   archetype: string;
+  rawIdentity?: string | null;
   mandate: string;
   coreValues: string[] | null;
   ethicalBoundaries: string[] | null;
@@ -191,6 +192,10 @@ export interface BuildSystemPromptOpts {
 function buildLayer1Block(operator: OperatorIdentity): string[] {
   const block: string[] = [];
   block.push('## Layer 1 — Foundation');
+  if (operator.rawIdentity) {
+    block.push('**Who you are:**');
+    block.push(operator.rawIdentity);
+  }
   block.push(`**Mandate:** ${operator.mandate}`);
   if (operator.coreValues && operator.coreValues.length > 0) {
     block.push(`**Core Values:** ${operator.coreValues.join(', ')}`);

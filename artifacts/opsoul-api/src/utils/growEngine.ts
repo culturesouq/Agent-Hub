@@ -78,8 +78,8 @@ function buildGrowPrompt(
 
 ## ABSOLUTE CONSTRAINTS — READ FIRST
 The following fields are LAYER 1 IMMUTABLE and must NEVER appear in your proposedChanges under any circumstances:
-name, archetype, mandate, coreValues, ethicalBoundaries, fundamentalPersonality, operatorType, backstory
-The backstory field is owner-authored narrative prose — it is permanently frozen and must never be touched.
+name, archetype, mandate, coreValues, ethicalBoundaries, fundamentalPersonality, operatorType, backstory, rawIdentity
+The backstory and rawIdentity fields are owner-authored narrative prose — they are permanently frozen and must never be touched.
 Any attempt to modify these fields will be blocked and flagged as a security violation.
 ${guardWarning}
 ## Current Agent Profile
