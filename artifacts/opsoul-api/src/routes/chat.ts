@@ -301,7 +301,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         outputFormat:       s.outputFormat ?? s.skillOutputFormat ?? null,
         customInstructions: s.customInstructions ?? null,
       }));
-      const skillTrigger = await detectSkillTrigger(fullContent, installedSkillsForAgency);
+      const skillTrigger = await detectSkillTrigger(message, installedSkillsForAgency, fullContent);
       if (skillTrigger) {
         console.log(`[agency] skill triggered: ${skillTrigger.name}`);
         const skillResult = await executeSkill(skillTrigger, chatModel);
@@ -381,7 +381,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         outputFormat:       s.outputFormat ?? s.skillOutputFormat ?? null,
         customInstructions: s.customInstructions ?? null,
       }));
-      const skillTrigger = await detectSkillTrigger(result.content, installedSkillsForAgency);
+      const skillTrigger = await detectSkillTrigger(message, installedSkillsForAgency, result.content);
       if (skillTrigger) {
         console.log(`[agency] skill triggered: ${skillTrigger.name}`);
         const skillResult = await executeSkill(skillTrigger, chatModel);
