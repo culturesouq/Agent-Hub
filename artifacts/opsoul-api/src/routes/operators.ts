@@ -316,6 +316,7 @@ router.patch('/:id/soul', async (req: Request, res: Response): Promise<void> => 
   const updates = parsed.data;
 
   const newSoul: Layer2Soul = {
+    backstory: updates.backstory ?? currentSoul.backstory,
     personalityTraits: updates.personalityTraits ?? currentSoul.personalityTraits,
     toneProfile: updates.toneProfile ?? currentSoul.toneProfile,
     communicationStyle: updates.communicationStyle ?? currentSoul.communicationStyle,
