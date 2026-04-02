@@ -5,8 +5,8 @@ import { eq, and, isNull, isNotNull, inArray, desc } from 'drizzle-orm';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { chatCompletion } from './openrouter.js';
 
-export const MEMORY_TOP_N = 5;
-export const MEMORY_MIN_SIMILARITY = 0.40;
+export const MEMORY_TOP_N = 8;
+export const MEMORY_MIN_SIMILARITY = 0.55;
 export const MEMORY_MIN_WEIGHT = 0.1;
 export const MEMORY_DECAY_RATE_PER_DAY = 0.05;
 export const MEMORY_ARCHIVE_THRESHOLD = 0.05;
@@ -185,11 +185,14 @@ Memory types:
 ## Transcript
 ${transcript}
 
+## Phrasing instruction
+Write each memory so it can be retrieved by the QUESTIONS a user will ask in future conversations — not just what they literally said. Include likely retrieval keywords. For example, instead of "User is planning to expand into vegetable farming, specifically tomatoes", write "User plans to expand their farm — next crop is tomatoes, vegetable farming expansion planned for next year".
+
 Respond ONLY with valid JSON:
 {
   "memories": [
     {
-      "content": "<concise, third-person memory statement — e.g. 'User prefers bullet-point summaries over paragraphs'>",
+      "content": "<retrieval-optimized, third-person memory statement>",
       "memoryType": "fact" | "preference" | "interaction" | "pattern" | "context",
       "confidence": <0.0–1.0 how certain this extraction is>
     }
