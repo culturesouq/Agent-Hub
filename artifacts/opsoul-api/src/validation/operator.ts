@@ -20,7 +20,7 @@ export type Layer2Soul = z.infer<typeof Layer2SoulSchema>;
 
 export const CreateOperatorSchema = z.object({
   name: z.string().min(1).max(100),
-  rawIdentity: z.string().optional(),
+  rawIdentity: z.string().nullable().optional(),
   slug: z
     .string()
     .min(2)

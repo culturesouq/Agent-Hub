@@ -83,7 +83,8 @@ Generate ALL of the following in ONE JSON response. Return ONLY valid JSON — n
 
 {
   "archetype": "Exactly one of: Executor, Advisor, Expert, Connector, Creator, Guardian. If input is minimal or ambiguous, use Connector.",
-  "identityParagraph": "2-3 warm human sentences in THIRD PERSON describing who this assistant is. Weave together: the Layer 0 human foundation, the archetype's nature, and what the owner described. Specific, not generic. Never mention 'Layer 0', archetypes, or technical terms.",
+  "mandate": "One sentence only. What this Operator exists to do. Starts with a verb. No fluff. Example: 'Help MENA founders navigate strategy, clarity, and what is actually hard about building something real.'",
+  "rawIdentity": "200-300 words in first person. Who this Operator is — their origin, their voice, what makes them different from any other AI. This is NOT rules. NOT a mandate. It is a story. Written the way a person would describe themselves if asked who they really are. Weave together: the name, the purpose, the archetype character, and 2-3 specific things that make this Operator theirs.",
   "personalityParagraph": "1-2 sentences describing HOW they communicate. Warm and specific. No jargon.",
   "openingMessage": "The very first thing this assistant says when a chat opens. In character. Warm, natural, specific to who they are. 1-2 sentences max. NEVER use: 'How can I help you today?', 'Certainly!', 'Of course!', 'Great question!', or any filler opener. Make it feel like meeting a real person.",
   "coreValues": ["3 to 4 specific values that fit this assistant — not generic platitudes"],
@@ -129,7 +130,8 @@ Archetype guide:
     const trimmedName = name.trim();
     res.json({
       archetype,
-      identityParagraph: parsed.identityParagraph ?? `${trimmedName} is here to help you.`,
+      mandate: parsed.mandate ?? `Help users with ${trimmedName}'s core purpose.`,
+      rawIdentity: parsed.rawIdentity ?? null,
       personalityParagraph: parsed.personalityParagraph ?? `${trimmedName} communicates clearly and warmly.`,
       openingMessage: parsed.openingMessage ?? `Hi there. I'm ${trimmedName}.`,
       coreValues: parsed.coreValues ?? ['helpfulness', 'honesty', 'clarity'],
@@ -176,6 +178,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     name: data.name,
     archetype: data.archetype,
     mandate: data.mandate,
+    rawIdentity: data.rawIdentity ?? null,
     coreValues: data.coreValues,
     ethicalBoundaries: data.ethicalBoundaries,
     layer2Soul: data.layer2Soul,
