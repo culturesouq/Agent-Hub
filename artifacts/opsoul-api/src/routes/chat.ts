@@ -137,14 +137,33 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     buildMessageHistory(conv.id),
   ]);
 
-  const selfAwareness: SelfAwarenessSnapshot | null = selfAwarenessRow[0]
+  const selfAwarenessData = selfAwarenessRow[0] ?? null;
+  const storedIdentity = selfAwarenessData?.identityState as Record<string, unknown> | null | undefined;
+  const storedTaskHistory = selfAwarenessData?.taskHistory as {
+    successRate?: number;
+    taskTypeBreakdown?: Record<string, { total: number; succeeded: number; failed: number }>;
+    last30Tasks?: { taskType: string }[];
+  } | null | undefined;
+
+  const selfAwareness: SelfAwarenessSnapshot | null = selfAwarenessData
     ? {
-        healthScore: selfAwarenessRow[0].healthScore as { score: number; label: string } | null,
-        mandateGaps: selfAwarenessRow[0].mandateGaps ?? null,
-        lastUpdateTrigger: selfAwarenessRow[0].lastUpdateTrigger ?? null,
-        lastUpdated: selfAwarenessRow[0].lastUpdated ?? null,
-        soulState: selfAwarenessRow[0].soulState as SelfAwarenessSnapshot['soulState'],
-        capabilityState: selfAwarenessRow[0].capabilityState as SelfAwarenessSnapshot['capabilityState'],
+        healthScore: selfAwarenessData.healthScore as { score: number; label: string } | null,
+        mandateGaps: selfAwarenessData.mandateGaps ?? null,
+        lastUpdateTrigger: selfAwarenessData.lastUpdateTrigger ?? null,
+        lastUpdated: selfAwarenessData.lastUpdated ?? null,
+        growLockLevel: (storedIdentity?.growLockLevel as string | null) ?? null,
+        soulState: selfAwarenessData.soulState as SelfAwarenessSnapshot['soulState'],
+        capabilityState: selfAwarenessData.capabilityState as SelfAwarenessSnapshot['capabilityState'],
+        taskSummary: storedTaskHistory
+          ? {
+              successRate: storedTaskHistory.successRate ?? 100,
+              recentTypes: [
+                ...new Set(
+                  (storedTaskHistory.last30Tasks ?? []).map((t) => t.taskType).filter(Boolean),
+                ),
+              ].slice(0, 5),
+            }
+          : null,
       }
     : null;
 

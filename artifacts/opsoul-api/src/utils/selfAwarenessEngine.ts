@@ -68,7 +68,7 @@ export interface CapabilityState {
     type: string;
     status: string;
     hasToken: boolean;
-    scopeCount: number;
+    scopes: string[];
   }[];
   skills: {
     id: string;
@@ -241,7 +241,7 @@ async function buildCapabilityState(operatorId: string): Promise<CapabilityState
       type: i.type,
       status: i.status ?? 'connected',
       hasToken: !!i.tokenEncrypted,
-      scopeCount: i.scopes?.length ?? 0,
+      scopes: i.scopes ?? [],
     })),
     skills: skillInstalls.map((s) => ({
       id: s.id,

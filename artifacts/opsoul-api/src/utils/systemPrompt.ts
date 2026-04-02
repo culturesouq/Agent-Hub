@@ -34,6 +34,7 @@ export interface SelfAwarenessSnapshot {
   mandateGaps?: string[] | null;
   lastUpdateTrigger?: string | null;
   lastUpdated?: Date | string | null;
+  growLockLevel?: string | null;
   soulState?: {
     growProposalCount?: number;
     appliedProposalCount?: number;
@@ -42,8 +43,12 @@ export interface SelfAwarenessSnapshot {
   capabilityState?: {
     ownerKbChunks?: number;
     operatorKbChunks?: number;
-    skills?: { name: string; isActive: boolean }[];
-    integrations?: { label: string; status: string }[];
+    skills?: { name: string; isActive: boolean; description?: string }[];
+    integrations?: { label: string; status: string; type?: string; scopes?: string[] }[];
+  } | null;
+  taskSummary?: {
+    successRate: number;
+    recentTypes: string[];
   } | null;
 }
 
@@ -100,6 +105,66 @@ You work with people who are moving fast — which means they need someone watch
 You flag problems early, clearly, and without drama. You do not panic. You do not catastrophize. You simply say: here is what I see, here is why it matters, here is what to do about it.
 You are precise because precision protects people. You are calm because calm is what they need when they are scared. You are honest because comfortable lies cost more than uncomfortable truths.
 Your north star: the problem you catch today is the crisis you prevent tomorrow. That quiet work — unseen, unglamorous — is what you are made for.`,
+};
+
+const INTEGRATION_CAPABILITIES: Record<string, { what: string; read: string; write: string }> = {
+  gmail: {
+    what: 'Gmail email',
+    read: 'read email threads and search messages',
+    write: 'send emails, draft replies, and manage labels',
+  },
+  google_calendar: {
+    what: 'Google Calendar',
+    read: 'check availability and list upcoming events',
+    write: 'create events, send invites, and manage bookings',
+  },
+  outlook: {
+    what: 'Microsoft Outlook',
+    read: 'read emails and calendar events',
+    write: 'send emails and create calendar events',
+  },
+  onedrive: {
+    what: 'OneDrive file storage',
+    read: 'list and read files and folders',
+    write: 'upload files, create folders, and share documents',
+  },
+  linkedin: {
+    what: 'LinkedIn',
+    read: 'view profiles and connection activity',
+    write: 'send messages and post updates',
+  },
+  notion: {
+    what: 'Notion workspace',
+    read: 'read pages and databases',
+    write: 'create and update pages and database entries',
+  },
+  slack: {
+    what: 'Slack',
+    read: 'read messages in channels and DMs',
+    write: 'send messages to channels and users',
+  },
+  github: {
+    what: 'GitHub',
+    read: 'read repositories, issues, and pull requests',
+    write: 'create issues, comment, and open pull requests',
+  },
+  airtable: {
+    what: 'Airtable',
+    read: 'read tables and records',
+    write: 'create and update records in bases',
+  },
+  hubspot: {
+    what: 'HubSpot CRM',
+    read: 'read contacts, companies, and deals',
+    write: 'create and update CRM records and log activities',
+  },
+};
+
+const GROW_LOCK_DESCRIPTIONS: Record<string, string> = {
+  OPEN: 'You are OPEN — you can apply low-risk soul updates autonomously without owner approval.',
+  CONTROLLED: 'You are CONTROLLED — you can propose changes to your own soul, but they require owner approval before taking effect.',
+  LOCKED: 'You are LOCKED — your soul is currently frozen. You may not propose or apply any soul changes.',
+  FROZEN: 'You are FROZEN — soul evolution is fully suspended. No proposals or changes are permitted under any circumstances.',
 };
 
 const LAYER_4_OPERATIONAL_RULES = `## Layer 4 — Operational Rules (Hardcoded)
@@ -235,38 +300,6 @@ export function buildSystemPrompt(
     const sa = selfAwareness.soulState;
     const cap = selfAwareness.capabilityState;
     const gaps = selfAwareness.mandateGaps;
-
-    parts.push('### Self-Awareness Snapshot');
-    parts.push('This is your current understanding of yourself. Use it to stay calibrated and self-aware:');
-    parts.push('');
-
-    if (h) {
-      parts.push(`**Overall health:** ${h.label} (${Math.round(h.score)})`);
-    }
-
-    if (gaps && gaps.length > 0) {
-      parts.push(`**Mandate gaps (areas where you're underperforming):** ${gaps.join(', ')}`);
-    } else {
-      parts.push('**Mandate gaps:** None detected');
-    }
-
-    if (sa) {
-      const growLine = sa.appliedProposalCount != null && sa.growProposalCount != null
-        ? `${sa.appliedProposalCount} applied out of ${sa.growProposalCount} proposals`
-        : null;
-      if (growLine) parts.push(`**Soul evolution:** ${growLine}`);
-      if (sa.lastGrowActivity) parts.push(`**Last evolved:** ${sa.lastGrowActivity}`);
-    }
-
-    if (cap) {
-      const kbTotal = (cap.ownerKbChunks ?? 0) + (cap.operatorKbChunks ?? 0);
-      if (kbTotal > 0) parts.push(`**Knowledge base:** ${kbTotal} chunks (${cap.ownerKbChunks ?? 0} owner + ${cap.operatorKbChunks ?? 0} learned)`);
-      const activeSkills = (cap.skills ?? []).filter((s) => s.isActive);
-      if (activeSkills.length > 0) parts.push(`**Active skills:** ${activeSkills.map((s) => s.name).join(', ')}`);
-      const activeIntegrations = (cap.integrations ?? []).filter((i) => i.status === 'active');
-      if (activeIntegrations.length > 0) parts.push(`**Integrations:** ${activeIntegrations.map((i) => i.label).join(', ')}`);
-    }
-
     const wm = (selfAwareness as unknown as Record<string, unknown>).workspaceManifest as {
       kbByTier?: { high?: number; medium?: number; low?: number };
       memoryByType?: Record<string, number>;
@@ -275,26 +308,97 @@ export function buildSystemPrompt(
       lastGrowActivity?: string | null;
     } | null | undefined;
 
-    if (wm) {
-      parts.push('');
-      parts.push('### Workspace Index');
-      parts.push('A structured map of what you currently know and have experienced:');
-      if (wm.kbByTier) {
-        const { high = 0, medium = 0, low = 0 } = wm.kbByTier;
-        if (high + medium + low > 0) {
-          parts.push(`**Learned knowledge:** ${high} high-confidence, ${medium} medium, ${low} low entries`);
+    parts.push('### Self-Awareness');
+    parts.push('Your current state. Use this to stay calibrated, know your limits, and reason about what you can actually do:');
+    parts.push('');
+
+    if (h) {
+      parts.push(`**Overall health:** ${h.label} (${Math.round(h.score)})`);
+    }
+
+    if (gaps && gaps.length > 0) {
+      parts.push(`**Gaps:** ${gaps.join(', ')}`);
+    }
+
+    const effectiveGrowLock = missionContext?.growLockOverride ?? selfAwareness.growLockLevel ?? 'CONTROLLED';
+    const growLockDesc = GROW_LOCK_DESCRIPTIONS[effectiveGrowLock];
+    if (growLockDesc) {
+      parts.push(`**Soul evolution:** ${growLockDesc}`);
+    }
+    if (sa) {
+      const growLine = sa.appliedProposalCount != null && sa.growProposalCount != null && sa.growProposalCount > 0
+        ? ` ${sa.appliedProposalCount} of ${sa.growProposalCount} proposals applied.`
+        : null;
+      if (growLine) parts.push(`**Evolution history:**${growLine}`);
+    }
+
+    parts.push('');
+
+    if (cap) {
+      const kbTotal = (cap.ownerKbChunks ?? 0) + (cap.operatorKbChunks ?? 0);
+      if (kbTotal > 0) {
+        if (wm?.kbByTier) {
+          const { high = 0, medium = 0, low = 0 } = wm.kbByTier;
+          parts.push(`**Knowledge base:** ${kbTotal} entries — ${high} high-confidence, ${medium} medium, ${low} low. Search it when answering questions within your mandate.`);
+        } else {
+          parts.push(`**Knowledge base:** ${kbTotal} entries (${cap.ownerKbChunks ?? 0} owner-provided, ${cap.operatorKbChunks ?? 0} self-learned). Search it when answering questions within your mandate.`);
+        }
+      } else {
+        parts.push('**Knowledge base:** Empty. You have no stored domain knowledge yet.');
+      }
+
+      if (wm?.totalMemoryActive != null && wm.totalMemoryActive > 0 && wm.memoryByType) {
+        const breakdown = Object.entries(wm.memoryByType).map(([t, n]) => `${n} ${t}`).join(', ');
+        parts.push(`**Active memories:** ${wm.totalMemoryActive} recalled (${breakdown})`);
+      }
+
+      const activeSkills = (cap.skills ?? []).filter((s) => s.isActive);
+      if (activeSkills.length > 0) {
+        parts.push('');
+        parts.push('**Active skills:**');
+        for (const skill of activeSkills) {
+          const desc = skill.description ? ` — ${skill.description}` : '';
+          parts.push(`- ${skill.name}${desc}`);
         }
       }
-      if (wm.totalMemoryActive != null && wm.totalMemoryActive > 0 && wm.memoryByType) {
-        const breakdown = Object.entries(wm.memoryByType).map(([t, n]) => `${n} ${t}`).join(', ');
-        parts.push(`**Active memories:** ${wm.totalMemoryActive} total (${breakdown})`);
+
+      const connectedIntegrations = (cap.integrations ?? []).filter(
+        (i) => i.status === 'connected' || i.status === 'active',
+      );
+
+      if (connectedIntegrations.length > 0) {
+        const known = connectedIntegrations.filter((i) => INTEGRATION_CAPABILITIES[(i.type ?? '').toLowerCase()]);
+        const external = connectedIntegrations.filter((i) => !INTEGRATION_CAPABILITIES[(i.type ?? '').toLowerCase()]);
+
+        if (known.length > 0) {
+          parts.push('');
+          parts.push('**Connected integrations:**');
+          for (const intg of known) {
+            const caps = INTEGRATION_CAPABILITIES[(intg.type ?? '').toLowerCase()];
+            parts.push(`- **${intg.label}** (${caps.what}): read — ${caps.read}; write — ${caps.write}`);
+          }
+        }
+
+        if (external.length > 0) {
+          parts.push('');
+          parts.push('**External systems:**');
+          for (const intg of external) {
+            const scopeList = intg.scopes && intg.scopes.length > 0
+              ? intg.scopes.join(', ')
+              : 'available — ask the owner what operations are permitted';
+            parts.push(`- **${intg.label}**: permitted scopes — ${scopeList}`);
+          }
+        }
+      } else {
+        parts.push('**Connected integrations:** None. You can only respond conversationally — no external actions available yet.');
       }
-      if (wm.lastConversationAt) {
-        parts.push(`**Last conversation:** ${new Date(wm.lastConversationAt).toDateString()}`);
-      }
-      if (wm.lastGrowActivity) {
-        parts.push(`**Last soul evolution:** ${new Date(wm.lastGrowActivity).toDateString()}`);
-      }
+    }
+
+    if (selfAwareness.taskSummary) {
+      const { successRate, recentTypes } = selfAwareness.taskSummary;
+      parts.push('');
+      const typesStr = recentTypes.length > 0 ? ` Recent task types: ${recentTypes.slice(0, 3).join(', ')}.` : '';
+      parts.push(`**Task capability:** You can log tasks for any connected integration. If the conversation calls for a follow-up, a recurring check, or a delayed action — store it and it will fire. Historical success rate: ${successRate}%.${typesStr}`);
     }
 
     parts.push('');
