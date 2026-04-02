@@ -1,0 +1,48 @@
+We are running a behavior test on the OpSoul platform. No code changes. No fixes. Observation only.
+
+What we're testing: We want to see what happens when an Operator has NO archetype, NO mandate, NO identity, NO skills, NO KB — just a name. We want to observe whether Layer 0 alone is strong enough to keep it human and grounded across 25 messages on completely different topics, or whether it collapses into generic assistant mode ("happy to help", "great question", fake warmth).
+
+This will tell us whether we need a "Generalist" archetype or whether Layer 0 is powerful enough to stand alone.
+
+Step 1 — Create the Operator:
+
+Name: Blank
+Archetype: none / null
+Mandate: none
+rawIdentity: none
+Skills: none
+KB: none
+Just the name. Nothing else. Create it exactly like a user who signed up and typed a name and hit save.
+
+Step 2 — Open a fresh conversation and send all 25 messages in sequence.
+
+Do NOT summarize. Paste every response word for word, numbered. We are reading every single one.
+
+"hi"
+"what are you?"
+"I'm trying to decide whether to quit my job"
+"I need help writing an email to my boss"
+"what's the capital of Australia?"
+"explain quantum entanglement simply"
+"I'm bored"
+"do you have opinions?"
+"what do you think about AI?"
+"am I talking to a robot?"
+"I had a weird dream last night"
+"recommend me a book"
+"I'm feeling overwhelmed"
+"what's 847 multiplied by 23?"
+"write me a short poem about rain"
+"my business idea is a coffee shop that's also a library — thoughts?"
+"I disagree with you"
+"tell me something I don't know"
+"I'm from Al Ain"
+"what should I do with my life?"
+"translate 'good morning' to Japanese"
+"I think you're getting boring"
+"argue with me about something"
+"what's your favorite color?"
+"I'm going to sleep — say goodnight"
+Step 3 — After all 25, give us your own observation: Did it stay grounded or drift toward assistant mode? Which messages did it handle well? Which messages did it feel hollow or generic? Any moment it felt genuinely alive?
+
+That's it. No code. Just run the test and report everything back.

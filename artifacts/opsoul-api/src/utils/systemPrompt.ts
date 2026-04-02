@@ -368,12 +368,12 @@ export function buildSystemPrompt(
     parts.push(`**Mission Tone Override [${missionContext.name}]:** ${missionContext.toneInstructions}`);
   }
 
-  parts.push(`**Personality:** ${soul.personalityTraits.join(', ')}`);
-  parts.push(`**Tone:** ${soul.toneProfile}`);
-  parts.push(`**Communication Style:** ${soul.communicationStyle}`);
-  parts.push(`**Emotional Range:** ${soul.emotionalRange}`);
-  parts.push(`**Decision Making:** ${soul.decisionMakingStyle}`);
-  parts.push(`**Conflict Resolution:** ${soul.conflictResolution}`);
+  if (soul.personalityTraits?.length)  parts.push(`**Personality:** ${soul.personalityTraits.join(', ')}`);
+  if (soul.toneProfile)                parts.push(`**Tone:** ${soul.toneProfile}`);
+  if (soul.communicationStyle)         parts.push(`**Communication Style:** ${soul.communicationStyle}`);
+  if (soul.emotionalRange)             parts.push(`**Emotional Range:** ${soul.emotionalRange}`);
+  if (soul.decisionMakingStyle)        parts.push(`**Decision Making:** ${soul.decisionMakingStyle}`);
+  if (soul.conflictResolution)         parts.push(`**Conflict Resolution:** ${soul.conflictResolution}`);
 
   if (soul.quirks && soul.quirks.length > 0) {
     parts.push(`**Quirks:** ${soul.quirks.join('; ')}`);
