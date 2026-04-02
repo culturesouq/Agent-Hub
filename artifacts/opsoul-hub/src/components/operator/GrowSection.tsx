@@ -133,11 +133,19 @@ function ProposalCard({
           {prop.proposedValue !== undefined && (
             <div className="space-y-1.5">
               <p className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">Proposed change</p>
-              <pre className="font-mono text-xs bg-primary/5 text-primary/90 p-3 rounded-lg border border-primary/20 whitespace-pre-wrap overflow-x-auto">
-                {typeof prop.proposedValue === "object"
-                  ? JSON.stringify(prop.proposedValue, null, 2)
-                  : String(prop.proposedValue)}
-              </pre>
+              {Array.isArray(prop.proposedValue) ? (
+                <div className="flex flex-wrap gap-1.5 p-3 bg-primary/5 rounded-lg border border-primary/20">
+                  {prop.proposedValue.map((item: string, i: number) => (
+                    <span key={i} className="font-mono text-xs bg-primary/10 text-primary/90 px-2 py-0.5 rounded-full border border-primary/20">
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="font-mono text-xs text-primary/90 bg-primary/5 p-3 rounded-lg border border-primary/20 leading-relaxed">
+                  {String(prop.proposedValue)}
+                </p>
+              )}
             </div>
           )}
         </div>

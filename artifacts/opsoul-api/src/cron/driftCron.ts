@@ -70,6 +70,7 @@ async function runDriftCheck(): Promise<void> {
 
 function soulToText(soul: Layer2Soul): string {
   const parts: string[] = [];
+  if (soul.backstory) parts.push(soul.backstory);
   if (soul.personalityTraits?.length) parts.push(`Personality: ${soul.personalityTraits.join(', ')}`);
   if (soul.toneProfile) parts.push(`Tone: ${soul.toneProfile}`);
   if (soul.communicationStyle) parts.push(`Style: ${soul.communicationStyle}`);

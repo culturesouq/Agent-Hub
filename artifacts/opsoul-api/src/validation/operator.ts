@@ -4,6 +4,7 @@ export const GROW_LOCK_LEVELS = ['OPEN', 'CONTROLLED', 'LOCKED', 'FROZEN'] as co
 export type GrowLockLevel = (typeof GROW_LOCK_LEVELS)[number];
 
 export const Layer2SoulSchema = z.object({
+  backstory: z.string().optional(),
   personalityTraits: z.array(z.string().min(1)).min(1, 'At least one personality trait required'),
   toneProfile: z.string().min(1, 'Tone profile required'),
   communicationStyle: z.string().min(1, 'Communication style required'),
@@ -49,6 +50,7 @@ export const UpdateOperatorLayer1Schema = z.object({
 
 export const UpdateSoulSchema = z
   .object({
+    backstory: z.string().optional(),
     personalityTraits: z.array(z.string().min(1)).min(1).optional(),
     toneProfile: z.string().min(1).optional(),
     communicationStyle: z.string().min(1).optional(),

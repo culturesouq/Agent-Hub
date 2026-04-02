@@ -92,13 +92,13 @@
   --input: 217 32% 18%;
   --ring: 189 94% 43%;
 
-  /* Sidebar slightly lighter than main background */
-  --sidebar: 222 47% 14%;
+  /* Sidebar — clearly lighter than main background for visual separation */
+  --sidebar: 222 40% 18%;
   --sidebar-foreground: 210 40% 97%;
-  --sidebar-border: 217 32% 20%;
+  --sidebar-border: 217 32% 24%;
   --sidebar-primary: 189 94% 43%;
   --sidebar-primary-foreground: 222 47% 10%;
-  --sidebar-accent: 217 32% 20%;
+  --sidebar-accent: 217 32% 23%;
   --sidebar-accent-foreground: 210 40% 97%;
   --sidebar-ring: 189 94% 43%;
 
@@ -146,12 +146,12 @@
   --input: 217 32% 18%;
   --ring: 189 94% 43%;
 
-  --sidebar: 222 47% 14%;
+  --sidebar: 222 40% 18%;
   --sidebar-foreground: 210 40% 97%;
-  --sidebar-border: 217 32% 20%;
+  --sidebar-border: 217 32% 24%;
   --sidebar-primary: 189 94% 43%;
   --sidebar-primary-foreground: 222 47% 10%;
-  --sidebar-accent: 217 32% 20%;
+  --sidebar-accent: 217 32% 23%;
   --sidebar-accent-foreground: 210 40% 97%;
   --sidebar-ring: 189 94% 43%;
 }

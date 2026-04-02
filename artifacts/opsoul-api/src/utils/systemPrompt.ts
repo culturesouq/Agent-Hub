@@ -202,6 +202,11 @@ export function buildSystemPrompt(
   parts.push('');
   parts.push('## Layer 2 — Soul (Your evolving character)');
 
+  if (soul.backstory) {
+    parts.push(soul.backstory);
+    parts.push('');
+  }
+
   if (missionContext?.toneInstructions) {
     parts.push(`**Mission Tone Override [${missionContext.name}]:** ${missionContext.toneInstructions}`);
   }

@@ -18,6 +18,7 @@ export const LAYER_1_LOCKED_FIELDS = new Set([
   'owner_id',
   'slug',
   'id',
+  'backstory',
 ]);
 
 export interface GuardResult {

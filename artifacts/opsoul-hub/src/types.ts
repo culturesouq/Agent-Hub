@@ -16,6 +16,7 @@ export interface Operator {
   safeMode: boolean;
   createdAt: string;
   soul: {
+    backstory?: string;
     personalityTraits: string[];
     toneProfile: string;
     communicationStyle: string;
