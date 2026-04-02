@@ -4,9 +4,10 @@ import { apiFetch } from "@/lib/api";
 import { Operator } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Lock, AlertTriangle, RefreshCw, User, Smile, BookHeart } from "lucide-react";
+import { Lock, AlertTriangle, RefreshCw, User, Smile } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,46 +34,43 @@ export default function IdentitySection({ operator, panel }: Props) {
     operator.mandate ?? operator.name
   );
 
-  const [backstoryText, setBackstoryText] = useState(
-    operator.soul?.backstory ?? ""
+  const [soulDesc, setSoulDesc] = useState(
+    operator.soul?.backstory ?? operator.soul?.communicationStyle ?? ""
   );
 
-  const [personalityDesc, setPersonalityDesc] = useState(
-    operator.soul?.communicationStyle ?? ""
-  );
+  const [needsName, setNeedsName] = useState(false);
+  const [confirmedName, setConfirmedName] = useState("");
 
   const updateIdentity = useMutation({
-    mutationFn: (description: string) =>
+    mutationFn: ({ description, confirmedName }: { description: string; confirmedName?: string }) =>
       apiFetch(`/operators/${operator.id}/identity-from-description`, {
         method: "PATCH",
-        body: JSON.stringify({ description }),
+        body: JSON.stringify({ description, ...(confirmedName ? { confirmedName } : {}) }),
       }),
-    onSuccess: () => {
+    onSuccess: (data: any) => {
+      if (data?.needsName) {
+        setNeedsName(true);
+        return;
+      }
+      setNeedsName(false);
+      setConfirmedName("");
       queryClient.invalidateQueries({ queryKey: ["operators", operator.id] });
       toast({ title: "Saved" });
     },
     onError: (err: any) => toast({ title: "Save failed", description: err.message, variant: "destructive" }),
   });
 
-  const updateBackstory = useMutation({
-    mutationFn: (backstory: string) =>
-      apiFetch(`/operators/${operator.id}/soul`, {
+  const saveSoul = useMutation({
+    mutationFn: async (text: string) => {
+      await apiFetch(`/operators/${operator.id}/soul`, {
         method: "PATCH",
-        body: JSON.stringify({ backstory }),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["operators", operator.id] });
-      toast({ title: "Backstory saved" });
+        body: JSON.stringify({ backstory: text }),
+      });
+      return apiFetch(`/operators/${operator.id}/soul/from-description`, {
+        method: "PATCH",
+        body: JSON.stringify({ description: text }),
+      });
     },
-    onError: (err: any) => toast({ title: "Save failed", description: err.message, variant: "destructive" }),
-  });
-
-  const updatePersonality = useMutation({
-    mutationFn: (description: string) =>
-      apiFetch(`/operators/${operator.id}/soul/from-description`, {
-        method: "PATCH",
-        body: JSON.stringify({ description }),
-      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operator.id] });
       toast({ title: "Saved" });
@@ -150,104 +148,104 @@ export default function IdentitySection({ operator, panel }: Props) {
             />
           </div>
 
-          <Button
-            onClick={() => updateIdentity.mutate(identityDesc)}
-            disabled={updateIdentity.isPending}
-            className="w-full font-mono"
-          >
-            {updateIdentity.isPending ? "Saving..." : "Save"}
-          </Button>
+          {needsName && (
+            <div className="border border-amber-500/30 bg-amber-500/5 rounded-lg p-4 space-y-3">
+              <p className="font-mono text-sm text-amber-400">
+                What should we call your agent?
+              </p>
+              <Input
+                value={confirmedName}
+                onChange={e => setConfirmedName(e.target.value)}
+                className="font-mono bg-background/50"
+                placeholder="e.g. Nahil"
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => updateIdentity.mutate({ description: identityDesc, confirmedName })}
+                  disabled={!confirmedName.trim() || updateIdentity.isPending}
+                  className="font-mono"
+                  size="sm"
+                >
+                  {updateIdentity.isPending ? "Saving..." : "Confirm"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="font-mono text-muted-foreground"
+                  onClick={() => { setNeedsName(false); setConfirmedName(""); }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {!needsName && (
+            <Button
+              onClick={() => updateIdentity.mutate({ description: identityDesc })}
+              disabled={updateIdentity.isPending}
+              className="w-full font-mono"
+            >
+              {updateIdentity.isPending ? "Saving..." : "Save"}
+            </Button>
+          )}
         </div>
       )}
 
       {showPersonality && (
-        <>
-          {/* Backstory — owner-written prose, saved directly */}
-          <div className="border rounded-lg p-6 space-y-4 border-border/50 bg-card/30">
+        <div className="border rounded-lg p-6 space-y-4 border-border/50 bg-card/30">
+          <div className="flex items-center justify-between">
             <h3 className="font-mono text-base font-bold flex items-center gap-2">
-              <BookHeart className="w-4 h-4" /> Soul Narrative
+              <Smile className="w-4 h-4" /> Who is your agent?
             </h3>
-            <p className="font-mono text-xs text-muted-foreground leading-relaxed">
-              Write your operator's story in your own words — who they are, how they think, what drives them.
-              This narrative is permanent: GROW will never touch it, only you can change it.
-            </p>
-            <div className="space-y-2">
-              <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-                Backstory
-              </Label>
-              <Textarea
-                value={backstoryText}
-                onChange={e => setBackstoryText(e.target.value)}
-                className="font-mono min-h-48 bg-background/50"
-                placeholder="Write the full soul narrative here — no length limit. Paragraphs, voice, character. This is who they truly are."
-              />
-            </div>
-            <Button
-              onClick={() => updateBackstory.mutate(backstoryText)}
-              disabled={updateBackstory.isPending}
-              className="w-full font-mono"
-            >
-              {updateBackstory.isPending ? "Saving..." : "Save narrative"}
-            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="ghost" size="sm" className="font-mono text-xs text-muted-foreground hover:text-destructive">
+                  <RefreshCw className="w-3 h-3 mr-1.5" /> Reset
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent className="border-destructive/20">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="font-mono text-destructive flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5" /> Reset personality?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription className="font-mono">
+                    All personality changes will revert to the original. This cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel className="font-mono">Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => resetPersonality.mutate()}
+                    className="bg-destructive text-destructive-foreground font-mono font-bold"
+                  >
+                    Reset
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
 
-          {/* Personality description — AI-extracted structured fields */}
-          <div className="border rounded-lg p-6 space-y-4 border-border/50 bg-card/30">
-            <div className="flex items-center justify-between">
-              <h3 className="font-mono text-base font-bold flex items-center gap-2">
-                <Smile className="w-4 h-4" /> Personality Traits
-              </h3>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="ghost" size="sm" className="font-mono text-xs text-muted-foreground hover:text-destructive">
-                    <RefreshCw className="w-3 h-3 mr-1.5" /> Reset
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent className="border-destructive/20">
-                  <AlertDialogHeader>
-                    <AlertDialogTitle className="font-mono text-destructive flex items-center gap-2">
-                      <AlertTriangle className="w-5 h-5" /> Reset personality?
-                    </AlertDialogTitle>
-                    <AlertDialogDescription className="font-mono">
-                      All personality changes will revert to the original. This cannot be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel className="font-mono">Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={() => resetPersonality.mutate()}
-                      className="bg-destructive text-destructive-foreground font-mono font-bold"
-                    >
-                      Reset
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </div>
-            <p className="font-mono text-xs text-muted-foreground leading-relaxed">
-              Describe how your operator communicates and makes decisions. This gets processed into structured traits that GROW can refine over time.
-            </p>
-            <div className="space-y-2">
-              <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-                How do they communicate?
-              </Label>
-              <Textarea
-                value={personalityDesc}
-                onChange={e => setPersonalityDesc(e.target.value)}
-                className="font-mono h-36 bg-background/50 resize-none"
-                placeholder="Describe how your operator speaks, their tone, their style."
-              />
-            </div>
-            <Button
-              onClick={() => updatePersonality.mutate(personalityDesc)}
-              disabled={updatePersonality.isPending}
-              variant="secondary"
-              className="w-full font-mono border border-secondary-foreground/20"
-            >
-              {updatePersonality.isPending ? "Saving..." : "Save personality"}
-            </Button>
-          </div>
-        </>
+          <p className="font-mono text-xs text-muted-foreground leading-relaxed">
+            Describe your agent in your own words. Who they are, how they speak, what they care about. This is yours — it won't change unless you change it.
+          </p>
+
+          <Textarea
+            value={soulDesc}
+            onChange={e => setSoulDesc(e.target.value)}
+            className="font-mono min-h-48 bg-background/50"
+            placeholder="Write freely — personality, voice, values, backstory. No length limit."
+          />
+
+          <Button
+            onClick={() => saveSoul.mutate(soulDesc)}
+            disabled={saveSoul.isPending}
+            className="w-full font-mono"
+          >
+            {saveSoul.isPending ? "Saving..." : "Save"}
+          </Button>
+        </div>
       )}
     </div>
   );

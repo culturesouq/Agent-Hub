@@ -408,13 +408,42 @@ router.patch('/:id/identity-from-description', async (req: Request, res: Respons
 
   if (!op) { res.status(404).json({ error: 'Operator not found' }); return; }
 
-  const { description } = req.body as { description?: string };
+  const { description, confirmedName } = req.body as { description?: string; confirmedName?: string };
   if (!description || description.trim().length === 0) {
     res.status(400).json({ error: 'description is required' });
     return;
   }
 
-  let parsed: { name: string; mandate: string; coreValues: string[]; ethicalBoundaries: string[] };
+  let agentName = confirmedName?.trim() ?? '';
+
+  if (!agentName) {
+    try {
+      const nameRaw = await chatCompletion([
+        {
+          role: 'system',
+          content: 'You extract the proper name of an AI agent from a description. Return ONLY the name — a single word or short proper noun (1–3 words maximum). No punctuation, no explanation, no extra words. If no clear name is present, return an empty string.',
+        },
+        {
+          role: 'user',
+          content: description,
+        },
+      ]);
+      const candidate = nameRaw.trim().replace(/["""''.,]/g, '');
+      const wordCount = candidate.split(/\s+/).length;
+      if (candidate.length > 0 && candidate.length <= 40 && wordCount <= 3) {
+        agentName = candidate;
+      }
+    } catch {
+      agentName = '';
+    }
+  }
+
+  if (!agentName) {
+    res.json({ needsName: true });
+    return;
+  }
+
+  let parsed: { mandate: string; coreValues: string[]; ethicalBoundaries: string[] };
   try {
     const raw = await chatCompletion([
       {
@@ -423,14 +452,12 @@ router.patch('/:id/identity-from-description', async (req: Request, res: Respons
       },
       {
         role: 'user',
-        content: `Extract these fields from the description below:\n\n"${description}"\n\nReturn JSON: { "name": "short name for the operator", "mandate": "concise purpose statement (1-2 sentences)", "coreValues": ["up to 4 values"], "ethicalBoundaries": ["up to 3 things it won't do"] }`,
+        content: `Extract these fields from the description below:\n\n"${description}"\n\nReturn JSON: { "mandate": "concise purpose statement (1-2 sentences)", "coreValues": ["up to 4 values"], "ethicalBoundaries": ["up to 3 things it won't do"] }`,
       },
     ]);
     parsed = JSON.parse(raw);
   } catch {
-    const words = description.split(/\s+/);
     parsed = {
-      name: words.slice(0, 3).join(' '),
       mandate: description.substring(0, 300),
       coreValues: [],
       ethicalBoundaries: [],
@@ -440,7 +467,7 @@ router.patch('/:id/identity-from-description', async (req: Request, res: Respons
   const [updated] = await db
     .update(operatorsTable)
     .set({
-      name: parsed.name ?? op.name,
+      name: agentName,
       mandate: parsed.mandate ?? op.mandate,
       coreValues: parsed.coreValues ?? op.coreValues,
       ethicalBoundaries: parsed.ethicalBoundaries ?? op.ethicalBoundaries,
