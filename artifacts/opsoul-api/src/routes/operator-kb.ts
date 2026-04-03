@@ -212,6 +212,10 @@ router.patch('/:chunkId', async (req: Request, res: Response): Promise<void> => 
     });
 
   res.json({ ok: true, chunk: updated });
+
+  if (updates.verificationStatus === 'verified') {
+    triggerSelfAwareness(operatorId, 'kb_learn').catch(() => {});
+  }
 });
 
 router.delete('/:chunkId', async (req: Request, res: Response): Promise<void> => {
