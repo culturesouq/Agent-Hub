@@ -121,8 +121,20 @@ export async function verifyAndStore(
     // non-critical — continue
   }
 
-  // ── Check 6: Confidence score ───────────────────────────────────────────────
-  const confidenceScore = relevanceScore;
+  // ── Check 6: Confidence score (independent from relevance) ─────────────────
+  let factualConfidence = 0;
+  try {
+    const raw = await llmCheck(
+      `How factually confident are you in this content? Is it specific, verifiable, and well-grounded?\nContent: "${content.slice(0, 600)}"\nRespond with only a number between 0 and 100.`
+    );
+    const parsed = parseInt(raw.replace(/\D/g, '').slice(0, 3), 10);
+    factualConfidence = isNaN(parsed) ? 0 : Math.min(100, parsed);
+  } catch {
+    factualConfidence = relevanceScore; // fallback only if LLM call fails
+  }
+
+  // Final confidence = average of relevance + factual confidence
+  const confidenceScore = Math.round((relevanceScore + factualConfidence) / 2);
   if (confidenceScore < 60) {
     return { stored: false, status: 'skipped', reason: `Confidence too low (${confidenceScore}/100)` };
   }
