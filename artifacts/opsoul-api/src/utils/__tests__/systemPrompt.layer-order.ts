@@ -107,7 +107,7 @@ assert('Layer 4 contains mandate-scope rule', promptWithKb.includes('scoped to y
 assert('Layer 4 contains format rule', promptWithKb.includes('Format responses'));
 
 console.log('\n--- Absolute Position Checks ---');
-assert('Preamble (agent name) before Layer 0', promptWithKb.indexOf('TestAgent') < posL0);
+assert('Preamble (operator name) before Layer 0', promptWithKb.indexOf('TestAgent') < posL0);
 assert('Layer 0 HUMAN_CORE constant matches embedded text', promptWithKb.includes(LAYER_0_HUMAN_CORE));
 assert('Layer 4 OPERATIONAL_RULES constant matches embedded text', promptWithKb.includes(LAYER_4_OPERATIONAL_RULES));
 

@@ -429,7 +429,7 @@ router.patch('/:id/identity-from-description', async (req: Request, res: Respons
       const nameRaw = await chatCompletion([
         {
           role: 'system',
-          content: 'You extract the proper name of an AI agent from a description. Return ONLY the name — a single word or short proper noun (1–3 words maximum). No punctuation, no explanation, no extra words. If no clear name is present, return an empty string.',
+          content: 'You extract the proper name of an Operator from a description. Return ONLY the name — a single word or short proper noun (1–3 words maximum). No punctuation, no explanation, no extra words. If no clear name is present, return an empty string.',
         },
         {
           role: 'user',

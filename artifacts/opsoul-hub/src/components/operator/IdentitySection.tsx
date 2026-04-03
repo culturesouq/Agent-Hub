@@ -151,7 +151,7 @@ export default function IdentitySection({ operator, panel }: Props) {
           {needsName && (
             <div className="border border-amber-500/30 bg-amber-500/5 rounded-lg p-4 space-y-3">
               <p className="font-mono text-sm text-amber-400">
-                What should we call your agent?
+                What should we call your operator?
               </p>
               <Input
                 value={confirmedName}
@@ -197,7 +197,7 @@ export default function IdentitySection({ operator, panel }: Props) {
         <div className="border rounded-lg p-6 space-y-4 border-border/50 bg-card/30">
           <div className="flex items-center justify-between">
             <h3 className="font-mono text-base font-bold flex items-center gap-2">
-              <Smile className="w-4 h-4" /> Who is your agent?
+              <Smile className="w-4 h-4" /> Who is your operator?
             </h3>
             <AlertDialog>
               <AlertDialogTrigger asChild>
@@ -228,7 +228,7 @@ export default function IdentitySection({ operator, panel }: Props) {
           </div>
 
           <p className="font-mono text-xs text-muted-foreground leading-relaxed">
-            Describe your agent in your own words. Who they are, how they speak, what they care about. This is yours — it won't change unless you change it.
+            Describe your operator in your own words. Who they are, how they speak, what they care about. This is yours — it won't change unless you change it.
           </p>
 
           <Textarea

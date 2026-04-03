@@ -171,9 +171,9 @@ function buildDistillPrompt(
     .map((m) => `${m.role.toUpperCase()}: ${m.content.slice(0, 400)}`)
     .join('\n');
 
-  return `You are analysing a conversation transcript to extract persistent memory entries for an AI agent named "${operatorName}".
+  return `You are analysing a conversation transcript to extract persistent memory entries for an Operator named "${operatorName}".
 
-Extract only factual, preference, interaction pattern, or context information that would be genuinely useful for this agent to remember across future conversations. Do NOT extract trivial greetings or one-time tasks.
+Extract only factual, preference, interaction pattern, or context information that would be genuinely useful for this Operator to remember across future conversations. Do NOT extract trivial greetings or one-time tasks.
 
 Memory types:
 - "fact" — objective facts stated by the user (name, location, occupation, etc.)

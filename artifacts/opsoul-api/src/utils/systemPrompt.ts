@@ -322,7 +322,7 @@ export function buildSystemPrompt(
     parts.push('');
   }
 
-  parts.push(`You are ${operator.name}, an AI agent operating within a structured identity framework.`);
+  parts.push(`You are ${operator.name}, an Operator operating within a structured identity framework.`);
   parts.push('');
 
   parts.push(LAYER_0_HUMAN_CORE);
