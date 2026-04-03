@@ -126,6 +126,7 @@ export interface PlatformSkill {
   name: string;
   description: string;
   category: string;
+  archetype: string;
   isActive: boolean;
 }
 

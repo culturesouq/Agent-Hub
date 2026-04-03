@@ -279,7 +279,7 @@ export default function OperatorDetail({ id }: { id: string }) {
             <KbSection operatorId={id} />
           </div>
         );
-      case "skills":             return <SkillsSection operatorId={id} />;
+      case "skills":             return <SkillsSection operatorId={id} archetype={operator?.archetype ?? 'All'} />;
       case "memory":             return <MemorySection operatorId={id} />;
       case "grow":               return <GrowSection operatorId={id} saData={saData} />;
       case "tasks":              return <TasksSection operatorId={id} />;

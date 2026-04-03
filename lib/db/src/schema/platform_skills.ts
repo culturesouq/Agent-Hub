@@ -7,6 +7,7 @@ export const platformSkillsTable = pgTable('platform_skills', {
   triggerDescription: text('trigger_description'),
   instructions: text('instructions').notNull(),
   outputFormat: text('output_format'),
+  archetype: text('archetype').default('All'),
   author: text('author').default('opsoul'),
   installCount: integer('install_count').default(0),
   createdAt: timestamp('created_at').defaultNow(),

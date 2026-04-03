@@ -9,10 +9,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Download, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 
-export default function SkillsSection({ operatorId }: { operatorId: string }) {
+export default function SkillsSection({ operatorId, archetype }: { operatorId: string; archetype: string }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedPlatformSkill, setSelectedPlatformSkill] = useState<PlatformSkill | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
   const { data: platformSkills = [], isLoading: platLoading } = useQuery({
     queryKey: ["platform-skills"],
@@ -42,6 +43,10 @@ export default function SkillsSection({ operatorId }: { operatorId: string }) {
     },
   });
 
+  const filteredSkills = showAll
+    ? platformSkills
+    : platformSkills.filter(s => s.archetype === archetype || s.archetype === 'All');
+
   const isInstalled = (platformId: string) => opSkills?.some(s => s.platformSkillId === platformId);
 
   return (
@@ -49,17 +54,25 @@ export default function SkillsSection({ operatorId }: { operatorId: string }) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 min-h-[400px]">
         {/* Available */}
         <div className="flex flex-col border border-border/50 rounded-lg bg-card/20 overflow-hidden">
-          <div className="p-3 bg-card/50 border-b border-border/50">
-            <h3 className="font-mono text-sm font-bold">Available Skills</h3>
-            <p className="font-mono text-xs text-muted-foreground mt-0.5">Skills you can add to your operator</p>
+          <div className="p-3 bg-card/50 border-b border-border/50 flex items-center gap-2">
+            <div>
+              <h3 className="font-mono text-sm font-bold">Available Skills</h3>
+              <p className="font-mono text-xs text-muted-foreground mt-0.5">Skills you can add to your operator</p>
+            </div>
+            <button
+              onClick={() => setShowAll(v => !v)}
+              className="font-mono text-xs text-primary/60 hover:text-primary underline underline-offset-2 ml-auto"
+            >
+              {showAll ? 'Show relevant only' : 'Show all skills'}
+            </button>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {platLoading ? (
               <div className="text-center font-mono text-xs text-muted-foreground animate-pulse mt-4">Loading...</div>
-            ) : platformSkills?.length === 0 ? (
+            ) : filteredSkills?.length === 0 ? (
               <div className="text-center font-mono text-xs text-muted-foreground mt-4">No skills available</div>
             ) : (
-              platformSkills?.map(skill => (
+              filteredSkills?.map(skill => (
                 <div key={skill.id} className="p-3 border border-border/50 rounded bg-background/50 flex flex-col gap-2">
                   <div className="flex justify-between items-start">
                     <div>
