@@ -457,6 +457,41 @@ export async function recomputeSelfAwareness(
         ...payload,
       });
     }
+
+    // If mandate gaps exist — Curiosity fires to fill them
+    if (computed.mandateGaps && computed.mandateGaps.length > 0) {
+      const { curiositySearch } = await import('./curiosityEngine.js');
+      const { storeMemory } = await import('./memoryEngine.js');
+
+      for (const gap of computed.mandateGaps) {
+        try {
+          const curiosity = await curiositySearch(gap, operatorId);
+
+          if (curiosity.verified && curiosity.corroborated) {
+            await storeMemory(
+              operatorId,
+              operatorId,
+              `Mandate gap filled — external source suggests: ${curiosity.sources[0]?.snippet ?? curiosity.bestSource}. Gap was: ${gap}`,
+              'pattern',
+              'ai_distilled',
+              0.65,
+            );
+            console.log(
+              `[self-awareness] gap filled for ${operatorId}: "${gap}" — tier: ${curiosity.tier}, source: ${curiosity.bestSource}`
+            );
+          } else {
+            console.log(
+              `[self-awareness] gap not resolved for ${operatorId}: "${gap}" — no corroborated source found`
+            );
+          }
+        } catch (err) {
+          console.error(
+            `[self-awareness] curiosity failed for gap "${gap}":`,
+            (err as Error).message
+          );
+        }
+      }
+    }
   } catch (err) {
     console.error(`[self-awareness] Recompute failed for ${operatorId} (trigger: ${trigger}):`, (err as Error).message);
 
