@@ -8,6 +8,8 @@ import {
   selfAwarenessStateTable,
   messagesTable,
   conversationsTable,
+  ownersTable,
+  opsLogsTable,
 } from '@workspace/db';
 import { eq, and, desc, inArray, lte } from 'drizzle-orm';
 import { chatCompletion } from './openrouter.js';
@@ -323,6 +325,37 @@ export async function runGrowCycle(operatorId: string): Promise<{
       evaluatedAt: new Date(),
     })
     .where(eq(growProposalsTable.id, proposalId));
+
+  // Notify owner if proposal needs review
+  if (status === 'needs_owner_review') {
+    try {
+      const [owner] = await db
+        .select({ email: ownersTable.email, name: ownersTable.name })
+        .from(ownersTable)
+        .where(eq(ownersTable.id, operator.ownerId));
+
+      if (owner) {
+        console.log(
+          `[GROW] 📬 Notification due → owner: ${owner.email} | ` +
+          `operator: ${operator.name} | proposal: ${proposalId}`
+        );
+        // Telegram push goes here when channels are wired
+        // Email push goes here when SMTP is wired
+        // For now: logged to ops_logs for visibility
+        await db.insert(opsLogsTable).values({
+          id: crypto.randomUUID(),
+          logTier: 'info',
+          errorType: 'grow_notification',
+          operatorId,
+          skill: `proposal:${proposalId}`,
+          fixOutcome: `owner:${owner.email}`,
+          createdAt: new Date(),
+        });
+      }
+    } catch (err) {
+      console.error('[GROW] notification log failed:', (err as Error).message);
+    }
+  }
 
   let changesApplied = 0;
 
