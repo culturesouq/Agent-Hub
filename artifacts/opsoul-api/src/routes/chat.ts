@@ -31,6 +31,8 @@ import type { Layer2Soul } from '../validation/operator.js';
 import { resolveScope } from '../utils/scopeResolver.js';
 import { scrapeUrl } from '../utils/urlScraper.js';
 import type { ContentPart } from '../utils/openrouter.js';
+import { webSearch } from '../utils/webSearch.js';
+import { verifyAndStore } from '../utils/kbIntake.js';
 import { eq, and, asc } from 'drizzle-orm';
 
 const router = Router({ mergeParams: true });
@@ -247,6 +249,51 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     }
   }
 
+  // Web search — only trigger on KB miss
+  let searchContext = '';
+  const kbMiss = kbContext === '' && memoryHits.length === 0;
+  if (kbMiss) {
+    try {
+      const domainCheck = await chatCompletion(
+        [
+          { role: 'system', content: `Operator mandate: ${operator.mandate}` },
+          {
+            role: 'user',
+            content: `Is this message a factual question within the operator's domain? Answer only "yes" or "no".\nMessage: ${message}`,
+          },
+        ],
+        'meta-llama/llama-3.3-70b-instruct',
+      );
+      if (domainCheck.content.trim().toLowerCase().startsWith('yes')) {
+        searchContext = `[Searching the web for: ${message}]\n`;
+        const results = await webSearch(message);
+        const evolutionLocked =
+          operator.growLockLevel === 'FROZEN' || operator.growLockLevel === 'LOCKED';
+        for (const result of results) {
+          searchContext += `Source: ${result.title} (${result.url})\n${result.snippet}\n\n`;
+          if (!evolutionLocked) {
+            verifyAndStore(
+              operator.id,
+              operator.ownerId,
+              result.snippet,
+              result.url,
+              result.title,
+              operator.mandate ?? '',
+            ).catch((e) => console.error('[kbIntake]', e));
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[webSearch]', e);
+    }
+  }
+
+  if (searchContext) {
+    kbContext = kbContext
+      ? `${kbContext}\n\n---\n\n${searchContext}`
+      : searchContext;
+  }
+
   const systemPrompt = buildSystemPrompt(
     {
       name: operator.name,
@@ -322,6 +369,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     let promptTokens = 0;
 
     try {
+      if (searchContext) {
+        const notice = "I don't have that in my knowledge base — let me search and verify…\n\n";
+        res.write(`data: ${JSON.stringify({ delta: notice })}\n\n`);
+        fullContent += notice;
+      }
+
       for await (const chunk of streamChat(messages, chatOpts)) {
         if (chunk.delta) {
           fullContent += chunk.delta;

@@ -1,0 +1,118 @@
+Phase 2 confirmed. Now Phase 3 — web search with Evolution Lock gate.
+
+
+Reply
+Read these files first before writing anything:
+
+artifacts/opsoul-api/src/routes/chat.ts
+artifacts/opsoul-api/src/routes/operator-kb.ts
+artifacts/opsoul-api/src/utils/vectorSearch.ts
+artifacts/opsoul-api/src/utils/growGuards.ts
+
+Reply
+Confirm you've read all four. Then build in this exact order — one step at a time, confirm each before next.
+
+
+Reply
+Step 1 — webSearch.ts
+
+
+Reply
+Create artifacts/opsoul-api/src/utils/webSearch.ts:
+
+Calls Serper API https://google.serper.dev/search using process.env.SERPER_API_KEY
+Takes a query string, returns top 3 results as { title, snippet, url }[]
+Strips any result with empty snippet
+Returns empty array if API key missing or request fails — never throws
+
+Reply
+Step 2 — kbIntake.ts
+
+
+Reply
+Create artifacts/opsoul-api/src/utils/kbIntake.ts:
+
+
+Reply
+Export one function: verifyAndStore(operatorId, ownerId, content, sourceUrl, sourceName, mandate)
+
+
+Reply
+It runs 7 checks in order. Fail any check → stop, return { stored: false, status: 'skipped', reason }:
+
+
+Reply
+Relevance — LLM prompt: "Does this content relate to this mandate: [mandate]? Score 0-100." Fail if score < 50.
+Durability — LLM prompt: "Is this fact stable over time, or is it ephemeral (price, today's news, live event)? Answer: stable or ephemeral." Fail if ephemeral.
+Privacy — LLM prompt: "Does this content contain personal identifiable information (names, emails, phone numbers, addresses)? Answer: yes or no." Fail if yes.
+No duplication — embed content, vector search existing operator_kb for this operator. If any result has cosine similarity > 0.92 → skip silently.
+No contradiction — same vector search. If similarity > 0.85 with a verified entry → store as pending with flagReason: 'Possible contradiction with existing knowledge'. Don't fail — just flag.
+Confidence score — compute from relevance score (0-100 → 0-100). If < 60 → skip. If ≥ 85 → verificationStatus: 'verified'. Otherwise → verificationStatus: 'pending'.
+Source trust — if sourceUrl contains .gov, .edu, [reuters.com](https://reuters.com), [bbc.com](https://bbc.com), [nature.com](https://nature.com), who.int → sourceTrustLevel: 'external_verified'. Otherwise → sourceTrustLevel: 'external_unverified'.
+
+Reply
+On pass: insert into operator_kb table with all fields populated. Return { stored: true, status: 'verified' | 'pending' }.
+
+
+Reply
+Step 3 — wire into chat.ts
+
+
+Reply
+After the existing KB search and memory context are built, add this block before the system prompt is assembled:
+
+
+Reply
+// Web search — only trigger on KB miss
+const kbMiss = kbResults.length === 0 && memoryContext.trim() === '';
+
+if (kbMiss) {
+  // Ask LLM: is this message a factual question within the operator's domain?
+  const domainCheck = await chat([
+    { role: 'system', content: `Operator mandate: ${operator.mandate}` },
+    { role: 'user', content: `Is this message a factual question within the operator's domain? Answer only "yes" or "no".\nMessage: ${message}` }
+  ], { model: DISTILL_MODEL });
+
+  if (domainCheck.trim().toLowerCase().startsWith('yes')) {
+    // Inject search notice into stream before main response
+    searchContext = `[Searching the web for: ${message}]\n`;
+
+    const results = await webSearch(message);
+
+    for (const result of results) {
+      // Always inject into context for this answer
+      searchContext += `Source: ${result.title} (${result.url})\n${result.snippet}\n\n`;
+
+      // Only store if Evolution Lock is OFF
+      if (!operator.evolutionLocked) {
+        await verifyAndStore(
+          operator.id,
+          operator.ownerId,
+          result.snippet,
+          result.url,
+          result.title,
+          operator.mandate ?? ''
+        );
+      }
+    }
+  }
+}
+
+Reply
+Inject searchContext into the system prompt just before the user message, after the KB context block.
+
+
+Reply
+Step 4 — one line in the stream before the answer
+
+
+Reply
+When searchContext is non-empty, stream this one line first before the Operator's response:
+
+I don't have that in my knowledge base — let me search and verify…
+Then continue with the normal response.
+
+
+Reply
+No other files touched. Read all four files first. Confirm the plan. Then execute step by step.
+
