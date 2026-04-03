@@ -125,7 +125,7 @@ export default function MemorySection({ operatorId }: { operatorId: string }) {
                 <div className="space-y-4 pt-2">
                   <div className="flex justify-between items-center">
                     <Label className="font-mono text-xs uppercase text-muted-foreground">Importance</Label>
-                    <span className="font-mono text-sm text-primary font-bold">{addForm.weight.toFixed(2)}</span>
+                    <span className="font-mono text-sm text-primary font-bold">{Math.round(addForm.weight * 100)}%</span>
                   </div>
                   <Slider 
                     value={[addForm.weight]} 
@@ -179,7 +179,7 @@ export default function MemorySection({ operatorId }: { operatorId: string }) {
                   <CardFooter className="p-3 pt-0 border-t border-border/20 mt-2 flex justify-between items-center">
                     <div className="text-[10px] font-mono text-muted-foreground">{format(new Date(mem.createdAt), 'MM/dd HH:mm')}</div>
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono text-primary/60">Weight: {mem.weight.toFixed(2)}</span>
+                      <span className="text-[10px] font-mono text-primary/60">Weight: {Math.round(mem.weight * 100)}%</span>
                       <div className="w-16 h-1 bg-background rounded overflow-hidden border border-border/30">
                         <div className="h-full bg-primary" style={{ width: `${mem.weight * 100}%` }} />
                       </div>
