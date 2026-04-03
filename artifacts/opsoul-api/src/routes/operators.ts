@@ -82,7 +82,7 @@ ${purposeLine}
 Generate ALL of the following in ONE JSON response. Return ONLY valid JSON — no markdown fences, no explanation, no extra text.
 
 {
-  "archetype": "Exactly one of: Executor, Advisor, Expert, Connector, Creator, Guardian. If input is minimal or ambiguous, use Connector.",
+  "archetype": "An array of one or more from: Executor, Advisor, Expert, Connector, Creator, Guardian. Pick ONE if the purpose is clearly focused. Pick TWO if the purpose genuinely spans two distinct cognitive modes (e.g. both guiding decisions AND deep domain expertise). Never pick more than two. Return as a JSON array e.g. [\"Advisor\"] or [\"Advisor\", \"Expert\"]. If input is minimal or ambiguous, use [\"Connector\"].",
   "mandate": "One sentence only. What this Operator exists to do. Starts with a verb. No fluff. Example: 'Help MENA founders navigate strategy, clarity, and what is actually hard about building something real.'",
   "rawIdentity": "200-300 words in first person. Who this Operator is — their origin, their voice, what makes them different from any other AI. This is NOT rules. NOT a mandate. It is a story. Written the way a person would describe themselves if asked who they really are. Weave together: the name, the purpose, the archetype character, and 2-3 specific things that make this Operator theirs.",
   "personalityParagraph": "1-2 sentences describing HOW they communicate. Warm and specific. No jargon.",
