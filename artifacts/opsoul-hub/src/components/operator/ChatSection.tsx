@@ -5,15 +5,57 @@ import { Conversation, Message } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Trash2, MessageSquarePlus, Send, MessageSquare } from "lucide-react";
+import { Trash2, MessageSquarePlus, Send, MessageSquare, Paperclip, X } from "lucide-react";
 import { format } from "date-fns";
+
+type Attachment = {
+  type: "image" | "text";
+  content: string;
+  mimeType?: string;
+  name?: string;
+  previewUrl?: string;
+};
 
 export default function ChatSection({ operatorId }: { operatorId: string }) {
   const queryClient = useQueryClient();
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [streamingMsg, setStreamingMsg] = useState("");
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [uploading, setUploading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const token = localStorage.getItem("opsoul_token");
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      const att: Attachment = {
+        type: data.type,
+        content: data.type === "image" ? data.base64 : data.content,
+        mimeType: data.mimeType,
+        name: data.name ?? file.name,
+        previewUrl: data.type === "image" ? `data:${data.mimeType};base64,${data.base64}` : undefined,
+      };
+      setAttachments(prev => [...prev, att]);
+    } catch (err) {
+      console.error("[upload]", err);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const { data: convos, isLoading: convosLoading } = useQuery({
     queryKey: ["operators", operatorId, "conversations"],
@@ -75,10 +117,12 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || !activeConvId) return;
+    if ((!input.trim() && attachments.length === 0) || !activeConvId) return;
 
-    const msgText = input;
+    const msgText = input || (attachments.length > 0 ? `[${attachments.map(a => a.name).join(", ")}]` : "");
+    const pendingAttachments = [...attachments];
     setInput("");
+    setAttachments([]);
     setStreamingMsg("...");
 
     const tempUserMsg: Message = {
@@ -102,7 +146,13 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ message: msgText, stream: true }),
+        body: JSON.stringify({
+          message: msgText,
+          stream: true,
+          attachments: pendingAttachments.length > 0
+            ? pendingAttachments.map(a => ({ type: a.type, content: a.content, mimeType: a.mimeType, name: a.name }))
+            : undefined,
+        }),
       });
 
       if (!response.ok) throw new Error("Failed to send message");
@@ -244,8 +294,49 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
               )}
             </div>
 
-            <div className="p-3 border-t border-border/50 bg-card/30">
+            <div className="p-3 border-t border-border/50 bg-card/30 space-y-2">
+              {/* Attachment previews */}
+              {attachments.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {attachments.map((att, i) => (
+                    <div key={i} className="relative flex items-center gap-1.5 bg-card border border-border/50 rounded-lg px-2 py-1 text-xs font-mono">
+                      {att.previewUrl ? (
+                        <img src={att.previewUrl} alt={att.name} className="w-8 h-8 rounded object-cover" />
+                      ) : (
+                        <Paperclip className="w-3 h-3 text-muted-foreground" />
+                      )}
+                      <span className="text-foreground/80 max-w-24 truncate">{att.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))}
+                        className="text-muted-foreground hover:text-destructive ml-0.5"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
               <form onSubmit={sendMessage} className="flex gap-2">
+                {/* Hidden file input */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,.doc,.docx,.xlsx"
+                  className="hidden"
+                  onChange={handleFileSelect}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="shrink-0 w-9 h-9 text-muted-foreground hover:text-primary"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={!!streamingMsg || uploading}
+                  title="Attach file"
+                >
+                  <Paperclip className={`w-4 h-4 ${uploading ? "animate-pulse text-primary" : ""}`} />
+                </Button>
                 <Input
                   value={input}
                   onChange={e => setInput(e.target.value)}
@@ -255,7 +346,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                 />
                 <Button
                   type="submit"
-                  disabled={!input.trim() || !!streamingMsg}
+                  disabled={(!input.trim() && attachments.length === 0) || !!streamingMsg}
                   className="shrink-0 w-10"
                   variant="default"
                 >

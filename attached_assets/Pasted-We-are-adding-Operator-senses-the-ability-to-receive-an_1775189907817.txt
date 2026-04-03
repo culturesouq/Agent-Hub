@@ -1,0 +1,92 @@
+We are adding Operator senses — the ability to receive and process rich inputs beyond text. This is a phased build. Do Phase 1 only, confirm, then we continue.
+
+
+Reply
+PHASE 1 — Files, Images, and URLs in chat
+
+
+Reply
+Step 1 — File upload endpoint
+
+
+Reply
+Create artifacts/opsoul-api/src/routes/upload.ts:
+
+POST /upload — accepts multipart/form-data with a file field
+Supported types: images (jpg, png, gif, webp), PDFs, text files, Word docs, Excel
+Images → convert to base64, store temporarily, return { type: "image", base64, mimeType }
+PDFs/docs/text → extract text content using a text parser, return { type: "text", content }
+Max file size: 10MB
+Use multer for multipart handling, pdf-parse for PDFs
+Register route in index.ts as /api/upload
+
+Reply
+Step 2 — Update chat message schema
+
+
+Reply
+In artifacts/opsoul-api/src/routes/chat.ts:
+
+
+Reply
+Update SendMessageSchema to accept optional attachments:
+
+attachments: z.array(z.object({
+  type: z.enum(["image", "text", "url"]),
+  content: z.string(), // base64 for images, text content for docs, URL string for links
+  mimeType: z.string().optional(),
+  name: z.string().optional(),
+})).optional()
+
+Reply
+Step 3 — Build message content for OpenRouter
+
+
+Reply
+When attachments exist, build a multimodal content array instead of a plain string:
+
+// Image attachment → OpenRouter vision format
+{ type: "image_url", image_url: { url: `data:${mimeType};base64,${content}` } }
+
+// Text/doc attachment → inject as text block before user message
+{ type: "text", text: `[Attached file: ${name}]\n${content}` }
+
+// URL attachment → scrape the URL first, inject as text
+{ type: "text", text: `[Content from ${url}]:\n${scrapedContent}` }
+
+Reply
+Step 4 — URL scraper utility
+
+
+Reply
+Create artifacts/opsoul-api/src/utils/urlScraper.ts:
+
+Takes a URL, fetches the page, extracts main text content (strip HTML tags, nav, footer)
+Returns plain text, max 3000 chars
+Use node-fetch + simple regex HTML stripper (no heavy dependencies)
+
+Reply
+Step 5 — Frontend: attach button in chat
+
+
+Reply
+In artifacts/opsoul-hub/src/components/operator/ChatSection.tsx:
+
+Add a paperclip button next to the send button
+Opens file picker: accepts images, PDF, txt, doc, docx, xlsx
+On select → POST to /api/upload → get back attachment object
+Show attachment preview in the input area (image thumbnail or filename pill)
+Send attachment alongside the message
+
+Reply
+PHASE 2 — Voice (after Phase 1 confirmed)
+
+Record voice in chat → Whisper transcription → send as text
+
+Reply
+PHASE 3 — Web search (after Phase 2)
+
+Operator detects when it needs external info → calls Serper API → verifies → stores in Learned KB
+
+Reply
+Do Phase 1 only. Read all affected files before writing. Confirm the plan then execute step by step.

@@ -29,10 +29,19 @@ import { decryptToken } from '@workspace/opsoul-utils/crypto';
 import type { ChatMessage } from '../utils/openrouter.js';
 import type { Layer2Soul } from '../validation/operator.js';
 import { resolveScope } from '../utils/scopeResolver.js';
+import { scrapeUrl } from '../utils/urlScraper.js';
+import type { ContentPart } from '../utils/openrouter.js';
 import { eq, and, asc } from 'drizzle-orm';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
+
+const AttachmentSchema = z.object({
+  type: z.enum(['image', 'text', 'url']),
+  content: z.string(),
+  mimeType: z.string().optional(),
+  name: z.string().optional(),
+});
 
 const SendMessageSchema = z.object({
   message: z.string().min(1, 'message is required').max(8000),
@@ -40,6 +49,7 @@ const SendMessageSchema = z.object({
   kbSearch: z.boolean().default(true),
   kbTopN: z.number().int().min(1).max(20).default(8),
   kbMinConfidence: z.number().int().min(0).max(100).default(30),
+  attachments: z.array(AttachmentSchema).optional(),
 });
 
 async function resolveOperatorAndConv(
@@ -140,7 +150,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  const { message, stream, kbSearch, kbTopN, kbMinConfidence } = parsed.data;
+  const { message, stream, kbSearch, kbTopN, kbMinConfidence, attachments } = parsed.data;
 
   const chatApiKey = operator.openrouterApiKey
     ? (() => { try { return decryptToken(operator.openrouterApiKey!); } catch { return undefined; } })()
@@ -255,10 +265,37 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     promptOpts,
   );
 
+  // Build user content — plain string or multimodal array when attachments present
+  let userContent: string | ContentPart[] = message;
+  if (attachments && attachments.length > 0) {
+    const parts: ContentPart[] = [{ type: 'text', text: message }];
+    for (const att of attachments) {
+      if (att.type === 'image') {
+        parts.push({
+          type: 'image_url',
+          image_url: { url: `data:${att.mimeType ?? 'image/jpeg'};base64,${att.content}` },
+        });
+      } else if (att.type === 'text') {
+        parts.push({
+          type: 'text',
+          text: `[Attached file: ${att.name ?? 'document'}]\n${att.content}`,
+        });
+      } else if (att.type === 'url') {
+        try {
+          const scraped = await scrapeUrl(att.content);
+          parts.push({ type: 'text', text: `[Content from ${att.content}]:\n${scraped}` });
+        } catch {
+          parts.push({ type: 'text', text: `[URL: ${att.content} — could not be fetched]` });
+        }
+      }
+    }
+    userContent = parts;
+  }
+
   const messages: ChatMessage[] = [
     { role: 'system', content: systemPrompt },
     ...history,
-    { role: 'user', content: message },
+    { role: 'user', content: userContent },
   ];
 
   const userMsgId = crypto.randomUUID();

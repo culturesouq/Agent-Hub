@@ -92,14 +92,14 @@
   --input: 217 32% 18%;
   --ring: 189 94% 43%;
 
-  /* Sidebar — distinctly lighter for strong visual separation from main content */
-  --sidebar: 220 28% 22%;
-  --sidebar-foreground: 210 40% 98%;
-  --sidebar-border: 220 25% 29%;
-  --sidebar-primary: 189 94% 43%;
-  --sidebar-primary-foreground: 222 47% 10%;
-  --sidebar-accent: 220 25% 28%;
-  --sidebar-accent-foreground: 210 40% 98%;
+  /* Sidebar — light background for strong visual separation from dark chat area */
+  --sidebar: 220 20% 96%;
+  --sidebar-foreground: 222 47% 18%;
+  --sidebar-border: 220 15% 87%;
+  --sidebar-primary: 189 94% 35%;
+  --sidebar-primary-foreground: 210 40% 97%;
+  --sidebar-accent: 220 15% 90%;
+  --sidebar-accent-foreground: 222 47% 18%;
   --sidebar-ring: 189 94% 43%;
 
   --app-font-sans: 'Space Mono', 'Inter', sans-serif;
@@ -146,13 +146,13 @@
   --input: 217 32% 18%;
   --ring: 189 94% 43%;
 
-  --sidebar: 220 28% 22%;
-  --sidebar-foreground: 210 40% 98%;
-  --sidebar-border: 220 25% 29%;
-  --sidebar-primary: 189 94% 43%;
-  --sidebar-primary-foreground: 222 47% 10%;
-  --sidebar-accent: 220 25% 28%;
-  --sidebar-accent-foreground: 210 40% 98%;
+  --sidebar: 220 20% 96%;
+  --sidebar-foreground: 222 47% 18%;
+  --sidebar-border: 220 15% 87%;
+  --sidebar-primary: 189 94% 35%;
+  --sidebar-primary-foreground: 210 40% 97%;
+  --sidebar-accent: 220 15% 90%;
+  --sidebar-accent-foreground: 222 47% 18%;
   --sidebar-ring: 189 94% 43%;
 }
 

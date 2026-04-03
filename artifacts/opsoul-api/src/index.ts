@@ -22,6 +22,7 @@ import missionContextsRouter from './routes/mission-contexts.js';
 import memoryRouter from './routes/memory.js';
 import capabilityRequestsRouter from './routes/capability-requests.js';
 import tasksRouter from './routes/tasks.js';
+import uploadRouter from './routes/upload.js';
 import { startGrowCron } from './cron/growCron.js';
 import { startMemoryCron } from './cron/memoryCron.js';
 import { startDriftCron } from './cron/driftCron.js';
@@ -51,6 +52,7 @@ app.use('/api/operators/:operatorId/memory', memoryRouter);
 app.use('/api/operators/:operatorId/capability-requests', capabilityRequestsRouter);
 app.use('/api/operators/:operatorId/tasks', tasksRouter);
 app.use('/api/platform-skills', platformSkillsRouter);
+app.use('/api/upload', uploadRouter);
 
 app.get('/api/healthz', (_req, res) => {
   res.json({ status: 'ok', service: 'opsoul-api', phase: 8 });

@@ -74,8 +74,8 @@ function SidebarLeaf({
       data-testid={`nav-${item.id}`}
       className={`flex items-center gap-2.5 ${pl} pr-3 py-2 rounded-md text-sm font-mono w-full text-left transition-all
         ${isActive
-          ? "bg-primary/10 text-primary border border-primary/20"
-          : "text-muted-foreground hover:bg-white/5 hover:text-foreground border border-transparent"
+          ? "bg-sidebar-primary/15 text-sidebar-primary border border-sidebar-primary/25"
+          : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground border border-transparent"
         }`}
     >
       <item.icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? "text-primary" : ""}`} />
@@ -111,7 +111,7 @@ function SidebarGroup({
     <div>
       <button
         onClick={() => toggleGroup(item.id)}
-        className={`flex items-center gap-2.5 ${pl} pr-3 py-2 rounded-md text-sm font-mono w-full text-left transition-all text-muted-foreground hover:bg-white/5 hover:text-foreground border border-transparent`}
+        className={`flex items-center gap-2.5 ${pl} pr-3 py-2 rounded-md text-sm font-mono w-full text-left transition-all text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground border border-transparent`}
       >
         <item.icon className="w-3.5 h-3.5 shrink-0" />
         <span className="truncate flex-1">{item.label}</span>
@@ -377,7 +377,7 @@ export default function OperatorDetail({ id }: { id: string }) {
             <div className="p-4 border-b border-sidebar-border flex items-center gap-3">
               <OperatorAvatar name={operator.name} />
               <div className="min-w-0">
-                <div className="font-mono font-bold text-sm truncate leading-tight">{operator.name}</div>
+                <div className="font-mono font-bold text-sm truncate leading-tight text-sidebar-foreground">{operator.name}</div>
               </div>
             </div>
             <div className="p-2 flex flex-col gap-0.5 flex-1 overflow-y-auto">
@@ -396,7 +396,7 @@ export default function OperatorDetail({ id }: { id: string }) {
           <div className="p-4 border-b border-sidebar-border flex items-center gap-3">
             <OperatorAvatar name={operator.name} />
             <div className="min-w-0">
-              <div className="font-mono font-bold text-sm truncate leading-tight">{operator.name}</div>
+              <div className="font-mono font-bold text-sm truncate leading-tight text-sidebar-foreground">{operator.name}</div>
             </div>
           </div>
           <div className="p-2 flex flex-col gap-0.5 flex-1 overflow-y-auto">
