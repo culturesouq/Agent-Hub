@@ -135,7 +135,7 @@ export default function CreateAgentChat({ open, onClose }: Props) {
             <Input
               value={name}
               onChange={e => setName(e.target.value)}
-              placeholder="e.g. Alex, Support Bot, Research Helper"
+              placeholder="e.g. Alex, Support Operator, Research Advisor"
               className="font-mono"
               disabled={isLoading}
               onKeyDown={e => { if (e.key === "Enter" && canSubmit) handleCreate(); }}
