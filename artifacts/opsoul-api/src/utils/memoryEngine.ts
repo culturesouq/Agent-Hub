@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { db, pool } from '@workspace/db';
-import { operatorMemoryTable, messagesTable, conversationsTable } from '@workspace/db';
+import { operatorMemoryTable, messagesTable, conversationsTable, operatorsTable } from '@workspace/db';
 import { eq, and, isNull, isNotNull, inArray, desc } from 'drizzle-orm';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { chatCompletion } from './openrouter.js';
@@ -275,9 +275,15 @@ export async function distillMemoriesFromConversations(
         continue;
       }
       await storeMemory(operatorId, ownerId, m.content, m.memoryType, 'ai_distilled', m.confidence);
-      // 70% confidence threshold — promote to Learned KB
+      // Promote memories with 70%+ confidence through the 7-point verification gate
       if (m.confidence >= 0.7) {
-        verifyAndStore(operatorId, ownerId, m.content, undefined, 'Memory Distillation', '').catch(() => {});
+        // Fetch operator mandate for KB relevance gate (Check 1)
+        const operatorRow = await db.select({ mandate: operatorsTable.mandate })
+          .from(operatorsTable)
+          .where(eq(operatorsTable.id, operatorId))
+          .limit(1);
+        const mandate = operatorRow[0]?.mandate ?? '';
+        verifyAndStore(operatorId, ownerId, m.content, '', 'ai_distilled', mandate).catch(() => {});
       }
       stored++;
     } catch {
