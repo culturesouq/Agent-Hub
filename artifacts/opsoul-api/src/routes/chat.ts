@@ -251,41 +251,33 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   }
 
   // Web search — only trigger on KB miss
+  // Uses curiosityEngine for tier evaluation and corroboration
+  // instead of raw webSearch
   let searchContext = '';
-  const kbMiss = kbContext === '' && memoryHits.length === 0;
-  if (kbMiss) {
+  if (!kbContext || kbContext.trim().length < 100) {
     try {
-      const domainCheck = await chatCompletion(
-        [
-          { role: 'system', content: `Operator mandate: ${operator.mandate}` },
-          {
-            role: 'user',
-            content: `Is this message a factual question within the operator's domain? Answer only "yes" or "no".\nMessage: ${message}`,
-          },
-        ],
-        'meta-llama/llama-3.3-70b-instruct',
-      );
-      if (domainCheck.content.trim().toLowerCase().startsWith('yes')) {
-        searchContext = `[Searching the web for: ${message}]\n`;
-        const results = await webSearch(message);
-        const evolutionLocked =
-          operator.growLockLevel === 'FROZEN' || operator.growLockLevel === 'LOCKED';
-        for (const result of results) {
-          searchContext += `Source: ${result.title} (${result.url})\n${result.snippet}\n\n`;
-          if (!evolutionLocked) {
-            verifyAndStore(
-              operator.id,
-              operator.ownerId,
-              result.snippet,
-              result.url,
-              result.title,
-              operator.mandate ?? '',
-            ).catch((e) => console.error('[kbIntake]', e));
-          }
-        }
+      const { curiositySearch } = await import('../utils/curiosityEngine.js');
+      const curiosity = await curiositySearch(message, operator.id);
+
+      if (curiosity.corroborated && curiosity.tier) {
+        // Build context only from trusted, corroborated sources
+        searchContext = curiosity.sources
+          .filter(s => s.tier === 1 || s.tier === 2)
+          .map(s => `Source: ${s.title} (${s.url})\n${s.snippet}`)
+          .join('\n\n');
+
+        console.log(
+          `[chat] curiosity search — tier: ${curiosity.tier}, ` +
+          `corroborated: ${curiosity.corroborated}, ` +
+          `confidence: ${curiosity.confidence}`
+        );
+      } else {
+        console.log(
+          `[chat] curiosity search — no corroborated source found (tier: ${curiosity.tier})`
+        );
       }
     } catch (e) {
-      console.error('[webSearch]', e);
+      console.error('[curiositySearch]', e);
     }
   }
 
