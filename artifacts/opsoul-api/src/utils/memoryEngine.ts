@@ -109,10 +109,6 @@ export async function storeMemory(
     decayStartedAt: startDecay ? new Date() : undefined,
   }).returning();
 
-  if (weight >= 0.7) {
-    verifyAndStore(operatorId, ownerId, content, undefined, 'Memory Distillation', '').catch(() => {});
-  }
-
   return memory;
 }
 
@@ -275,15 +271,33 @@ export async function distillMemoriesFromConversations(
         continue;
       }
       await storeMemory(operatorId, ownerId, m.content, m.memoryType, 'ai_distilled', m.confidence);
-      // Promote memories with 70%+ confidence through the 7-point verification gate
+      // Promote memories with 70%+ confidence — only if externally corroborated
       if (m.confidence >= 0.7) {
-        // Fetch operator mandate for KB relevance gate (Check 1)
         const operatorRow = await db.select({ mandate: operatorsTable.mandate })
           .from(operatorsTable)
           .where(eq(operatorsTable.id, operatorId))
           .limit(1);
         const mandate = operatorRow[0]?.mandate ?? '';
-        verifyAndStore(operatorId, ownerId, m.content, '', 'ai_distilled', mandate).catch(() => {});
+
+        // Validate via real-world source before promoting to KB
+        // ai_distilled memories must be corroborated externally
+        const { curiositySearch } = await import('./curiosityEngine.js');
+        const curiosity = await curiositySearch(m.content, operatorId, mandate);
+
+        if (curiosity.verified && curiosity.corroborated) {
+          verifyAndStore(
+            operatorId,
+            ownerId,
+            m.content,
+            curiosity.bestSource,
+            'ai_distilled',
+            mandate,
+          ).catch(() => {});
+        } else {
+          console.log(
+            `[memory] skipped KB promotion — not externally corroborated (tier: ${curiosity.tier}, corroborated: ${curiosity.corroborated})`
+          );
+        }
       }
       stored++;
     } catch {
