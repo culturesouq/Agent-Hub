@@ -4,6 +4,7 @@ import { operatorMemoryTable, messagesTable, conversationsTable } from '@workspa
 import { eq, and, isNull, isNotNull, inArray, desc } from 'drizzle-orm';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { chatCompletion } from './openrouter.js';
+import { verifyAndStore } from './kbIntake.js';
 
 export const MEMORY_TOP_N = 8;
 export const MEMORY_MIN_SIMILARITY = 0.55;
@@ -107,6 +108,10 @@ export async function storeMemory(
     weight,
     decayStartedAt: startDecay ? new Date() : undefined,
   }).returning();
+
+  if (weight >= 0.7) {
+    verifyAndStore(operatorId, ownerId, content, undefined, 'Memory Distillation', '').catch(() => {});
+  }
 
   return memory;
 }
