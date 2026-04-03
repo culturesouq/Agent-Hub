@@ -5,20 +5,18 @@ import { apiFetch } from "@/lib/api";
 import { Operator, HealthScore, CapabilityRequest } from "@/types";
 import {
   ArrowLeft, MessageSquare, Brain, Activity,
-  BookOpen, User, Smile, BookMarked, Zap, Archive, Network,
-  CheckSquare, FileText, Settings2, Key, Code2, ShieldCheck, AlertTriangle,
-  Radio, MessageCircle, Send, GraduationCap, Star, ChevronRight, Bell,
+  User, Zap, Archive, Network,
+  CheckSquare, FileText, Settings2, Key, Code2, AlertTriangle,
+  Radio, MessageCircle, Send, Star, ChevronRight, Bell,
   Shield, Menu, X, Cpu,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 
 import ChatSection from "@/components/operator/ChatSection";
-import KbSection from "@/components/operator/KbSection";
 import MemorySection from "@/components/operator/MemorySection";
 import IntegrationsSection from "@/components/operator/IntegrationsSection";
 import SettingsSection from "@/components/operator/SettingsSection";
@@ -133,35 +131,27 @@ function SidebarGroup({
 }
 
 const NAV_MAIN: NavItem[] = [
-  { kind: "leaf", id: "chat",  label: "Chat",   icon: MessageSquare, depth: 0 },
+  { kind: "leaf", id: "chat", label: "Chat", icon: MessageSquare, depth: 0 },
   {
     kind: "group", id: "brain", label: "Brain", icon: Brain, depth: 0,
     children: [
-      {
-        kind: "group", id: "knowledge", label: "Knowledge", icon: BookOpen, depth: 1,
-        children: [
-          { kind: "leaf", id: "identity",    label: "Identity",        icon: User,       depth: 2 },
-          { kind: "leaf", id: "personality", label: "Personality",     icon: Smile,      depth: 2 },
-          { kind: "leaf", id: "owner-kb",    label: "Owner Knowledge", icon: BookMarked, depth: 2 },
-          { kind: "leaf", id: "skills",      label: "Skills",          icon: Zap,        depth: 2 },
-        ],
-      },
-      { kind: "leaf", id: "memory",       label: "Memory",       icon: Archive, depth: 1 },
-      { kind: "leaf", id: "integrations", label: "Integrations", icon: Network, depth: 1 },
-      { kind: "leaf", id: "grow",         label: "Growth",       icon: Activity, depth: 1 },
+      { kind: "leaf", id: "soul",   label: "Soul",   icon: User,     depth: 1 },
+      { kind: "leaf", id: "skills", label: "Skills", icon: Zap,      depth: 1 },
+      { kind: "leaf", id: "memory", label: "Memory", icon: Archive,  depth: 1 },
+      { kind: "leaf", id: "grow",   label: "Growth", icon: Activity, depth: 1 },
     ],
   },
-  { kind: "leaf", id: "tasks", label: "Tasks", icon: CheckSquare, depth: 0 },
-  { kind: "leaf", id: "files", label: "Files", icon: FileText, depth: 0 },
+  { kind: "leaf", id: "tasks",       label: "Tasks",       icon: CheckSquare, depth: 0 },
+  { kind: "leaf", id: "files",       label: "Files",       icon: FileText,    depth: 0 },
+  { kind: "leaf", id: "connections", label: "Connections", icon: Network,     depth: 0 },
   {
     kind: "group", id: "settings", label: "Settings", icon: Settings2, depth: 0,
     children: [
-      { kind: "leaf", id: "settings.model",     label: "Model & AI",     icon: Cpu,           depth: 1 },
-      { kind: "leaf", id: "settings.secrets",   label: "Secrets & Keys", icon: Key,           depth: 1 },
-      { kind: "leaf", id: "settings.api",       label: "API",            icon: Code2,         depth: 1 },
-      { kind: "leaf", id: "settings.safemode",  label: "Safe Mode",      icon: Shield,        depth: 1 },
-      { kind: "leaf", id: "settings.evolution", label: "Evolution Lock", icon: ShieldCheck,   depth: 1 },
-      { kind: "leaf", id: "settings.danger",    label: "Danger Zone",    icon: AlertTriangle, depth: 1 },
+      { kind: "leaf", id: "settings.model",    label: "Model & AI",   icon: Cpu,           depth: 1 },
+      { kind: "leaf", id: "settings.secrets",  label: "Keys & Secrets", icon: Key,         depth: 1 },
+      { kind: "leaf", id: "settings.api",      label: "API Access",   icon: Code2,         depth: 1 },
+      { kind: "leaf", id: "settings.behavior", label: "Behavior",     icon: Shield,        depth: 1 },
+      { kind: "leaf", id: "settings.danger",   label: "Danger Zone",  icon: AlertTriangle, depth: 1 },
     ],
   },
 ];
@@ -170,18 +160,16 @@ const NAV_BOTTOM: NavItem[] = [
   {
     kind: "group", id: "channels", label: "Channels", icon: Radio, depth: 0,
     children: [
+      { kind: "leaf", id: "channels.telegram", label: "Telegram", icon: Send,          depth: 1 },
       { kind: "leaf", id: "channels.whatsapp", label: "WhatsApp", icon: MessageCircle, depth: 1 },
-      { kind: "leaf", id: "channels.telegram", label: "Telegram", icon: Send, depth: 1 },
     ],
   },
-  { kind: "leaf", id: "learn",    label: "Learn",           icon: GraduationCap, depth: 0 },
-  { kind: "leaf", id: "feedback", label: "Leave feedback",  icon: Star,          depth: 0 },
+  { kind: "leaf", id: "feedback", label: "Leave Feedback", icon: Star, depth: 0 },
 ];
 
-const BRAIN_LEAVES     = ["identity", "personality", "owner-kb", "skills", "memory", "integrations", "grow"];
-const KNOWLEDGE_LEAVES = ["identity", "personality", "owner-kb", "skills"];
-const SETTINGS_LEAVES  = ["settings.model", "settings.secrets", "settings.api", "settings.safemode", "settings.evolution", "settings.danger"];
-const CHANNELS_LEAVES  = ["channels.whatsapp", "channels.telegram"];
+const BRAIN_LEAVES    = ["soul", "skills", "memory", "grow"];
+const SETTINGS_LEAVES = ["settings.model", "settings.secrets", "settings.api", "settings.behavior", "settings.danger"];
+const CHANNELS_LEAVES = ["channels.whatsapp", "channels.telegram"];
 
 export default function OperatorDetail({ id }: { id: string }) {
   const { toast } = useToast();
@@ -239,10 +227,9 @@ export default function OperatorDetail({ id }: { id: string }) {
   useEffect(() => {
     setOpenGroups(prev => {
       const next = new Set(prev);
-      if (BRAIN_LEAVES.includes(activeTab))     next.add("brain");
-      if (KNOWLEDGE_LEAVES.includes(activeTab)) next.add("knowledge");
-      if (SETTINGS_LEAVES.includes(activeTab))  next.add("settings");
-      if (CHANNELS_LEAVES.includes(activeTab))  next.add("channels");
+      if (BRAIN_LEAVES.includes(activeTab))    next.add("brain");
+      if (SETTINGS_LEAVES.includes(activeTab)) next.add("settings");
+      if (CHANNELS_LEAVES.includes(activeTab)) next.add("channels");
       return next;
     });
   }, [activeTab]);
@@ -281,27 +268,23 @@ export default function OperatorDetail({ id }: { id: string }) {
   function renderContent() {
     if (!operator) return null;
     switch (activeTab) {
-      case "chat":                return <ChatSection operatorId={id} />;
-      case "identity":            return <IdentitySection operator={operator} panel="identity" />;
-      case "personality":         return <IdentitySection operator={operator} panel="personality" />;
-      case "owner-kb":            return <KbSection operatorId={id} />;
-      case "skills":              return <SkillsSection operatorId={id} />;
-      case "memory":              return <MemorySection operatorId={id} />;
-      case "integrations":        return <IntegrationsSection operatorId={id} />;
-      case "grow":                return <GrowSection operatorId={id} saData={saData} />;
-      case "tasks":               return <TasksSection operatorId={id} />;
-      case "files":               return <ComingSoon title="Files" />;
-      case "settings.model":      return <SettingsSection operator={operator} section="model" />;
-      case "settings.secrets":    return <SettingsSection operator={operator} section="secrets" />;
-      case "settings.api":        return <SettingsSection operator={operator} section="api" />;
-      case "settings.safemode":   return <SettingsSection operator={operator} section="safemode" />;
-      case "settings.evolution":  return <SettingsSection operator={operator} section="evolution" />;
-      case "settings.danger":     return <SettingsSection operator={operator} section="danger" />;
-      case "channels.whatsapp":   return <ComingSoon title="WhatsApp" />;
-      case "channels.telegram":   return <ComingSoon title="Telegram" />;
-      case "learn":               return <ComingSoon title="Learn" />;
-      case "feedback":            return <ComingSoon title="Leave feedback" />;
-      default:                    return <ChatSection operatorId={id} />;
+      case "chat":               return <ChatSection operatorId={id} />;
+      case "soul":               return <IdentitySection operator={operator} panel="identity" />;
+      case "skills":             return <SkillsSection operatorId={id} />;
+      case "memory":             return <MemorySection operatorId={id} />;
+      case "grow":               return <GrowSection operatorId={id} saData={saData} />;
+      case "tasks":              return <TasksSection operatorId={id} />;
+      case "files":              return <ComingSoon title="Files" />;
+      case "connections":        return <IntegrationsSection operatorId={id} />;
+      case "settings.model":     return <SettingsSection operator={operator} section="model" />;
+      case "settings.secrets":   return <SettingsSection operator={operator} section="secrets" />;
+      case "settings.api":       return <SettingsSection operator={operator} section="api" />;
+      case "settings.behavior":  return <SettingsSection operator={operator} section="safemode" />;
+      case "settings.danger":    return <SettingsSection operator={operator} section="danger" />;
+      case "channels.telegram":  return <ComingSoon title="Telegram" />;
+      case "channels.whatsapp":  return <ComingSoon title="WhatsApp" />;
+      case "feedback":           return <ComingSoon title="Leave Feedback" />;
+      default:                   return <ChatSection operatorId={id} />;
     }
   }
 
