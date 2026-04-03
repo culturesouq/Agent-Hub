@@ -275,6 +275,10 @@ export async function distillMemoriesFromConversations(
         continue;
       }
       await storeMemory(operatorId, ownerId, m.content, m.memoryType, 'ai_distilled', m.confidence);
+      // 70% confidence threshold — promote to Learned KB
+      if (m.confidence >= 0.7) {
+        verifyAndStore(operatorId, ownerId, m.content, undefined, 'Memory Distillation', '').catch(() => {});
+      }
       stored++;
     } catch {
       // individual embedding failure should not abort the batch
