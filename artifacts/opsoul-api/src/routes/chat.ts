@@ -461,6 +461,27 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       })}\n\n`);
       res.end();
 
+      // --- [LEARN:] EXTRACTION ---
+      if (!operator.safeMode) {
+        const learnMatches = fullContent.match(/\[LEARN:\s*(.*?)\]/gs);
+        if (learnMatches && learnMatches.length > 0) {
+          for (const match of learnMatches) {
+            const text = match.replace(/\[LEARN:\s*/i, '').replace(/\]$/, '').trim();
+            if (text.length > 20) {
+              verifyAndStore(
+                operator.id,
+                operator.ownerId,
+                text,
+                'self_learn',
+                'operator_self_learn',
+                operator.mandate ?? '',
+              ).catch(() => {});
+            }
+          }
+        }
+      }
+      // --- END [LEARN:] EXTRACTION ---
+
       if (!operator.safeMode) {
         triggerSelfAwareness(operator.id, 'conversation_end').catch(() => {});
         distillMemoriesFromConversations(operator.id, operator.ownerId, operator.name).catch(() => {});
@@ -545,6 +566,27 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         memoryCount: memoryHits.length,
         layer1WasLocked: operator.layer1LockedAt === null,
       });
+
+      // --- [LEARN:] EXTRACTION ---
+      if (!operator.safeMode) {
+        const learnMatches = result.content.match(/\[LEARN:\s*(.*?)\]/gs);
+        if (learnMatches && learnMatches.length > 0) {
+          for (const match of learnMatches) {
+            const text = match.replace(/\[LEARN:\s*/i, '').replace(/\]$/, '').trim();
+            if (text.length > 20) {
+              verifyAndStore(
+                operator.id,
+                operator.ownerId,
+                text,
+                'self_learn',
+                'operator_self_learn',
+                operator.mandate ?? '',
+              ).catch(() => {});
+            }
+          }
+        }
+      }
+      // --- END [LEARN:] EXTRACTION ---
 
       if (!operator.safeMode) {
         triggerSelfAwareness(operator.id, 'conversation_end').catch(() => {});
