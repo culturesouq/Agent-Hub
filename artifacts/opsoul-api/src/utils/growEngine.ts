@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import cron from 'node-cron';
 import { db } from '@workspace/db';
 import {
   operatorsTable,
@@ -10,6 +11,7 @@ import {
 } from '@workspace/db';
 import { eq, and, desc, inArray, lte } from 'drizzle-orm';
 import { chatCompletion } from './openrouter.js';
+import { semanticDistance } from '@workspace/opsoul-utils/ai';
 import type { Layer2Soul } from '../validation/operator.js';
 import {
   enforceLayer1Lock,
@@ -561,3 +563,67 @@ export async function retryPendingProposals(): Promise<void> {
 }
 
 export { GROW_MODEL };
+
+// ─── T08: Cumulative Drift Detection — runs 0 3 1 */3 (1st of every 3rd month at 3am) ───
+
+async function checkCumulativeDrift(): Promise<void> {
+  console.log('[DRIFT] Starting cumulative drift scan...');
+  try {
+    const operators = await db
+      .select({
+        id: operatorsTable.id,
+        name: operatorsTable.name,
+        layer2Soul: operatorsTable.layer2Soul,
+        layer2SoulOriginal: operatorsTable.layer2SoulOriginal,
+      })
+      .from(operatorsTable);
+
+    for (const op of operators) {
+      try {
+        if (!op.layer2Soul || !op.layer2SoulOriginal) continue;
+
+        const original = JSON.stringify(op.layer2SoulOriginal);
+        const current = JSON.stringify(op.layer2Soul);
+        const drift = await semanticDistance(original, current);
+        const flagged = drift > 0.30;
+
+        const [existing] = await db
+          .select({ id: selfAwarenessStateTable.id, identityState: selfAwarenessStateTable.identityState })
+          .from(selfAwarenessStateTable)
+          .where(eq(selfAwarenessStateTable.operatorId, op.id));
+
+        const updatedIdentityState = {
+          ...(existing?.identityState as Record<string, unknown> ?? {}),
+          driftScore: drift,
+          driftFlagged: flagged,
+          driftCheckedAt: new Date().toISOString(),
+        };
+
+        if (existing) {
+          await db
+            .update(selfAwarenessStateTable)
+            .set({ identityState: updatedIdentityState, lastUpdated: new Date(), lastUpdateTrigger: 'drift_cron' })
+            .where(eq(selfAwarenessStateTable.operatorId, op.id));
+        }
+
+        if (flagged) {
+          console.warn(`[DRIFT] Operator "${op.name}" (${op.id}) has drifted ${(drift * 100).toFixed(1)}% from original soul — flagged for owner review.`);
+        } else {
+          console.log(`[DRIFT] Operator "${op.name}" drift: ${(drift * 100).toFixed(1)}% — within threshold.`);
+        }
+      } catch (opErr) {
+        console.error(`[DRIFT] Error processing operator ${op.id}:`, opErr);
+      }
+    }
+    console.log('[DRIFT] Cumulative drift scan complete.');
+  } catch (err) {
+    console.error('[DRIFT] Fatal error during drift scan:', err);
+  }
+}
+
+// Schedule: 0 3 1 */3 * — 3am on the 1st of every 3rd month
+cron.schedule('0 3 1 */3 *', () => {
+  checkCumulativeDrift().catch(err => console.error('[DRIFT] Unhandled error:', err));
+});
+
+export { checkCumulativeDrift };

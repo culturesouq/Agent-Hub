@@ -1,0 +1,148 @@
+Two fixes. Read before touching.
+
+
+Reply
+FIX 1 — Delete "Socratic Questioning" from the DB
+
+
+Reply
+Run this SQL directly:
+
+DELETE FROM platform_skills WHERE name = 'Socratic Questioning';
+Confirm it deleted 1 row.
+
+
+Reply
+FIX 2 — Add "Create Custom Skill" to SkillsSection.tsx
+
+
+Reply
+In artifacts/opsoul-hub/src/components/operator/SkillsSection.tsx:
+
+
+Reply
+Add these imports at the top:
+
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Plus } from "lucide-react";
+import { Label } from "@/components/ui/label";
+
+Reply
+Add this state after the existing state declarations:
+
+const [showCreateDialog, setShowCreateDialog] = useState(false);
+const [newSkill, setNewSkill] = useState({ 
+  name: '', 
+  description: '', 
+  triggerDescription: '', 
+  instructions: '', 
+  outputFormat: '' 
+});
+
+Reply
+Add this mutation after the removeSkill mutation:
+
+const createSkill = useMutation({
+  mutationFn: (data: typeof newSkill) =>
+    apiFetch(`/platform-skills`, { 
+      method: "POST", 
+      body: JSON.stringify({ ...data, archetype }) 
+    }),
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["platform-skills"] });
+    queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "skills"] });
+    setShowCreateDialog(false);
+    setNewSkill({ name: '', description: '', triggerDescription: '', instructions: '', outputFormat: '' });
+    toast({ title: "Skill created and ready to install" });
+  },
+});
+
+Reply
+In the Available Skills panel header (the div with p-3 bg-card/50 border-b), add a "Create" button next to the title:
+
+<div className="p-3 bg-card/50 border-b border-border/50 flex items-center justify-between">
+  <div>
+    <h3 className="font-mono text-sm font-bold">Available Skills</h3>
+    <p className="font-mono text-xs text-muted-foreground mt-0.5">Skills you can add to your operator</p>
+  </div>
+  <Button 
+    variant="outline" 
+    size="sm" 
+    className="h-7 font-mono text-xs border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground"
+    onClick={() => setShowCreateDialog(true)}
+  >
+    <Plus className="w-3 h-3 mr-1" /> Create
+  </Button>
+</div>
+
+Reply
+Add this Dialog before the closing </div> of the component (after the existing install Dialog):
+
+<Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+  <DialogContent className="border-primary/20 bg-card/95 backdrop-blur max-w-lg">
+    <DialogHeader>
+      <DialogTitle className="font-mono text-xl text-primary">Create Custom Skill</DialogTitle>
+    </DialogHeader>
+    <div className="space-y-4 mt-2">
+      <div>
+        <Label className="font-mono text-xs text-muted-foreground">Skill Name *</Label>
+        <Input 
+          className="font-mono text-sm mt-1 bg-background/50 border-border/50" 
+          placeholder="e.g. Competitor Analysis"
+          value={newSkill.name}
+          onChange={e => setNewSkill(s => ({ ...s, name: e.target.value }))}
+        />
+      </div>
+      <div>
+        <Label className="font-mono text-xs text-muted-foreground">Description *</Label>
+        <Input 
+          className="font-mono text-sm mt-1 bg-background/50 border-border/50" 
+          placeholder="One line — what this skill does"
+          value={newSkill.description}
+          onChange={e => setNewSkill(s => ({ ...s, description: e.target.value }))}
+        />
+      </div>
+      <div>
+        <Label className="font-mono text-xs text-muted-foreground">When to trigger</Label>
+        <Input 
+          className="font-mono text-sm mt-1 bg-background/50 border-border/50" 
+          placeholder="e.g. user asks about competitors or market analysis"
+          value={newSkill.triggerDescription}
+          onChange={e => setNewSkill(s => ({ ...s, triggerDescription: e.target.value }))}
+        />
+      </div>
+      <div>
+        <Label className="font-mono text-xs text-muted-foreground">Instructions *</Label>
+        <Textarea 
+          className="font-mono text-sm mt-1 bg-background/50 border-border/50 min-h-[100px]" 
+          placeholder="What should the operator do when this skill fires? Be specific."
+          value={newSkill.instructions}
+          onChange={e => setNewSkill(s => ({ ...s, instructions: e.target.value }))}
+        />
+      </div>
+      <div>
+        <Label className="font-mono text-xs text-muted-foreground">Output Format</Label>
+        <Input 
+          className="font-mono text-sm mt-1 bg-background/50 border-border/50" 
+          placeholder="e.g. Three competitors → strengths → gaps"
+          value={newSkill.outputFormat}
+          onChange={e => setNewSkill(s => ({ ...s, outputFormat: e.target.value }))}
+        />
+      </div>
+      <Button 
+        className="w-full font-mono font-bold mt-2" 
+        onClick={() => createSkill.mutate(newSkill)}
+        disabled={createSkill.isPending || !newSkill.name || !newSkill.description || !newSkill.instructions}
+      >
+        {createSkill.isPending ? 'Creating...' : 'Create Skill'}
+      </Button>
+    </div>
+  </DialogContent>
+</Dialog>
+
+Reply
+Two changes only. Confirm row deleted + server restarted.
+
+
+Reply

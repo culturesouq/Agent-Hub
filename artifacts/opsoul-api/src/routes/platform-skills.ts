@@ -16,6 +16,7 @@ const CreatePlatformSkillSchema = z.object({
   instructions: z.string().min(1).max(8000),
   outputFormat: z.string().max(500).optional(),
   author: z.string().max(100).optional(),
+  archetype: z.string().max(50).optional(),
 });
 
 const UpdatePlatformSkillSchema = CreatePlatformSkillSchema.partial();
@@ -35,6 +36,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     instructions: parsed.data.instructions,
     outputFormat: parsed.data.outputFormat,
     author: parsed.data.author ?? req.owner!.ownerId,
+    archetype: parsed.data.archetype ?? 'All',
     installCount: 0,
   }).returning();
 

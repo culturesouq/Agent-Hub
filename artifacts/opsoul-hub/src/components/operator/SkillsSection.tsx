@@ -6,7 +6,10 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Download, Trash2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Download, Trash2, Plus } from "lucide-react";
 import { format } from "date-fns";
 
 export default function SkillsSection({ operatorId, archetype }: { operatorId: string; archetype: string }) {
@@ -14,6 +17,14 @@ export default function SkillsSection({ operatorId, archetype }: { operatorId: s
   const queryClient = useQueryClient();
   const [selectedPlatformSkill, setSelectedPlatformSkill] = useState<PlatformSkill | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [newSkill, setNewSkill] = useState({
+    name: '',
+    description: '',
+    triggerDescription: '',
+    instructions: '',
+    outputFormat: '',
+  });
 
   const { data: platformSkills = [], isLoading: platLoading } = useQuery({
     queryKey: ["platform-skills"],
@@ -43,6 +54,21 @@ export default function SkillsSection({ operatorId, archetype }: { operatorId: s
     },
   });
 
+  const createSkill = useMutation({
+    mutationFn: (data: typeof newSkill) =>
+      apiFetch(`/platform-skills`, {
+        method: "POST",
+        body: JSON.stringify({ ...data, archetype }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["platform-skills"] });
+      queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "skills"] });
+      setShowCreateDialog(false);
+      setNewSkill({ name: '', description: '', triggerDescription: '', instructions: '', outputFormat: '' });
+      toast({ title: "Skill created and ready to install" });
+    },
+  });
+
   const filteredSkills = showAll
     ? platformSkills
     : platformSkills.filter(s => s.archetype === archetype || s.archetype === 'All');
@@ -54,17 +80,27 @@ export default function SkillsSection({ operatorId, archetype }: { operatorId: s
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 min-h-[400px]">
         {/* Available */}
         <div className="flex flex-col border border-border/50 rounded-lg bg-card/20 overflow-hidden">
-          <div className="p-3 bg-card/50 border-b border-border/50 flex items-center gap-2">
+          <div className="p-3 bg-card/50 border-b border-border/50 flex items-center justify-between">
             <div>
               <h3 className="font-mono text-sm font-bold">Available Skills</h3>
               <p className="font-mono text-xs text-muted-foreground mt-0.5">Skills you can add to your operator</p>
             </div>
-            <button
-              onClick={() => setShowAll(v => !v)}
-              className="font-mono text-xs text-primary/60 hover:text-primary underline underline-offset-2 ml-auto"
-            >
-              {showAll ? 'Show relevant only' : 'Show all skills'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowAll(v => !v)}
+                className="font-mono text-xs text-primary/60 hover:text-primary underline underline-offset-2"
+              >
+                {showAll ? 'Relevant only' : 'Show all'}
+              </button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 font-mono text-xs border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground"
+                onClick={() => setShowCreateDialog(true)}
+              >
+                <Plus className="w-3 h-3 mr-1" /> Create
+              </Button>
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {platLoading ? (
@@ -130,6 +166,68 @@ export default function SkillsSection({ operatorId, archetype }: { operatorId: s
           </div>
         </div>
       </div>
+
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent className="border-primary/20 bg-card/95 backdrop-blur max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="font-mono text-xl text-primary">Create Custom Skill</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <div>
+              <Label className="font-mono text-xs text-muted-foreground">Skill Name *</Label>
+              <Input
+                className="font-mono text-sm mt-1 bg-background/50 border-border/50"
+                placeholder="e.g. Competitor Analysis"
+                value={newSkill.name}
+                onChange={e => setNewSkill(s => ({ ...s, name: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label className="font-mono text-xs text-muted-foreground">Description *</Label>
+              <Input
+                className="font-mono text-sm mt-1 bg-background/50 border-border/50"
+                placeholder="One line — what this skill does"
+                value={newSkill.description}
+                onChange={e => setNewSkill(s => ({ ...s, description: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label className="font-mono text-xs text-muted-foreground">When to trigger</Label>
+              <Input
+                className="font-mono text-sm mt-1 bg-background/50 border-border/50"
+                placeholder="e.g. user asks about competitors or market analysis"
+                value={newSkill.triggerDescription}
+                onChange={e => setNewSkill(s => ({ ...s, triggerDescription: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label className="font-mono text-xs text-muted-foreground">Instructions *</Label>
+              <Textarea
+                className="font-mono text-sm mt-1 bg-background/50 border-border/50 min-h-[100px]"
+                placeholder="What should the operator do when this skill fires? Be specific."
+                value={newSkill.instructions}
+                onChange={e => setNewSkill(s => ({ ...s, instructions: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label className="font-mono text-xs text-muted-foreground">Output Format</Label>
+              <Input
+                className="font-mono text-sm mt-1 bg-background/50 border-border/50"
+                placeholder="e.g. Three competitors → strengths → gaps"
+                value={newSkill.outputFormat}
+                onChange={e => setNewSkill(s => ({ ...s, outputFormat: e.target.value }))}
+              />
+            </div>
+            <Button
+              className="w-full font-mono font-bold mt-2"
+              onClick={() => createSkill.mutate(newSkill)}
+              disabled={createSkill.isPending || !newSkill.name || !newSkill.description || !newSkill.instructions}
+            >
+              {createSkill.isPending ? 'Creating...' : 'Create Skill'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!selectedPlatformSkill} onOpenChange={(open) => !open && setSelectedPlatformSkill(null)}>
         <DialogContent className="border-primary/20 bg-card/95 backdrop-blur">
