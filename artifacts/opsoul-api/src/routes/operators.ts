@@ -122,10 +122,14 @@ Archetype guide:
       return;
     }
 
-    const rawArchetype = (parsed.archetype ?? '').trim();
-    const archetype: string = VALID_ARCHETYPES.find(
-      a => a.toLowerCase() === rawArchetype.toLowerCase()
-    ) ?? 'Connector';
+    const rawArchetypes: string[] = Array.isArray(parsed.archetype)
+      ? parsed.archetype
+      : [parsed.archetype ?? 'Connector'];
+    const archetype: string[] = rawArchetypes
+      .map((r: string) => VALID_ARCHETYPES.find(a => a.toLowerCase() === r.toLowerCase()))
+      .filter(Boolean)
+      .slice(0, 2) as string[];
+    if (archetype.length === 0) archetype.push('Connector');
 
     const trimmedName = name.trim();
     res.json({
