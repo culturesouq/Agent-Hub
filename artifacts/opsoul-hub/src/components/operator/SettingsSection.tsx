@@ -14,22 +14,28 @@ import {
 
 const MODELS = [
   {
-    id: "anthropic/claude-haiku-4-5",
-    label: "Claude Haiku",
-    description: "Fast and balanced — great for most conversations",
-    badge: "Balanced",
+    id: "opsoul/auto",
+    label: "Auto",
+    description: "OpSoul picks the right model per message — fast when simple, powerful when it matters.",
+    badge: "Recommended",
   },
   {
     id: "anthropic/claude-sonnet-4-5",
     label: "Claude Sonnet",
-    description: "Best quality — deeper reasoning and richer responses",
+    description: "Best quality — deep reasoning, rich responses, strong Arabic support.",
     badge: "Best Quality",
   },
   {
-    id: "meta-llama/llama-3.3-70b-instruct",
-    label: "Llama 3.3 70B",
-    description: "Solid performance at no extra cost",
-    badge: "Free Tier",
+    id: "anthropic/claude-haiku-4-5",
+    label: "Claude Haiku",
+    description: "Fast and sharp — great for quick back-and-forth conversations.",
+    badge: "Fast & Sharp",
+  },
+  {
+    id: "google/gemini-flash-2.0",
+    label: "Gemini Flash 2.0",
+    description: "Fast, multimodal — handles images, files, and rapid queries.",
+    badge: "Multimodal",
   },
 ] as const;
 
@@ -78,14 +84,14 @@ export default function SettingsSection({ operator, section }: { operator: Opera
   const [, setLocation] = useLocation();
   const [safeMode, setSafeMode] = useState(operator.safeMode ?? false);
 
-  const defaultModelId = operator.defaultModel ?? "meta-llama/llama-3.3-70b-instruct";
+  const defaultModelId = operator.defaultModel ?? "opsoul/auto";
   const [selectedModel, setSelectedModel] = useState<string>(defaultModelId);
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [verifyStatus, setVerifyStatus] = useState<"idle" | "verifying" | "ok" | "fail">("idle");
   const [showModelDropdown, setShowModelDropdown] = useState(false);
 
-  const selectedModelInfo = MODELS.find((m) => m.id === selectedModel) ?? MODELS[2];
+  const selectedModelInfo = MODELS.find((m) => m.id === selectedModel) ?? MODELS[0];
 
   const saveModelSettings = useMutation({
     mutationFn: (payload: { apiKey?: string; model?: string; clearApiKey?: boolean }) =>
@@ -302,65 +308,10 @@ print(response.json()["content"])`;
             </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="font-mono text-xs text-muted-foreground uppercase tracking-wider">
-              OpenRouter API Key {operator.hasCustomApiKey ? "(replace)" : "(paste yours)"}
-            </label>
-            <div className="relative">
-              <input
-                type={showKey ? "text" : "password"}
-                value={apiKeyInput}
-                onChange={(e) => { setApiKeyInput(e.target.value); setVerifyStatus("idle"); }}
-                placeholder={operator.hasCustomApiKey ? "Paste new key to replace..." : "sk-or-v1-..."}
-                className="w-full font-mono text-sm bg-background/60 border border-border/40 rounded-lg px-3 py-2.5 pr-20 focus:outline-none focus:border-primary/50 placeholder:text-muted-foreground/40"
-              />
-              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setShowKey(!showKey)}
-                  className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                </button>
-              </div>
-            </div>
-            <p className="font-mono text-[10px] text-muted-foreground">
-              Get your key at{" "}
-              <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                openrouter.ai/keys
-              </a>
-              . It's never shown again after saving.
-            </p>
-          </div>
-
           <div className="flex items-center gap-3 flex-wrap">
-            {apiKeyInput.trim() && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={verifyKey}
-                disabled={verifyStatus === "verifying"}
-                className="font-mono text-xs"
-              >
-                {verifyStatus === "verifying" ? (
-                  <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> Verifying...</>
-                ) : verifyStatus === "ok" ? (
-                  <><Check className="w-3 h-3 mr-1.5 text-green-500" /> Verified</>
-                ) : verifyStatus === "fail" ? (
-                  <><AlertTriangle className="w-3 h-3 mr-1.5 text-destructive" /> Failed</>
-                ) : (
-                  "Verify Key"
-                )}
-              </Button>
-            )}
-
             <Button
               size="sm"
-              onClick={() => {
-                const payload: { apiKey?: string; model?: string } = { model: selectedModel };
-                if (apiKeyInput.trim()) payload.apiKey = apiKeyInput.trim();
-                saveModelSettings.mutate(payload);
-              }}
+              onClick={() => saveModelSettings.mutate({ model: selectedModel })}
               disabled={saveModelSettings.isPending}
               className="font-mono text-xs"
             >
@@ -372,16 +323,14 @@ print(response.json()["content"])`;
 
       {show("secrets") && (
         <section className="space-y-4">
-          <div className="flex items-center gap-2 border-b border-border/50 pb-3">
-            <Key className="w-4 h-4 text-muted-foreground" />
-            <h2 className="font-mono font-bold text-base">Secrets & Keys</h2>
-          </div>
-          <div className="rounded-lg border border-border/40 bg-card/30 p-6 text-center space-y-2">
-            <Key className="w-8 h-8 text-muted-foreground/40 mx-auto" />
-            <p className="font-mono text-sm font-medium">Store private keys and tokens</p>
-            <p className="font-mono text-xs text-muted-foreground max-w-sm mx-auto">
-              Save API keys and tokens that only your operator can access during conversations. Coming soon.
+          <div>
+            <h3 className="font-mono font-bold text-sm text-foreground">Keys & Secrets</h3>
+            <p className="font-mono text-xs text-muted-foreground mt-1">
+              Store API keys and tokens your operator can use during conversations — webhooks, third-party tools, external services.
             </p>
+          </div>
+          <div className="rounded-lg border border-border/30 bg-muted/20 px-4 py-3">
+            <p className="font-mono text-xs text-muted-foreground">Coming soon — external integration secrets.</p>
           </div>
         </section>
       )}

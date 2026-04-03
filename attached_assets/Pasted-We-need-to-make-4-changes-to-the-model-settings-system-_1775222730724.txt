@@ -1,0 +1,130 @@
+We need to make 4 changes to the model settings system. Do them in this exact order, one file at a time.
+
+
+CHANGE 1 — artifacts/opsoul-api/src/utils/openrouter.ts
+
+
+Add this constant below CHAT_MODEL:
+
+
+export const AUTO_MODEL = 'opsoul/auto';
+
+
+
+CHANGE 2 — artifacts/opsoul-api/src/routes/chat.ts
+
+
+Find the line:
+const chatModel = operator.defaultModel || CHAT_MODEL;
+
+
+Replace it with:
+
+
+const rawModel = operator.defaultModel || CHAT_MODEL;
+
+const chatModel = (() => {
+  if (rawModel !== 'opsoul/auto') return rawModel;
+
+  // Auto routing logic
+  const lastUserMessage = messages[messages.length - 1]?.content ?? '';
+  const hasAttachment = Array.isArray(lastUserMessage); // multimodal content array
+  const isShort = typeof lastUserMessage === 'string' && lastUserMessage.length < 200;
+  const hasContext = (kbContext && kbContext.length > 0) || (memoryContext && memoryContext.length > 0);
+
+  if (hasAttachment) return 'google/gemini-flash-2.0';
+  if (isShort && !hasContext) return 'anthropic/claude-haiku-4-5';
+  return 'anthropic/claude-sonnet-4-5';
+})();
+
+
+
+CHANGE 3 — artifacts/opsoul-hub/src/components/operator/SettingsSection.tsx
+
+
+Replace the entire MODELS constant (lines 15–34) with:
+
+
+const MODELS = [
+  {
+    id: "opsoul/auto",
+    label: "Auto",
+    description: "OpSoul picks the right model per message — fast when simple, powerful when it matters.",
+    badge: "Recommended",
+  },
+  {
+    id: "anthropic/claude-sonnet-4-5",
+    label: "Claude Sonnet",
+    description: "Best quality — deep reasoning, rich responses, strong Arabic support.",
+    badge: "Best Quality",
+  },
+  {
+    id: "anthropic/claude-haiku-4-5",
+    label: "Claude Haiku",
+    description: "Fast and sharp — great for quick back-and-forth conversations.",
+    badge: "Fast & Sharp",
+  },
+  {
+    id: "google/gemini-flash-2.0",
+    label: "Gemini Flash 2.0",
+    description: "Fast, multimodal — handles images, files, and rapid queries.",
+    badge: "Multimodal",
+  },
+] as const;
+
+
+Then find line 81:
+const defaultModelId = operator.defaultModel ?? "meta-llama/llama-3.3-70b-instruct";
+
+
+Replace with:
+const defaultModelId = operator.defaultModel ?? "opsoul/auto";
+
+
+
+CHANGE 4 — artifacts/opsoul-hub/src/components/operator/SettingsSection.tsx
+
+
+Find the show("secrets") section — it looks like this:
+
+
+{show("secrets") && (
+  <section className="space-y-4">
+    ...Save API keys and tokens...Coming soon.
+  </section>
+)}
+
+
+Replace the entire show("secrets") section with:
+
+
+{show("secrets") && (
+  <section className="space-y-4">
+    <div>
+      <h3 className="font-mono font-bold text-sm text-foreground">Keys & Secrets</h3>
+      <p className="font-mono text-xs text-muted-foreground mt-1">
+        Store API keys and tokens your operator can use during conversations — webhooks, third-party tools, external services.
+      </p>
+    </div>
+    <div className="rounded-lg border border-border/30 bg-muted/20 px-4 py-3">
+      <p className="font-mono text-xs text-muted-foreground">Coming soon — external integration secrets.</p>
+    </div>
+  </section>
+)}
+
+
+Also find and fully remove the section inside show("model") that contains the API key input — the block that includes apiKeyInput, sk-or-v1-... placeholder, and the verify key button. Keep everything else in show("model") intact (the model selector cards and save button stay).
+
+
+
+After all 4 changes:
+
+
+1. Run the app
+2. Go to any operator → Settings → Model & AI
+3. Confirm: 4 model cards show (Auto, Sonnet, Haiku, Gemini Flash), no API key input
+4. Set an operator to Auto, send a short message — confirm it routes to Haiku in server logs
+5. Send a long message with KB context — confirm it routes to Sonnet
+
+
+Report back with what you see in the logs.

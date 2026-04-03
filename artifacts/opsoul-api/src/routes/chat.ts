@@ -157,8 +157,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   const chatApiKey = operator.openrouterApiKey
     ? (() => { try { return decryptToken(operator.openrouterApiKey!); } catch { return undefined; } })()
     : undefined;
-  const chatModel = operator.defaultModel || CHAT_MODEL;
-  const chatOpts = { apiKey: chatApiKey, model: chatModel };
+  const rawModel = operator.defaultModel || CHAT_MODEL;
+  let chatModel = rawModel;
+  const chatOpts = { apiKey: chatApiKey, get model() { return chatModel; } };
 
   const [skills, missionContext, selfAwarenessRow, history] = await Promise.all([
     loadActiveSkills(operator.id),
@@ -293,6 +294,21 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       ? `${kbContext}\n\n---\n\n${searchContext}`
       : searchContext;
   }
+
+  // Auto routing — resolve final model now that kbContext and memoryHits are known
+  chatModel = (() => {
+    if (rawModel !== 'opsoul/auto') return rawModel;
+    const hasAttachment = Array.isArray(attachments) && attachments.length > 0;
+    const isShort = message.length < 200;
+    const hasContext = kbContext.length > 0 || memoryHits.length > 0;
+    const resolved = hasAttachment
+      ? 'google/gemini-flash-2.0'
+      : isShort && !hasContext
+        ? 'anthropic/claude-haiku-4-5'
+        : 'anthropic/claude-sonnet-4-5';
+    console.log(`[AUTO] routed → ${resolved} | short=${isShort} attachment=${hasAttachment} hasContext=${hasContext}`);
+    return resolved;
+  })();
 
   const systemPrompt = buildSystemPrompt(
     {

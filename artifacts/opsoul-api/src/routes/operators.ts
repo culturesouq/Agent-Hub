@@ -563,8 +563,8 @@ router.patch('/:id/model-settings', async (req: Request, res: Response): Promise
     clearApiKey?: boolean;
   };
 
-  const validModelIds = MODEL_OPTIONS.map((m) => m.id);
-  if (model && !validModelIds.includes(model as typeof validModelIds[number])) {
+  const validModelIds = ['opsoul/auto', ...MODEL_OPTIONS.map((m) => m.id)];
+  if (model && !validModelIds.includes(model)) {
     res.status(400).json({ error: 'Invalid model. Must be one of: ' + validModelIds.join(', ') });
     return;
   }

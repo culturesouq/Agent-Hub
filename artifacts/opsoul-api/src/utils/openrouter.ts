@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 
 export const CHAT_MODEL = 'anthropic/claude-sonnet-4-5';
+export const AUTO_MODEL = 'opsoul/auto';
 
 export const MODEL_OPTIONS = [
   { id: 'anthropic/claude-sonnet-4-5', label: 'Claude Sonnet', description: 'Best quality — deeper reasoning and richer responses' },
