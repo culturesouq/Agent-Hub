@@ -9,7 +9,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Loader2 } from "lucide-react";
+import { Loader2, Check } from "lucide-react";
+
+const ARCHETYPE_OPTIONS = [
+  { id: 'Advisor',   label: 'Advisor',   desc: 'Guides decisions and counsels' },
+  { id: 'Executor',  label: 'Executor',  desc: 'Action-oriented, gets things done' },
+  { id: 'Expert',    label: 'Expert',    desc: 'Deep specialist knowledge' },
+  { id: 'Connector', label: 'Connector', desc: 'Bridges people and ideas' },
+  { id: 'Creator',   label: 'Creator',   desc: 'Generates ideas and content' },
+  { id: 'Guardian',  label: 'Guardian',  desc: 'Protects and monitors boundaries' },
+] as const;
 
 interface BootstrapPreview {
   archetype: string;
@@ -44,11 +53,23 @@ export default function CreateAgentChat({ open, onClose }: Props) {
   const [name, setName] = useState("");
   const [purpose, setPurpose] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedArchetypes, setSelectedArchetypes] = useState<string[]>(['Advisor']);
+
+  const toggleArchetype = (a: string) => {
+    setSelectedArchetypes(prev => {
+      if (prev.includes(a)) {
+        if (prev.length === 1) return prev;
+        return prev.filter(x => x !== a);
+      }
+      return [...prev, a];
+    });
+  };
 
   const handleClose = () => {
     if (isLoading) return;
     setName("");
     setPurpose("");
+    setSelectedArchetypes(['Advisor']);
     onClose();
   };
 
@@ -77,7 +98,7 @@ export default function CreateAgentChat({ open, onClose }: Props) {
         body: JSON.stringify({
           name: trimmedName,
           slug,
-          archetype: preview.archetype,
+          archetype: selectedArchetypes,
           mandate: preview.identityParagraph,
           coreValues: preview.coreValues,
           ethicalBoundaries: preview.ethicalBoundaries,
@@ -99,7 +120,7 @@ export default function CreateAgentChat({ open, onClose }: Props) {
     }
   };
 
-  const canSubmit = name.trim().length > 0 && !isLoading;
+  const canSubmit = name.trim().length > 0 && !isLoading && selectedArchetypes.length > 0;
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
@@ -133,6 +154,39 @@ export default function CreateAgentChat({ open, onClose }: Props) {
               className="font-mono min-h-[100px] resize-none"
               disabled={isLoading}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
+              Archetype <span className="normal-case text-muted-foreground/60">(pick one or more)</span>
+            </Label>
+            <div className="grid grid-cols-2 gap-2">
+              {ARCHETYPE_OPTIONS.map(a => {
+                const selected = selectedArchetypes.includes(a.id);
+                return (
+                  <button
+                    key={a.id}
+                    type="button"
+                    disabled={isLoading}
+                    onClick={() => toggleArchetype(a.id)}
+                    className={`flex items-start gap-2.5 p-3 rounded-lg border text-left transition-all font-mono
+                      ${selected
+                        ? 'border-primary/60 bg-primary/10 text-primary'
+                        : 'border-border/40 bg-card/30 text-muted-foreground hover:border-border hover:text-foreground'
+                      }`}
+                  >
+                    <div className={`mt-0.5 w-4 h-4 rounded border shrink-0 flex items-center justify-center transition-all
+                      ${selected ? 'bg-primary border-primary' : 'border-border/60'}`}>
+                      {selected && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold leading-tight">{a.label}</div>
+                      <div className="text-[10px] leading-snug mt-0.5 opacity-70">{a.desc}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <Button

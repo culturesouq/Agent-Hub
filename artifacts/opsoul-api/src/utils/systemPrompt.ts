@@ -345,12 +345,19 @@ export function buildSystemPrompt(
   parts.push('');
 
   parts.push('## Layer 1 — Foundation (Immutable after first interaction)');
-  const archetypeFoundation = ARCHETYPE_FOUNDATIONS[operator.archetype];
-  if (archetypeFoundation) {
-    parts.push(archetypeFoundation);
-    parts.push('');
-  } else {
-    parts.push(`**Archetype:** ${operator.archetype}`);
+  const archetypes = Array.isArray(operator.archetype)
+    ? operator.archetype
+    : operator.archetype
+      ? [operator.archetype]
+      : [];
+
+  archetypes.forEach(a => {
+    const foundation = ARCHETYPE_FOUNDATIONS[a];
+    if (foundation) parts.push(foundation);
+  });
+
+  if (archetypes.length > 0 && !archetypes.some(a => ARCHETYPE_FOUNDATIONS[a])) {
+    parts.push(`**Archetype:** ${archetypes.join(', ')}`);
   }
   parts.push(`**Mandate:** ${operator.mandate}`);
 

@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Download, Trash2, Plus } from "lucide-react";
 import { format } from "date-fns";
 
-export default function SkillsSection({ operatorId, archetype }: { operatorId: string; archetype: string }) {
+export default function SkillsSection({ operatorId, archetype }: { operatorId: string; archetype: string | string[] }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedPlatformSkill, setSelectedPlatformSkill] = useState<PlatformSkill | null>(null);
@@ -71,7 +71,10 @@ export default function SkillsSection({ operatorId, archetype }: { operatorId: s
 
   const filteredSkills = showAll
     ? platformSkills
-    : platformSkills.filter(s => s.archetype === archetype || s.archetype === 'All');
+    : platformSkills.filter(s => {
+        const archetypes = Array.isArray(archetype) ? archetype : [archetype];
+        return archetypes.includes(s.archetype) || s.archetype === 'All';
+      });
 
   const isInstalled = (platformId: string) => opSkills?.some(s => s.platformSkillId === platformId);
 

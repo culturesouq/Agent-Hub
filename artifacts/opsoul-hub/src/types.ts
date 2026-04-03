@@ -7,7 +7,7 @@ export interface Owner {
 export interface Operator {
   id: string;
   name: string;
-  archetype: string;
+  archetype: string[];
   mandate: string;
   rawIdentity?: string;
   coreValues: string[];
