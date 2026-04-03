@@ -28,6 +28,7 @@ import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import { decryptToken } from '@workspace/opsoul-utils/crypto';
 import type { ChatMessage } from '../utils/openrouter.js';
 import type { Layer2Soul } from '../validation/operator.js';
+import { resolveScope } from '../utils/scopeResolver.js';
 import { eq, and, asc } from 'drizzle-orm';
 
 const router = Router({ mergeParams: true });
@@ -59,6 +60,8 @@ async function resolveOperatorAndConv(
     return null;
   }
 
+  const expectedScope = resolveScope({ operatorId: operator.id, source: 'owner', callerId: req.owner!.ownerId });
+
   const [conv] = await db
     .select()
     .from(conversationsTable)
@@ -66,6 +69,7 @@ async function resolveOperatorAndConv(
       and(
         eq(conversationsTable.id, req.params.convId),
         eq(conversationsTable.operatorId, operator.id),
+        eq(conversationsTable.scopeId, expectedScope.scopeId),
       ),
     );
   if (!conv) {
@@ -212,7 +216,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     ? 'The user is writing in Arabic. Respond in Arabic. Match their dialect if possible.'
     : undefined;
 
-  const promptOpts: BuildSystemPromptOpts = { sycophancyWarning, soulAnchorActive, languageInstruction };
+  const scopeLine = `[SCOPE: ${conv.scopeType} | ${conv.scopeId}]`;
+  const promptOpts: BuildSystemPromptOpts = { sycophancyWarning, soulAnchorActive, languageInstruction, scopeLine };
 
   let kbContext = '';
   let memoryHits: MemoryHit[] = [];

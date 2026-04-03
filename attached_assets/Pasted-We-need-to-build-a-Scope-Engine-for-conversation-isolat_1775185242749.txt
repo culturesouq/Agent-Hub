@@ -1,0 +1,45 @@
+We need to build a Scope Engine for conversation isolation. This is a core architectural feature — not a UI change.
+
+The concept: Every conversation must belong to a scope. A scope is just a unique scopeId string. No two different scopes ever share conversation context. The Operator always knows what scope it is operating in before it responds.
+
+Step 1 — Add scopeId to the conversations table Add a scope_id column (string, not null) and a scope_type column (string — e.g. "owner", "guest", "api", "telegram", "whatsapp") to the conversations table in the DB schema.
+
+
+Step 2 — Build a scope resolver function Create artifacts/opsoul-api/src/utils/scopeResolver.ts:
+
+
+export function resolveScope(params: {
+  operatorId: string
+  source: "owner" | "telegram" | "whatsapp" | "api" | "guest" | string
+  callerId?: string // user ID, token hash, phone number, etc.
+}): { scopeId: string; scopeType: string }
+
+
+Rules:
+* owner + ownerId → scopeId = "owner:{ownerId}"
+* telegram + userId → scopeId = "telegram:{userId}"
+* api + tokenHash → scopeId = "api:{tokenHash}"
+* guest + no callerId → scopeId = "guest:{uuid}" — auto-generate UUID
+* Any future source → scopeId = "{source}:{callerId}"
+
+
+Step 3 — Wire scope resolver into conversation creation In routes/conversations.ts — when a new conversation is created, call resolveScope() and store scopeId + scopeType on the record.
+
+
+Step 4 — Enforce isolation When loading conversation history for context — always filter by operatorId + scopeId together. Never load messages across different scopeIds.
+
+
+Step 5 — Inject scope context into Operator at conversation start In systemPrompt.ts or chat.ts — before Layer 0 injects, prepend a single line:
+[SCOPE: {scopeType} | {scopeId}]
+So the Operator always knows where it is and who it's with.
+
+
+Important:
+* Do not define or hardcode any business logic around scope types
+* The resolver must be extensible — new sources added by just adding a new case
+* No existing conversations should break — make scope_id default to "owner:{ownerId}" for any existing records
+* Do not touch Layer 0, Layer 1, or any identity logic
+
+
+
+This is architecture. Take it step by step and confirm each step before moving to the next.

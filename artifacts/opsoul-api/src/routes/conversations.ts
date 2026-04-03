@@ -5,6 +5,7 @@ import { db } from '@workspace/db';
 import { conversationsTable, operatorsTable, messagesTable } from '@workspace/db';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { eq, and, desc, sql } from 'drizzle-orm';
+import { resolveScope } from '../utils/scopeResolver.js';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -40,11 +41,15 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
+  const scope = resolveScope({ operatorId: op.id, source: 'owner', callerId: req.owner!.ownerId });
+
   const [conv] = await db.insert(conversationsTable).values({
     id: crypto.randomUUID(),
     operatorId: op.id,
     ownerId: req.owner!.ownerId,
     contextName: parsed.data.contextName,
+    scopeId: scope.scopeId,
+    scopeType: scope.scopeType,
     messageCount: 0,
   }).returning();
 

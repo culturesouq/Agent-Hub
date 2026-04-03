@@ -264,6 +264,7 @@ export interface BuildSystemPromptOpts {
   sycophancyWarning?: boolean;
   soulAnchorActive?: boolean;
   languageInstruction?: string;
+  scopeLine?: string;
 }
 
 function buildLayer1Block(operator: OperatorIdentity): string[] {
@@ -295,6 +296,12 @@ export function buildSystemPrompt(
 ): string {
   const soul = operator.layer2Soul;
   const parts: string[] = [];
+
+  // Scope Engine — always the first line so the Operator knows its deployment context
+  if (opts?.scopeLine) {
+    parts.push(opts.scopeLine);
+    parts.push('');
+  }
 
   // Q8 — Soul Anchor: reinject Layer 0 + Layer 1 when context window is filling up
   if (opts?.soulAnchorActive) {

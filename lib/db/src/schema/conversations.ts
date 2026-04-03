@@ -6,6 +6,8 @@ export const conversationsTable = pgTable('conversations', {
   ownerId: text('owner_id').notNull(),
   contextName: text('context_name').notNull(),
   missionContextId: text('mission_context_id'),
+  scopeId: text('scope_id').notNull(),
+  scopeType: text('scope_type').notNull().default('owner'),
   messageCount: integer('message_count').default(0),
   lastMessageAt: timestamp('last_message_at').default(undefined),
   createdAt: timestamp('created_at').defaultNow(),
