@@ -63,7 +63,37 @@ async function runDriftCheck(): Promise<void> {
       }
 
       if (flagged) {
-        console.log(`[DRIFT] ${op.name} (${op.id}): drift score ${driftScore} — flagged for owner review`);
+        console.log(`[DRIFT] ${op.name} (${op.id}): drift score ${driftScore} — flagged, firing curiosity search`);
+
+        // Drift detected — Curiosity fires to find the correct state
+        // Build a claim from the soul text difference
+        try {
+          const { curiositySearch } = await import('../utils/curiosityEngine.js');
+          const claim = `Current behavior and values of an AI operator: ${currentText.slice(0, 300)}`;
+          const curiosity = await curiositySearch(claim, op.id);
+
+          if (curiosity.verified && curiosity.corroborated) {
+            // Log correction as a memory entry so the operator learns
+            const { storeMemory } = await import('../utils/memoryEngine.js');
+            await storeMemory(
+              op.id,
+              op.id,
+              `Drift correction — external sources suggest: ${curiosity.sources[0]?.snippet ?? curiosity.bestSource}`,
+              'pattern',
+              'ai_distilled',
+              0.6,
+            );
+            console.log(
+              `[DRIFT] ${op.name}: curiosity correction stored (tier: ${curiosity.tier}, source: ${curiosity.bestSource})`
+            );
+          } else {
+            console.log(
+              `[DRIFT] ${op.name}: curiosity fired but no corroborated source found — drift remains flagged`
+            );
+          }
+        } catch (err) {
+          console.error(`[DRIFT] ${op.name}: curiosity search failed —`, (err as Error).message);
+        }
       } else {
         console.log(`[DRIFT] ${op.name} (${op.id}): drift score ${driftScore} — within normal range`);
       }
