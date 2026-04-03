@@ -15,8 +15,8 @@ async function resolveOperator(req: Request, res: Response): Promise<string | nu
     .from(operatorsTable)
     .where(
       and(
-        eq(operatorsTable.id, req.params.operatorId),
-        eq(operatorsTable.ownerId, req.owner!.ownerId),
+        eq(operatorsTable.id, String(req.params.operatorId)),
+        eq(operatorsTable.ownerId, String(req.owner!.ownerId)),
       ),
     );
   if (!op) {
@@ -84,7 +84,7 @@ router.get('/:requestId', async (req: Request, res: Response): Promise<void> => 
     .from(capabilityRequestsTable)
     .where(
       and(
-        eq(capabilityRequestsTable.id, req.params.requestId),
+        eq(capabilityRequestsTable.id, String(req.params.requestId)),
         eq(capabilityRequestsTable.operatorId, operatorId),
       ),
     );
@@ -112,7 +112,7 @@ router.patch('/:requestId/respond', async (req: Request, res: Response): Promise
     .from(capabilityRequestsTable)
     .where(
       and(
-        eq(capabilityRequestsTable.id, req.params.requestId),
+        eq(capabilityRequestsTable.id, String(req.params.requestId)),
         eq(capabilityRequestsTable.operatorId, operatorId),
       ),
     );
@@ -125,7 +125,7 @@ router.patch('/:requestId/respond', async (req: Request, res: Response): Promise
   const [updated] = await db
     .update(capabilityRequestsTable)
     .set({ ownerResponse: parsed.data.ownerResponse })
-    .where(eq(capabilityRequestsTable.id, req.params.requestId))
+    .where(eq(capabilityRequestsTable.id, String(req.params.requestId)))
     .returning();
 
   res.json(updated);
@@ -140,7 +140,7 @@ router.delete('/:requestId', async (req: Request, res: Response): Promise<void> 
     .from(capabilityRequestsTable)
     .where(
       and(
-        eq(capabilityRequestsTable.id, req.params.requestId),
+        eq(capabilityRequestsTable.id, String(req.params.requestId)),
         eq(capabilityRequestsTable.operatorId, operatorId),
       ),
     );
@@ -152,7 +152,7 @@ router.delete('/:requestId', async (req: Request, res: Response): Promise<void> 
 
   await db
     .delete(capabilityRequestsTable)
-    .where(eq(capabilityRequestsTable.id, req.params.requestId));
+    .where(eq(capabilityRequestsTable.id, String(req.params.requestId)));
 
   res.json({ ok: true });
 });

@@ -70,7 +70,7 @@ export async function* streamChat(
 
   const stream = await client.chat.completions.create({
     model,
-    messages,
+    messages: messages as Parameters<typeof client.chat.completions.create>[0]['messages'],
     max_tokens: MAX_TOKENS,
     stream: true,
     stream_options: { include_usage: true },
@@ -109,7 +109,7 @@ export async function chatCompletion(
 
   const response = await client.chat.completions.create({
     model,
-    messages,
+    messages: messages as Parameters<typeof client.chat.completions.create>[0]['messages'],
     max_tokens: MAX_TOKENS,
     stream: false,
   });
