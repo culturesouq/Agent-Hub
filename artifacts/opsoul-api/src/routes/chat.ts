@@ -347,6 +347,41 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     userContent = parts;
   }
 
+  // --- SENSES → KB PERSISTENCE ---
+  // Text attachments and URLs are persisted to Learned KB (fire-and-forget)
+  // Images are context-only (no text to store)
+  if (!operator.safeMode && attachments && attachments.length > 0) {
+    for (const att of attachments) {
+      if (att.type === 'text' && att.content.length > 100) {
+        verifyAndStore(
+          operator.id,
+          operator.ownerId,
+          att.content,
+          'file_upload',
+          att.name ?? 'uploaded_document',
+          operator.mandate ?? '',
+        ).catch(() => {});
+      } else if (att.type === 'url') {
+        try {
+          const scraped = await scrapeUrl(att.content);
+          if (scraped && scraped.length > 100) {
+            verifyAndStore(
+              operator.id,
+              operator.ownerId,
+              scraped,
+              att.content,
+              att.content,
+              operator.mandate ?? '',
+            ).catch(() => {});
+          }
+        } catch {
+          // scrape failed — already handled in the parts builder above
+        }
+      }
+    }
+  }
+  // --- END SENSES → KB PERSISTENCE ---
+
   const messages: ChatMessage[] = [
     { role: 'system', content: systemPrompt },
     ...history,
