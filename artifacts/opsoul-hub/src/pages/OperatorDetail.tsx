@@ -24,6 +24,8 @@ import IdentitySection from "@/components/operator/IdentitySection";
 import SkillsSection from "@/components/operator/SkillsSection";
 import TasksSection from "@/components/operator/TasksSection";
 import GrowSection from "@/components/operator/GrowSection";
+import PersonalitySection from "@/components/operator/PersonalitySection";
+import KbSection from "@/components/operator/KbSection";
 
 function OperatorAvatar({ name }: { name: string }) {
   const letter = name.charAt(0).toUpperCase();
@@ -269,7 +271,14 @@ export default function OperatorDetail({ id }: { id: string }) {
     if (!operator) return null;
     switch (activeTab) {
       case "chat":               return <ChatSection operatorId={id} />;
-      case "soul":               return <IdentitySection operator={operator} panel="identity" />;
+      case "soul":
+        return (
+          <div className="space-y-8">
+            <IdentitySection operator={operator} panel="identity" />
+            <PersonalitySection operatorId={id} />
+            <KbSection operatorId={id} />
+          </div>
+        );
       case "skills":             return <SkillsSection operatorId={id} />;
       case "memory":             return <MemorySection operatorId={id} />;
       case "grow":               return <GrowSection operatorId={id} saData={saData} />;
