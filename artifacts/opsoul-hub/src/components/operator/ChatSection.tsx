@@ -5,7 +5,7 @@ import { Conversation, Message } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Trash2, MessageSquarePlus, Send, MessageSquare, Paperclip, X } from "lucide-react";
+import { Trash2, MessageSquarePlus, Send, MessageSquare, Paperclip, X, Mic } from "lucide-react";
 import { format } from "date-fns";
 
 type Attachment = {
@@ -23,8 +23,12 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   const [streamingMsg, setStreamingMsg] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -54,6 +58,55 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setRecording(true);
+    } catch (err) {
+      console.error("[mic] getUserMedia failed:", err);
+    }
+  };
+
+  const stopRecording = async () => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === "inactive") return;
+    setRecording(false);
+    await new Promise<void>((resolve) => {
+      recorder.onstop = () => resolve();
+      recorder.stop();
+      recorder.stream.getTracks().forEach((t) => t.stop());
+    });
+    const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+    if (blob.size < 100) return;
+    setTranscribing(true);
+    try {
+      const token = localStorage.getItem("opsoul_token");
+      const formData = new FormData();
+      formData.append("audio", blob, "recording.webm");
+      const res = await fetch("/api/transcribe", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.transcript) {
+        setInput((prev) => (prev ? `${prev} ${data.transcript}` : data.transcript));
+      }
+    } catch (err) {
+      console.error("[transcribe]", err);
+    } finally {
+      setTranscribing(false);
+      mediaRecorderRef.current = null;
     }
   };
 
@@ -332,10 +385,28 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                   size="icon"
                   className="shrink-0 w-9 h-9 text-muted-foreground hover:text-primary"
                   onClick={() => fileInputRef.current?.click()}
-                  disabled={!!streamingMsg || uploading}
+                  disabled={!!streamingMsg || uploading || recording || transcribing}
                   title="Attach file"
                 >
                   <Paperclip className={`w-4 h-4 ${uploading ? "animate-pulse text-primary" : ""}`} />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className={`shrink-0 w-9 h-9 transition-colors ${
+                    recording
+                      ? "text-red-500 bg-red-500/10 hover:bg-red-500/20"
+                      : transcribing
+                      ? "text-primary"
+                      : "text-muted-foreground hover:text-primary"
+                  }`}
+                  onPointerDown={startRecording}
+                  onPointerUp={stopRecording}
+                  disabled={!!streamingMsg || uploading}
+                  title={recording ? "Release to transcribe" : transcribing ? "Transcribing…" : "Hold to record"}
+                >
+                  <Mic className={`w-4 h-4 ${transcribing ? "animate-pulse" : ""}`} />
                 </Button>
                 <Input
                   value={input}
