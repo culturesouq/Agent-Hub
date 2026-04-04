@@ -201,7 +201,39 @@ router.get('/me', requireAuth, async (req: Request, res: Response): Promise<void
     res.status(404).json({ error: 'Owner not found' });
     return;
   }
-  res.json({ id: owner.id, email: owner.email, name: owner.name, isSovereignAdmin: owner.isSovereignAdmin });
+  res.json({
+    id: owner.id,
+    email: owner.email,
+    name: owner.name,
+    isSovereignAdmin: owner.isSovereignAdmin,
+    createdAt: owner.createdAt,
+  });
+});
+
+router.patch('/me', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const { name } = req.body as { name?: string };
+  const ownerId = req.owner!.ownerId;
+
+  const trimmedName = typeof name === 'string' ? name.trim() : null;
+
+  const [owner] = await db
+    .update(ownersTable)
+    .set({ name: trimmedName || null })
+    .where(eq(ownersTable.id, ownerId))
+    .returning();
+
+  if (!owner) {
+    res.status(404).json({ error: 'Owner not found' });
+    return;
+  }
+
+  res.json({
+    id: owner.id,
+    email: owner.email,
+    name: owner.name,
+    isSovereignAdmin: owner.isSovereignAdmin,
+    createdAt: owner.createdAt,
+  });
 });
 
 export default router;

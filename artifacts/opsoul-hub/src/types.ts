@@ -1,8 +1,9 @@
 export interface Owner {
   id: string;
   email: string;
-  name: string;
+  name: string | null;
   isSovereignAdmin?: boolean;
+  createdAt?: string;
 }
 
 export interface Operator {

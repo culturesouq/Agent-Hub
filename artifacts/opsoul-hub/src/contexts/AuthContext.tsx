@@ -11,6 +11,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name: string) => Promise<void>;
   logout: () => void;
+  refreshOwner: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -93,8 +94,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLocation("/login");
   };
 
+  const refreshOwner = async () => {
+    try {
+      const data = await apiFetch<Owner>("/auth/me");
+      setOwner(data);
+    } catch {}
+  };
+
   return (
-    <AuthContext.Provider value={{ owner, token, isLoading, login, register, logout }}>
+    <AuthContext.Provider value={{ owner, token, isLoading, login, register, logout, refreshOwner }}>
       {children}
     </AuthContext.Provider>
   );
