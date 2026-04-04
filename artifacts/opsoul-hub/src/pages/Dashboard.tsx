@@ -105,12 +105,12 @@ export default function Dashboard() {
       {/* Header */}
       <header className="frosted-nav border-b border-border/30 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
+          <Link href="/" className="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
             <div className="w-7 h-7 rounded-lg bg-primary/15 border border-primary/25 flex items-center justify-center">
               <span className="font-headline font-bold text-sm text-primary">O</span>
             </div>
             <span className="font-headline font-bold text-lg text-foreground tracking-tight">OpSoul</span>
-          </div>
+          </Link>
           <div className="flex items-center gap-4">
             {owner?.isSovereignAdmin && (
               <Link

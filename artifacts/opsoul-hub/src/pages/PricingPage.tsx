@@ -4,7 +4,7 @@ import PublicNav from "@/components/public/PublicNav";
 import PublicFooter from "@/components/public/PublicFooter";
 import NebulaBlobs from "@/components/ui/NebulaBlobs";
 
-const tiers = [
+const tiers: { tier: string; name: string; monthly: string; annual: string; sub: string; features: string[]; cta: string; href?: string; highlighted: boolean }[] = [
   {
     tier: "Tier 01",
     name: "Solo",
@@ -42,7 +42,8 @@ const tiers = [
     annual: "Custom",
     sub: "Unlimited Operators",
     features: ["White-label UI Scaling", "Air-gapped Deployment", "Custom Protocol Rules"],
-    cta: "Request Uplink",
+    cta: "Contact Us",
+    href: "/contact",
     highlighted: false,
   },
 ];
@@ -179,7 +180,7 @@ export default function PricingPage() {
                   </div>
                 ))}
               </div>
-              <Link href="/login">
+              <Link href={t.href ?? "/login"}>
                 <button
                   className={`w-full py-3 font-label uppercase tracking-widest text-[10px] transition-all ${
                     t.highlighted

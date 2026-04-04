@@ -13,6 +13,7 @@ export default function PublicFooter() {
         <div className="flex gap-8">
           <a className="text-slate-500 hover:text-secondary font-label uppercase tracking-widest text-[10px] hover:translate-x-1 transition-transform" href="/docs">Documentation</a>
           <a className="text-slate-500 hover:text-secondary font-label uppercase tracking-widest text-[10px] hover:translate-x-1 transition-transform" href="/pricing">Pricing</a>
+          <a className="text-slate-500 hover:text-secondary font-label uppercase tracking-widest text-[10px] hover:translate-x-1 transition-transform" href="/support">Support</a>
           <a className="text-slate-500 hover:text-secondary font-label uppercase tracking-widest text-[10px] hover:translate-x-1 transition-transform" href="/contact">Contact</a>
         </div>
         <div className="flex items-center gap-3 text-secondary opacity-70 hover:opacity-100 transition-opacity">
