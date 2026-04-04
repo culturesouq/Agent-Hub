@@ -8,7 +8,7 @@ import {
   User, Zap, Archive, Network,
   CheckSquare, FileText, Settings2, Key, Code2, AlertTriangle,
   Radio, MessageCircle, Send, Star, ChevronRight, Bell,
-  Shield, Menu, X, Cpu,
+  Shield, Menu, X, Cpu, LayoutGrid, ShieldAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +17,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 
 import ChatSection from "@/components/operator/ChatSection";
+import MissionContextsSection from "@/components/operator/MissionContextsSection";
+import CapabilityRequestsSection from "@/components/operator/CapabilityRequestsSection";
 import MemorySection from "@/components/operator/MemorySection";
 import IntegrationsSection from "@/components/operator/IntegrationsSection";
 import SettingsSection from "@/components/operator/SettingsSection";
@@ -139,10 +141,12 @@ const NAV_MAIN: NavItem[] = [
   {
     kind: "group", id: "brain", label: "Brain", icon: Brain, depth: 0,
     children: [
-      { kind: "leaf", id: "soul",   label: "Soul",   icon: User,     depth: 1 },
-      { kind: "leaf", id: "skills", label: "Skills", icon: Zap,      depth: 1 },
-      { kind: "leaf", id: "memory", label: "Memory", icon: Archive,  depth: 1 },
-      { kind: "leaf", id: "grow",   label: "Growth", icon: Activity, depth: 1 },
+      { kind: "leaf", id: "soul",                 label: "Soul",             icon: User,         depth: 1 },
+      { kind: "leaf", id: "mission-contexts",     label: "Missions",         icon: LayoutGrid,   depth: 1 },
+      { kind: "leaf", id: "skills",               label: "Skills",           icon: Zap,          depth: 1 },
+      { kind: "leaf", id: "memory",               label: "Memory",           icon: Archive,      depth: 1 },
+      { kind: "leaf", id: "capability-requests",  label: "Permissions",      icon: ShieldAlert,  depth: 1 },
+      { kind: "leaf", id: "grow",                 label: "Growth",           icon: Activity,     depth: 1 },
     ],
   },
   { kind: "leaf", id: "tasks",       label: "Tasks",       icon: CheckSquare, depth: 0 },
@@ -171,7 +175,7 @@ const NAV_BOTTOM: NavItem[] = [
   { kind: "leaf", id: "feedback", label: "Leave Feedback", icon: Star, depth: 0 },
 ];
 
-const BRAIN_LEAVES    = ["soul", "skills", "memory", "grow"];
+const BRAIN_LEAVES    = ["soul", "mission-contexts", "skills", "memory", "capability-requests", "grow"];
 const SETTINGS_LEAVES = ["settings.model", "settings.secrets", "settings.api", "settings.behavior", "settings.danger"];
 const CHANNELS_LEAVES = ["channels.whatsapp", "channels.telegram"];
 
@@ -282,7 +286,9 @@ export default function OperatorDetail({ id }: { id: string }) {
           </div>
         );
       case "skills":             return <SkillsSection operatorId={id} archetype={operator?.archetype ?? ['All']} />;
-      case "memory":             return <MemorySection operatorId={id} />;
+      case "memory":              return <MemorySection operatorId={id} />;
+      case "mission-contexts":   return <MissionContextsSection operatorId={id} />;
+      case "capability-requests": return <CapabilityRequestsSection operatorId={id} />;
       case "grow":               return <GrowSection operatorId={id} saData={saData} />;
       case "tasks":              return <TasksSection operatorId={id} />;
       case "files":              return <FilesSection operator={operator} />;

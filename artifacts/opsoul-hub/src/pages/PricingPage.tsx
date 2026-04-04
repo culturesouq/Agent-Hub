@@ -8,7 +8,8 @@ const tiers = [
   {
     tier: "Tier 01",
     name: "Solo",
-    price: "$49",
+    monthly: "$49",
+    annual: "$41",
     sub: "1 Active Operator",
     features: ["Full Neural Integration", "24/7 Autonomous Sync", "Standard Encryption"],
     cta: "Initialize Solo",
@@ -17,7 +18,8 @@ const tiers = [
   {
     tier: "Tier 02",
     name: "Pro",
-    price: "$99",
+    monthly: "$99",
+    annual: "$83",
     sub: "3 Active Operators",
     features: ["Cross-Node Cooperation", "Advanced Heuristics", "Priority Protocol Access"],
     cta: "Deploy Pro",
@@ -26,7 +28,8 @@ const tiers = [
   {
     tier: "Tier 03",
     name: "Studio",
-    price: "$249",
+    monthly: "$249",
+    annual: "$207",
     sub: "10 Active Operators",
     features: ["Fleet Management UI", "Shared Context Pools", "Dedicated Support Node"],
     cta: "Launch Studio",
@@ -35,7 +38,8 @@ const tiers = [
   {
     tier: "Tier 04",
     name: "Enterprise",
-    price: "Custom",
+    monthly: "Custom",
+    annual: "Custom",
     sub: "Unlimited Operators",
     features: ["White-label UI Scaling", "Air-gapped Deployment", "Custom Protocol Rules"],
     cta: "Request Uplink",
@@ -148,8 +152,8 @@ export default function PricingPage() {
               </div>
               <div className="mb-8">
                 <div className="text-4xl font-headline font-bold text-on-surface">
-                  {t.price}
-                  {t.price !== "Custom" && <span className="text-sm font-light text-slate-500">/mo</span>}
+                  {annual ? t.annual : t.monthly}
+                  {(annual ? t.annual : t.monthly) !== "Custom" && <span className="text-sm font-light text-slate-500">/mo</span>}
                 </div>
                 <p className={`text-xs mt-2 font-label uppercase tracking-widest ${t.highlighted ? "text-primary" : "text-slate-500"}`}>{t.sub}</p>
               </div>

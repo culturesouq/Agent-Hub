@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { apiFetch } from "@/lib/api";
 import { Operator, HealthScore } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { LogOut, Plus, Cpu } from "lucide-react";
+import { LogOut, Plus, Cpu, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import CreateAgentChat from "@/components/operator/CreateAgentChat";
 import NebulaBlobs from "@/components/ui/NebulaBlobs";
@@ -90,7 +90,7 @@ function OperatorCard({ operator, onClick }: { operator: Operator; onClick: () =
 }
 
 export default function Dashboard() {
-  const { logout } = useAuth();
+  const { logout, owner } = useAuth();
   const [, setLocation] = useLocation();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
@@ -111,13 +111,23 @@ export default function Dashboard() {
             </div>
             <span className="font-headline font-bold text-lg text-foreground tracking-tight">OpSoul</span>
           </div>
-          <button
-            onClick={logout}
-            className="font-label text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
-            data-testid="button-logout"
-          >
-            <LogOut className="w-3.5 h-3.5" /> Sign out
-          </button>
+          <div className="flex items-center gap-4">
+            {owner?.isSovereignAdmin && (
+              <Link
+                href="/admin"
+                className="font-label text-sm text-primary/80 hover:text-primary transition-colors flex items-center gap-1.5 border border-primary/20 rounded px-2.5 py-1 hover:bg-primary/10"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" /> Admin Console
+              </Link>
+            )}
+            <button
+              onClick={logout}
+              className="font-label text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
+              data-testid="button-logout"
+            >
+              <LogOut className="w-3.5 h-3.5" /> Sign out
+            </button>
+          </div>
         </div>
       </header>
 

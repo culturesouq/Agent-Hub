@@ -1,14 +1,39 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import PublicNav from "@/components/public/PublicNav";
 import PublicFooter from "@/components/public/PublicFooter";
 import NebulaBlobs from "@/components/ui/NebulaBlobs";
+import { apiFetch } from "@/lib/api";
 
 export default function ContactPage() {
   const [submitted, setSubmitted] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  function handleSubmit(e: React.FormEvent) {
+  const nameRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const subjectRef = useRef<HTMLSelectElement>(null);
+  const messageRef = useRef<HTMLTextAreaElement>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setSubmitted(true);
+    setError(null);
+    setIsLoading(true);
+    try {
+      await apiFetch("/contact", {
+        method: "POST",
+        body: JSON.stringify({
+          name: nameRef.current?.value ?? "",
+          email: emailRef.current?.value ?? "",
+          subject: subjectRef.current?.value ?? "General Inquiry",
+          message: messageRef.current?.value ?? "",
+        }),
+      });
+      setSubmitted(true);
+    } catch (err: any) {
+      setError(err?.message ?? "Failed to transmit. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
@@ -84,6 +109,7 @@ export default function ContactPage() {
                   <div className="space-y-2">
                     <label className="font-label uppercase tracking-widest text-[10px] text-on-surface-variant ml-1 block">Full Name</label>
                     <input
+                      ref={nameRef}
                       className="w-full bg-surface-container-highest border-none outline-none focus:ring-1 focus:ring-primary/50 text-on-surface placeholder:text-slate-600 px-4 py-4 transition-all font-sans rounded-sm"
                       placeholder="OPERATOR NAME"
                       type="text"
@@ -93,6 +119,7 @@ export default function ContactPage() {
                   <div className="space-y-2">
                     <label className="font-label uppercase tracking-widest text-[10px] text-on-surface-variant ml-1 block">Email Address</label>
                     <input
+                      ref={emailRef}
                       className="w-full bg-surface-container-highest border-none outline-none focus:ring-1 focus:ring-primary/50 text-on-surface placeholder:text-slate-600 px-4 py-4 transition-all font-sans rounded-sm"
                       placeholder="ADDRESS@PROTOCOL.COM"
                       type="email"
@@ -102,7 +129,10 @@ export default function ContactPage() {
                 </div>
                 <div className="space-y-2">
                   <label className="font-label uppercase tracking-widest text-[10px] text-on-surface-variant ml-1 block">Transmission Subject</label>
-                  <select className="w-full bg-surface-container-highest border-none outline-none focus:ring-1 focus:ring-primary/50 text-on-surface px-4 py-4 appearance-none cursor-pointer font-sans rounded-sm">
+                  <select
+                    ref={subjectRef}
+                    className="w-full bg-surface-container-highest border-none outline-none focus:ring-1 focus:ring-primary/50 text-on-surface px-4 py-4 appearance-none cursor-pointer font-sans rounded-sm"
+                  >
                     <option>General Inquiry</option>
                     <option>Sales Engineering</option>
                     <option>Enterprise Deployment</option>
@@ -113,18 +143,23 @@ export default function ContactPage() {
                 <div className="space-y-2">
                   <label className="font-label uppercase tracking-widest text-[10px] text-on-surface-variant ml-1 block">Message Body</label>
                   <textarea
+                    ref={messageRef}
                     className="w-full bg-surface-container-highest border-none outline-none focus:ring-1 focus:ring-primary/50 text-on-surface placeholder:text-slate-600 px-4 py-4 transition-all resize-none font-sans rounded-sm"
                     placeholder="ENCODE YOUR MESSAGE HERE..."
                     rows={5}
                     required
                   />
                 </div>
+                {error && (
+                  <p className="text-destructive font-label text-[10px] uppercase tracking-widest">{error}</p>
+                )}
                 <div className="pt-4">
                   <button
                     type="submit"
-                    className="w-full md:w-auto bg-primary text-on-primary font-label uppercase tracking-[0.2em] font-bold px-12 py-5 hover:bg-primary/90 transition-all group flex items-center justify-center gap-3"
+                    disabled={isLoading}
+                    className="w-full md:w-auto bg-primary text-on-primary font-label uppercase tracking-[0.2em] font-bold px-12 py-5 hover:bg-primary/90 transition-all group flex items-center justify-center gap-3 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    Transmit Signal
+                    {isLoading ? "Transmitting..." : "Transmit Signal"}
                     <span className="material-symbols-outlined text-sm group-hover:translate-x-1 transition-transform select-none">send</span>
                   </button>
                 </div>

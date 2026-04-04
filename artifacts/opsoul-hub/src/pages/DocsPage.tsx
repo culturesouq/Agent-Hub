@@ -106,7 +106,7 @@ export default function DocsPage() {
             </div>
 
             {/* Page header */}
-            <header className="mb-12 relative">
+            <header id="overview" className="mb-12 relative">
               <div className="status-beacon absolute -left-6 top-6" />
               <h1 className="text-6xl font-headline font-bold text-on-surface tracking-tighter mb-4">
                 What is an <span className="text-primary">Operator</span>?
@@ -132,7 +132,7 @@ export default function DocsPage() {
 
             {/* Content */}
             <div className="space-y-12">
-              <section>
+              <section id="core-architecture">
                 <h2 className="text-2xl font-headline font-semibold text-primary mb-6 flex items-center gap-3">
                   <span className="w-8 h-px bg-primary/30" /> Core Architecture
                 </h2>
@@ -154,7 +154,7 @@ export default function DocsPage() {
                 </div>
               </section>
 
-              <section>
+              <section id="initialization">
                 <h2 className="text-2xl font-headline font-semibold text-primary mb-6 flex items-center gap-3">
                   <span className="w-8 h-px bg-primary/30" /> Initializing Your First Operator
                 </h2>
@@ -218,10 +218,9 @@ export default function DocsPage() {
           <div className="sticky top-24">
             <div className="text-[9px] font-label uppercase tracking-[0.2em] text-slate-500 font-bold mb-6">On this page</div>
             <nav className="space-y-4">
-              <a className="block text-[10px] font-label uppercase tracking-widest text-primary border-l border-primary pl-4" href="#">Overview</a>
-              <a className="block text-[10px] font-label uppercase tracking-widest text-slate-500 hover:text-on-surface pl-4 transition-colors" href="#">Core Architecture</a>
-              <a className="block text-[10px] font-label uppercase tracking-widest text-slate-500 hover:text-on-surface pl-4 transition-colors" href="#">Initialization</a>
-              <a className="block text-[10px] font-label uppercase tracking-widest text-slate-500 hover:text-on-surface pl-4 transition-colors" href="#">Safety Protocols</a>
+              <a className="block text-[10px] font-label uppercase tracking-widest text-primary border-l border-primary pl-4" href="#overview">Overview</a>
+              <a className="block text-[10px] font-label uppercase tracking-widest text-slate-500 hover:text-on-surface pl-4 transition-colors" href="#core-architecture">Core Architecture</a>
+              <a className="block text-[10px] font-label uppercase tracking-widest text-slate-500 hover:text-on-surface pl-4 transition-colors" href="#initialization">Initialization</a>
             </nav>
             <div className="mt-12 p-4 bg-secondary/5 rounded-xl border border-secondary/10">
               <div className="text-secondary text-[10px] font-bold font-label uppercase tracking-widest mb-2">System Status</div>
