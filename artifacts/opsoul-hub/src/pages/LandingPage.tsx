@@ -9,7 +9,7 @@ export default function LandingPage() {
           <div className="lg:col-span-7">
             <div className="flex items-center gap-3 mb-6">
               <span className="status-beacon" />
-              <span className="font-label uppercase tracking-[0.2em] text-[10px] text-secondary">System Online: v4.0.1</span>
+              <span className="font-label uppercase tracking-[0.2em] text-[10px] text-secondary">Now in early access</span>
             </div>
             <h1 className="headline-lg text-6xl md:text-8xl font-bold text-on-surface mb-8">
               Your Permanent <br />

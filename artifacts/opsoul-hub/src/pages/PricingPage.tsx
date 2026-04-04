@@ -9,7 +9,7 @@ const tiers: { tier: string; name: string; monthly: string; annual: string; sub:
     monthly: "$49",
     annual: "$41",
     sub: "1 Active Operator",
-    features: ["Persistent memory", "Full Soul configuration", "Grows with every conversation"],
+    features: ["Persistent memory", "Full Soul configuration", "Grows with every conversation", "1 active Operator"],
     cta: "Get Started",
     highlighted: false,
   },
@@ -19,8 +19,8 @@ const tiers: { tier: string; name: string; monthly: string; annual: string; sub:
     monthly: "$99",
     annual: "$83",
     sub: "3 Active Operators",
-    features: ["3 independent Operators", "Separate memory per Operator", "Priority support"],
-    cta: "Start Pro",
+    features: ["3 independent Operators", "Separate memory per Operator", "Priority support", "All Solo features"],
+    cta: "Get Pro",
     highlighted: true,
   },
   {
@@ -29,8 +29,8 @@ const tiers: { tier: string; name: string; monthly: string; annual: string; sub:
     monthly: "$249",
     annual: "$207",
     sub: "10 Active Operators",
-    features: ["10 Operators in one workspace", "Shared context across Operators", "Dedicated support"],
-    cta: "Start Studio",
+    features: ["10 Operators in one workspace", "Shared context across Operators", "Dedicated support", "All Pro features"],
+    cta: "Get Studio",
     highlighted: false,
   },
   {
@@ -39,7 +39,7 @@ const tiers: { tier: string; name: string; monthly: string; annual: string; sub:
     monthly: "Custom",
     annual: "Custom",
     sub: "Unlimited Operators",
-    features: ["Unlimited Operators", "Custom deployment", "White-label available"],
+    features: ["Unlimited Operators", "Custom deployment", "White-label available", "SLA + dedicated account manager"],
     cta: "Contact Us",
     href: "/contact",
     highlighted: false,
@@ -50,7 +50,7 @@ const faqs = [
   { q: "Free Trial", size: "md:col-span-1", desc: "Every plan starts with a 14-day free trial. No credit card required — sign up, create your first Operator, and explore the platform before committing." },
   { q: "Changing Plans", size: "md:col-span-2", desc: "You can upgrade or downgrade your plan at any time from billing settings. Any unused time on your current plan is prorated and credited to your next billing cycle." },
   { q: "What is a Founding Operator?", size: "md:col-span-2", desc: "Founding Operators are our early believers. You aren't just a user; you are a permanent part of the OpSoul ledger. You get the lowest possible price point and every future feature upgrade for life. No exceptions." },
-  { q: "Deleting an Operator", size: "md:col-span-1", desc: "Deleting an Operator is permanent. All of its memory, conversations, and configuration are removed and cannot be recovered. You can create a new Operator in the freed slot immediately." },
+  { q: "Deleting an Operator", size: "md:col-span-1", desc: "When you delete an Operator, it enters a 30-day recovery window. You can restore it from your dashboard within that period. After 30 days it is permanently removed." },
   { q: "What you're paying for", size: "md:col-span-3", desc: "We don't gate features based on plan. Every Operator — regardless of whether you're on Solo or Enterprise — has the same full capabilities. You're paying for how many Operators you run simultaneously, not for a better or worse version of the AI." },
 ];
 
