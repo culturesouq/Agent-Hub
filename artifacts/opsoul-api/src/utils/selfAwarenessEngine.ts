@@ -40,7 +40,7 @@ export interface HealthScore {
 
 export interface IdentityState {
   name: string;
-  archetype: string;
+  archetype: string[];
   mandate: string;
   coreValues: string[] | null;
   ethicalBoundaries: string[] | null;

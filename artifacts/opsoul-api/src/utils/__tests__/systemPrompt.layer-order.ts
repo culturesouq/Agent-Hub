@@ -2,7 +2,7 @@ import { buildSystemPrompt, LAYER_0_HUMAN_CORE, LAYER_4_OPERATIONAL_RULES } from
 
 const MOCK_OPERATOR = {
   name: 'TestAgent',
-  archetype: 'Pragmatic Guide',
+  archetype: ['Pragmatic Guide'],
   mandate: 'Help users accomplish tasks efficiently',
   coreValues: ['clarity', 'reliability'],
   ethicalBoundaries: ['never mislead', 'never cause harm'],

@@ -5,7 +5,7 @@ export type { MemoryHit };
 
 export interface OperatorIdentity {
   name: string;
-  archetype: string;
+  archetype: string[];
   rawIdentity?: string | null;
   mandate: string;
   coreValues: string[] | null;
