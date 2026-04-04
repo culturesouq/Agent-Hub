@@ -95,15 +95,8 @@
   --app-font-body:     'Manrope', sans-serif;
   --app-font-label:    'Inter', sans-serif;
 
-  /* Stitch radius scale (MD3-aligned, canonical) */
-  --radius:     0.5rem;
-  --radius-xs:  0.125rem;
-  --radius-sm:  0.25rem;
-  --radius-md:  0.5rem;
-  --radius-lg:  0.75rem;
-  --radius-xl:  1rem;
-  --radius-2xl: 1.25rem;
-  --radius-3xl: 1.5rem;
+  /* --radius: canonical shorthand used by shadcn/ui components */
+  --radius: 0.5rem;
 
   /* Elevation / overlay helpers */
   --button-outline: rgba(255,255,255,.10);
@@ -183,7 +176,7 @@
     135deg,
     rgba(224, 182, 255, 0.35),
     rgba(140, 212, 195, 0.30),
-    rgba(207, 188, 255, 0.25)
+    rgba(255, 106, 159, 0.25)
   );
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
