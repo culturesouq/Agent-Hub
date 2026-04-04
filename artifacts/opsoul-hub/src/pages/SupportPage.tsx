@@ -3,9 +3,9 @@ import PublicLayout from "@/components/public/PublicLayout";
 import { Link } from "wouter";
 
 const faqs = [
-  { q: "How is billing calculated?", a: "Billing is simple — you pay a flat monthly or annual rate based on your plan. There are no per-message or per-conversation charges. Upgrading or downgrading your plan is prorated automatically at your next billing cycle." },
+  { q: "How is billing calculated?", a: "Billing is straightforward — you pay a flat monthly or annual rate based on your plan. Upgrading or downgrading is handled at the plan level; any credit for unused time is applied to your next billing cycle." },
   { q: "Why is my Operator not responding?", a: "Try refreshing the page or starting a new conversation. If the issue continues, check our status page to see if there is a known incident. You can also reach our support team and we'll investigate within a few hours." },
-  { q: "Can I transfer Operator ownership?", a: "Yes. You can initiate a transfer from the Operator's Settings tab. Both the current owner and the new owner will receive a confirmation email — once both parties confirm, the Operator and all its memory moves to the new account." },
+  { q: "Can I transfer Operator ownership?", a: "Yes. You can initiate a transfer from the Operator's Settings tab. The transfer requires confirmation from both parties before the Operator and all its memory moves to the new account." },
   { q: "What happens if I delete an Operator?", a: "Deletion is permanent. All of the Operator's memory, conversations, Soul configuration, and tasks are removed and cannot be recovered. Consider exporting or noting any key context before deleting. You can create a new Operator in the freed slot immediately." },
   { q: "Is my data encrypted?", a: "Yes. All data — including conversations, memory, and Soul configuration — is encrypted in transit and at rest. We do not have access to your Operator's conversations or private memory." },
   { q: "How do I run more Operators?", a: "The number of Operators you can run simultaneously depends on your plan. You can upgrade at any time from your billing settings, or add individual Operator slots as a monthly add-on without switching plans." },
