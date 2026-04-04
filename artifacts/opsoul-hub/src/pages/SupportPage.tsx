@@ -1,6 +1,5 @@
 import { useState } from "react";
-import PublicNav from "@/components/public/PublicNav";
-import PublicFooter from "@/components/public/PublicFooter";
+import PublicLayout from "@/components/public/PublicLayout";
 import { Link } from "wouter";
 
 const faqs = [
@@ -16,43 +15,37 @@ export default function SupportPage() {
   const [open, setOpen] = useState<number | null>(null);
 
   return (
-    <div className="min-h-screen bg-background text-on-surface selection:bg-primary/30">
-      <div className="fixed inset-0 dot-grid opacity-15 pointer-events-none z-0" />
+    <PublicLayout>
+      <main className="relative z-10 pt-20 min-h-screen">
+        {/* Status Banner — sits directly below the fixed nav */}
+        <div className="sticky top-16 w-full bg-secondary-container/20 backdrop-blur-sm py-2 px-6 md:px-8 flex justify-center items-center gap-3 z-40 border-b border-outline-variant/5">
+          <span className="status-beacon" />
+          <span className="font-label text-[10px] uppercase tracking-[0.2em] text-secondary">All systems operational</span>
+        </div>
 
-      {/* Status Banner */}
-      <div className="w-full bg-secondary-container/20 py-2 px-8 flex justify-center items-center gap-3 relative z-50">
-        <div className="w-2 h-2 rounded-full bg-secondary shadow-[0_0_10px_#40cef3]" />
-        <span className="font-label text-[10px] uppercase tracking-[0.2em] text-secondary">All systems operational</span>
-      </div>
-
-      <div className="pt-10">
-        <PublicNav />
-      </div>
-
-      <main className="relative z-10 pt-32 min-h-screen">
-        <div className="max-w-6xl mx-auto px-8 pb-24">
+        <div className="max-w-7xl mx-auto px-6 md:px-8 pb-24 pt-12">
 
           {/* Hero */}
           <section className="mb-20 text-center">
             <h1 className="font-headline text-5xl md:text-7xl font-bold tracking-tight text-on-surface mb-8">
-              Support <span className="text-primary">Interface</span>
+              Support <span className="text-primary">Center</span>
             </h1>
             <div className="max-w-3xl mx-auto relative group">
               <div className="absolute -inset-1 bg-gradient-to-r from-primary/20 to-secondary/20 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000" />
-              <div className="relative flex items-center bg-surface-container-highest/60 backdrop-blur-xl rounded-2xl p-2 border border-white/5 shadow-2xl">
-                <span className="material-symbols-outlined ml-4 text-outline select-none">search</span>
+              <div className="relative flex items-center bg-surface-container-highest/60 backdrop-blur-xl rounded-2xl p-2 border border-outline-variant/10 shadow-2xl">
+                <span className="material-symbols-outlined ml-4 text-on-surface-variant select-none">search</span>
                 <input
-                  className="w-full bg-transparent border-none outline-none text-xl py-4 px-4 text-on-surface placeholder:text-outline/50 font-sans"
+                  className="w-full bg-transparent border-none outline-none text-xl py-4 px-4 text-on-surface placeholder:text-on-surface-variant/50 font-sans"
                   placeholder="What do you need help with?"
                   type="text"
                 />
-                <kbd className="hidden md:inline-flex items-center gap-1 px-3 py-1 mr-4 bg-white/5 rounded-lg border border-white/10 text-outline text-xs font-label">
+                <kbd className="hidden md:inline-flex items-center gap-1 px-3 py-1 mr-4 bg-white/5 rounded-lg border border-outline-variant/20 text-on-surface-variant text-xs font-label">
                   <span className="text-sm">⌘</span>K
                 </kbd>
               </div>
             </div>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
-              <span className="text-[10px] font-label uppercase tracking-widest text-outline">Quick links:</span>
+              <span className="text-[10px] font-label uppercase tracking-widest text-on-surface-variant">Quick links:</span>
               {["Getting started", "Billing", "Operator not responding", "Delete an Operator", "Channels"].map((link, i) => (
                 <span key={link} className="flex items-center gap-3">
                   {i > 0 && <span className="text-outline-variant/20">•</span>}
@@ -64,39 +57,39 @@ export default function SupportPage() {
 
           {/* Contact Cards */}
           <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-24">
-            <div className="glass-panel p-8 rounded-3xl border border-white/5 hover:border-primary/20 transition-all group relative overflow-hidden">
+            <div className="glass-panel p-6 rounded-2xl border border-outline-variant/10 hover:border-primary/20 transition-all group relative overflow-hidden">
               <div className="absolute top-4 right-4">
-                <div className="w-3 h-3 rounded-full bg-secondary shadow-[0_0_10px_#40cef3] animate-pulse" />
+                <span className="status-beacon beacon-pulse" />
               </div>
               <div className="bg-primary-container/20 w-12 h-12 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                 <span className="material-symbols-outlined text-primary text-3xl select-none">forum</span>
               </div>
               <h3 className="font-headline text-xl font-bold mb-2 text-on-surface">Live chat</h3>
-              <p className="text-on-surface-variant text-sm mb-6 leading-relaxed font-sans">Direct frequency connection with our system architects. Wait time: ~2 mins.</p>
+              <p className="text-on-surface-variant text-sm mb-6 leading-relaxed font-sans">Connect directly with our support team. Average wait time: ~2 minutes.</p>
               <button className="text-[10px] font-label uppercase tracking-widest text-primary flex items-center gap-2 group-hover:translate-x-1 transition-transform">
-                Establish Link <span className="material-symbols-outlined text-sm select-none">arrow_forward</span>
+                Start Chat <span className="material-symbols-outlined text-sm select-none">arrow_forward</span>
               </button>
             </div>
 
-            <div className="glass-panel p-8 rounded-3xl border border-white/5 hover:border-primary/20 transition-all group">
+            <div className="glass-panel p-6 rounded-2xl border border-outline-variant/10 hover:border-primary/20 transition-all group">
               <div className="bg-secondary-container/20 w-12 h-12 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                 <span className="material-symbols-outlined text-secondary text-3xl select-none">mail</span>
               </div>
               <h3 className="font-headline text-xl font-bold mb-2 text-on-surface">Email (24hr)</h3>
-              <p className="text-on-surface-variant text-sm mb-6 leading-relaxed font-sans">Send an encrypted transmission. Average response window: 14 hours.</p>
+              <p className="text-on-surface-variant text-sm mb-6 leading-relaxed font-sans">Send us a message and we'll get back to you within 14 hours.</p>
               <button className="text-[10px] font-label uppercase tracking-widest text-secondary flex items-center gap-2 group-hover:translate-x-1 transition-transform">
-                Open Terminal <span className="material-symbols-outlined text-sm select-none">arrow_forward</span>
+                Email Us <span className="material-symbols-outlined text-sm select-none">arrow_forward</span>
               </button>
             </div>
 
-            <div className="glass-panel p-8 rounded-3xl border border-white/5 hover:border-primary/20 transition-all group">
+            <div className="glass-panel p-6 rounded-2xl border border-outline-variant/10 hover:border-primary/20 transition-all group">
               <div className="bg-[#6200ea]/20 w-12 h-12 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                 <span className="material-symbols-outlined text-[#cfbcff] text-3xl select-none">groups</span>
               </div>
               <h3 className="font-headline text-xl font-bold mb-2 text-on-surface">Community forum</h3>
-              <p className="text-on-surface-variant text-sm mb-6 leading-relaxed font-sans">Collaborate with other protocol operators and shared intelligence nodes.</p>
+              <p className="text-on-surface-variant text-sm mb-6 leading-relaxed font-sans">Get help from other OpSoul users and share what you've built.</p>
               <button className="text-[10px] font-label uppercase tracking-widest text-[#cfbcff] flex items-center gap-2 group-hover:translate-x-1 transition-transform">
-                Access Network <span className="material-symbols-outlined text-sm select-none">arrow_forward</span>
+                Join Community <span className="material-symbols-outlined text-sm select-none">arrow_forward</span>
               </button>
             </div>
           </section>
@@ -104,15 +97,15 @@ export default function SupportPage() {
           {/* FAQ */}
           <section className="max-w-4xl mx-auto">
             <div className="flex items-center gap-4 mb-12">
-              <div className="h-px flex-1 bg-gradient-to-r from-transparent to-white/10" />
+              <div className="h-px flex-1 bg-gradient-to-r from-transparent to-outline-variant/20" />
               <h2 className="font-headline text-3xl font-bold uppercase tracking-widest text-center px-4 text-on-surface">Knowledge Base</h2>
-              <div className="h-px flex-1 bg-gradient-to-l from-transparent to-white/10" />
+              <div className="h-px flex-1 bg-gradient-to-l from-transparent to-outline-variant/20" />
             </div>
             <div className="space-y-4">
               {faqs.map((faq, i) => (
                 <div
                   key={faq.q}
-                  className="bg-surface-container-low/40 rounded-2xl border border-white/5 hover:bg-surface-container-low/80 transition-all cursor-pointer"
+                  className="bg-surface-container-low/40 rounded-2xl border border-outline-variant/10 hover:bg-surface-container-low/80 transition-all cursor-pointer"
                   onClick={() => setOpen(open === i ? null : i)}
                 >
                   <div className="flex justify-between items-center p-6">
@@ -130,24 +123,22 @@ export default function SupportPage() {
           </section>
 
           {/* Still need help CTA */}
-          <section className="mt-32 p-12 rounded-[2rem] bg-gradient-to-br from-primary/10 to-transparent border border-white/5 relative overflow-hidden">
+          <section className="mt-32 p-12 rounded-2xl bg-gradient-to-br from-primary/10 to-transparent border border-outline-variant/10 relative overflow-hidden">
             <div className="absolute -right-20 -bottom-20 w-80 h-80 bg-primary/20 rounded-full blur-[100px]" />
             <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
               <div>
-                <h2 className="font-headline text-3xl font-bold mb-2 text-on-surface">Still need architectural assistance?</h2>
-                <p className="text-on-surface-variant font-sans">Our support engineers are standing by for advanced node configuration.</p>
+                <h2 className="font-headline text-3xl font-bold mb-2 text-on-surface">Still need help?</h2>
+                <p className="text-on-surface-variant font-sans">Our support team is ready to assist with anything.</p>
               </div>
               <Link href="/contact">
-                <button className="bg-primary-container text-on-primary-container px-10 py-4 rounded-xl font-bold font-label hover:shadow-[0_0_30px_rgba(205,150,255,0.3)] transition-all whitespace-nowrap uppercase tracking-widest text-[10px]">
-                  Initialize Priority Support
+                <button className="bg-primary-container text-on-primary-container px-10 py-4 font-bold font-label hover:shadow-[0_0_30px_rgba(205,150,255,0.3)] transition-all whitespace-nowrap uppercase tracking-widest text-[10px]">
+                  Contact Support
                 </button>
               </Link>
             </div>
           </section>
         </div>
       </main>
-
-      <PublicFooter />
-    </div>
+    </PublicLayout>
   );
 }

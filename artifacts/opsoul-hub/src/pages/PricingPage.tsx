@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import PublicNav from "@/components/public/PublicNav";
-import PublicFooter from "@/components/public/PublicFooter";
-import NebulaBlobs from "@/components/ui/NebulaBlobs";
+import PublicLayout from "@/components/public/PublicLayout";
 
 const tiers: { tier: string; name: string; monthly: string; annual: string; sub: string; features: string[]; cta: string; href?: string; highlighted: boolean }[] = [
   {
@@ -60,12 +58,8 @@ export default function PricingPage() {
   const [annual, setAnnual] = useState(true);
 
   return (
-    <div className="min-h-screen bg-background text-on-surface selection:bg-primary-container selection:text-on-primary-container relative overflow-hidden">
-      <NebulaBlobs />
-      <div className="fixed inset-0 dot-grid opacity-15 pointer-events-none z-0" />
-      <PublicNav />
-
-      <main className="relative z-10 pt-32 pb-24 px-6 md:px-12 max-w-7xl mx-auto">
+    <PublicLayout>
+      <main className="relative z-10 pt-32 pb-24 px-6 md:px-8 max-w-7xl mx-auto">
         {/* Ambient glows */}
         <div className="absolute -top-40 -right-40 w-96 h-96 bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
         <div className="absolute top-1/2 -left-40 w-96 h-96 bg-secondary/5 rounded-full blur-[120px] pointer-events-none" />
@@ -73,8 +67,8 @@ export default function PricingPage() {
         {/* Hero */}
         <header className="mb-20 text-center md:text-left">
           <div className="flex items-center gap-3 mb-4 justify-center md:justify-start">
-            <div className="status-beacon" />
-            <span className="font-label uppercase tracking-[0.2em] text-secondary text-[10px]">Protocol Monetization v4.2</span>
+            <span className="status-beacon" />
+            <span className="font-label uppercase tracking-[0.2em] text-secondary text-[10px]">Simple, Transparent Pricing</span>
           </div>
           <h1 className="font-headline text-5xl md:text-7xl font-bold tracking-tight text-on-surface mb-6">
             Scale your <span className="text-primary">Sovereignty</span>
@@ -86,17 +80,17 @@ export default function PricingPage() {
 
         {/* Founding Banner */}
         <section className="mb-20">
-          <div className="glass-panel p-8 rounded-xl border border-primary/10 relative overflow-hidden group hover:border-primary/30 transition-all duration-500">
+          <div className="glass-panel p-6 rounded-2xl border border-primary/10 relative overflow-hidden group hover:border-primary/30 transition-all duration-500">
             <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
             <div className="flex flex-col md:flex-row items-center justify-between gap-8 relative z-10">
               <div className="flex-1">
                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-primary/20 rounded-full mb-4">
                   <span className="material-symbols-outlined text-[14px] text-primary select-none" style={{ fontVariationSettings: "'FILL' 1" }}>verified</span>
-                  <span className="font-label uppercase tracking-widest text-[10px] text-primary font-bold">Limited Protocol Allocation</span>
+                  <span className="font-label uppercase tracking-widest text-[10px] text-primary font-bold">Limited Allocation</span>
                 </div>
                 <h2 className="font-headline text-3xl font-bold text-on-surface mb-3">Founding Operators</h2>
                 <p className="text-on-surface-variant max-w-xl font-sans">
-                  "You're not buying a subscription. You're founding a new kind of entity." First 200 people receive full protocol capabilities locked at{" "}
+                  "You're not buying a subscription. You're founding a new kind of entity." First 200 people receive full capabilities locked at{" "}
                   <span className="text-secondary font-bold">$29/mo</span> for life.
                 </p>
               </div>
@@ -107,7 +101,7 @@ export default function PricingPage() {
                     Claim Allocation
                   </button>
                 </Link>
-                <span className="text-[10px] font-label text-slate-500 uppercase tracking-tighter">142 Slots Remaining</span>
+                <span className="text-[10px] font-label text-on-surface-variant uppercase tracking-tighter">142 Slots Remaining</span>
               </div>
             </div>
           </div>
@@ -118,13 +112,13 @@ export default function PricingPage() {
           <div className="flex items-center gap-2 p-1 bg-surface-container-low rounded-full">
             <button
               onClick={() => setAnnual(false)}
-              className={`px-6 py-2 rounded-full font-label uppercase tracking-widest text-[10px] transition-colors ${!annual ? "bg-primary/10 text-primary font-bold" : "text-slate-400 hover:text-on-surface"}`}
+              className={`px-6 py-2 rounded-full font-label uppercase tracking-widest text-[10px] transition-colors ${!annual ? "bg-primary/10 text-primary font-bold" : "text-on-surface-variant hover:text-on-surface"}`}
             >
               Monthly
             </button>
             <button
               onClick={() => setAnnual(true)}
-              className={`px-6 py-2 rounded-full font-label uppercase tracking-widest text-[10px] transition-colors ${annual ? "bg-primary/10 text-primary font-bold" : "text-slate-400 hover:text-on-surface"}`}
+              className={`px-6 py-2 rounded-full font-label uppercase tracking-widest text-[10px] transition-colors ${annual ? "bg-primary/10 text-primary font-bold" : "text-on-surface-variant hover:text-on-surface"}`}
             >
               Annual <span className="text-[8px] opacity-70 ml-1">(2 Months Free)</span>
             </button>
@@ -136,7 +130,7 @@ export default function PricingPage() {
           {tiers.map((t) => (
             <div
               key={t.name}
-              className={`glass-panel p-8 rounded-xl flex flex-col transition-all duration-300 ${
+              className={`glass-panel p-6 rounded-2xl flex flex-col transition-all duration-300 ${
                 t.highlighted
                   ? "border border-primary/30 relative scale-105 z-10 bg-surface-container/80 shadow-[0_0_40px_rgba(205,150,255,0.05)]"
                   : "border border-outline-variant/10 hover:bg-white/5"
@@ -144,23 +138,23 @@ export default function PricingPage() {
             >
               {t.highlighted && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-on-primary px-3 py-1 font-label uppercase tracking-[0.2em] text-[8px] font-black whitespace-nowrap">
-                  Most Deployed
+                  Most Popular
                 </div>
               )}
-              <div className="mb-8">
-                <span className={`font-label uppercase tracking-widest text-[10px] ${t.highlighted ? "text-primary" : "text-slate-500"}`}>{t.tier}</span>
+              <div className="mb-6">
+                <span className={`font-label uppercase tracking-widest text-[10px] ${t.highlighted ? "text-primary" : "text-on-surface-variant"}`}>{t.tier}</span>
                 <h3 className="font-headline text-2xl font-bold mt-2 text-on-surface">{t.name}</h3>
               </div>
-              <div className="mb-8">
+              <div className="mb-6">
                 <div className="text-4xl font-headline font-bold text-on-surface">
                   {annual ? t.annual : t.monthly}
                   {(annual ? t.annual : t.monthly) !== "Custom" && (
-                    <span className="text-sm font-light text-slate-500">/mo</span>
+                    <span className="text-sm font-light text-on-surface-variant">/mo</span>
                   )}
                 </div>
                 {(annual ? t.annual : t.monthly) !== "Custom" && (
                   <div className="mt-1 flex items-center gap-2 flex-wrap">
-                    <p className="text-[10px] font-label uppercase tracking-widest text-slate-500">
+                    <p className="text-[10px] font-label uppercase tracking-widest text-on-surface-variant">
                       {annual ? "billed annually" : "billed monthly"}
                     </p>
                     {annual && (
@@ -170,9 +164,9 @@ export default function PricingPage() {
                     )}
                   </div>
                 )}
-                <p className={`text-xs mt-2 font-label uppercase tracking-widest ${t.highlighted ? "text-primary" : "text-slate-500"}`}>{t.sub}</p>
+                <p className={`text-xs mt-2 font-label uppercase tracking-widest ${t.highlighted ? "text-primary" : "text-on-surface-variant"}`}>{t.sub}</p>
               </div>
-              <div className="flex-grow space-y-4 mb-10">
+              <div className="flex-grow space-y-4 mb-8">
                 {t.features.map((f) => (
                   <div key={f} className="flex items-start gap-3">
                     <span className="material-symbols-outlined text-secondary text-sm select-none">check_circle</span>
@@ -185,7 +179,7 @@ export default function PricingPage() {
                   className={`w-full py-3 font-label uppercase tracking-widest text-[10px] transition-all ${
                     t.highlighted
                       ? "bg-primary text-on-primary font-black hover:opacity-90"
-                      : "border border-outline-variant/30 text-on-surface hover:bg-primary/10 hover:border-primary/50"
+                      : "border border-outline-variant/30 rounded-lg text-on-surface hover:bg-primary/10 hover:border-primary/50"
                   }`}
                 >
                   {t.cta}
@@ -196,7 +190,7 @@ export default function PricingPage() {
         </div>
 
         {/* Add-on */}
-        <div className="flex flex-col md:flex-row items-center justify-between p-8 bg-surface-container-lowest rounded-xl border border-outline-variant/5 mb-32">
+        <div className="flex flex-col md:flex-row items-center justify-between p-6 bg-surface-container-lowest rounded-2xl border border-outline-variant/5 mb-32">
           <div className="flex items-center gap-6 mb-6 md:mb-0">
             <div className="p-4 bg-surface-container rounded-lg">
               <span className="material-symbols-outlined text-primary text-3xl select-none">add_circle</span>
@@ -207,8 +201,8 @@ export default function PricingPage() {
             </div>
           </div>
           <div className="text-center md:text-right">
-            <span className="text-2xl font-headline font-bold text-on-surface">+$29<span className="text-sm font-light text-slate-500">/mo</span></span>
-            <p className="font-label uppercase tracking-widest text-[10px] text-slate-500">per extra Operator</p>
+            <span className="text-2xl font-headline font-bold text-on-surface">+$29<span className="text-sm font-light text-on-surface-variant">/mo</span></span>
+            <p className="font-label uppercase tracking-widest text-[10px] text-on-surface-variant">per extra Operator</p>
           </div>
         </div>
 
@@ -217,9 +211,9 @@ export default function PricingPage() {
           <h2 className="font-headline text-4xl font-bold mb-12 text-center md:text-left text-on-surface">Operational Intelligence (FAQ)</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {faqs.map((f) => (
-              <div key={f.q} className={`glass-panel p-8 rounded-xl ${f.size}`}>
+              <div key={f.q} className={`glass-panel p-6 rounded-2xl ${f.size}`}>
                 <h4 className="font-headline font-bold text-primary mb-4">{f.q}</h4>
-                <p className="text-on-surface-variant text-sm font-light leading-relaxed font-sans text-center only:text-center">
+                <p className="text-on-surface-variant text-sm font-light leading-relaxed font-sans">
                   {f.desc}
                 </p>
               </div>
@@ -227,8 +221,6 @@ export default function PricingPage() {
           </div>
         </section>
       </main>
-
-      <PublicFooter />
-    </div>
+    </PublicLayout>
   );
 }

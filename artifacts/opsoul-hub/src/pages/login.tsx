@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,6 +32,16 @@ export default function Login() {
   return (
     <div className="min-h-screen dot-grid flex items-center justify-center p-4 bg-background">
       <div className="w-full max-w-md space-y-8">
+        {/* Back to home */}
+        <div className="text-center">
+          <Link href="/">
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-primary transition-colors font-label cursor-pointer">
+              <span className="material-symbols-outlined text-sm select-none">arrow_back</span>
+              Back to home
+            </span>
+          </Link>
+        </div>
+
         {/* Brand */}
         <div className="text-center space-y-2">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 mb-4">
