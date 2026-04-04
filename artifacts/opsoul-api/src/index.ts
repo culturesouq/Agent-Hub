@@ -25,6 +25,7 @@ import tasksRouter from './routes/tasks.js';
 import uploadRouter from './routes/upload.js';
 import transcribeRouter from './routes/transcribe.js';
 import operatorFilesRouter from './routes/operatorFiles.js';
+import adminRouter from './routes/admin.js';
 import { startGrowCron } from './cron/growCron.js';
 import { startMemoryCron } from './cron/memoryCron.js';
 import { startDriftCron } from './cron/driftCron.js';
@@ -57,6 +58,7 @@ app.use('/api/operators/:operatorId/files', operatorFilesRouter);
 app.use('/api/platform-skills', platformSkillsRouter);
 app.use('/api/upload', uploadRouter);
 app.use('/api/transcribe', transcribeRouter);
+app.use('/api/admin', adminRouter);
 
 app.get('/api/healthz', (_req, res) => {
   res.json({ status: 'ok', service: 'opsoul-api', phase: 8 });

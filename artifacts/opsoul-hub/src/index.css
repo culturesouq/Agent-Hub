@@ -113,10 +113,6 @@
 }
 
 @layer base {
-  * {
-    @apply border-border;
-  }
-
   html {
     background-color: #050508;
   }
@@ -175,13 +171,24 @@
   box-shadow: 0 0 20px rgba(140, 212, 195, 0.15);
 }
 
-/* Live status indicator */
+/* Live status indicator — 4px per Stitch spec, 10px outer blur */
 .status-beacon {
-  width: 8px;
-  height: 8px;
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
   background-color: #8cd4c3;
   box-shadow: 0 0 10px #8cd4c3;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* Amber drift-alert beacon */
+.status-beacon-warn {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: #fbbf24;
+  box-shadow: 0 0 10px #fbbf24;
   display: inline-block;
   flex-shrink: 0;
 }

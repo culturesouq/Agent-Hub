@@ -12,6 +12,7 @@ import PricingPage from "@/pages/PricingPage";
 import SupportPage from "@/pages/SupportPage";
 import DocsPage from "@/pages/DocsPage";
 import ContactPage from "@/pages/ContactPage";
+import AdminPage from "@/pages/AdminPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -70,6 +71,9 @@ function Router() {
       <Route path="/contact" component={ContactPage} />
       <Route path="/operators/:id">
         {(params) => <ProtectedRoute component={OperatorDetail} {...params} />}
+      </Route>
+      <Route path="/admin">
+        {() => <ProtectedRoute component={AdminPage} />}
       </Route>
       <Route component={NotFound} />
     </Switch>

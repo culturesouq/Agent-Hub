@@ -2,6 +2,7 @@ export interface Owner {
   id: string;
   email: string;
   name: string;
+  isSovereignAdmin?: boolean;
 }
 
 export interface Operator {
