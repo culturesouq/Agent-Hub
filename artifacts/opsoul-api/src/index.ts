@@ -65,6 +65,9 @@ app.use('/api/admin', adminRouter);
 app.use('/api/contact', contactRouter);
 
 app.get('/api/healthz', (_req, res) => {
+  // Fire a non-blocking DB ping to keep the Neon endpoint warm.
+  // This prevents the endpoint from suspending, which blocks redeployment.
+  pool.query('SELECT 1').catch(() => {/* non-fatal — endpoint may be waking up */});
   res.json({ status: 'ok', service: 'opsoul-api', phase: 8 });
 });
 
