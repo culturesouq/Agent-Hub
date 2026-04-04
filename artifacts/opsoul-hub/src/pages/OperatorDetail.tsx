@@ -142,10 +142,10 @@ const NAV_MAIN: NavItem[] = [
     kind: "group", id: "brain", label: "Brain", icon: Brain, depth: 0,
     children: [
       { kind: "leaf", id: "soul",                 label: "Soul",             icon: User,         depth: 1 },
-      { kind: "leaf", id: "mission-contexts",     label: "Missions",         icon: LayoutGrid,   depth: 1 },
+      { kind: "leaf", id: "mission-contexts",     label: "Mission Contexts", icon: LayoutGrid,   depth: 1 },
       { kind: "leaf", id: "skills",               label: "Skills",           icon: Zap,          depth: 1 },
       { kind: "leaf", id: "memory",               label: "Memory",           icon: Archive,      depth: 1 },
-      { kind: "leaf", id: "capability-requests",  label: "Permissions",      icon: ShieldAlert,  depth: 1 },
+      { kind: "leaf", id: "capability-requests",  label: "Capabilities",     icon: ShieldAlert,  depth: 1 },
       { kind: "leaf", id: "grow",                 label: "Growth",           icon: Activity,     depth: 1 },
     ],
   },

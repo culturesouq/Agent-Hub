@@ -29,8 +29,9 @@ export default function ContactPage() {
         }),
       });
       setSubmitted(true);
-    } catch (err: any) {
-      setError(err?.message ?? "Failed to transmit. Please try again.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to transmit. Please try again.";
+      setError(msg);
     } finally {
       setIsLoading(false);
     }

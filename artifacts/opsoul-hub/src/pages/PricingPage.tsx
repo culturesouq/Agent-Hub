@@ -158,9 +158,16 @@ export default function PricingPage() {
                   )}
                 </div>
                 {(annual ? t.annual : t.monthly) !== "Custom" && (
-                  <p className="text-[10px] font-label uppercase tracking-widest text-slate-500 mt-1">
-                    {annual ? "billed annually" : "billed monthly"}
-                  </p>
+                  <div className="mt-1 flex items-center gap-2 flex-wrap">
+                    <p className="text-[10px] font-label uppercase tracking-widest text-slate-500">
+                      {annual ? "billed annually" : "billed monthly"}
+                    </p>
+                    {annual && (
+                      <span className="text-[9px] font-label uppercase tracking-widest text-secondary bg-secondary/10 px-2 py-0.5 rounded-full border border-secondary/20">
+                        2 months free
+                      </span>
+                    )}
+                  </div>
                 )}
                 <p className={`text-xs mt-2 font-label uppercase tracking-widest ${t.highlighted ? "text-primary" : "text-slate-500"}`}>{t.sub}</p>
               </div>
