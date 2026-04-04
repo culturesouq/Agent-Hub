@@ -374,7 +374,7 @@ export default function OperatorDetail({ id }: { id: string }) {
             className="absolute inset-0 bg-background/80 backdrop-blur-sm"
             onClick={() => setMobileNavOpen(false)}
           />
-          <aside className="absolute left-0 top-0 bottom-0 w-64 bg-sidebar border-r border-sidebar-border flex flex-col overflow-y-auto shadow-2xl shadow-black/40">
+          <aside className="absolute left-0 top-0 bottom-0 w-64 bg-sidebar border-r border-sidebar-border flex flex-col overflow-y-auto shadow-2xl shadow-black/40 animate-in slide-in-from-left duration-200">
             <div className="p-4 border-b border-sidebar-border flex items-center gap-3">
               <OperatorAvatar name={operator.name} />
               <div className="min-w-0">
