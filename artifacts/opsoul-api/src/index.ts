@@ -142,6 +142,7 @@ async function start(): Promise<void> {
   startGrowCron();
   startMemoryCron();
   startDriftCron();
+  startKeepAliveCron();
 }
 
 start().catch((err) => {
