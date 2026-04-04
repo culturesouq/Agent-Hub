@@ -1,5 +1,28 @@
 uploads = []
-generated = []
+
+[[generated]]
+id = "q57ySc8oUZCgpL3juDP6D"
+uri = "file://artifacts/opsoul-hub/public/images/hero-bg.png"
+type = "image"
+title = "hero nebula dark"
+
+[[generated]]
+id = "tGUygzJaUT5ejXDW9OLPe"
+uri = "file://artifacts/opsoul-hub/public/images/persona-founder.png"
+type = "image"
+title = "founder portrait dark purple"
+
+[[generated]]
+id = "ZwovBQtjlyiMituHjcxO7"
+uri = "file://artifacts/opsoul-hub/public/images/persona-executive.png"
+type = "image"
+title = "executive portrait dark cyan"
+
+[[generated]]
+id = "PIsOqwFUD7WZmbDRNsaNG"
+uri = "file://artifacts/opsoul-hub/public/images/persona-consultant.png"
+type = "image"
+title = "consultant portrait dark pink"
 
 [[outputs]]
 id = "QUWzJK67wK2iTc6lOZSDj"

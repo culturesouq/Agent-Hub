@@ -39,10 +39,16 @@ export default function LandingPage() {
           </div>
 
           <div className="lg:col-span-5 hidden lg:block">
-            <div className="relative aspect-square glass-panel rounded-full flex items-center justify-center p-8 overflow-hidden neon-glow-primary">
-              <div className="absolute inset-0 bg-gradient-to-tr from-primary/10 to-transparent" />
-              <div className="w-full h-full rounded-full bg-gradient-to-br from-primary/20 via-[#6f389b]/30 to-secondary/10" />
-              <div className="absolute inset-0 border-[0.5px] border-primary/20 rounded-full" />
+            <div className="relative rounded-2xl overflow-hidden neon-glow-primary luminous-edge aspect-[4/5]">
+              <img
+                src="/images/hero-bg.png"
+                alt="AI Operator neural network visualization"
+                className="w-full h-full object-cover"
+                loading="eager"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-background via-background/20 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent" />
+              <div className="absolute inset-0 border border-primary/20 rounded-2xl pointer-events-none" />
             </div>
           </div>
         </section>
@@ -115,17 +121,19 @@ export default function LandingPage() {
             {[
               {
                 title: "The Founder", label: "Scale Operations",
-                color: "text-primary", accentColor: "#e0b6ff",
-                glowColor: "rgba(224,182,255,0.25)",
+                color: "text-primary", accentColor: "#cd96ff",
+                glowColor: "rgba(205,150,255,0.25)",
                 ringColor: "border-primary/30",
+                imageSrc: "/images/persona-founder.png",
                 desc: "Uses OpSoul to clone their decision-making framework, allowing the AI to vet partners and manage high-level triage.",
                 initial: "F",
               },
               {
                 title: "The Executive", label: "Zero-Loss Context",
-                color: "text-secondary", accentColor: "#8cd4c3",
-                glowColor: "rgba(140,212,195,0.2)",
+                color: "text-secondary", accentColor: "#40cef3",
+                glowColor: "rgba(64,206,243,0.2)",
                 ringColor: "border-secondary/30",
+                imageSrc: "/images/persona-executive.png",
                 desc: "Maintains a persistent shadow of every meeting, email, and strategy deck to ensure no executive intent is ever lost.",
                 initial: "E",
               },
@@ -134,50 +142,42 @@ export default function LandingPage() {
                 color: "text-tertiary", accentColor: "#ff6a9f",
                 glowColor: "rgba(255,106,159,0.18)",
                 ringColor: "border-[#ff6a9f]/30",
+                imageSrc: "/images/persona-consultant.png",
                 desc: "Leverages memory-persistence to keep deep technical nuances available for instant recall across 15+ different client projects.",
                 initial: "C",
               },
             ].map((p) => (
-              <div key={p.title} className="bg-surface-container-high rounded-2xl overflow-hidden group hover:scale-[1.02] transition-all duration-500">
+              <div key={p.title} className="bg-surface-container-high rounded-2xl overflow-hidden group hover:scale-[1.02] transition-all duration-500 glass-edge">
                 {/* Cinematic portrait frame */}
-                <div className="h-64 relative overflow-hidden flex items-center justify-center bg-[#0a0a0f]">
-                  {/* Deep background radial */}
+                <div className="h-64 relative overflow-hidden bg-[#0a0a0f]">
+                  {/* Portrait image */}
+                  <img
+                    src={p.imageSrc}
+                    alt={`${p.title} archetype portrait`}
+                    className="w-full h-full object-cover object-top opacity-80 group-hover:opacity-100 transition-opacity duration-500"
+                  />
+                  {/* Colour-tinted overlay for brand cohesion */}
                   <div
                     className="absolute inset-0"
-                    style={{ background: `radial-gradient(ellipse at 50% 120%, ${p.glowColor} 0%, transparent 70%)` }}
+                    style={{ background: `radial-gradient(ellipse at 50% 100%, ${p.glowColor} 0%, transparent 60%)`, mixBlendMode: "screen" }}
                   />
-                  {/* Scanlines overlay */}
-                  <div
-                    className="absolute inset-0 opacity-[0.04]"
-                    style={{ backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,1) 2px, rgba(255,255,255,1) 3px)" }}
-                  />
-                  {/* Concentric rings */}
-                  <div className={`absolute w-40 h-40 rounded-full border ${p.ringColor} opacity-40`} />
-                  <div className={`absolute w-52 h-52 rounded-full border ${p.ringColor} opacity-20`} />
-                  <div className={`absolute w-64 h-64 rounded-full border ${p.ringColor} opacity-10`} />
-                  {/* Inner glow disc */}
-                  <div
-                    className="absolute w-28 h-28 rounded-full"
-                    style={{ background: `radial-gradient(circle, ${p.glowColor} 0%, transparent 80%)`, filter: "blur(16px)" }}
-                  />
-                  {/* Avatar monogram */}
-                  <div
-                    className="relative z-10 w-20 h-20 rounded-full flex items-center justify-center border-2"
-                    style={{ borderColor: p.accentColor, boxShadow: `0 0 24px ${p.glowColor}`, background: `radial-gradient(circle at 40% 35%, ${p.glowColor}, rgba(10,10,15,0.8))` }}
-                  >
-                    <span className="font-headline font-bold text-3xl" style={{ color: p.accentColor }}>{p.initial}</span>
-                  </div>
                   {/* Top accent line */}
                   <div
                     className="absolute top-0 left-0 right-0 h-px"
                     style={{ background: `linear-gradient(to right, transparent, ${p.accentColor}60, transparent)` }}
                   />
-                  {/* Bottom fade */}
+                  {/* Bottom fade into card */}
                   <div className="absolute inset-0 bg-gradient-to-t from-surface-container-high via-transparent to-transparent" />
+                  {/* Label chip */}
+                  <div
+                    className="absolute bottom-4 left-4 px-3 py-1 rounded-full text-[10px] font-label uppercase tracking-widest border"
+                    style={{ borderColor: `${p.accentColor}40`, background: `${p.accentColor}15`, color: p.accentColor }}
+                  >
+                    {p.label}
+                  </div>
                 </div>
                 <div className="p-8">
                   <h4 className="font-headline text-2xl mb-2 text-on-surface">{p.title}</h4>
-                  <p className={`${p.color} font-label text-xs uppercase tracking-widest mb-6`}>{p.label}</p>
                   <p className="text-on-surface-variant text-sm font-sans leading-relaxed">{p.desc}</p>
                 </div>
               </div>

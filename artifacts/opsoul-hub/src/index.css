@@ -5,75 +5,75 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  /* Stitch hex tokens — primary source of truth for Tailwind utilities */
-  --color-background:  #050508;
+  /* ── Stitch Nebula Glass — corrected color tokens ── */
+  --color-background:  #0e0e11;
   --color-foreground:  #e6e3e8;
   --color-border:      #4a4658;
   --color-input:       #1f1f23;
-  --color-ring:        #e0b6ff;
+  --color-ring:        #cd96ff;
 
-  --color-primary:             #e0b6ff;
-  --color-primary-foreground:  #3f1a6c;
+  --color-primary:             #cd96ff;
+  --color-primary-foreground:  #2c0d54;
 
-  --color-secondary:             #8cd4c3;
-  --color-secondary-foreground:  #03372d;
+  --color-secondary:             #40cef3;
+  --color-secondary-foreground:  #003a4a;
 
   --color-muted:             #28272c;
   --color-muted-foreground:  #b8b3c0;
 
-  --color-accent:             #6f389b;
-  --color-accent-foreground:  #e0b6ff;
+  --color-accent:             #6b2ea8;
+  --color-accent-foreground:  #cd96ff;
 
   --color-destructive:             #ffb4ab;
   --color-destructive-foreground:  #690005;
 
-  --color-card:             #1f1f23;
+  --color-card:             #1a1a1e;
   --color-card-foreground:  #e6e3e8;
   --color-card-border:      #4a4658;
 
-  --color-popover:             #1f1f23;
+  --color-popover:             #1a1a1e;
   --color-popover-foreground:  #e6e3e8;
   --color-popover-border:      #4a4658;
 
-  /* MD3 surface hierarchy */
-  --color-surface:                    #14141a;
-  --color-surface-dim:                #0e0e12;
-  --color-surface-container-lowest:   #101014;
-  --color-surface-container-low:      #1a1a1e;
-  --color-surface-container:          #1f1f23;
-  --color-surface-container-high:     #28272c;
-  --color-surface-container-highest:  #34333a;
+  /* MD3 surface hierarchy — charcoal-based */
+  --color-surface:                    #131317;
+  --color-surface-dim:                #0e0e11;
+  --color-surface-container-lowest:   #0f0f12;
+  --color-surface-container-low:      #18181c;
+  --color-surface-container:          #1d1d21;
+  --color-surface-container-high:     #262529;
+  --color-surface-container-highest:  #323036;
   --color-on-surface:                 #e6e3e8;
   --color-on-surface-variant:         #cac4cf;
 
   /* Full MD3 Stitch palette — remaining role tokens */
-  --color-primary-container:    #6f389b;
-  --color-on-primary-container: #e0b6ff;
-  --color-on-primary:           #4a0b76;
-  --color-secondary-container:  #025b4e;
-  --color-on-secondary:         #00382f;
+  --color-primary-container:    #6b2ea8;
+  --color-on-primary-container: #cd96ff;
+  --color-on-primary:           #2c0d54;
+  --color-secondary-container:  #00495e;
+  --color-on-secondary:         #003a4a;
   --color-tertiary:             #ff6a9f;
   --color-tertiary-container:   #6200ea;
   --color-on-tertiary:          #3a0092;
-  --color-on-secondary-container: #89d0bf;
+  --color-on-secondary-container: #a6eeff;
   --color-outline:              #958da2;
   --color-outline-variant:      #494456;
-  --color-surface-variant:      #353439;
-  --color-surface-bright:       #39393d;
+  --color-surface-variant:      #323036;
+  --color-surface-bright:       #37363b;
   --color-inverse-surface:      #e5e1e7;
   --color-inverse-on-surface:   #303034;
-  --color-inverse-primary:      #7b44a8;
+  --color-inverse-primary:      #6b2ea8;
   --color-error-container:      #93000a;
 
-  /* Sidebar — slightly lighter than background for visual separation */
-  --color-sidebar:                     #181820;
+  /* Sidebar — slightly lighter than background */
+  --color-sidebar:                     #141418;
   --color-sidebar-foreground:          #e6e3e8;
-  --color-sidebar-border:              #2a2836;
-  --color-sidebar-primary:             #e0b6ff;
-  --color-sidebar-primary-foreground:  #3f1a6c;
-  --color-sidebar-accent:              #1f1f26;
+  --color-sidebar-border:              #252330;
+  --color-sidebar-primary:             #cd96ff;
+  --color-sidebar-primary-foreground:  #2c0d54;
+  --color-sidebar-accent:              #1d1d21;
   --color-sidebar-accent-foreground:   #e6e3e8;
-  --color-sidebar-ring:                #e0b6ff;
+  --color-sidebar-ring:                #cd96ff;
 
   --font-sans:  var(--app-font-body);
   --font-serif: var(--app-font-headline);
@@ -93,7 +93,7 @@
   /* Stitch Design System — runtime non-color tokens */
   --app-font-headline: 'Space Grotesk', sans-serif;
   --app-font-body:     'Manrope', sans-serif;
-  --app-font-label:    'Inter', sans-serif;
+  --app-font-label:    'Manrope', sans-serif;
 
   /* --radius: canonical shorthand used by shadcn/ui components */
   --radius: 0.5rem;
@@ -107,7 +107,7 @@
 
 @layer base {
   html {
-    background-color: #050508;
+    background-color: #0e0e11;
   }
 
   body {
@@ -116,50 +116,57 @@
     overflow-x: hidden;
   }
 
-  /* Thin, styled scrollbars */
+  /* Thin styled scrollbar — 6px with rounded thumb */
   ::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
+    width: 6px;
+    height: 6px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: #4a4658;
-    border-radius: 2px;
+    background: rgba(74, 70, 88, 0.7);
+    border-radius: 10px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #5e5a6e;
+    background: rgba(205, 150, 255, 0.4);
   }
   * {
     scrollbar-width: thin;
-    scrollbar-color: #4a4658 transparent;
+    scrollbar-color: rgba(74, 70, 88, 0.7) transparent;
+  }
+
+  /* Text selection */
+  ::selection {
+    background-color: rgba(205, 150, 255, 0.30);
+    color: #e6e3e8;
   }
 }
 
 /* =============================================
-   Stitch Design System — Utility Classes
+   Stitch Nebula Glass — Utility Classes
    ============================================= */
 
-/* Radial dot grid background */
+/* Radial dot grid — 32px spacing, hair-thin white dots */
 .dot-grid {
-  background-image: radial-gradient(#353439 1px, transparent 1px);
-  background-size: 24px 24px;
+  background-image: radial-gradient(rgba(255,255,255,0.05) 0.5px, transparent 0.5px);
+  background-size: 32px 32px;
 }
 
-/* Nebula radial glow background — Stitch Nebula Glass signature texture */
+/* Nebula radial glow — warm visible blobs (opacity ~0.15) */
 .nebula-bg {
   background-image:
-    radial-gradient(circle at 20% 20%, rgba(224, 182, 255, 0.06) 0%, transparent 45%),
-    radial-gradient(circle at 80% 75%, rgba(140, 212, 195, 0.05) 0%, transparent 40%),
-    radial-gradient(circle at 50% 50%, rgba(111, 56, 155, 0.04) 0%, transparent 60%);
+    radial-gradient(circle at 20% 20%, rgba(205, 150, 255, 0.15) 0%, transparent 45%),
+    radial-gradient(circle at 80% 75%, rgba(64, 206, 243, 0.12) 0%, transparent 40%),
+    radial-gradient(circle at 50% 50%, rgba(107, 46, 168, 0.10) 0%, transparent 60%);
 }
 
-/* Frosted glass panel */
+/* Frosted glass panel — semi-transparent 0.40 */
 .glass-panel {
-  background: rgba(24, 24, 32, 0.65);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  background: rgba(20, 20, 24, 0.40);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 /* Iridescent gradient border — Stitch Nebula Glass signature edge */
@@ -174,8 +181,8 @@
   padding: 1px;
   background: linear-gradient(
     135deg,
-    rgba(224, 182, 255, 0.35),
-    rgba(140, 212, 195, 0.30),
+    rgba(205, 150, 255, 0.35),
+    rgba(64, 206, 243, 0.30),
     rgba(255, 106, 159, 0.25)
   );
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
@@ -185,12 +192,12 @@
   pointer-events: none;
 }
 
-/* Tricolor text gradient — OpSoul brand mark */
+/* Tricolor text gradient — OpSoul brand mark (corrected spec colors) */
 .text-gradient {
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
-  background-image: linear-gradient(to right, #e0b6ff, #8cd4c3, #ff6a9f);
+  background-image: linear-gradient(to right, #cd96ff, #40cef3, #ff6a9f);
 }
 
 /* Primary text gradient */
@@ -198,33 +205,100 @@
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
-  background-image: linear-gradient(135deg, #e0b6ff 0%, #ff6a9f 100%);
+  background-image: linear-gradient(135deg, #cd96ff 0%, #ff6a9f 100%);
+}
+
+/* ── Iridescent text & bg utility classes ── */
+.iridescent-text {
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  background-image: linear-gradient(90deg, #cd96ff 0%, #40cef3 50%, #ff6a9f 100%);
+}
+
+.iridescent-bg {
+  background-image: linear-gradient(135deg, rgba(205,150,255,0.15) 0%, rgba(64,206,243,0.12) 50%, rgba(255,106,159,0.10) 100%);
+}
+
+/* ── Glow utilities ── */
+.luminous-edge {
+  box-shadow:
+    0 0 0 1px rgba(205, 150, 255, 0.25),
+    0 0 20px rgba(205, 150, 255, 0.12),
+    inset 0 1px 0 rgba(205, 150, 255, 0.15);
+}
+
+.luminous-edge-cyan {
+  box-shadow:
+    0 0 0 1px rgba(64, 206, 243, 0.25),
+    0 0 20px rgba(64, 206, 243, 0.12),
+    inset 0 1px 0 rgba(64, 206, 243, 0.15);
+}
+
+.glass-edge {
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.soul-glow {
+  box-shadow:
+    0 0 60px rgba(205, 150, 255, 0.20),
+    0 0 120px rgba(205, 150, 255, 0.08);
+}
+
+.node-glow {
+  box-shadow:
+    0 0 20px rgba(64, 206, 243, 0.18),
+    0 0 40px rgba(64, 206, 243, 0.08);
+}
+
+/* ── Command gradient ── */
+.command-gradient {
+  background: linear-gradient(135deg, rgba(107,46,168,0.30) 0%, rgba(0,73,94,0.25) 100%);
+}
+
+/* ── Beacon pulse animation ── */
+@keyframes beacon-pulse-anim {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(1.6); }
+}
+.beacon-pulse {
+  animation: beacon-pulse-anim 2s ease-in-out infinite;
+}
+
+/* ── Star field (white dot variant) ── */
+.star-field {
+  background-image:
+    radial-gradient(rgba(255,255,255,0.8) 1px, transparent 1px),
+    radial-gradient(rgba(255,255,255,0.4) 1px, transparent 1px);
+  background-size: 80px 80px, 40px 40px;
+  background-position: 0 0, 20px 20px;
 }
 
 /* Purple neon glow */
 .neon-glow-primary {
-  box-shadow: 0 0 40px rgba(224, 182, 255, 0.12);
+  box-shadow: 0 0 40px rgba(205, 150, 255, 0.12);
 }
 
-/* Teal neon glow */
+/* Cyan neon glow */
 .neon-glow-secondary {
-  box-shadow: 0 0 20px rgba(140, 212, 195, 0.15);
+  box-shadow: 0 0 20px rgba(64, 206, 243, 0.15);
 }
 
-/* Ambient card shadow — Stitch "floating layer" look */
+/* Ambient card shadow */
 .card-ambient {
   box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.45),
     0 0 0 1px rgba(255, 255, 255, 0.04) inset;
 }
 
-/* Live status indicator — 4px per Stitch spec, 10px outer blur */
+/* Live status indicator — 4px per Stitch spec, cyan glow */
 .status-beacon {
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background-color: #8cd4c3;
-  box-shadow: 0 0 10px #8cd4c3;
+  background-color: #40cef3;
+  box-shadow: 0 0 10px #40cef3;
   display: inline-block;
   flex-shrink: 0;
 }
@@ -253,42 +327,54 @@
 }
 
 .font-label {
-  font-family: 'Inter', sans-serif;
+  font-family: 'Manrope', sans-serif;
 }
 
 /* Frosted nav bar — slightly deeper than sidebar */
 .frosted-nav {
-  background: rgba(2, 2, 5, 0.72);
+  background: rgba(10, 10, 13, 0.75);
   backdrop-filter: blur(32px);
   -webkit-backdrop-filter: blur(32px);
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.04),
-    0 0 40px rgba(224, 182, 255, 0.04);
+    0 0 40px rgba(205, 150, 255, 0.04);
 }
 
-/* Sidebar surface — noticeably lighter than main #050508 background */
+/* Sidebar surface — noticeably lighter than main background */
 .sidebar-surface {
-  background: #181820;
-  border-right: 1px solid #2a2836;
+  background: #141418;
+  border-right: 1px solid #252330;
+}
+
+/* Sidebar active nav item — left border + gradient fade */
+.sidebar-nav-active {
+  position: relative;
+  background: linear-gradient(90deg, rgba(205,150,255,0.12) 0%, rgba(205,150,255,0.04) 60%, transparent 100%);
+  color: #cd96ff;
+}
+.sidebar-nav-active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: #cd96ff;
+  box-shadow: 0 0 8px rgba(205, 150, 255, 0.6);
 }
 
 /* Chat area — full dark, no competing texture */
 .chat-surface {
-  background: #050508;
+  background: #0e0e11;
 }
 
-/* Operator section panels — consistent spacing wrapper */
+/* Operator section panels */
 .section-panel {
-  background: rgba(24, 24, 32, 0.65);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  background: rgba(20, 20, 24, 0.40);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border-radius: var(--radius-2xl);
-  border: 1px solid rgba(74, 70, 88, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   padding: 1.5rem;
-}
-
-/* Selection styling */
-::selection {
-  background-color: rgba(111, 56, 155, 0.4);
-  color: #e0b6ff;
 }

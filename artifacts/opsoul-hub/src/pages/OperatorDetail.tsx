@@ -76,9 +76,9 @@ function SidebarLeaf({
     <button
       onClick={() => onSelect(item.id)}
       data-testid={`nav-${item.id}`}
-      className={`flex items-center gap-2.5 ${pl} pr-3 py-2 rounded-md text-sm font-label w-full text-left transition-all
+      className={`flex items-center gap-2.5 ${pl} pr-3 py-2 rounded-md text-sm font-label w-full text-left transition-all overflow-hidden
         ${isActive
-          ? "bg-sidebar-primary/15 text-sidebar-primary border border-sidebar-primary/25"
+          ? "sidebar-nav-active border border-transparent"
           : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground border border-transparent"
         }`}
     >

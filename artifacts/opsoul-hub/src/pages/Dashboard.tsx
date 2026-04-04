@@ -38,50 +38,81 @@ function HealthBadge({ operatorId }: { operatorId: string }) {
   );
 }
 
+const PERSONA_IMAGES = [
+  "/images/persona-founder.png",
+  "/images/persona-executive.png",
+  "/images/persona-consultant.png",
+];
+
+const PERSONA_GLOWS = [
+  "rgba(205,150,255,0.30)",
+  "rgba(64,206,243,0.25)",
+  "rgba(255,106,159,0.22)",
+];
+
+const PERSONA_ACCENTS = ["#cd96ff", "#40cef3", "#ff6a9f"];
+
 function OperatorCard({ operator, onClick }: { operator: Operator; onClick: () => void }) {
   const initial = operator.name.charAt(0).toUpperCase();
-  const hue = operator.name.charCodeAt(0) % 360;
+  const idx = operator.name.charCodeAt(0) % 3;
+  const imgSrc = PERSONA_IMAGES[idx];
+  const glow = PERSONA_GLOWS[idx];
+  const accent = PERSONA_ACCENTS[idx];
 
   return (
     <div
-      className="group relative overflow-hidden rounded-2xl border border-border/40 glass-panel hover:border-primary/40 hover:neon-glow-primary grayscale opacity-60 hover:grayscale-0 hover:opacity-100 transition-all duration-700 cursor-pointer flex flex-col"
+      className="group relative overflow-hidden rounded-2xl border border-border/30 glass-panel hover:border-primary/40 hover:neon-glow-primary transition-all duration-500 cursor-pointer flex flex-col"
       onClick={onClick}
       data-testid={`card-operator-${operator.id}`}
     >
-      <div className="absolute top-3 right-3 z-10">
-        <HealthBadge operatorId={operator.id} />
+      {/* Image header */}
+      <div className="h-28 relative overflow-hidden bg-[#0a0a0f] shrink-0">
+        <img
+          src={imgSrc}
+          alt={`${operator.name} portrait`}
+          className="w-full h-full object-cover object-top opacity-60 group-hover:opacity-90 scale-110 group-hover:scale-100 transition-all duration-500"
+        />
+        <div
+          className="absolute inset-0"
+          style={{ background: `radial-gradient(ellipse at 50% 120%, ${glow} 0%, transparent 65%)`, mixBlendMode: "screen" }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-card via-card/40 to-transparent" />
+        {/* Health badge floats top-right */}
+        <div className="absolute top-2 right-2 z-10">
+          <HealthBadge operatorId={operator.id} />
+        </div>
       </div>
 
-      {/* Avatar + name */}
-      <div className="p-5 pb-3 flex items-center gap-3">
+      {/* Avatar + name row */}
+      <div className="px-4 pt-3 pb-2 flex items-center gap-3">
         <div
-          className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-white font-headline font-bold text-base"
-          style={{ backgroundColor: `hsl(${hue} 60% 45%)` }}
+          className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-white font-headline font-bold text-sm border"
+          style={{ backgroundColor: `${accent}22`, borderColor: `${accent}40`, color: accent }}
         >
           {initial}
         </div>
-        <div className="min-w-0 flex-1 pr-20">
-          <h3 className="font-headline font-bold text-base text-foreground truncate leading-tight">
+        <div className="min-w-0 flex-1">
+          <h3 className="font-headline font-bold text-sm text-foreground truncate leading-tight">
             {operator.name}
           </h3>
-          <p className="font-label text-xs text-muted-foreground/70 mt-0.5">
+          <p className="font-label text-[11px] text-muted-foreground/70 mt-0.5">
             {operator.archetype ?? "Operator"}
           </p>
         </div>
       </div>
 
       {/* Mandate */}
-      <div className="px-5 pb-5 flex-1">
-        <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed">
+      <div className="px-4 pb-4 flex-1">
+        <p className="text-xs text-muted-foreground line-clamp-3 leading-relaxed">
           {operator.mandate}
         </p>
       </div>
 
       {/* Footer bar */}
-      <div className="px-5 py-3 border-t border-border/30 flex items-center gap-2">
+      <div className="px-4 py-2.5 border-t border-border/20 flex items-center gap-2">
         <span className="status-beacon" />
-        <span className="font-label text-xs text-muted-foreground">Active</span>
-        <span className="ml-auto font-label text-xs text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+        <span className="font-label text-[11px] text-muted-foreground">Active</span>
+        <span className="ml-auto font-label text-[11px] opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: accent }}>
           Open →
         </span>
       </div>
