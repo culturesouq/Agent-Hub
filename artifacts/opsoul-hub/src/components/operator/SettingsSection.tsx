@@ -6,7 +6,7 @@ import { Operator } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Lock, AlertTriangle, RefreshCw, Key, Globe, ShieldCheck, Copy, Shield, Cpu, Eye, EyeOff, Check, Loader2, ChevronDown, Info } from "lucide-react";
+import { Lock, AlertTriangle, RefreshCw, Key, Globe, ShieldCheck, Copy, Shield, Cpu, Eye, EyeOff, Check, Loader2, ChevronDown, Info, Zap } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -83,6 +83,7 @@ export default function SettingsSection({ operator, section }: { operator: Opera
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const [safeMode, setSafeMode] = useState(operator.safeMode ?? false);
+  const [freeRoaming, setFreeRoaming] = useState(operator.freeRoaming ?? false);
 
   const defaultModelId = operator.defaultModel ?? "opsoul/auto";
   const [selectedModel, setSelectedModel] = useState<string>(defaultModelId);
@@ -194,6 +195,18 @@ print(response.json()["content"])`;
       toast({ title: enabled ? "Safe Mode enabled" : "Safe Mode disabled" });
     },
     onError: (err: Error) => toast({ title: "Failed to update Safe Mode", description: err.message, variant: "destructive" }),
+  });
+
+  const updateFreeRoaming = useMutation({
+    mutationFn: (enabled: boolean) => apiFetch(`/operators/${operator.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ freeRoaming: enabled }),
+    }),
+    onSuccess: (_, enabled) => {
+      setFreeRoaming(enabled);
+      toast({ title: enabled ? "Free Roaming enabled" : "Free Roaming disabled" });
+    },
+    onError: (err: Error) => toast({ title: "Failed to update Free Roaming", description: err.message, variant: "destructive" }),
   });
 
   const lockIdentity = useMutation({
@@ -440,6 +453,30 @@ print(response.json()["content"])`;
           </div>
         </section>
       )}
+
+      <section className="space-y-4">
+        {show("safemode") && (
+          <>
+            <div className="flex items-center justify-between">
+              <h2 className="font-mono font-bold text-base">Free Roaming</h2>
+              <Switch
+                checked={freeRoaming}
+                onCheckedChange={(val) => updateFreeRoaming.mutate(val)}
+                disabled={updateFreeRoaming.isPending}
+              />
+            </div>
+            <p className="font-mono text-xs text-muted-foreground">
+              When enabled, the Operator can act autonomously using connected integrations.
+              Tool Use Policy activates and controls what it is allowed to do.
+            </p>
+            {freeRoaming && (
+              <div className="flex items-center gap-1.5 text-xs text-amber-500 font-mono">
+                <Zap className="w-3 h-3" /> Free Roaming is active — Tool Use Policy enforced
+              </div>
+            )}
+          </>
+        )}
+      </section>
 
       {show("evolution") && (
         <section className="space-y-4">

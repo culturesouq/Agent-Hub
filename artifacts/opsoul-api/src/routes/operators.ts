@@ -42,6 +42,7 @@ function serializeOperator(op: typeof operatorsTable.$inferSelect) {
     growLockLevel: op.growLockLevel,
     lockedUntil: op.lockedUntil,
     safeMode: op.safeMode,
+    freeRoaming: op.freeRoaming,
     toolUsePolicy: op.toolUsePolicy,
     hasCustomApiKey: !!op.openrouterApiKey,
     defaultModel: op.defaultModel ?? null,

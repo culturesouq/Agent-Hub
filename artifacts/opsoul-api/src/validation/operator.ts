@@ -47,6 +47,7 @@ export const UpdateOperatorLayer1Schema = z.object({
   coreValues: z.array(z.string().min(1)).min(1).max(10).optional(),
   ethicalBoundaries: z.array(z.string().min(1)).min(1).max(20).optional(),
   safeMode: z.boolean().optional(),
+  freeRoaming: z.boolean().optional(),
   toolUsePolicy: z.record(z.unknown()).optional(),
 });
 
