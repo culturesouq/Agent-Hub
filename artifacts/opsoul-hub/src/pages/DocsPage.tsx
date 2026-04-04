@@ -232,24 +232,7 @@ export default function DocsPage() {
         </aside>
       </div>
 
-      <footer className="relative z-10 w-full bg-slate-950/50 py-12 px-8 border-t border-white/5">
-        <div className="flex flex-col md:flex-row justify-between items-center gap-6 w-full max-w-7xl mx-auto">
-          <div className="flex flex-col gap-2">
-            <span className="text-lg font-black text-primary font-headline uppercase tracking-tighter">OpSoul Command</span>
-            <span className="text-[10px] font-label uppercase tracking-widest text-slate-500">© 2024 OpSoul Command. All systems operational.</span>
-          </div>
-          <div className="flex gap-8">
-            <a className="text-[10px] font-label uppercase tracking-widest text-slate-500 hover:text-secondary transition-colors" href="#">Terminal</a>
-            <a className="text-[10px] font-label uppercase tracking-widest text-slate-500 hover:text-secondary transition-colors" href="#">Documentation</a>
-            <a className="text-[10px] font-label uppercase tracking-widest text-slate-500 hover:text-secondary transition-colors" href="#">Governance</a>
-            <a className="text-[10px] font-label uppercase tracking-widest text-slate-500 hover:text-secondary transition-colors" href="#">Security</a>
-          </div>
-          <div className="flex gap-4">
-            <span className="material-symbols-outlined text-secondary opacity-80 hover:opacity-100 transition-opacity cursor-pointer select-none">share</span>
-            <span className="material-symbols-outlined text-secondary opacity-80 hover:opacity-100 transition-opacity cursor-pointer select-none">chat_bubble</span>
-          </div>
-        </div>
-      </footer>
+      <PublicFooter />
     </div>
   );
 }
