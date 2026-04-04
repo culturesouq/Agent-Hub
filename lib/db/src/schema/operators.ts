@@ -5,7 +5,7 @@ export const operatorsTable = pgTable('operators', {
   ownerId: text('owner_id').notNull(),
   slug: text('slug').notNull().unique(),
   name: text('name').notNull(),
-  archetype: text('archetype').array().notNull(),
+  archetype: text('archetype').notNull(),
   mandate: text('mandate').notNull(),
   coreValues: text('core_values').array(),
   ethicalBoundaries: text('ethical_boundaries').array(),

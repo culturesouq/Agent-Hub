@@ -21,7 +21,7 @@ import { lockLayer1IfUnlocked } from '../utils/lockLayer1.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { buildSystemPrompt } from '../utils/systemPrompt.js';
 import type { ActiveSkill, ActiveMissionContext, SelfAwarenessSnapshot, BuildSystemPromptOpts } from '../utils/systemPrompt.js';
-import { searchMemory, buildMemoryContext, distillMemoriesFromConversations } from '../utils/memoryEngine.js';
+import { searchMemory, buildMemoryContext, distillMemoriesFromConversations, storeMemory } from '../utils/memoryEngine.js';
 import type { MemoryHit } from '../utils/memoryEngine.js';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
@@ -205,11 +205,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     const assistantMsgs = history.filter((m) => m.role === 'assistant');
     if (assistantMsgs.length >= 2) {
       try {
-        const dist = await semanticDistance(
-          assistantMsgs[0].content,
-          assistantMsgs[assistantMsgs.length - 1].content,
-        );
-        sycophancyWarning = dist > 0.35;
+        const firstContent = assistantMsgs[0].content;
+        const lastContent = assistantMsgs[assistantMsgs.length - 1].content;
+        if (typeof firstContent === 'string' && typeof lastContent === 'string') {
+          const dist = await semanticDistance(firstContent, lastContent);
+          sycophancyWarning = dist > 0.35;
+        }
       } catch {
         // non-critical — skip silently
       }
@@ -461,6 +462,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           const skillSystemMsg = `[Skill: ${skillResult.skillName}] Result:\n${skillResult.output}`;
           await db.insert(messagesTable).values({
             id:             crypto.randomUUID(),
+            operatorId:     operator.id,
             conversationId: conv.id,
             role:           'system',
             content:        skillSystemMsg,
@@ -585,6 +587,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           const skillSystemMsg = `[Skill: ${skillResult.skillName}] Result:\n${skillResult.output}`;
           await db.insert(messagesTable).values({
             id:             crypto.randomUUID(),
+            operatorId:     operator.id,
             conversationId: conv.id,
             role:           'system',
             content:        skillSystemMsg,

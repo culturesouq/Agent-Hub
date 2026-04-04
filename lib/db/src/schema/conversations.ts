@@ -9,6 +9,6 @@ export const conversationsTable = pgTable('conversations', {
   scopeId: text('scope_id').notNull(),
   scopeType: text('scope_type').notNull().default('owner'),
   messageCount: integer('message_count').default(0),
-  lastMessageAt: timestamp('last_message_at').default(undefined),
+  lastMessageAt: timestamp('last_message_at'),
   createdAt: timestamp('created_at').defaultNow(),
 });

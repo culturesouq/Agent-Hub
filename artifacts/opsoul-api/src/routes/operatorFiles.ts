@@ -7,7 +7,7 @@ import crypto from 'crypto';
 const router = Router({ mergeParams: true });
 
 router.get('/', async (req, res) => {
-  const { id } = req.params;
+  const id = (req.params as { id: string }).id;
   const ownerId = (req as any).ownerId;
   try {
     const files = await db
@@ -22,7 +22,7 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { id } = req.params;
+  const id = (req.params as { id: string }).id;
   const ownerId = (req as any).ownerId;
   const { filename, content = '' } = req.body;
   if (!filename) { res.status(400).json({ error: 'filename required' }); return; }

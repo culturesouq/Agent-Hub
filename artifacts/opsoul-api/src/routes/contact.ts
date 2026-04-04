@@ -4,10 +4,11 @@ import { randomUUID } from 'crypto';
 
 const router = Router();
 
-router.post('/', async (req, res) => {
+router.post('/', async (req, res): Promise<void> => {
   const { name, email, subject, message } = req.body;
   if (!name || !email || !message) {
-    return res.status(400).json({ error: 'Missing required fields' });
+    res.status(400).json({ error: 'Missing required fields' });
+    return;
   }
   try {
     await pool.query(

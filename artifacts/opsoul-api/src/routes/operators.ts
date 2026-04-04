@@ -441,7 +441,7 @@ router.patch('/:id/identity-from-description', async (req: Request, res: Respons
           content: description,
         },
       ]);
-      const candidate = nameRaw.trim().replace(/["""''.,]/g, '');
+      const candidate = nameRaw.content.trim().replace(/["""''.,]/g, '');
       const wordCount = candidate.split(/\s+/).length;
       if (candidate.length > 0 && candidate.length <= 40 && wordCount <= 3) {
         agentName = candidate;
@@ -468,7 +468,7 @@ router.patch('/:id/identity-from-description', async (req: Request, res: Respons
         content: `Extract these fields from the description below:\n\n"${description}"\n\nReturn JSON: { "mandate": "concise purpose statement (1-2 sentences)", "coreValues": ["up to 4 values"], "ethicalBoundaries": ["up to 3 things it won't do"] }`,
       },
     ]);
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(raw.content);
   } catch {
     parsed = {
       mandate: description.substring(0, 300),
@@ -520,7 +520,7 @@ router.patch('/:id/soul/from-description', async (req: Request, res: Response): 
         content: `Extract communication/personality fields from:\n\n"${description}"\n\nReturn JSON: { "communicationStyle": "one sentence", "personalityTraits": ["up to 4 traits"], "toneProfile": "one sentence about tone", "emotionalRange": "one sentence", "decisionMakingStyle": "one sentence", "conflictResolution": "one sentence", "quirks": ["up to 2 quirks"] }`,
       },
     ]);
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(raw.content);
   } catch {
     parsed = { communicationStyle: description.substring(0, 300) };
   }
