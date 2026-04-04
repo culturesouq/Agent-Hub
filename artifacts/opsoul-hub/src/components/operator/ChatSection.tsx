@@ -253,11 +253,11 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   const convName = (conv: Conversation) => conv.contextName || "Conversation";
 
   return (
-    <div className="h-[calc(100vh-140px)] flex border border-border/50 rounded-lg overflow-hidden bg-card/20 animate-in fade-in zoom-in-95 duration-300">
+    <div className="h-[calc(100vh-140px)] flex glass-panel rounded-2xl border border-border/30 overflow-hidden animate-in fade-in zoom-in-95 duration-300">
       {/* Conversation list */}
-      <div className="w-56 border-r border-border/50 flex flex-col bg-card/40 shrink-0">
-        <div className="p-3 border-b border-border/50 flex justify-between items-center bg-card/60">
-          <span className="font-mono text-sm font-bold flex items-center gap-2">
+      <div className="w-56 border-r border-border/30 flex flex-col bg-surface-container-low/60 shrink-0">
+        <div className="p-3 border-b border-border/30 flex justify-between items-center bg-surface-container/40">
+          <span className="font-headline text-sm font-bold flex items-center gap-2 text-primary">
             <MessageSquare className="w-4 h-4" /> Conversations
           </span>
           <Button
@@ -275,7 +275,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
             {convosLoading ? (
               <div className="p-4 text-center font-mono text-xs text-muted-foreground animate-pulse">Loading...</div>
             ) : convosArray.length === 0 ? (
-              <div className="p-4 text-center font-mono text-xs text-muted-foreground">No conversations yet</div>
+              <div className="p-4 text-center font-label text-xs text-muted-foreground">No conversations yet</div>
             ) : (
               convosArray.map(conv => (
                 <div
@@ -288,8 +288,8 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                     }`}
                 >
                   <div className="overflow-hidden flex-1 min-w-0">
-                    <div className="font-mono text-xs truncate font-semibold">{convName(conv)}</div>
-                    <div className="font-mono text-[10px] opacity-60 mt-0.5">
+                    <div className="font-label text-xs truncate font-semibold">{convName(conv)}</div>
+                    <div className="font-label text-[10px] opacity-60 mt-0.5">
                       {format(new Date(conv.createdAt), "MMM d, HH:mm")}
                     </div>
                   </div>
@@ -320,7 +320,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
               ) : msgsArray.length === 0 && !streamingMsg ? (
                 <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-40 space-y-3">
                   <MessageSquare className="w-10 h-10" />
-                  <p className="font-mono text-sm">Send a message to get started.</p>
+                  <p className="font-label text-sm">Send a message to get started.</p>
                 </div>
               ) : (
                 <>
@@ -412,7 +412,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                   value={input}
                   onChange={e => setInput(e.target.value)}
                   placeholder="Type a message..."
-                  className="font-mono bg-background/50 border-border/50 focus-visible:ring-primary/30 text-sm"
+                  className="font-sans bg-background/50 border-border/50 focus-visible:ring-primary/30 text-sm"
                   disabled={!!streamingMsg}
                 />
                 <Button
@@ -429,7 +429,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
         ) : (
           <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-40 space-y-3">
             <MessageSquare className="w-10 h-10" />
-            <p className="font-mono text-sm">Select or start a conversation.</p>
+            <p className="font-label text-sm">Select or start a conversation.</p>
           </div>
         )}
       </div>
