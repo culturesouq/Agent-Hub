@@ -16,9 +16,14 @@ The platform has two services that must both be running:
 bash scripts/start-dev.sh
 ```
 
-**Routing:** The frontend is registered at `previewPath = "/"` via `artifacts/opsoul-hub/.replit-artifact/artifact.toml`. Visiting `/` with no auth token shows LandingPage; with a valid token shows Dashboard. The `[[artifacts]]` section in `.replit` contains a legacy `api-server` entry (stale — no longer used); the live artifact registration is via artifact.toml files.
+**Routing:** The frontend is registered at `previewPath = "/"` via `artifacts/opsoul-hub/.replit-artifact/artifact.toml`. Visiting `/` with no auth token shows LandingPage; with a valid token shows Dashboard.
 
-**Note on .replit [[artifacts]]:** Direct editing of `.replit` is platform-restricted. The opsoul-hub artifact is correctly registered via its own `artifact.toml` which is the authoritative registration mechanism in this Replit version. To update `.replit` artifact entries, a maintainer must edit the file directly.
+**Artifact registration (confirmed):**
+- `artifacts/opsoul-hub` — registered as kind `web`, title "OpSoul Hub" (id: `artifacts/opsoul-hub`)
+- `artifacts/mockup-sandbox` — registered as kind `design`, title "Canvas"
+- `artifacts/opsoul-api` — Express API server (no artifact registration needed; managed as a workflow)
+
+**Note on .replit [[artifacts]]:** The `[[artifacts]]` entries in `.replit` are managed by the platform's artifact bootstrap system and cannot be modified by agents directly (agent file tools block `.replit` edits). The stale `artifacts/api-server` entry is a legacy reference from a previous scaffold — it is harmless but cannot be cleaned up. The live artifact registrations are stored in per-artifact `artifact.toml` files and confirmed via the platform artifact registry above.
 
 ## v2.4 GitHub Release — Task #19
 
