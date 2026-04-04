@@ -2,6 +2,16 @@
 
 AI operator platform with 5-layer identity architecture, dual knowledge bases, GROW self-evolution system, multi-tenant JWT auth, and pgvector semantic search.
 
+## v2.4 GitHub Release — Task #19
+
+**Push record (2026-04-04):**
+- Staged: `.gitignore` — added `.env`, `.env.*`, `!.env.example` entries (no `.env` files existed)
+- Pre-push check: `git status --short` confirmed no sensitive files staged
+- Commit SHA: `4b7339f` — `"feat: OpSoul v2.4 Complete — persistence, GROW, Safe Mode, mobile, i18n"`
+- Remote: `https://github.com/culturesouq/Agent-Hub.git` branch `main`
+- Push range: `7062494..4b7339f` — 91 objects, 70.32 KiB — **SUCCESS**
+- Command used: `GIT_TERMINAL_PROMPT=0 git -c credential.helper="" push "https://x-access-token:${GITHUB_PERSONAL_ACCESS_TOKEN}@github.com/culturesouq/Agent-Hub.git" main`
+
 ## v2.4 Session Completed Features
 
 - **T2 Arabic detection** — Unicode `/[\u0600-\u06FF...]` detected in chat.ts → `languageInstruction` injected silently into system prompt
