@@ -71,143 +71,26 @@
 }
 
 :root {
-  /* === Stitch Design System — Material Design 3 Dark ===
-     Primary: #e0b6ff (light purple)   → HSL 276 100% 86%
-     Secondary: #8cd4c3 (teal)         → HSL 168 43% 69%
-     Background: #050508 (near-black)  → HSL 240 29% 4%
-  */
-
-  /* MD3 surface hierarchy */
-  --surface-dim: 240 16% 6%;
-  --surface: 240 7% 9%;
-  --surface-container-lowest: 240 11% 7%;
-  --surface-container-low: 240 7% 11%;
-  --surface-container: 240 7% 13%;
-  --surface-container-high: 264 6% 17%;
-  --surface-container-highest: 264 6% 22%;
-  --on-surface: 282 7% 90%;
-  --on-surface-variant: 264 14% 70%;
-
-  /* Surfaces */
-  --background: 240 29% 4%;
-  --foreground: 282 7% 90%;
-
-  /* Cards / containers (surface-container #1f1f23) */
-  --card: 240 7% 13%;
-  --card-foreground: 282 7% 90%;
-  --card-border: 256 11% 30%;
-
-  --popover: 240 7% 13%;
-  --popover-foreground: 282 7% 90%;
-  --popover-border: 256 11% 30%;
-
-  /* Primary — #e0b6ff light purple */
-  --primary: 276 100% 86%;
-  --primary-foreground: 278 83% 25%;
-
-  /* Secondary — #8cd4c3 teal */
-  --secondary: 168 43% 69%;
-  --secondary-foreground: 172 100% 11%;
-
-  /* Muted — surface-container-high #2a292e */
-  --muted: 264 6% 17%;
-  --muted-foreground: 264 14% 80%;
-
-  /* Accent — primary-container #6f389b */
-  --accent: 277 44% 41%;
-  --accent-foreground: 276 100% 86%;
-
-  /* Destructive — error #ffb4ab */
-  --destructive: 5 100% 84%;
-  --destructive-foreground: 356 100% 29%;
-
-  /* Borders & inputs */
-  --border: 256 11% 30%;
-  --input: 240 7% 13%;
-  --ring: 276 100% 86%;
-
-  /* Sidebar — dark surface-container-low #1b1b1f */
-  --sidebar: 240 7% 11%;
-  --sidebar-foreground: 282 7% 90%;
-  --sidebar-border: 256 11% 22%;
-  --sidebar-primary: 276 100% 86%;
-  --sidebar-primary-foreground: 278 83% 25%;
-  --sidebar-accent: 240 7% 13%;
-  --sidebar-accent-foreground: 282 7% 90%;
-  --sidebar-ring: 276 100% 86%;
-
-  /* Font families */
+  /* Stitch Design System — runtime non-color tokens */
   --app-font-headline: 'Space Grotesk', sans-serif;
-  --app-font-body: 'Manrope', sans-serif;
-  --app-font-label: 'Inter', sans-serif;
+  --app-font-body:     'Manrope', sans-serif;
+  --app-font-label:    'Inter', sans-serif;
 
-  /* Stitch radius scale (MD3-aligned) */
-  --radius: 0.25rem;
-  --radius-xs: 0.125rem;
-  --radius-sm: 0.25rem;
-  --radius-md: 0.375rem;
-  --radius-base: 0.5rem;
-  --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
-  --radius-2xl: 1.5rem;
-  --radius-3xl: 2rem;
+  /* Stitch radius scale (MD3-aligned, canonical) */
+  --radius:     0.125rem;
+  --radius-xs:  0.125rem;
+  --radius-sm:  0.125rem;
+  --radius-md:  0.25rem;
+  --radius-lg:  0.25rem;
+  --radius-xl:  0.5rem;
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.5rem;
 
-  --button-outline: rgba(255,255,255, .10);
-  --badge-outline: rgba(255,255,255, .05);
-  --opaque-button-border-intensity: 9;
-  --elevate-1: rgba(255,255,255, .04);
-  --elevate-2: rgba(255,255,255, .09);
-}
-
-.dark {
-  --surface-dim: 240 16% 6%;
-  --surface: 240 7% 9%;
-  --surface-container-lowest: 240 11% 7%;
-  --surface-container-low: 240 7% 11%;
-  --surface-container: 240 7% 13%;
-  --surface-container-high: 264 6% 17%;
-  --surface-container-highest: 264 6% 22%;
-  --on-surface: 282 7% 90%;
-  --on-surface-variant: 264 14% 70%;
-
-  --background: 240 29% 4%;
-  --foreground: 282 7% 90%;
-
-  --card: 240 7% 13%;
-  --card-foreground: 282 7% 90%;
-  --card-border: 256 11% 30%;
-
-  --popover: 240 7% 13%;
-  --popover-foreground: 282 7% 90%;
-  --popover-border: 256 11% 30%;
-
-  --primary: 276 100% 86%;
-  --primary-foreground: 278 83% 25%;
-
-  --secondary: 168 43% 69%;
-  --secondary-foreground: 172 100% 11%;
-
-  --muted: 264 6% 17%;
-  --muted-foreground: 264 14% 80%;
-
-  --accent: 277 44% 41%;
-  --accent-foreground: 276 100% 86%;
-
-  --destructive: 5 100% 84%;
-  --destructive-foreground: 356 100% 29%;
-
-  --border: 256 11% 30%;
-  --input: 240 7% 13%;
-  --ring: 276 100% 86%;
-
-  --sidebar: 240 7% 11%;
-  --sidebar-foreground: 282 7% 90%;
-  --sidebar-border: 256 11% 22%;
-  --sidebar-primary: 276 100% 86%;
-  --sidebar-primary-foreground: 278 83% 25%;
-  --sidebar-accent: 240 7% 13%;
-  --sidebar-accent-foreground: 282 7% 90%;
-  --sidebar-ring: 276 100% 86%;
+  /* Elevation / overlay helpers */
+  --button-outline: rgba(255,255,255,.10);
+  --badge-outline:  rgba(255,255,255,.05);
+  --elevate-1:      rgba(255,255,255,.04);
+  --elevate-2:      rgba(255,255,255,.09);
 }
 
 @layer base {
@@ -233,15 +116,15 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: hsl(256 11% 30%);
+    background: #4a4658;
     border-radius: 2px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: hsl(256 11% 40%);
+    background: #5e5a6e;
   }
   * {
     scrollbar-width: thin;
-    scrollbar-color: hsl(256 11% 30%) transparent;
+    scrollbar-color: #4a4658 transparent;
   }
 }
 
