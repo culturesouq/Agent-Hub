@@ -26,6 +26,7 @@ import TasksSection from "@/components/operator/TasksSection";
 import GrowSection from "@/components/operator/GrowSection";
 import PersonalitySection from "@/components/operator/PersonalitySection";
 import KbSection from "@/components/operator/KbSection";
+import FilesSection from "@/components/operator/FilesSection";
 
 function OperatorAvatar({ name }: { name: string }) {
   const letter = name.charAt(0).toUpperCase();
@@ -283,7 +284,7 @@ export default function OperatorDetail({ id }: { id: string }) {
       case "memory":             return <MemorySection operatorId={id} />;
       case "grow":               return <GrowSection operatorId={id} saData={saData} />;
       case "tasks":              return <TasksSection operatorId={id} />;
-      case "files":              return <ComingSoon title="Files" />;
+      case "files":              return <FilesSection operator={operator} />;
       case "connections":        return <IntegrationsSection operatorId={id} />;
       case "settings.model":     return <SettingsSection operator={operator} section="model" />;
       case "settings.secrets":   return <SettingsSection operator={operator} section="secrets" />;

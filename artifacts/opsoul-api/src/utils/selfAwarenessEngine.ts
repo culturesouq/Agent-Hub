@@ -13,6 +13,7 @@ import {
   conversationsTable,
   tasksTable,
   opsLogsTable,
+  operatorFilesTable,
 } from '@workspace/db';
 import { eq, and, count, avg, desc, not, isNull, inArray, sql, gte, lt, isNotNull } from 'drizzle-orm';
 
@@ -100,6 +101,8 @@ export interface WorkspaceManifest {
   lastConversationAt: string | null;
   lastGrowActivity: string | null;
   generatedAt: string;
+  fileCount: number;
+  fileNames: string[];
 }
 
 export interface SelfAwarenessState {
@@ -116,7 +119,7 @@ export interface SelfAwarenessState {
 }
 
 async function buildWorkspaceManifest(operatorId: string): Promise<WorkspaceManifest> {
-  const [kbHigh, kbMedium, kbLow, memoryRows, lastGrow, lastConv] = await Promise.all([
+  const [kbHigh, kbMedium, kbLow, memoryRows, lastGrow, lastConv, filesRows] = await Promise.all([
     db.select({ total: count() }).from(operatorKbTable)
       .where(and(eq(operatorKbTable.operatorId, operatorId), gte(operatorKbTable.confidenceScore, 80))),
     db.select({ total: count() }).from(operatorKbTable)
@@ -133,6 +136,9 @@ async function buildWorkspaceManifest(operatorId: string): Promise<WorkspaceMani
     db.select({ lastAt: sql<string>`MAX(last_message_at)::text` })
       .from(conversationsTable)
       .where(eq(conversationsTable.operatorId, operatorId)),
+    db.select({ id: operatorFilesTable.id, filename: operatorFilesTable.filename })
+      .from(operatorFilesTable)
+      .where(eq(operatorFilesTable.operatorId, operatorId)),
   ]);
 
   const memoryByType: Record<string, number> = {};
@@ -153,6 +159,8 @@ async function buildWorkspaceManifest(operatorId: string): Promise<WorkspaceMani
     lastConversationAt: lastConv[0]?.lastAt ?? null,
     lastGrowActivity: lastGrow[0]?.lastActivity ?? null,
     generatedAt: new Date().toISOString(),
+    fileCount: filesRows.length,
+    fileNames: filesRows.map(f => f.filename),
   };
 }
 
