@@ -479,6 +479,14 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           });
           console.log(`[agency] skill ${skillTrigger.name} executed and logged`);
           triggerSelfAwareness(operator.id, 'integration_change').catch(() => {});
+          storeMemory(
+            operator.id,
+            operator.ownerId,
+            `Skill executed: ${skillTrigger.name}. Result: ${skillResult.output.slice(0, 500)}`,
+            'pattern',
+            'ai_distilled',
+            0.6,
+          ).catch(() => {});
         }
       }
       // --- END AGENCY LAYER ---
@@ -595,6 +603,14 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           });
           console.log(`[agency] skill ${skillTrigger.name} executed and logged`);
           triggerSelfAwareness(operator.id, 'integration_change').catch(() => {});
+          storeMemory(
+            operator.id,
+            operator.ownerId,
+            `Skill executed: ${skillTrigger.name}. Result: ${skillResult.output.slice(0, 500)}`,
+            'pattern',
+            'ai_distilled',
+            0.6,
+          ).catch(() => {});
         }
       }
       // --- END AGENCY LAYER ---
