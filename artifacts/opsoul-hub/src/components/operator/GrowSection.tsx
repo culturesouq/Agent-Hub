@@ -7,20 +7,23 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Activity, CheckCircle2, XCircle, AlertCircle, Play, RefreshCw, FlaskConical, ChevronDown, ChevronUp, ArrowRight } from "lucide-react";
+import {
+  Activity, CheckCircle2, XCircle, AlertCircle, Play, RefreshCw,
+  FlaskConical, ChevronDown, ChevronUp, ArrowRight, Sparkles,
+} from "lucide-react";
 import { format } from "date-fns";
 
 const FIELD_LABELS: Record<string, string> = {
-  personalityTraits: "personality traits",
-  toneProfile: "communication tone",
-  communicationStyle: "communication style",
-  emotionalRange: "emotional range",
-  decisionMakingStyle: "decision-making approach",
-  conflictResolution: "conflict resolution style",
-  quirks: "unique characteristics",
-  valuesManifestation: "how values show up",
-  openingMessage: "opening message",
-  mandate: "core purpose",
+  personalityTraits:    "personality traits",
+  toneProfile:          "communication tone",
+  communicationStyle:   "communication style",
+  emotionalRange:       "emotional range",
+  decisionMakingStyle:  "decision-making approach",
+  conflictResolution:   "conflict resolution style",
+  quirks:               "unique characteristics",
+  valuesManifestation:  "how values show up",
+  openingMessage:       "opening message",
+  mandate:              "core purpose",
 };
 
 function humanizeField(field: string): string {
@@ -31,6 +34,25 @@ function confidenceColor(pct: number) {
   if (pct >= 80) return "text-green-500";
   if (pct >= 60) return "text-amber-500";
   return "text-muted-foreground";
+}
+
+function describePropChange(field: string, value: unknown): string {
+  const label = humanizeField(field);
+  if (Array.isArray(value) && value.length > 0) {
+    const items = value.map(String);
+    if (items.length === 1) return `Your operator's ${label} would be updated to: ${items[0]}.`;
+    const last = items[items.length - 1];
+    const rest = items.slice(0, -1).join(", ");
+    return `Your operator's ${label} would be updated to include: ${rest} and ${last}.`;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const preview = value.length > 120 ? value.slice(0, 120).trimEnd() + "…" : value;
+    return `Your operator's ${label} would be updated to: "${preview}"`;
+  }
+  if (typeof value === "number") {
+    return `Your operator's ${label} would be set to ${value}.`;
+  }
+  return `Your operator's ${label} would be refined based on recent experience.`;
 }
 
 interface TestResult {
@@ -75,8 +97,9 @@ function ProposalCard({
       );
       setTestResults(res.results ?? []);
     } catch (err: any) {
-      setTestError(err.message ?? "Test failed");
-      toast({ title: "Preview failed", description: err.message, variant: "destructive" });
+      const msg = err.message ?? "Test failed";
+      setTestError(msg);
+      toast({ title: "Preview failed", description: msg, variant: "destructive" });
     } finally {
       setTestLoading(false);
     }
@@ -99,10 +122,11 @@ function ProposalCard({
             </span>
           </div>
 
+          {/* Human-language change summary (always visible) */}
           <p className="font-mono text-sm font-bold text-foreground leading-snug">
-            Wants to update <span className="text-primary">{humanizeField(prop.targetField)}</span>
+            Proposes to update{" "}
+            <span className="text-primary">{humanizeField(prop.targetField)}</span>
           </p>
-
           <p className="font-mono text-xs text-muted-foreground mt-1.5 leading-relaxed line-clamp-2">
             {prop.rationale}
           </p>
@@ -110,55 +134,51 @@ function ProposalCard({
 
         <div className="flex flex-col items-end gap-2 shrink-0">
           <span className={`font-mono text-xs font-bold ${confidenceColor(prop.confidence)}`}>
-            {prop.confidence}% confidence
+            {prop.confidence}% confident
           </span>
           <button
             onClick={() => setExpanded(e => !e)}
             className="text-muted-foreground hover:text-foreground transition-colors"
+            aria-label={expanded ? "Collapse details" : "Expand details"}
           >
             {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
         </div>
       </div>
 
-      {/* Expanded detail */}
+      {/* Behavior Diff Card — human-language detail */}
       {expanded && (
         <div className="border-t border-border/30 px-4 pb-4 pt-3 space-y-3">
+          {/* What would change — plain English */}
+          <div className="rounded-lg bg-primary/5 border border-primary/15 p-3 space-y-1.5">
+            <p className="font-mono text-[10px] text-primary/60 uppercase tracking-wider flex items-center gap-1.5">
+              <Sparkles className="w-2.5 h-2.5" /> What would change
+            </p>
+            <p className="font-mono text-xs text-foreground/90 leading-relaxed">
+              {describePropChange(prop.targetField, prop.proposedValue)}
+            </p>
+          </div>
+
+          {/* Why — full rationale */}
           <div className="space-y-1.5">
-            <p className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">Full reasoning</p>
+            <p className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
+              Why the operator wants this
+            </p>
             <p className="font-mono text-xs text-foreground/80 leading-relaxed border-l-2 border-primary/30 pl-3">
               {prop.rationale}
             </p>
           </div>
-          {prop.proposedValue !== undefined && (
-            <div className="space-y-1.5">
-              <p className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">Proposed change</p>
-              {Array.isArray(prop.proposedValue) ? (
-                <div className="flex flex-wrap gap-1.5 p-3 bg-primary/5 rounded-lg border border-primary/20">
-                  {prop.proposedValue.map((item: string, i: number) => (
-                    <span key={i} className="font-mono text-xs bg-primary/10 text-primary/90 px-2 py-0.5 rounded-full border border-primary/20">
-                      {item}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <p className="font-mono text-xs text-primary/90 bg-primary/5 p-3 rounded-lg border border-primary/20 leading-relaxed">
-                  {String(prop.proposedValue)}
-                </p>
-              )}
-            </div>
-          )}
         </div>
       )}
 
-      {/* Preview test results */}
-      {testResults && (
+      {/* Test Preview results panel */}
+      {testResults && testResults.length > 0 && (
         <div className="border-t border-border/30 px-4 pb-4 pt-3 space-y-4">
           <p className="font-mono text-xs font-bold text-foreground flex items-center gap-2">
             <FlaskConical className="w-3.5 h-3.5 text-primary" />
-            Preview — how the operator would respond differently
+            Test preview — how responses would differ
           </p>
-          <div className="space-y-4">
+          <div className="space-y-5">
             {testResults.map((result, i) => (
               <div key={i} className="space-y-2">
                 <p className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
@@ -189,6 +209,14 @@ function ProposalCard({
         </div>
       )}
 
+      {testResults && testResults.length === 0 && (
+        <div className="border-t border-border/30 px-4 py-3">
+          <p className="font-mono text-xs text-muted-foreground text-center">
+            No conversation history available to test against yet.
+          </p>
+        </div>
+      )}
+
       {testError && (
         <div className="border-t border-destructive/20 px-4 py-2">
           <p className="font-mono text-xs text-destructive">{testError}</p>
@@ -206,7 +234,7 @@ function ProposalCard({
             disabled={testLoading}
           >
             <FlaskConical className={`w-3 h-3 mr-1.5 ${testLoading ? "animate-spin" : ""}`} />
-            {testLoading ? "Running preview…" : testResults ? "Re-run preview" : "Preview changes"}
+            {testLoading ? "Running preview…" : testResults ? "Re-run test preview" : "Test preview"}
           </Button>
           <div className="flex gap-2 ml-auto">
             <Button
@@ -239,19 +267,24 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
 
   const { data: proposals = [], isLoading: propsLoading } = useQuery({
     queryKey: ["operators", operatorId, "grow-proposals"],
-    queryFn: () => apiFetch<any>(`/operators/${operatorId}/grow/proposals`).then(r => r.proposals ?? []),
+    queryFn: () =>
+      apiFetch<any>(`/operators/${operatorId}/grow/proposals`).then(r => r.proposals ?? []),
   });
 
   const triggerGrow = useMutation({
     mutationFn: () => apiFetch(`/operators/${operatorId}/grow/trigger`, { method: "POST" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "grow-proposals"] });
-      toast({ title: "Growth cycle started", description: "Your operator is analyzing recent experience for potential improvements." });
+      toast({
+        title: "Growth cycle started",
+        description: "Your operator is analyzing recent experience for potential improvements.",
+      });
     },
   });
 
   const recomputeSa = useMutation({
-    mutationFn: () => apiFetch(`/operators/${operatorId}/grow/recompute`, { method: "POST" }),
+    mutationFn: () =>
+      apiFetch(`/operators/${operatorId}/grow/self-awareness/recompute`, { method: "POST" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "self-awareness"] });
       toast({ title: "Health score refreshed" });
@@ -260,7 +293,10 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
 
   const decideProposal = useMutation({
     mutationFn: ({ id, action }: { id: string; action: "approve" | "reject" }) =>
-      apiFetch(`/operators/${operatorId}/grow/proposals/${id}/decide`, { method: "PATCH", body: JSON.stringify({ decision: action }) }),
+      apiFetch(`/operators/${operatorId}/grow/proposals/${id}/decide`, {
+        method: "PATCH",
+        body: JSON.stringify({ decision: action }),
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "grow-proposals"] });
       queryClient.invalidateQueries({ queryKey: ["operators", operatorId] });
@@ -307,10 +343,16 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
 
       <Tabs defaultValue="health" className="w-full">
         <TabsList className="grid w-full max-w-sm grid-cols-2 bg-card/50 border border-border/50 h-auto p-1 mb-6">
-          <TabsTrigger value="health" className="font-mono text-xs py-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
+          <TabsTrigger
+            value="health"
+            className="font-mono text-xs py-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary"
+          >
             Health
           </TabsTrigger>
-          <TabsTrigger value="proposals" className="font-mono text-xs py-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary relative">
+          <TabsTrigger
+            value="proposals"
+            className="font-mono text-xs py-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary relative"
+          >
             Proposals
             {pending.length > 0 && (
               <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-bold">
@@ -327,15 +369,25 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
               <div className="flex flex-col sm:flex-row gap-5">
                 {/* Score */}
                 <div className="rounded-xl border border-border/40 bg-card/30 p-6 flex flex-col items-center justify-center gap-2 min-w-36">
-                  <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">Health score</span>
-                  <span className={`font-mono font-bold text-5xl leading-none ${
-                    saData.healthScore.score >= 80 ? "text-green-500" :
-                    saData.healthScore.score >= 50 ? "text-amber-500" : "text-red-500"
-                  }`}>
+                  <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
+                    Health score
+                  </span>
+                  <span
+                    className={`font-mono font-bold text-5xl leading-none ${
+                      saData.healthScore.score >= 80
+                        ? "text-green-500"
+                        : saData.healthScore.score >= 50
+                        ? "text-amber-500"
+                        : "text-red-500"
+                    }`}
+                  >
                     {saData.healthScore.score}
                     <span className="text-2xl opacity-50">%</span>
                   </span>
-                  <Badge variant="outline" className="font-mono text-[10px] uppercase bg-background/50 mt-1">
+                  <Badge
+                    variant="outline"
+                    className="font-mono text-[10px] uppercase bg-background/50 mt-1"
+                  >
                     {saData.healthScore.label}
                   </Badge>
                 </div>
@@ -343,16 +395,24 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
                 {/* Components */}
                 <div className="flex-1 rounded-xl border border-border/40 bg-card/30 p-5 space-y-4">
                   {[
-                    { key: "mandateCoverage",  label: "Purpose coverage",       val: saData.healthScore.components.mandateCoverage },
-                    { key: "mandateGaps",      label: "Purpose adherence",      val: saData.healthScore.components.mandateGaps ?? 0 },
-                    { key: "kbConfidence",     label: "Knowledge confidence",   val: saData.healthScore.components.kbConfidence },
-                    { key: "growActivity",     label: "Growth activity",        val: saData.healthScore.components.growActivity },
-                    { key: "soulIntegrity",    label: "Personality integrity",  val: saData.healthScore.components.soulIntegrity },
+                    { key: "mandateCoverage", label: "Purpose coverage",      val: saData.healthScore.components.mandateCoverage },
+                    { key: "mandateGaps",     label: "Purpose adherence",     val: saData.healthScore.components.mandateGaps ?? 0 },
+                    { key: "kbConfidence",    label: "Knowledge confidence",  val: saData.healthScore.components.kbConfidence },
+                    { key: "growActivity",    label: "Growth activity",       val: saData.healthScore.components.growActivity },
+                    { key: "soulIntegrity",   label: "Personality integrity", val: saData.healthScore.components.soulIntegrity },
                   ].map(comp => (
                     <div key={comp.key} className="space-y-1">
                       <div className="flex justify-between text-xs font-mono">
                         <span className="text-muted-foreground">{comp.label}</span>
-                        <span className={comp.val >= 80 ? "text-green-500" : comp.val >= 50 ? "text-amber-500" : "text-red-500"}>
+                        <span
+                          className={
+                            comp.val >= 80
+                              ? "text-green-500"
+                              : comp.val >= 50
+                              ? "text-amber-500"
+                              : "text-red-500"
+                          }
+                        >
                           {comp.val}%
                         </span>
                       </div>
@@ -381,7 +441,13 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
             <div className="flex flex-col items-center justify-center h-48 gap-3">
               <Activity className="w-8 h-8 text-muted-foreground/20" />
               <p className="font-mono text-sm text-muted-foreground">No health data yet.</p>
-              <Button variant="outline" size="sm" onClick={() => recomputeSa.mutate()} disabled={recomputeSa.isPending} className="font-mono text-xs">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => recomputeSa.mutate()}
+                disabled={recomputeSa.isPending}
+                className="font-mono text-xs"
+              >
                 <RefreshCw className="w-3 h-3 mr-1.5" /> Compute now
               </Button>
             </div>
@@ -400,7 +466,9 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
             <div className="flex flex-col items-center justify-center h-48 gap-3 border border-dashed border-border/40 rounded-xl bg-card/10">
               <Activity className="w-8 h-8 text-muted-foreground/20" />
               <p className="font-mono text-sm text-muted-foreground">No growth proposals yet.</p>
-              <p className="font-mono text-xs text-muted-foreground/60">Run a growth cycle to generate the first proposals.</p>
+              <p className="font-mono text-xs text-muted-foreground/60">
+                Run a growth cycle to generate the first proposals.
+              </p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -423,7 +491,9 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
               {rest.length > 0 && (
                 <div className="space-y-3">
                   {pending.length > 0 && (
-                    <p className="font-mono text-xs text-muted-foreground uppercase tracking-wider">History</p>
+                    <p className="font-mono text-xs text-muted-foreground uppercase tracking-wider">
+                      History
+                    </p>
                   )}
                   {rest.map(prop => (
                     <ProposalCard
