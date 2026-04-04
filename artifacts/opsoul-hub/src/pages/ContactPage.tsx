@@ -1,6 +1,7 @@
 import { useState } from "react";
 import PublicNav from "@/components/public/PublicNav";
 import PublicFooter from "@/components/public/PublicFooter";
+import NebulaBlobs from "@/components/ui/NebulaBlobs";
 
 export default function ContactPage() {
   const [submitted, setSubmitted] = useState(false);
@@ -11,17 +12,12 @@ export default function ContactPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#131317] text-on-surface selection:bg-primary/30 selection:text-primary">
+    <div className="min-h-screen bg-background text-on-surface selection:bg-primary/30 selection:text-primary relative overflow-hidden">
+      <NebulaBlobs />
       <div
         className="fixed inset-0 pointer-events-none z-0"
         style={{ backgroundImage: "radial-gradient(rgba(224,182,255,0.03) 1px, transparent 0)", backgroundSize: "24px 24px" }}
       />
-
-      {/* Decorative ambient panels */}
-      <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
-        <div className="absolute -top-24 -left-24 w-[40vw] h-[40vw] opacity-10 bg-gradient-to-br from-primary/30 to-transparent rounded-full blur-[80px]" />
-        <div className="absolute -bottom-48 -right-48 w-[50vw] h-[50vw] opacity-5 bg-gradient-to-tl from-secondary/20 to-transparent rounded-full blur-[100px]" />
-      </div>
 
       <PublicNav />
 

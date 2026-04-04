@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { LogOut, Plus, Cpu } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import CreateAgentChat from "@/components/operator/CreateAgentChat";
+import NebulaBlobs from "@/components/ui/NebulaBlobs";
 
 function HealthBadge({ operatorId }: { operatorId: string }) {
   const { data, isLoading } = useQuery({
@@ -43,7 +44,7 @@ function OperatorCard({ operator, onClick }: { operator: Operator; onClick: () =
 
   return (
     <div
-      className="group relative overflow-hidden rounded-2xl border border-border/40 glass-panel hover:border-primary/40 hover:neon-glow-primary transition-all duration-300 cursor-pointer flex flex-col"
+      className="group relative overflow-hidden rounded-2xl border border-border/40 glass-panel hover:border-primary/40 hover:neon-glow-primary grayscale opacity-60 hover:grayscale-0 hover:opacity-100 transition-all duration-700 cursor-pointer flex flex-col"
       onClick={onClick}
       data-testid={`card-operator-${operator.id}`}
     >
@@ -99,7 +100,8 @@ export default function Dashboard() {
   });
 
   return (
-    <div className="min-h-screen dot-grid bg-background">
+    <div className="min-h-screen dot-grid bg-background relative overflow-hidden">
+      <NebulaBlobs />
       {/* Header */}
       <header className="frosted-nav border-b border-border/30 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">

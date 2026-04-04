@@ -1,9 +1,11 @@
 import PublicNav from "@/components/public/PublicNav";
 import PublicFooter from "@/components/public/PublicFooter";
+import NebulaBlobs from "@/components/ui/NebulaBlobs";
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-background text-on-surface selection:bg-primary-container selection:text-on-primary-container">
+    <div className="min-h-screen bg-background text-on-surface selection:bg-primary-container selection:text-on-primary-container relative overflow-hidden">
+      <NebulaBlobs />
       <div className="fixed inset-0 dot-grid opacity-20 pointer-events-none z-0" />
       <div className="fixed inset-0 bg-gradient-to-b from-transparent via-transparent to-background pointer-events-none z-0" />
 
@@ -19,7 +21,7 @@ export default function LandingPage() {
             </div>
             <h1 className="headline-lg text-6xl md:text-8xl font-bold text-on-surface mb-8">
               Your Permanent <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-[#cfbcff] to-secondary">
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-secondary to-tertiary">
                 AI Operator
               </span>
             </h1>
@@ -97,7 +99,7 @@ export default function LandingPage() {
               { icon: "enhanced_encryption", color: "text-primary", title: "Completely Private", desc: "Your data memory is locally encrypted and zero-knowledge accessible. We never see your Operator." },
               { icon: "hub", color: "text-secondary", title: "Lives Across Channels", desc: "Unified memory across Slack, Discord, Email, and Terminal. One mind, many hands." },
             ].map((f) => (
-              <div key={f.title} className="glass-panel p-8 rounded-xl hover:-translate-y-1 transition-all duration-300">
+              <div key={f.title} className="glass-panel p-8 rounded-xl hover:-translate-y-1 hover:scale-[1.03] transition-all duration-300">
                 <span className={`material-symbols-outlined ${f.color} text-4xl mb-6 block select-none`}>{f.icon}</span>
                 <h4 className="font-headline text-xl mb-3 text-on-surface">{f.title}</h4>
                 <p className="text-on-surface-variant font-sans text-sm leading-relaxed">{f.desc}</p>
@@ -111,14 +113,67 @@ export default function LandingPage() {
           <h2 className="font-headline text-center text-4xl mb-20 text-on-surface">Who Commands OpSoul?</h2>
           <div className="grid md:grid-cols-3 gap-8">
             {[
-              { title: "The Founder", label: "Scale Operations", color: "text-primary", bg: "from-primary/20 to-[#6f389b]/20", desc: "Uses OpSoul to clone their decision-making framework, allowing the AI to vet partners and manage high-level triage." },
-              { title: "The Executive", label: "Zero-Loss Context", color: "text-secondary", bg: "from-secondary/20 to-[#025b4e]/20", desc: "Maintains a persistent shadow of every meeting, email, and strategy deck to ensure no executive intent is ever lost." },
-              { title: "The Consultant", label: "Expert Synthesis", color: "text-primary", bg: "from-primary/20 to-[#cfbcff]/10", desc: "Leverages memory-persistence to keep deep technical nuances available for instant recall across 15+ different client projects." },
+              {
+                title: "The Founder", label: "Scale Operations",
+                color: "text-primary", accentColor: "#e0b6ff",
+                glowColor: "rgba(224,182,255,0.25)",
+                ringColor: "border-primary/30",
+                desc: "Uses OpSoul to clone their decision-making framework, allowing the AI to vet partners and manage high-level triage.",
+                initial: "F",
+              },
+              {
+                title: "The Executive", label: "Zero-Loss Context",
+                color: "text-secondary", accentColor: "#8cd4c3",
+                glowColor: "rgba(140,212,195,0.2)",
+                ringColor: "border-secondary/30",
+                desc: "Maintains a persistent shadow of every meeting, email, and strategy deck to ensure no executive intent is ever lost.",
+                initial: "E",
+              },
+              {
+                title: "The Consultant", label: "Expert Synthesis",
+                color: "text-tertiary", accentColor: "#ff6a9f",
+                glowColor: "rgba(255,106,159,0.18)",
+                ringColor: "border-[#ff6a9f]/30",
+                desc: "Leverages memory-persistence to keep deep technical nuances available for instant recall across 15+ different client projects.",
+                initial: "C",
+              },
             ].map((p) => (
-              <div key={p.title} className="bg-surface-container-high rounded-2xl overflow-hidden group">
-                <div className={`h-64 relative bg-gradient-to-br ${p.bg} flex items-center justify-center`}>
-                  <span className="material-symbols-outlined text-6xl text-white/20 select-none">person</span>
-                  <div className="absolute inset-0 bg-gradient-to-t from-surface-container-high to-transparent" />
+              <div key={p.title} className="bg-surface-container-high rounded-2xl overflow-hidden group hover:scale-[1.02] transition-all duration-500">
+                {/* Cinematic portrait frame */}
+                <div className="h-64 relative overflow-hidden flex items-center justify-center bg-[#0a0a0f]">
+                  {/* Deep background radial */}
+                  <div
+                    className="absolute inset-0"
+                    style={{ background: `radial-gradient(ellipse at 50% 120%, ${p.glowColor} 0%, transparent 70%)` }}
+                  />
+                  {/* Scanlines overlay */}
+                  <div
+                    className="absolute inset-0 opacity-[0.04]"
+                    style={{ backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,1) 2px, rgba(255,255,255,1) 3px)" }}
+                  />
+                  {/* Concentric rings */}
+                  <div className={`absolute w-40 h-40 rounded-full border ${p.ringColor} opacity-40`} />
+                  <div className={`absolute w-52 h-52 rounded-full border ${p.ringColor} opacity-20`} />
+                  <div className={`absolute w-64 h-64 rounded-full border ${p.ringColor} opacity-10`} />
+                  {/* Inner glow disc */}
+                  <div
+                    className="absolute w-28 h-28 rounded-full"
+                    style={{ background: `radial-gradient(circle, ${p.glowColor} 0%, transparent 80%)`, filter: "blur(16px)" }}
+                  />
+                  {/* Avatar monogram */}
+                  <div
+                    className="relative z-10 w-20 h-20 rounded-full flex items-center justify-center border-2"
+                    style={{ borderColor: p.accentColor, boxShadow: `0 0 24px ${p.glowColor}`, background: `radial-gradient(circle at 40% 35%, ${p.glowColor}, rgba(10,10,15,0.8))` }}
+                  >
+                    <span className="font-headline font-bold text-3xl" style={{ color: p.accentColor }}>{p.initial}</span>
+                  </div>
+                  {/* Top accent line */}
+                  <div
+                    className="absolute top-0 left-0 right-0 h-px"
+                    style={{ background: `linear-gradient(to right, transparent, ${p.accentColor}60, transparent)` }}
+                  />
+                  {/* Bottom fade */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-surface-container-high via-transparent to-transparent" />
                 </div>
                 <div className="p-8">
                   <h4 className="font-headline text-2xl mb-2 text-on-surface">{p.title}</h4>

@@ -52,7 +52,7 @@
   --color-on-primary:           #4a0b76;
   --color-secondary-container:  #025b4e;
   --color-on-secondary:         #00382f;
-  --color-tertiary:             #cfbcff;
+  --color-tertiary:             #ff6a9f;
   --color-tertiary-container:   #6200ea;
   --color-on-tertiary:          #3a0092;
   --color-on-secondary-container: #89d0bf;
@@ -81,11 +81,11 @@
 
   /* Stitch radius scale */
   --radius-xs:  0.125rem;
-  --radius-sm:  0.125rem;
-  --radius-md:  0.25rem;
-  --radius-lg:  0.25rem;
-  --radius-xl:  0.5rem;
-  --radius-2xl: 1rem;
+  --radius-sm:  0.25rem;
+  --radius-md:  0.5rem;
+  --radius-lg:  0.75rem;
+  --radius-xl:  1rem;
+  --radius-2xl: 1.25rem;
   --radius-3xl: 1.5rem;
 }
 
@@ -96,13 +96,13 @@
   --app-font-label:    'Inter', sans-serif;
 
   /* Stitch radius scale (MD3-aligned, canonical) */
-  --radius:     0.125rem;
+  --radius:     0.5rem;
   --radius-xs:  0.125rem;
-  --radius-sm:  0.125rem;
-  --radius-md:  0.25rem;
-  --radius-lg:  0.25rem;
-  --radius-xl:  0.5rem;
-  --radius-2xl: 1rem;
+  --radius-sm:  0.25rem;
+  --radius-md:  0.5rem;
+  --radius-lg:  0.75rem;
+  --radius-xl:  1rem;
+  --radius-2xl: 1.25rem;
   --radius-3xl: 1.5rem;
 
   /* Elevation / overlay helpers */
@@ -197,7 +197,7 @@
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
-  background-image: linear-gradient(to right, #e0b6ff, #8cd4c3, #cfbcff);
+  background-image: linear-gradient(to right, #e0b6ff, #8cd4c3, #ff6a9f);
 }
 
 /* Primary text gradient */
@@ -205,7 +205,7 @@
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
-  background-image: linear-gradient(135deg, #e0b6ff 0%, #cfbcff 100%);
+  background-image: linear-gradient(135deg, #e0b6ff 0%, #ff6a9f 100%);
 }
 
 /* Purple neon glow */

@@ -1,5 +1,6 @@
 import PublicNav from "@/components/public/PublicNav";
 import PublicFooter from "@/components/public/PublicFooter";
+import NebulaBlobs from "@/components/ui/NebulaBlobs";
 
 const docNav = [
   {
@@ -43,7 +44,8 @@ const docNav = [
 
 export default function DocsPage() {
   return (
-    <div className="min-h-screen bg-[#131317] text-on-surface">
+    <div className="min-h-screen bg-background text-on-surface relative overflow-hidden">
+      <NebulaBlobs />
       <div className="fixed inset-0 pointer-events-none z-0"
         style={{ backgroundImage: "radial-gradient(rgba(224,182,255,0.03) 1px, transparent 1px)", backgroundSize: "24px 24px" }}
       />

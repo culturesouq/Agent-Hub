@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "wouter";
 import PublicNav from "@/components/public/PublicNav";
 import PublicFooter from "@/components/public/PublicFooter";
+import NebulaBlobs from "@/components/ui/NebulaBlobs";
 
 const tiers = [
   {
@@ -54,7 +55,8 @@ export default function PricingPage() {
   const [annual, setAnnual] = useState(true);
 
   return (
-    <div className="min-h-screen bg-background text-on-surface selection:bg-primary-container selection:text-on-primary-container">
+    <div className="min-h-screen bg-background text-on-surface selection:bg-primary-container selection:text-on-primary-container relative overflow-hidden">
+      <NebulaBlobs />
       <div className="fixed inset-0 dot-grid opacity-15 pointer-events-none z-0" />
       <PublicNav />
 
