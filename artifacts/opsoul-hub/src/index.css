@@ -11,6 +11,17 @@
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
 
+  /* MD3 surface hierarchy */
+  --color-surface: hsl(var(--surface));
+  --color-surface-dim: hsl(var(--surface-dim));
+  --color-surface-container-lowest: hsl(var(--surface-container-lowest));
+  --color-surface-container-low: hsl(var(--surface-container-low));
+  --color-surface-container: hsl(var(--surface-container));
+  --color-surface-container-high: hsl(var(--surface-container-high));
+  --color-surface-container-highest: hsl(var(--surface-container-highest));
+  --color-on-surface: hsl(var(--on-surface));
+  --color-on-surface-variant: hsl(var(--on-surface-variant));
+
   --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
   --color-card-border: hsl(var(--card-border));
@@ -58,6 +69,8 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 16px);
 }
 
 :root {
@@ -66,6 +79,17 @@
      Secondary: #8cd4c3 (teal)         → HSL 168 43% 69%
      Background: #050508 (near-black)  → HSL 240 29% 4%
   */
+
+  /* MD3 surface hierarchy */
+  --surface-dim: 240 16% 6%;
+  --surface: 240 7% 9%;
+  --surface-container-lowest: 240 11% 7%;
+  --surface-container-low: 240 7% 11%;
+  --surface-container: 240 7% 13%;
+  --surface-container-high: 264 6% 17%;
+  --surface-container-highest: 264 6% 22%;
+  --on-surface: 282 7% 90%;
+  --on-surface-variant: 264 14% 70%;
 
   /* Surfaces */
   --background: 240 29% 4%;
@@ -130,6 +154,16 @@
 }
 
 .dark {
+  --surface-dim: 240 16% 6%;
+  --surface: 240 7% 9%;
+  --surface-container-lowest: 240 11% 7%;
+  --surface-container-low: 240 7% 11%;
+  --surface-container: 240 7% 13%;
+  --surface-container-high: 264 6% 17%;
+  --surface-container-highest: 264 6% 22%;
+  --on-surface: 282 7% 90%;
+  --on-surface-variant: 264 14% 70%;
+
   --background: 240 29% 4%;
   --foreground: 282 7% 90%;
 

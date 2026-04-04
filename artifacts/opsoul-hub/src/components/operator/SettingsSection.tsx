@@ -245,7 +245,7 @@ print(response.json()["content"])`;
         <section className="space-y-5">
           <div className="flex items-center gap-2 border-b border-border/50 pb-3">
             <Cpu className="w-4 h-4 text-muted-foreground" />
-            <h2 className="font-mono font-bold text-base">Model & AI</h2>
+            <h2 className="font-headline font-bold text-base">Model & AI</h2>
           </div>
 
           {!operator.hasCustomApiKey && (
@@ -352,7 +352,7 @@ print(response.json()["content"])`;
         <section className="space-y-5">
           <div className="flex items-center gap-2 border-b border-border/50 pb-3">
             <Globe className="w-4 h-4 text-muted-foreground" />
-            <h2 className="font-mono font-bold text-base">API Reference</h2>
+            <h2 className="font-headline font-bold text-base">API Reference</h2>
           </div>
 
           <p className="font-mono text-xs text-muted-foreground">
@@ -427,7 +427,7 @@ print(response.json()["content"])`;
         <section className="space-y-4">
           <div className="flex items-center gap-2 border-b border-border/50 pb-3">
             <Shield className="w-4 h-4 text-muted-foreground" />
-            <h2 className="font-mono font-bold text-base">Safe Mode</h2>
+            <h2 className="font-headline font-bold text-base">Safe Mode</h2>
           </div>
           <div className="rounded-lg border border-border/40 bg-card/30 p-5">
             <div className="flex items-start justify-between gap-4">
@@ -458,7 +458,7 @@ print(response.json()["content"])`;
         {show("safemode") && (
           <>
             <div className="flex items-center justify-between">
-              <h2 className="font-mono font-bold text-base">Free Roaming</h2>
+              <h2 className="font-headline font-bold text-base">Free Roaming</h2>
               <Switch
                 checked={freeRoaming}
                 onCheckedChange={(val) => updateFreeRoaming.mutate(val)}
@@ -482,7 +482,7 @@ print(response.json()["content"])`;
         <section className="space-y-4">
           <div className="flex items-center gap-2 border-b border-border/50 pb-3">
             <ShieldCheck className="w-4 h-4 text-muted-foreground" />
-            <h2 className="font-mono font-bold text-base">Evolution Lock</h2>
+            <h2 className="font-headline font-bold text-base">Evolution Lock</h2>
           </div>
           <p className="font-mono text-xs text-muted-foreground">
             Choose how much your operator is allowed to learn and adapt over time.
@@ -519,7 +519,7 @@ print(response.json()["content"])`;
         <section className="space-y-4">
           <div className="flex items-center gap-2 border-b border-destructive/30 pb-3">
             <AlertTriangle className="w-4 h-4 text-destructive/70" />
-            <h2 className="font-mono font-bold text-base text-destructive/80">Danger Zone</h2>
+            <h2 className="font-headline font-bold text-base text-destructive/80">Danger Zone</h2>
           </div>
           <div className="space-y-3">
             {!isLocked && (

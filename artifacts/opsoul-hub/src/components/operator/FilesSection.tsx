@@ -62,7 +62,15 @@ export default function FilesSection({ operator }: { operator: Operator }) {
   });
 
   return (
-    <div className="flex h-full gap-4 font-mono">
+    <div className="space-y-4 animate-in fade-in zoom-in-95 duration-300">
+      <div className="flex items-center gap-2 border-b border-border/50 pb-4">
+        <FileText className="w-5 h-5 text-primary" />
+        <div>
+          <h2 className="font-headline font-bold text-lg text-primary">Files</h2>
+          <p className="font-mono text-xs text-muted-foreground mt-0.5">Documents and reference materials for your operator</p>
+        </div>
+      </div>
+    <div className="flex gap-4 font-mono">
       <div className="w-48 shrink-0 flex flex-col gap-2">
         <div className="flex items-center justify-between mb-1">
           <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Files</span>
@@ -145,6 +153,7 @@ export default function FilesSection({ operator }: { operator: Operator }) {
           </div>
         )}
       </div>
+    </div>
     </div>
   );
 }

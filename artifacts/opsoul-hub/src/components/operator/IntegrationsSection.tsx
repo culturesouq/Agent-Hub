@@ -113,7 +113,7 @@ export default function IntegrationsSection({ operatorId }: { operatorId: string
       <div className="flex items-center gap-2 border-b border-border/50 pb-4">
         <Network className="w-5 h-5 text-primary" />
         <div>
-          <h2 className="font-mono font-bold text-lg text-primary">Integrations</h2>
+          <h2 className="font-headline font-bold text-lg text-primary">Integrations</h2>
           <p className="font-mono text-xs text-muted-foreground mt-0.5">Connect external services your operator can use</p>
         </div>
       </div>

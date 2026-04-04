@@ -75,7 +75,7 @@ export default function MemorySection({ operatorId }: { operatorId: string }) {
     <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-border/50 pb-4">
         <div>
-          <h2 className="text-2xl font-bold font-mono tracking-tight text-primary flex items-center gap-2">
+          <h2 className="headline-lg text-2xl font-bold text-primary flex items-center gap-2">
             <Brain className="w-6 h-6" /> Memory
           </h2>
           <p className="text-muted-foreground font-mono text-sm mt-1">What your operator remembers across conversations</p>

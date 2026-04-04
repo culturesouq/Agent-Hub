@@ -102,7 +102,7 @@ export default function IdentitySection({ operator, panel }: Props) {
       {showIdentity && (
         <div className={`border rounded-lg p-6 space-y-4 transition-all ${isLocked ? "border-primary/20 bg-primary/5" : "border-border/50 bg-card/30"}`}>
           <div className="flex items-center justify-between">
-            <h3 className="font-mono text-base font-bold flex items-center gap-2">
+            <h3 className="font-headline text-base font-bold flex items-center gap-2">
               <User className="w-4 h-4" /> Identity
             </h3>
             {isLocked ? (
@@ -196,7 +196,7 @@ export default function IdentitySection({ operator, panel }: Props) {
       {showPersonality && (
         <div className="border rounded-lg p-6 space-y-4 border-border/50 bg-card/30">
           <div className="flex items-center justify-between">
-            <h3 className="font-mono text-base font-bold flex items-center gap-2">
+            <h3 className="font-headline text-base font-bold flex items-center gap-2">
               <Smile className="w-4 h-4" /> Who is your operator?
             </h3>
             <AlertDialog>

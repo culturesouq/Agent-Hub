@@ -79,13 +79,20 @@ export default function SkillsSection({ operatorId, archetype }: { operatorId: s
   const isInstalled = (platformId: string) => opSkills?.some(s => s.platformSkillId === platformId);
 
   return (
-    <div className="space-y-6 pt-2">
+    <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
+      <div className="flex items-center gap-2 border-b border-border/50 pb-4">
+        <Download className="w-5 h-5 text-primary" />
+        <div>
+          <h2 className="font-headline font-bold text-lg text-primary">Skills</h2>
+          <p className="font-mono text-xs text-muted-foreground mt-0.5">Extend what your operator can do</p>
+        </div>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 min-h-[400px]">
         {/* Available */}
         <div className="flex flex-col border border-border/50 rounded-lg bg-card/20 overflow-hidden">
           <div className="p-3 bg-card/50 border-b border-border/50 flex items-center justify-between">
             <div>
-              <h3 className="font-mono text-sm font-bold">Available Skills</h3>
+              <h3 className="font-headline text-sm font-bold">Available Skills</h3>
               <p className="font-mono text-xs text-muted-foreground mt-0.5">Skills you can add to your operator</p>
             </div>
             <div className="flex items-center gap-2">
@@ -136,7 +143,7 @@ export default function SkillsSection({ operatorId, archetype }: { operatorId: s
         {/* Installed */}
         <div className="flex flex-col border border-border/50 rounded-lg bg-card/20 overflow-hidden">
           <div className="p-3 bg-primary/10 border-b border-primary/20">
-            <h3 className="font-mono text-sm font-bold text-primary">Installed Skills</h3>
+            <h3 className="font-headline text-sm font-bold text-primary">Installed Skills</h3>
             <p className="font-mono text-xs text-muted-foreground mt-0.5">Active on your operator right now</p>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-3">

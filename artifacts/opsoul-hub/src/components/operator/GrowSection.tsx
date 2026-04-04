@@ -275,7 +275,7 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
     <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-border/50 pb-4">
         <div>
-          <h2 className="font-mono font-bold text-lg text-primary flex items-center gap-2">
+          <h2 className="font-headline font-bold text-lg text-primary flex items-center gap-2">
             <Activity className="w-5 h-5" /> Growth
           </h2>
           <p className="font-mono text-xs text-muted-foreground mt-0.5">
