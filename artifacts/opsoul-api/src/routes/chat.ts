@@ -464,6 +464,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             completedAt:      new Date(),
           });
           console.log(`[agency] skill ${skillTrigger.name} executed and logged`);
+          triggerSelfAwareness(operator.id, 'integration_change').catch(() => {});
         }
       }
       // --- END AGENCY LAYER ---
@@ -565,6 +566,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             completedAt:      new Date(),
           });
           console.log(`[agency] skill ${skillTrigger.name} executed and logged`);
+          triggerSelfAwareness(operator.id, 'integration_change').catch(() => {});
         }
       }
       // --- END AGENCY LAYER ---
