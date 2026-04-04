@@ -79,7 +79,7 @@ export default function LandingPage() {
                   <span>33% Retention</span>
                 </div>
                 <div className="mt-12 h-1 bg-surface-variant w-full rounded-full">
-                  <div className="h-full bg-secondary w-full shadow-[0_0_10px_rgba(140,212,195,0.5)]" />
+                  <div className="h-full bg-secondary w-full shadow-[0_0_10px_rgba(64,206,243,0.5)]" />
                 </div>
                 <div className="flex justify-between font-label text-[10px] uppercase tracking-widest text-secondary">
                   <span>OpSoul Persistent Core</span>
@@ -189,7 +189,7 @@ export default function LandingPage() {
         <section className="my-40 px-8 max-w-7xl mx-auto">
           <div className="relative glass-panel p-16 rounded-3xl overflow-hidden text-center neon-glow-primary">
             <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-primary to-transparent opacity-50" />
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(224,182,255,0.05)_0%,_transparent_70%)]" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(205,150,255,0.05)_0%,_transparent_70%)]" />
             <h3 className="font-label uppercase tracking-[0.3em] text-secondary text-sm mb-8">Limited Genesis Phase</h3>
             <h2 className="font-headline text-5xl md:text-6xl font-bold mb-8 text-on-surface">Founding Operators</h2>
             <div className="max-w-2xl mx-auto">

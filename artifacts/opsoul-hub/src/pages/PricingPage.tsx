@@ -138,7 +138,7 @@ export default function PricingPage() {
               key={t.name}
               className={`glass-panel p-8 rounded-xl flex flex-col transition-all duration-300 ${
                 t.highlighted
-                  ? "border border-primary/30 relative scale-105 z-10 bg-surface-container/80 shadow-[0_0_40px_rgba(224,182,255,0.05)]"
+                  ? "border border-primary/30 relative scale-105 z-10 bg-surface-container/80 shadow-[0_0_40px_rgba(205,150,255,0.05)]"
                   : "border border-outline-variant/10 hover:bg-white/5"
               }`}
             >

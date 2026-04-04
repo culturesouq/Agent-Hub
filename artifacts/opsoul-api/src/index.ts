@@ -66,6 +66,8 @@ app.get('/api/healthz', (_req, res) => {
   res.json({ status: 'ok', service: 'opsoul-api', phase: 8 });
 });
 
+const SOVEREIGN_ADMIN_EMAIL = 'mohamedhajeri887@gmail.com';
+
 async function setupDatabase(): Promise<void> {
   try {
     await pool.query('CREATE EXTENSION IF NOT EXISTS vector');
@@ -78,6 +80,18 @@ async function setupDatabase(): Promise<void> {
     console.log('[db] admin_audit_log immutability trigger ensured');
   } catch (err) {
     console.error('[db] Failed to create audit log trigger:', (err as Error).message);
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE owners SET is_sovereign_admin = true WHERE email = $1 AND is_sovereign_admin = false RETURNING email`,
+      [SOVEREIGN_ADMIN_EMAIL],
+    );
+    if (result.rowCount && result.rowCount > 0) {
+      console.log(`[db] Sovereign admin access granted to ${SOVEREIGN_ADMIN_EMAIL}`);
+    }
+  } catch (err) {
+    console.error('[db] Failed to bootstrap sovereign admin:', (err as Error).message);
   }
 }
 

@@ -63,7 +63,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
 
   res.status(201).json({
     accessToken,
-    owner: { id: owner.id, email: owner.email, name: owner.name },
+    owner: { id: owner.id, email: owner.email, name: owner.name, isSovereignAdmin: owner.isSovereignAdmin ?? false },
   });
 });
 
@@ -109,7 +109,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
 
   res.json({
     accessToken,
-    owner: { id: owner.id, email: owner.email, name: owner.name },
+    owner: { id: owner.id, email: owner.email, name: owner.name, isSovereignAdmin: owner.isSovereignAdmin ?? false },
   });
 });
 
@@ -142,7 +142,7 @@ router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
 
   res.json({
     accessToken,
-    owner: { id: owner.id, email: owner.email, name: owner.name },
+    owner: { id: owner.id, email: owner.email, name: owner.name, isSovereignAdmin: owner.isSovereignAdmin ?? false },
   });
 });
 

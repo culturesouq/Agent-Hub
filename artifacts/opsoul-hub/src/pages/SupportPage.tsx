@@ -21,7 +21,7 @@ export default function SupportPage() {
 
       {/* Status Banner */}
       <div className="w-full bg-secondary-container/20 py-2 px-8 flex justify-center items-center gap-3 relative z-50">
-        <div className="w-2 h-2 rounded-full bg-secondary shadow-[0_0_10px_#8cd4c3]" />
+        <div className="w-2 h-2 rounded-full bg-secondary shadow-[0_0_10px_#40cef3]" />
         <span className="font-label text-[10px] uppercase tracking-[0.2em] text-secondary">All systems operational</span>
       </div>
 
@@ -66,7 +66,7 @@ export default function SupportPage() {
           <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-24">
             <div className="glass-panel p-8 rounded-3xl border border-white/5 hover:border-primary/20 transition-all group relative overflow-hidden">
               <div className="absolute top-4 right-4">
-                <div className="w-3 h-3 rounded-full bg-secondary shadow-[0_0_10px_#8cd4c3] animate-pulse" />
+                <div className="w-3 h-3 rounded-full bg-secondary shadow-[0_0_10px_#40cef3] animate-pulse" />
               </div>
               <div className="bg-primary-container/20 w-12 h-12 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                 <span className="material-symbols-outlined text-primary text-3xl select-none">forum</span>
@@ -138,7 +138,7 @@ export default function SupportPage() {
                 <p className="text-on-surface-variant font-sans">Our support engineers are standing by for advanced node configuration.</p>
               </div>
               <Link href="/contact">
-                <button className="bg-primary-container text-on-primary-container px-10 py-4 rounded-xl font-bold font-label hover:shadow-[0_0_30px_rgba(224,182,255,0.3)] transition-all whitespace-nowrap uppercase tracking-widest text-[10px]">
+                <button className="bg-primary-container text-on-primary-container px-10 py-4 rounded-xl font-bold font-label hover:shadow-[0_0_30px_rgba(205,150,255,0.3)] transition-all whitespace-nowrap uppercase tracking-widest text-[10px]">
                   Initialize Priority Support
                 </button>
               </Link>

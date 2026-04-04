@@ -42,7 +42,7 @@ export default function ContactPage() {
       <NebulaBlobs />
       <div
         className="fixed inset-0 pointer-events-none z-0"
-        style={{ backgroundImage: "radial-gradient(rgba(224,182,255,0.03) 1px, transparent 0)", backgroundSize: "24px 24px" }}
+        style={{ backgroundImage: "radial-gradient(rgba(205,150,255,0.03) 1px, transparent 0)", backgroundSize: "24px 24px" }}
       />
 
       <PublicNav />
@@ -51,7 +51,7 @@ export default function ContactPage() {
         {/* Left header */}
         <header className="lg:col-span-5 flex flex-col justify-start">
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-2 h-2 rounded-full bg-secondary shadow-[0_0_10px_#8cd4c3]" />
+            <div className="w-2 h-2 rounded-full bg-secondary shadow-[0_0_10px_#40cef3]" />
             <span className="font-label uppercase tracking-[0.2em] text-[10px] text-secondary font-semibold">Communications Protocol</span>
           </div>
           <h1 className="font-headline text-7xl md:text-8xl font-bold tracking-tighter text-primary leading-[0.9] mb-6">

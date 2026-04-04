@@ -66,7 +66,7 @@ export default function DocsPage() {
     <div className="min-h-screen bg-background text-on-surface relative overflow-hidden">
       <NebulaBlobs />
       <div className="fixed inset-0 pointer-events-none z-0"
-        style={{ backgroundImage: "radial-gradient(rgba(224,182,255,0.03) 1px, transparent 1px)", backgroundSize: "24px 24px" }}
+        style={{ backgroundImage: "radial-gradient(rgba(205,150,255,0.03) 1px, transparent 1px)", backgroundSize: "24px 24px" }}
       />
 
       <PublicNav />
@@ -223,7 +223,7 @@ export default function DocsPage() {
                       Learn how to configure your Operator's 'Soul' parameters to specialize in specific data patterns and high-level logic tasks.
                     </p>
                   </div>
-                  <a href="#doc-soul" className="bg-primary text-on-primary px-8 py-4 rounded-full font-label uppercase tracking-widest text-xs font-black flex items-center gap-3 whitespace-nowrap hover:shadow-[0_0_30px_rgba(224,182,255,0.4)] transition-all">
+                  <a href="#doc-soul" className="bg-primary text-on-primary px-8 py-4 rounded-full font-label uppercase tracking-widest text-xs font-black flex items-center gap-3 whitespace-nowrap hover:shadow-[0_0_30px_rgba(205,150,255,0.4)] transition-all">
                     Protocol Guide: Soul Logic
                     <span className="material-symbols-outlined select-none">arrow_forward</span>
                   </a>

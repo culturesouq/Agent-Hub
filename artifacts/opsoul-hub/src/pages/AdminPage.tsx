@@ -65,7 +65,7 @@ function StatCard({ label, value, color, glow }: {
 function DriftBar({ score }: { score: number | null }) {
   if (score === null) return <span className="text-muted-foreground text-xs font-mono">—</span>;
   const pct = Math.min(score * 100, 100);
-  const color = score > 0.30 ? "#fbbf24" : "#8cd4c3";
+  const color = score > 0.30 ? "#fbbf24" : "#40cef3";
   return (
     <div className="flex items-center gap-3">
       <div className="w-20 h-1 bg-surface-container-highest rounded-full overflow-hidden">
@@ -208,19 +208,19 @@ export default function AdminPage() {
               label="Total Owners"
               value={stats.totalOwners}
               color="text-primary"
-              glow="bg-[radial-gradient(circle_at_top-left,rgba(224,182,255,0.06),transparent_60%)]"
+              glow="bg-[radial-gradient(circle_at_top-left,rgba(205,150,255,0.06),transparent_60%)]"
             />
             <StatCard
               label="Total Operators"
               value={stats.totalOperators}
               color="text-secondary"
-              glow="bg-[radial-gradient(circle_at_top-left,rgba(140,212,195,0.06),transparent_60%)]"
+              glow="bg-[radial-gradient(circle_at_top-left,rgba(64,206,243,0.06),transparent_60%)]"
             />
             <StatCard
               label="Messages (24h)"
               value={stats.messagesLast24h.toLocaleString()}
               color="text-primary"
-              glow="bg-[radial-gradient(circle_at_top-left,rgba(224,182,255,0.06),transparent_60%)]"
+              glow="bg-[radial-gradient(circle_at_top-left,rgba(205,150,255,0.06),transparent_60%)]"
             />
             <StatCard
               label="Drift Alerts"
@@ -228,7 +228,7 @@ export default function AdminPage() {
               color={stats.driftAlerts > 0 ? "text-amber-400" : "text-secondary"}
               glow={stats.driftAlerts > 0
                 ? "bg-[radial-gradient(circle_at_top-left,rgba(251,191,36,0.08),transparent_60%)]"
-                : "bg-[radial-gradient(circle_at_top-left,rgba(140,212,195,0.06),transparent_60%)]"
+                : "bg-[radial-gradient(circle_at_top-left,rgba(64,206,243,0.06),transparent_60%)]"
               }
             />
           </div>
@@ -242,7 +242,7 @@ export default function AdminPage() {
               onClick={() => setTab(t.id)}
               className={`px-5 py-2 font-label text-[10px] uppercase tracking-widest transition-all ${
                 tab === t.id
-                  ? "bg-primary-container text-on-primary-container shadow-[inset_0_1px_0_rgba(224,182,255,0.20)]"
+                  ? "bg-primary-container text-on-primary-container shadow-[inset_0_1px_0_rgba(205,150,255,0.20)]"
                   : "text-muted-foreground hover:text-foreground hover:bg-white/5"
               }`}
             >
