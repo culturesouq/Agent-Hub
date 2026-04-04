@@ -412,6 +412,8 @@ export function buildSystemPrompt(
       totalMemoryActive?: number;
       lastConversationAt?: string | null;
       lastGrowActivity?: string | null;
+      fileCount?: number;
+      fileNames?: string[];
     } | null | undefined;
 
     parts.push('This is what I actually have access to in this conversation. When someone asks what I can do — this is what I draw from. Not generic capabilities. What is specifically in front of me right now.');
@@ -480,6 +482,12 @@ export function buildSystemPrompt(
       } else {
         parts.push(`I don't have any live system connections right now. I'm conversational only — I can think, advise, and respond, but I can't reach out to external tools or take actions outside this conversation.`);
       }
+    }
+
+    if (wm?.fileCount != null && wm.fileCount > 0 && wm.fileNames && wm.fileNames.length > 0) {
+      parts.push('');
+      parts.push(`I also have a personal file workspace with ${wm.fileCount} ${wm.fileCount === 1 ? 'file' : 'files'}. When I reference or think through something, I can draw from these:`);
+      wm.fileNames.forEach(name => parts.push(`- ${name}`));
     }
 
     if (selfAwareness.taskSummary) {
