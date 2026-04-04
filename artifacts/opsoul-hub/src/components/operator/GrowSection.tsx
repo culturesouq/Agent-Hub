@@ -90,8 +90,8 @@ function ProposalCard({
         { method: "POST" }
       );
       setTestResults(res.results ?? []);
-    } catch (err: any) {
-      const msg = err.message ?? "Test failed";
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Test failed";
       setTestError(msg);
       toast({ title: "Preview failed", description: msg, variant: "destructive" });
     } finally {
