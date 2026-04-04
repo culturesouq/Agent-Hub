@@ -50,9 +50,9 @@
   --color-sidebar-accent-border: var(--sidebar-accent-border);
   --color-sidebar-ring: hsl(var(--sidebar-ring));
 
-  --font-sans: var(--app-font-sans);
-  --font-serif: var(--app-font-serif);
-  --font-mono: var(--app-font-mono);
+  --font-sans: var(--app-font-body);
+  --font-serif: var(--app-font-headline);
+  --font-mono: 'Space Mono', monospace;
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -61,50 +61,64 @@
 }
 
 :root {
-  /* Dark navy base */
-  --background: 222 47% 10%;
-  --foreground: 210 40% 97%;
+  /* === Stitch Design System — Material Design 3 Dark ===
+     Primary: #e0b6ff (light purple)   → HSL 276 100% 86%
+     Secondary: #8cd4c3 (teal)         → HSL 168 43% 69%
+     Background: #050508 (near-black)  → HSL 240 29% 4%
+  */
 
-  --card: 222 47% 12%;
-  --card-foreground: 210 40% 97%;
-  --card-border: 217 32% 19%;
+  /* Surfaces */
+  --background: 240 29% 4%;
+  --foreground: 282 7% 90%;
 
-  --popover: 222 47% 12%;
-  --popover-foreground: 210 40% 97%;
-  --popover-border: 217 32% 19%;
+  /* Cards / containers (surface-container #1f1f23) */
+  --card: 240 7% 13%;
+  --card-foreground: 282 7% 90%;
+  --card-border: 256 11% 30%;
 
-  --primary: 189 94% 43%;
-  --primary-foreground: 222 47% 10%;
+  --popover: 240 7% 13%;
+  --popover-foreground: 282 7% 90%;
+  --popover-border: 256 11% 30%;
 
-  --secondary: 217 32% 18%;
-  --secondary-foreground: 210 40% 97%;
+  /* Primary — #e0b6ff light purple */
+  --primary: 276 100% 86%;
+  --primary-foreground: 278 83% 25%;
 
-  --muted: 217 32% 18%;
-  --muted-foreground: 215 20% 63%;
+  /* Secondary — #8cd4c3 teal */
+  --secondary: 168 43% 69%;
+  --secondary-foreground: 172 100% 11%;
 
-  --accent: 189 94% 43%;
-  --accent-foreground: 222 47% 10%;
+  /* Muted — surface-container-high #2a292e */
+  --muted: 264 6% 17%;
+  --muted-foreground: 264 14% 80%;
 
-  --destructive: 0 63% 45%;
-  --destructive-foreground: 210 40% 97%;
+  /* Accent — primary-container #6f389b */
+  --accent: 277 44% 41%;
+  --accent-foreground: 276 100% 86%;
 
-  --border: 217 32% 19%;
-  --input: 217 32% 18%;
-  --ring: 189 94% 43%;
+  /* Destructive — error #ffb4ab */
+  --destructive: 5 100% 84%;
+  --destructive-foreground: 356 100% 29%;
 
-  /* Sidebar — light background for strong visual separation from dark chat area */
-  --sidebar: 220 20% 96%;
-  --sidebar-foreground: 222 47% 18%;
-  --sidebar-border: 220 15% 87%;
-  --sidebar-primary: 189 94% 35%;
-  --sidebar-primary-foreground: 210 40% 97%;
-  --sidebar-accent: 220 15% 90%;
-  --sidebar-accent-foreground: 222 47% 18%;
-  --sidebar-ring: 189 94% 43%;
+  /* Borders & inputs */
+  --border: 256 11% 30%;
+  --input: 240 7% 13%;
+  --ring: 276 100% 86%;
 
-  --app-font-sans: 'Space Mono', 'Inter', sans-serif;
-  --app-font-serif: Georgia, serif;
-  --app-font-mono: 'Space Mono', monospace;
+  /* Sidebar — dark surface-container-low #1b1b1f */
+  --sidebar: 240 7% 11%;
+  --sidebar-foreground: 282 7% 90%;
+  --sidebar-border: 256 11% 22%;
+  --sidebar-primary: 276 100% 86%;
+  --sidebar-primary-foreground: 278 83% 25%;
+  --sidebar-accent: 240 7% 13%;
+  --sidebar-accent-foreground: 282 7% 90%;
+  --sidebar-ring: 276 100% 86%;
+
+  /* Font families */
+  --app-font-headline: 'Space Grotesk', sans-serif;
+  --app-font-body: 'Manrope', sans-serif;
+  --app-font-label: 'Inter', sans-serif;
 
   --radius: 0.5rem;
 
@@ -116,44 +130,44 @@
 }
 
 .dark {
-  --background: 222 47% 10%;
-  --foreground: 210 40% 97%;
+  --background: 240 29% 4%;
+  --foreground: 282 7% 90%;
 
-  --card: 222 47% 12%;
-  --card-foreground: 210 40% 97%;
-  --card-border: 217 32% 19%;
+  --card: 240 7% 13%;
+  --card-foreground: 282 7% 90%;
+  --card-border: 256 11% 30%;
 
-  --popover: 222 47% 12%;
-  --popover-foreground: 210 40% 97%;
-  --popover-border: 217 32% 19%;
+  --popover: 240 7% 13%;
+  --popover-foreground: 282 7% 90%;
+  --popover-border: 256 11% 30%;
 
-  --primary: 189 94% 43%;
-  --primary-foreground: 222 47% 10%;
+  --primary: 276 100% 86%;
+  --primary-foreground: 278 83% 25%;
 
-  --secondary: 217 32% 18%;
-  --secondary-foreground: 210 40% 97%;
+  --secondary: 168 43% 69%;
+  --secondary-foreground: 172 100% 11%;
 
-  --muted: 217 32% 18%;
-  --muted-foreground: 215 20% 63%;
+  --muted: 264 6% 17%;
+  --muted-foreground: 264 14% 80%;
 
-  --accent: 189 94% 43%;
-  --accent-foreground: 222 47% 10%;
+  --accent: 277 44% 41%;
+  --accent-foreground: 276 100% 86%;
 
-  --destructive: 0 63% 45%;
-  --destructive-foreground: 210 40% 97%;
+  --destructive: 5 100% 84%;
+  --destructive-foreground: 356 100% 29%;
 
-  --border: 217 32% 19%;
-  --input: 217 32% 18%;
-  --ring: 189 94% 43%;
+  --border: 256 11% 30%;
+  --input: 240 7% 13%;
+  --ring: 276 100% 86%;
 
-  --sidebar: 220 20% 96%;
-  --sidebar-foreground: 222 47% 18%;
-  --sidebar-border: 220 15% 87%;
-  --sidebar-primary: 189 94% 35%;
-  --sidebar-primary-foreground: 210 40% 97%;
-  --sidebar-accent: 220 15% 90%;
-  --sidebar-accent-foreground: 222 47% 18%;
-  --sidebar-ring: 189 94% 43%;
+  --sidebar: 240 7% 11%;
+  --sidebar-foreground: 282 7% 90%;
+  --sidebar-border: 256 11% 22%;
+  --sidebar-primary: 276 100% 86%;
+  --sidebar-primary-foreground: 278 83% 25%;
+  --sidebar-accent: 240 7% 13%;
+  --sidebar-accent-foreground: 282 7% 90%;
+  --sidebar-ring: 276 100% 86%;
 }
 
 @layer base {
@@ -161,8 +175,13 @@
     @apply border-border;
   }
 
+  html {
+    background-color: #050508;
+  }
+
   body {
-    @apply font-sans antialiased bg-background text-foreground;
+    @apply antialiased bg-background text-foreground;
+    font-family: 'Manrope', sans-serif;
   }
 
   /* Thin, styled scrollbars */
@@ -174,14 +193,82 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: hsl(217 32% 25%);
+    background: hsl(256 11% 30%);
     border-radius: 2px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: hsl(217 32% 35%);
+    background: hsl(256 11% 40%);
   }
   * {
     scrollbar-width: thin;
-    scrollbar-color: hsl(217 32% 25%) transparent;
+    scrollbar-color: hsl(256 11% 30%) transparent;
   }
+}
+
+/* =============================================
+   Stitch Design System — Utility Classes
+   ============================================= */
+
+/* Radial dot grid background */
+.dot-grid {
+  background-image: radial-gradient(#353439 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Frosted glass panel */
+.glass-panel {
+  background: rgba(31, 31, 35, 0.6);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+/* Purple neon glow */
+.neon-glow-primary {
+  box-shadow: 0 0 40px rgba(224, 182, 255, 0.1);
+}
+
+/* Teal neon glow */
+.neon-glow-secondary {
+  box-shadow: 0 0 20px rgba(140, 212, 195, 0.15);
+}
+
+/* Live status indicator */
+.status-beacon {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #8cd4c3;
+  box-shadow: 0 0 10px #8cd4c3;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* Space Grotesk headline style */
+.headline-lg {
+  font-family: 'Space Grotesk', sans-serif;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+
+/* Font family utilities */
+.font-headline {
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+.font-label {
+  font-family: 'Inter', sans-serif;
+}
+
+/* Frosted nav bar */
+.frosted-nav {
+  background: rgba(2, 2, 5, 0.6);
+  backdrop-filter: blur(32px);
+  -webkit-backdrop-filter: blur(32px);
+  box-shadow: 0 0 40px rgba(224, 182, 255, 0.05);
+}
+
+/* Selection styling */
+::selection {
+  background-color: rgba(111, 56, 155, 0.4);
+  color: #e0b6ff;
 }

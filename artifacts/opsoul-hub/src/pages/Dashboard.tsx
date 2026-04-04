@@ -5,8 +5,7 @@ import { apiFetch } from "@/lib/api";
 import { Operator, HealthScore } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { LogOut, Plus, Activity, Cpu } from "lucide-react";
+import { LogOut, Plus, Cpu } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import CreateAgentChat from "@/components/operator/CreateAgentChat";
 
@@ -17,18 +16,75 @@ function HealthBadge({ operatorId }: { operatorId: string }) {
     staleTime: 60000,
   });
 
-  if (isLoading) return <Badge variant="outline" className="animate-pulse">...</Badge>;
+  if (isLoading) return <Badge variant="outline" className="animate-pulse font-label text-[10px]">···</Badge>;
   if (!data?.healthScore) return null;
 
   const { score, label } = data.healthScore;
-  const colorClass = score >= 80 ? "text-green-500 border-green-500/20 bg-green-500/10" :
-    score >= 50 ? "text-amber-500 border-amber-500/20 bg-amber-500/10" :
-    "text-red-500 border-red-500/20 bg-red-500/10";
+  const colorClass = score >= 80
+    ? "text-green-400 border-green-500/30 bg-green-500/10"
+    : score >= 50
+    ? "text-amber-400 border-amber-500/30 bg-amber-500/10"
+    : "text-red-400 border-red-500/30 bg-red-500/10";
 
   return (
-    <Badge variant="outline" className={`${colorClass} font-mono uppercase tracking-wider text-xs px-2 py-0.5`} data-testid={`badge-health-${operatorId}`}>
+    <Badge
+      variant="outline"
+      className={`${colorClass} font-label text-[10px] uppercase tracking-wider px-2 py-0.5`}
+      data-testid={`badge-health-${operatorId}`}
+    >
       {score}% · {label}
     </Badge>
+  );
+}
+
+function OperatorCard({ operator, onClick }: { operator: Operator; onClick: () => void }) {
+  const initial = operator.name.charAt(0).toUpperCase();
+  const hue = operator.name.charCodeAt(0) % 360;
+
+  return (
+    <div
+      className="group relative overflow-hidden rounded-2xl border border-border/40 glass-panel hover:border-primary/40 hover:neon-glow-primary transition-all duration-300 cursor-pointer flex flex-col"
+      onClick={onClick}
+      data-testid={`card-operator-${operator.id}`}
+    >
+      <div className="absolute top-3 right-3 z-10">
+        <HealthBadge operatorId={operator.id} />
+      </div>
+
+      {/* Avatar + name */}
+      <div className="p-5 pb-3 flex items-center gap-3">
+        <div
+          className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-white font-headline font-bold text-base"
+          style={{ backgroundColor: `hsl(${hue} 60% 45%)` }}
+        >
+          {initial}
+        </div>
+        <div className="min-w-0 flex-1 pr-20">
+          <h3 className="font-headline font-bold text-base text-foreground truncate leading-tight">
+            {operator.name}
+          </h3>
+          <p className="font-label text-xs text-muted-foreground/70 mt-0.5">
+            {operator.archetype ?? "Operator"}
+          </p>
+        </div>
+      </div>
+
+      {/* Mandate */}
+      <div className="px-5 pb-5 flex-1">
+        <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed">
+          {operator.mandate}
+        </p>
+      </div>
+
+      {/* Footer bar */}
+      <div className="px-5 py-3 border-t border-border/30 flex items-center gap-2">
+        <span className="status-beacon" />
+        <span className="font-label text-xs text-muted-foreground">Active</span>
+        <span className="ml-auto font-label text-xs text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+          Open →
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -43,74 +99,80 @@ export default function Dashboard() {
   });
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border/50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Activity className="w-6 h-6 text-primary" />
-            <span className="font-mono text-xl font-bold tracking-tight text-primary">OpSoul</span>
+    <div className="min-h-screen dot-grid bg-background">
+      {/* Header */}
+      <header className="frosted-nav border-b border-border/30 sticky top-0 z-50">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-primary/15 border border-primary/25 flex items-center justify-center">
+              <span className="font-headline font-bold text-sm text-primary">O</span>
+            </div>
+            <span className="font-headline font-bold text-lg text-foreground tracking-tight">OpSoul</span>
           </div>
-          <Button variant="ghost" size="sm" onClick={logout} className="font-mono text-muted-foreground hover:text-foreground" data-testid="button-logout">
-            <LogOut className="w-4 h-4 mr-2" /> Sign out
-          </Button>
+          <button
+            onClick={logout}
+            className="font-label text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
+            data-testid="button-logout"
+          >
+            <LogOut className="w-3.5 h-3.5" /> Sign out
+          </button>
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-10">
+        {/* Page heading */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-10">
           <div>
-            <h1 className="text-3xl font-bold font-mono tracking-tight">My Operators</h1>
-            <p className="text-muted-foreground mt-1 font-mono text-sm">Your AI operators</p>
+            <h1 className="headline-lg text-3xl sm:text-4xl font-bold text-foreground">
+              My Operators
+            </h1>
+            <p className="text-muted-foreground mt-1.5 text-sm font-label">
+              Your permanent AI operators — always on, always yours
+            </p>
           </div>
 
           <Button
-            className="font-mono font-bold tracking-wider"
             onClick={() => setIsCreateOpen(true)}
+            className="font-label font-semibold text-sm px-5 h-10 rounded-xl bg-primary text-primary-foreground hover:opacity-90 transition-opacity shrink-0"
             data-testid="button-create-operator"
           >
-            <Plus className="w-4 h-4 mr-2" /> New Operator
+            <Plus className="w-4 h-4 mr-1.5" /> New Operator
           </Button>
         </div>
 
+        {/* Grid */}
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {[1, 2, 3].map(i => (
-              <Card key={i} className="h-48 animate-pulse bg-muted/20 border-border/20" />
+              <div key={i} className="h-52 rounded-2xl border border-border/30 bg-card/20 animate-pulse" />
             ))}
           </div>
         ) : operators?.length === 0 ? (
-          <div className="text-center py-24 border border-dashed border-border/50 rounded-lg bg-card/20">
-            <Cpu className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-40" />
-            <h3 className="font-mono text-xl font-bold mb-2">No operators yet</h3>
-            <p className="text-muted-foreground font-mono text-sm mb-6 max-w-md mx-auto">
-              Create your first operator to get started.
+          <div className="flex flex-col items-center justify-center py-28 border border-dashed border-border/40 rounded-2xl glass-panel">
+            <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-5">
+              <Cpu className="w-7 h-7 text-primary/60" />
+            </div>
+            <h3 className="font-headline text-xl font-bold text-foreground mb-2">
+              No operators yet
+            </h3>
+            <p className="text-muted-foreground font-label text-sm mb-6 max-w-xs text-center leading-relaxed">
+              Create your first operator — it will learn, grow, and remember for you.
             </p>
-            <Button onClick={() => setIsCreateOpen(true)} variant="outline" className="font-mono border-primary/30 text-primary hover:bg-primary/10">
-              <Plus className="w-4 h-4 mr-2" /> Create Operator
-            </Button>
+            <button
+              onClick={() => setIsCreateOpen(true)}
+              className="font-label font-semibold text-sm px-6 h-10 rounded-xl border border-primary/40 text-primary hover:bg-primary/10 transition-colors flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" /> Create Operator
+            </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {operators?.map((operator) => (
-              <Card
+              <OperatorCard
                 key={operator.id}
-                className="group relative overflow-hidden bg-card border-border/50 hover:border-primary/50 transition-all duration-300 flex flex-col cursor-pointer"
+                operator={operator}
                 onClick={() => setLocation(`/operators/${operator.id}`)}
-                data-testid={`card-operator-${operator.id}`}
-              >
-                <div className="absolute top-3 right-3 z-10">
-                  <HealthBadge operatorId={operator.id} />
-                </div>
-
-                <CardHeader className="pb-3 pt-4">
-                  <CardTitle className="font-mono text-xl pr-24 truncate">{operator.name}</CardTitle>
-                </CardHeader>
-                <CardContent className="flex-grow">
-                  <p className="text-sm text-muted-foreground line-clamp-3 font-mono leading-relaxed opacity-80">
-                    {operator.mandate}
-                  </p>
-                </CardContent>
-              </Card>
+              />
             ))}
           </div>
         )}

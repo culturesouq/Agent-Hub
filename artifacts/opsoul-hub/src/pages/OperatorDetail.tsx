@@ -328,7 +328,7 @@ export default function OperatorDetail({ id }: { id: string }) {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       {/* Header */}
-      <header className="h-12 border-b border-border/50 bg-card/50 flex items-center px-3 shrink-0 justify-between sticky top-0 z-40 backdrop-blur-sm gap-2">
+      <header className="h-12 border-b border-border/30 frosted-nav flex items-center px-3 shrink-0 justify-between sticky top-0 z-40 gap-2">
         <div className="flex items-center gap-2">
           {/* Mobile hamburger */}
           <button
@@ -374,11 +374,11 @@ export default function OperatorDetail({ id }: { id: string }) {
             className="absolute inset-0 bg-background/80 backdrop-blur-sm"
             onClick={() => setMobileNavOpen(false)}
           />
-          <aside className="absolute left-0 top-0 bottom-0 w-64 bg-sidebar border-r border-sidebar-border flex flex-col overflow-y-auto shadow-xl">
+          <aside className="absolute left-0 top-0 bottom-0 w-64 bg-sidebar border-r border-sidebar-border flex flex-col overflow-y-auto shadow-2xl shadow-black/40">
             <div className="p-4 border-b border-sidebar-border flex items-center gap-3">
               <OperatorAvatar name={operator.name} />
               <div className="min-w-0">
-                <div className="font-mono font-bold text-sm truncate leading-tight text-sidebar-foreground">{operator.name}</div>
+                <div className="font-headline font-bold text-sm truncate leading-tight text-sidebar-foreground">{operator.name}</div>
               </div>
             </div>
             <div className="p-2 flex flex-col gap-0.5 flex-1 overflow-y-auto">
@@ -397,7 +397,7 @@ export default function OperatorDetail({ id }: { id: string }) {
           <div className="p-4 border-b border-sidebar-border flex items-center gap-3">
             <OperatorAvatar name={operator.name} />
             <div className="min-w-0">
-              <div className="font-mono font-bold text-sm truncate leading-tight text-sidebar-foreground">{operator.name}</div>
+              <div className="font-headline font-bold text-sm truncate leading-tight text-sidebar-foreground">{operator.name}</div>
             </div>
           </div>
           <div className="p-2 flex flex-col gap-0.5 flex-1 overflow-y-auto">
