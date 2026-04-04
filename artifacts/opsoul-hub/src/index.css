@@ -65,12 +65,13 @@
   --font-serif: var(--app-font-headline);
   --font-mono: 'Space Mono', monospace;
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) + 8px);
-  --radius-3xl: calc(var(--radius) + 16px);
+  --radius-xs: 0.125rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.5rem;
 }
 
 :root {
@@ -144,7 +145,31 @@
   --app-font-body: 'Manrope', sans-serif;
   --app-font-label: 'Inter', sans-serif;
 
-  --radius: 0.5rem;
+  /* Stitch radius scale (MD3-aligned) */
+  --radius: 0.25rem;
+  --radius-xs: 0.125rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-base: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+  --radius-3xl: 2rem;
+
+  /* Stitch hex palette (canonical Stitch design tokens) */
+  --hex-primary:                  #e0b6ff;
+  --hex-primary-dark:             #3f1a6c;
+  --hex-secondary:                #8cd4c3;
+  --hex-secondary-dark:          #03372d;
+  --hex-background:               #050508;
+  --hex-surface:                  #14141a;
+  --hex-surface-container-low:    #1a1a1e;
+  --hex-surface-container:        #1f1f23;
+  --hex-surface-container-high:   #28272c;
+  --hex-on-surface:               #e6e3e8;
+  --hex-on-surface-variant:       #cac4cf;
+  --hex-error:                    #ffb4ab;
+  --hex-border:                   #4a4658;
 
   --button-outline: rgba(255,255,255, .10);
   --badge-outline: rgba(255,255,255, .05);
