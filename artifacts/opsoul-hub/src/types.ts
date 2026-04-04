@@ -82,6 +82,12 @@ export interface GrowProposal {
   createdAt: string;
 }
 
+export interface TestResult {
+  message: string;
+  current: string;
+  proposed: string;
+}
+
 export interface KbChunk {
   id: string;
   sourceName: string;

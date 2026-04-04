@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
-import { GrowProposal, HealthScore } from "@/types";
+import { GrowProposal, HealthScore, TestResult } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -53,12 +53,6 @@ function describePropChange(field: string, value: unknown): string {
     return `Your operator's ${label} would be set to ${value}.`;
   }
   return `Your operator's ${label} would be refined based on recent experience.`;
-}
-
-interface TestResult {
-  message: string;
-  current: string;
-  proposed: string;
 }
 
 function ProposalCard({
@@ -206,14 +200,6 @@ function ProposalCard({
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {testResults && testResults.length === 0 && (
-        <div className="border-t border-border/30 px-4 py-3">
-          <p className="font-mono text-xs text-muted-foreground text-center">
-            No conversation history available to test against yet.
-          </p>
         </div>
       )}
 

@@ -5,10 +5,9 @@ import {
   operatorsTable,
   growProposalsTable,
   selfAwarenessStateTable,
-  conversationsTable,
   messagesTable,
 } from '@workspace/db';
-import { eq, and, desc, asc } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { runGrowCycle } from '../utils/growEngine.js';
 import {
@@ -208,7 +207,14 @@ router.post('/self-awareness/recompute', async (req: Request, res: Response): Pr
   }
 });
 
-// T5 — GROW Test Mode: preview before/after with 3 real conversation messages
+// Fixed diverse test messages used when no conversation history is available
+const FALLBACK_TEST_MESSAGES = [
+  'Can you help me understand what you can do for me?',
+  'I have a problem I need help solving — where do I start?',
+  'Give me your honest take on something difficult.',
+];
+
+// T5 — GROW Test Mode: preview before/after with 3 real or fallback messages
 router.post('/test-proposal/:proposalId', async (req: Request, res: Response): Promise<void> => {
   const operatorId = await resolveOperator(req, res);
   if (!operatorId) return;
@@ -223,36 +229,29 @@ router.post('/test-proposal/:proposalId', async (req: Request, res: Response): P
   if (!operator) { res.status(404).json({ error: 'Operator not found' }); return; }
 
   // Get recent user messages across conversations — pick 3 with temporal spread
-  const convIds = (await db
-    .select({ id: conversationsTable.id })
-    .from(conversationsTable)
-    .where(eq(conversationsTable.operatorId, operatorId))
-    .orderBy(desc(conversationsTable.lastMessageAt))
-    .limit(5)).map(c => c.id);
+  const recentUserMsgs = await db
+    .select({ content: messagesTable.content, createdAt: messagesTable.createdAt })
+    .from(messagesTable)
+    .where(and(
+      eq(messagesTable.operatorId, operatorId),
+      eq(messagesTable.role, 'user'),
+    ))
+    .orderBy(desc(messagesTable.createdAt))
+    .limit(9);
 
-  let testPrompts: string[] = [];
-  if (convIds.length > 0) {
-    const recentUserMsgs = await db
-      .select({ content: messagesTable.content, createdAt: messagesTable.createdAt })
-      .from(messagesTable)
-      .where(and(
-        eq(messagesTable.operatorId, operatorId),
-        eq(messagesTable.role, 'user'),
-      ))
-      .orderBy(desc(messagesTable.createdAt))
-      .limit(9);
-    // pick 3 with temporal spread: latest, middle, oldest of these 9
+  let testPrompts: string[];
+  if (recentUserMsgs.length >= 3) {
+    // Temporal spread: latest, middle, oldest of the retrieved set
     const msgs = recentUserMsgs.map(m => m.content);
-    if (msgs.length >= 3) {
-      testPrompts = [msgs[0], msgs[Math.floor(msgs.length / 2)], msgs[msgs.length - 1]];
-    } else {
-      testPrompts = msgs;
-    }
-  }
-
-  if (testPrompts.length === 0) {
-    res.json({ testPrompts: [], results: [], message: 'No conversation history yet to test against.' });
-    return;
+    testPrompts = [msgs[0], msgs[Math.floor(msgs.length / 2)], msgs[msgs.length - 1]];
+  } else if (recentUserMsgs.length > 0) {
+    // Pad with fallbacks to always reach 3
+    const real = recentUserMsgs.map(m => m.content);
+    const needed = FALLBACK_TEST_MESSAGES.slice(real.length);
+    testPrompts = [...real, ...needed];
+  } else {
+    // No history at all — use fixed diverse messages so test always runs
+    testPrompts = FALLBACK_TEST_MESSAGES;
   }
 
   const currentSoul = operator.layer2Soul as Layer2Soul;
