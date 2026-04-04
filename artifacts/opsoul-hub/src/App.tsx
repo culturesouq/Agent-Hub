@@ -7,6 +7,11 @@ import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import Dashboard from "@/pages/Dashboard";
 import OperatorDetail from "@/pages/OperatorDetail";
+import LandingPage from "@/pages/LandingPage";
+import PricingPage from "@/pages/PricingPage";
+import SupportPage from "@/pages/SupportPage";
+import DocsPage from "@/pages/DocsPage";
+import ContactPage from "@/pages/ContactPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -19,26 +24,50 @@ const queryClient = new QueryClient({
 
 function ProtectedRoute({ component: Component, ...rest }: any) {
   const { token, isLoading } = useAuth();
-  
+
   if (isLoading) {
-    return <div className="min-h-screen flex items-center justify-center bg-background text-primary font-mono tracking-widest">Loading...</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background text-primary font-mono tracking-widest">
+        Loading...
+      </div>
+    );
   }
-  
+
   if (!token) {
     window.location.href = "/login";
     return null;
   }
-  
+
   return <Component {...rest} />;
+}
+
+function RootRoute() {
+  const { token, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background text-primary font-mono tracking-widest">
+        Loading...
+      </div>
+    );
+  }
+
+  if (token) {
+    return <Dashboard />;
+  }
+
+  return <LandingPage />;
 }
 
 function Router() {
   return (
     <Switch>
+      <Route path="/" component={RootRoute} />
       <Route path="/login" component={Login} />
-      <Route path="/">
-        {(params) => <ProtectedRoute component={Dashboard} {...params} />}
-      </Route>
+      <Route path="/pricing" component={PricingPage} />
+      <Route path="/support" component={SupportPage} />
+      <Route path="/docs" component={DocsPage} />
+      <Route path="/contact" component={ContactPage} />
       <Route path="/operators/:id">
         {(params) => <ProtectedRoute component={OperatorDetail} {...params} />}
       </Route>

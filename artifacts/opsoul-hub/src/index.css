@@ -46,6 +46,25 @@
   --color-on-surface:                 #e6e3e8;
   --color-on-surface-variant:         #cac4cf;
 
+  /* Full MD3 Stitch palette — remaining role tokens */
+  --color-primary-container:    #6f389b;
+  --color-on-primary-container: #e0b6ff;
+  --color-on-primary:           #4a0b76;
+  --color-secondary-container:  #025b4e;
+  --color-on-secondary:         #00382f;
+  --color-tertiary:             #cfbcff;
+  --color-tertiary-container:   #6200ea;
+  --color-on-tertiary:          #3a0092;
+  --color-on-secondary-container: #89d0bf;
+  --color-outline:              #958da2;
+  --color-outline-variant:      #494456;
+  --color-surface-variant:      #353439;
+  --color-surface-bright:       #39393d;
+  --color-inverse-surface:      #e5e1e7;
+  --color-inverse-on-surface:   #303034;
+  --color-inverse-primary:      #7b44a8;
+  --color-error-container:      #93000a;
+
   /* Sidebar */
   --color-sidebar:                     #1a1a1e;
   --color-sidebar-foreground:          #e6e3e8;

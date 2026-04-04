@@ -5,7 +5,7 @@ import { Conversation, Message } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Trash2, MessageSquarePlus, Send, MessageSquare, Paperclip, X, Mic } from "lucide-react";
+import { Trash2, MessageSquarePlus, Send, MessageSquare, Paperclip, X, Mic, List, ArrowLeft } from "lucide-react";
 import { format } from "date-fns";
 
 type Attachment = {
@@ -25,6 +25,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
+  const [mobileView, setMobileView] = useState<"list" | "chat">("list");
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -127,12 +128,10 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     enabled: !!activeConvId,
   });
 
-  // Normalise: backend wraps in { conversations:[...] } — guard against stale cache shape
   const convosArray: Conversation[] = Array.isArray(convos)
     ? convos
     : ((convos as any)?.conversations ?? []);
 
-  // Normalise: backend wraps in { messages:[...] }
   const msgsArray: Message[] = Array.isArray(messages)
     ? messages
     : ((messages as any)?.messages ?? []);
@@ -146,6 +145,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   useEffect(() => {
     if (convosArray.length > 0 && !activeConvId) {
       setActiveConvId(convosArray[0].id);
+      setMobileView("chat");
     }
   }, [convosArray, activeConvId]);
 
@@ -157,6 +157,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "conversations"] });
       setActiveConvId(data.id);
+      setMobileView("chat");
     },
   });
 
@@ -164,7 +165,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     mutationFn: (id: string) => apiFetch(`/operators/${operatorId}/conversations/${id}`, { method: "DELETE" }),
     onSuccess: (_, deletedId) => {
       queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "conversations"] });
-      if (activeConvId === deletedId) setActiveConvId(null);
+      if (activeConvId === deletedId) { setActiveConvId(null); setMobileView("list"); }
     },
   });
 
@@ -252,187 +253,234 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
 
   const convName = (conv: Conversation) => conv.contextName || "Conversation";
 
-  return (
-    <div className="h-[calc(100vh-140px)] flex glass-panel rounded-2xl border border-border/30 overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-      {/* Conversation list */}
-      <div className="w-56 border-r border-border/30 flex flex-col bg-surface-container-low/60 shrink-0">
-        <div className="p-3 border-b border-border/30 flex justify-between items-center bg-surface-container/40">
-          <span className="font-headline text-sm font-bold flex items-center gap-2 text-primary">
-            <MessageSquare className="w-4 h-4" /> Conversations
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-primary hover:bg-primary/20"
-            onClick={() => createConv.mutate(`Chat ${format(new Date(), "MMM d, HH:mm")}`)}
-            title="New conversation"
-          >
-            <MessageSquarePlus className="w-4 h-4" />
-          </Button>
-        </div>
-        <ScrollArea className="flex-1">
-          <div className="p-2 space-y-1">
-            {convosLoading ? (
-              <div className="p-4 text-center font-mono text-xs text-muted-foreground animate-pulse">Loading...</div>
-            ) : convosArray.length === 0 ? (
-              <div className="p-4 text-center font-label text-xs text-muted-foreground">No conversations yet</div>
-            ) : (
-              convosArray.map(conv => (
-                <div
-                  key={conv.id}
-                  onClick={() => setActiveConvId(conv.id)}
-                  className={`group flex items-center justify-between p-2 rounded-md cursor-pointer transition-all
-                    ${activeConvId === conv.id
-                      ? "bg-primary/10 border border-primary/20 text-primary"
-                      : "hover:bg-white/5 border border-transparent text-muted-foreground"
-                    }`}
+  const selectConv = (id: string) => {
+    setActiveConvId(id);
+    setMobileView("chat");
+  };
+
+  const ConversationList = () => (
+    <div className="flex flex-col h-full bg-surface-container-low/60">
+      <div className="p-3 border-b border-border/30 flex justify-between items-center bg-surface-container/40">
+        <span className="font-headline text-sm font-bold flex items-center gap-2 text-primary">
+          <MessageSquare className="w-4 h-4" /> Conversations
+        </span>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-primary hover:bg-primary/20"
+          onClick={() => createConv.mutate(`Chat ${format(new Date(), "MMM d, HH:mm")}`)}
+          title="New conversation"
+        >
+          <MessageSquarePlus className="w-4 h-4" />
+        </Button>
+      </div>
+      <ScrollArea className="flex-1">
+        <div className="p-2 space-y-1">
+          {convosLoading ? (
+            <div className="p-4 text-center font-mono text-xs text-muted-foreground animate-pulse">Loading...</div>
+          ) : convosArray.length === 0 ? (
+            <div className="p-4 text-center font-label text-xs text-muted-foreground">No conversations yet</div>
+          ) : (
+            convosArray.map(conv => (
+              <div
+                key={conv.id}
+                onClick={() => selectConv(conv.id)}
+                className={`group flex items-center justify-between p-2 rounded-md cursor-pointer transition-all
+                  ${activeConvId === conv.id
+                    ? "bg-primary/10 border border-primary/20 text-primary"
+                    : "hover:bg-white/5 border border-transparent text-muted-foreground"
+                  }`}
+              >
+                <div className="overflow-hidden flex-1 min-w-0">
+                  <div className="font-label text-xs truncate font-semibold">{convName(conv)}</div>
+                  <div className="font-label text-[10px] opacity-60 mt-0.5">
+                    {format(new Date(conv.createdAt), "MMM d, HH:mm")}
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 opacity-0 group-hover:opacity-100 hover:text-destructive shrink-0 ml-1"
+                  onClick={(e) => { e.stopPropagation(); deleteConv.mutate(conv.id); }}
                 >
-                  <div className="overflow-hidden flex-1 min-w-0">
-                    <div className="font-label text-xs truncate font-semibold">{convName(conv)}</div>
-                    <div className="font-label text-[10px] opacity-60 mt-0.5">
-                      {format(new Date(conv.createdAt), "MMM d, HH:mm")}
+                  <Trash2 className="w-3 h-3" />
+                </Button>
+              </div>
+            ))
+          )}
+        </div>
+      </ScrollArea>
+    </div>
+  );
+
+  const ChatArea = () => (
+    <div className="flex-1 flex flex-col bg-background/50 relative h-full">
+      {activeConvId ? (
+        <>
+          {/* Mobile back button + conv name */}
+          <div className="md:hidden flex items-center gap-2 px-3 py-2 border-b border-border/30 bg-surface-container/40 shrink-0">
+            <button
+              onClick={() => setMobileView("list")}
+              className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <span className="font-label text-xs font-semibold text-foreground/80 truncate">
+              {convName(convosArray.find(c => c.id === activeConvId) ?? convosArray[0])}
+            </span>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-4" ref={scrollRef}>
+            {msgsLoading ? (
+              <div className="h-full flex items-center justify-center font-mono text-sm text-muted-foreground animate-pulse">
+                Loading...
+              </div>
+            ) : msgsArray.length === 0 && !streamingMsg ? (
+              <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-40 space-y-3">
+                <MessageSquare className="w-10 h-10" />
+                <p className="font-label text-sm">Send a message to get started.</p>
+              </div>
+            ) : (
+              <>
+                {msgsArray.map(msg => (
+                  <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                    <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed
+                      ${msg.role === "user"
+                        ? "bg-primary text-primary-foreground rounded-tr-none"
+                        : "bg-card border border-border/50 text-foreground rounded-tl-none"
+                      }`}
+                    >
+                      <div className="whitespace-pre-wrap break-words">{msg.content}</div>
                     </div>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 opacity-0 group-hover:opacity-100 hover:text-destructive shrink-0 ml-1"
-                    onClick={(e) => { e.stopPropagation(); deleteConv.mutate(conv.id); }}
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </Button>
-                </div>
-              ))
+                ))}
+                {streamingMsg && (
+                  <div className="flex justify-start">
+                    <div className="max-w-[85%] rounded-2xl rounded-tl-none px-4 py-3 text-sm leading-relaxed bg-card border border-border/50 text-foreground">
+                      <div className="whitespace-pre-wrap">{streamingMsg}</div>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
-        </ScrollArea>
+
+          <div className="p-3 border-t border-border/50 bg-card/30 space-y-2 shrink-0">
+            {attachments.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {attachments.map((att, i) => (
+                  <div key={i} className="relative flex items-center gap-1.5 bg-card border border-border/50 rounded-lg px-2 py-1 text-xs font-mono">
+                    {att.previewUrl ? (
+                      <img src={att.previewUrl} alt={att.name} className="w-8 h-8 rounded object-cover" />
+                    ) : (
+                      <Paperclip className="w-3 h-3 text-muted-foreground" />
+                    )}
+                    <span className="text-foreground/80 max-w-24 truncate">{att.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))}
+                      className="text-muted-foreground hover:text-destructive ml-0.5"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <form onSubmit={sendMessage} className="flex gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,.doc,.docx,.xlsx"
+                className="hidden"
+                onChange={handleFileSelect}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="shrink-0 w-9 h-9 text-muted-foreground hover:text-primary"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={!!streamingMsg || uploading || recording || transcribing}
+                title="Attach file"
+              >
+                <Paperclip className={`w-4 h-4 ${uploading ? "animate-pulse text-primary" : ""}`} />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className={`shrink-0 w-9 h-9 transition-colors ${
+                  recording
+                    ? "text-red-500 bg-red-500/10 hover:bg-red-500/20"
+                    : transcribing
+                    ? "text-primary"
+                    : "text-muted-foreground hover:text-primary"
+                }`}
+                onPointerDown={startRecording}
+                onPointerUp={stopRecording}
+                disabled={!!streamingMsg || uploading}
+                title={recording ? "Release to transcribe" : transcribing ? "Transcribing…" : "Hold to record"}
+              >
+                <Mic className={`w-4 h-4 ${transcribing ? "animate-pulse" : ""}`} />
+              </Button>
+              <Input
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                placeholder="Type a message..."
+                className="font-sans bg-background/50 border-border/50 focus-visible:ring-primary/30 text-sm"
+                disabled={!!streamingMsg}
+              />
+              <Button
+                type="submit"
+                disabled={(!input.trim() && attachments.length === 0) || !!streamingMsg}
+                className="shrink-0 w-10"
+                variant="default"
+              >
+                <Send className="w-4 h-4" />
+              </Button>
+            </form>
+          </div>
+        </>
+      ) : (
+        <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-40 space-y-3">
+          <MessageSquare className="w-10 h-10" />
+          <p className="font-label text-sm">Select or start a conversation.</p>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <>
+      {/* Desktop: side-by-side layout */}
+      <div className="h-[calc(100vh-140px)] hidden md:flex glass-panel rounded-2xl border border-border/30 overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+        <div className="w-56 border-r border-border/30 flex flex-col shrink-0">
+          <ConversationList />
+        </div>
+        <ChatArea />
       </div>
 
-      {/* Chat area */}
-      <div className="flex-1 flex flex-col bg-background/50 relative">
-        {activeConvId ? (
-          <>
-            <div className="flex-1 overflow-y-auto p-4 space-y-4" ref={scrollRef}>
-              {msgsLoading ? (
-                <div className="h-full flex items-center justify-center font-mono text-sm text-muted-foreground animate-pulse">
-                  Loading...
-                </div>
-              ) : msgsArray.length === 0 && !streamingMsg ? (
-                <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-40 space-y-3">
-                  <MessageSquare className="w-10 h-10" />
-                  <p className="font-label text-sm">Send a message to get started.</p>
-                </div>
-              ) : (
-                <>
-                  {msgsArray.map(msg => (
-                    <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                      <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed
-                        ${msg.role === "user"
-                          ? "bg-primary text-primary-foreground rounded-tr-none"
-                          : "bg-card border border-border/50 text-foreground rounded-tl-none"
-                        }`}
-                      >
-                        <div className="whitespace-pre-wrap break-words">{msg.content}</div>
-                      </div>
-                    </div>
-                  ))}
-                  {streamingMsg && (
-                    <div className="flex justify-start">
-                      <div className="max-w-[80%] rounded-2xl rounded-tl-none px-4 py-3 text-sm leading-relaxed bg-card border border-border/50 text-foreground">
-                        <div className="whitespace-pre-wrap">{streamingMsg}</div>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
+      {/* Mobile: single-panel with list/chat toggle */}
+      <div className="h-[calc(100dvh-112px)] md:hidden flex flex-col glass-panel rounded-2xl border border-border/30 overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+        {mobileView === "list" ? (
+          <div className="flex flex-col flex-1 overflow-hidden">
+            <ConversationList />
+            <div className="p-3 border-t border-border/30 bg-surface-container/40 shrink-0">
+              <Button
+                className="w-full font-mono text-xs"
+                onClick={() => createConv.mutate(`Chat ${format(new Date(), "MMM d, HH:mm")}`)}
+                disabled={createConv.isPending}
+              >
+                <MessageSquarePlus className="w-3.5 h-3.5 mr-1.5" />
+                New Conversation
+              </Button>
             </div>
-
-            <div className="p-3 border-t border-border/50 bg-card/30 space-y-2">
-              {/* Attachment previews */}
-              {attachments.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {attachments.map((att, i) => (
-                    <div key={i} className="relative flex items-center gap-1.5 bg-card border border-border/50 rounded-lg px-2 py-1 text-xs font-mono">
-                      {att.previewUrl ? (
-                        <img src={att.previewUrl} alt={att.name} className="w-8 h-8 rounded object-cover" />
-                      ) : (
-                        <Paperclip className="w-3 h-3 text-muted-foreground" />
-                      )}
-                      <span className="text-foreground/80 max-w-24 truncate">{att.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))}
-                        className="text-muted-foreground hover:text-destructive ml-0.5"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <form onSubmit={sendMessage} className="flex gap-2">
-                {/* Hidden file input */}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,.doc,.docx,.xlsx"
-                  className="hidden"
-                  onChange={handleFileSelect}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="shrink-0 w-9 h-9 text-muted-foreground hover:text-primary"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={!!streamingMsg || uploading || recording || transcribing}
-                  title="Attach file"
-                >
-                  <Paperclip className={`w-4 h-4 ${uploading ? "animate-pulse text-primary" : ""}`} />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className={`shrink-0 w-9 h-9 transition-colors ${
-                    recording
-                      ? "text-red-500 bg-red-500/10 hover:bg-red-500/20"
-                      : transcribing
-                      ? "text-primary"
-                      : "text-muted-foreground hover:text-primary"
-                  }`}
-                  onPointerDown={startRecording}
-                  onPointerUp={stopRecording}
-                  disabled={!!streamingMsg || uploading}
-                  title={recording ? "Release to transcribe" : transcribing ? "Transcribing…" : "Hold to record"}
-                >
-                  <Mic className={`w-4 h-4 ${transcribing ? "animate-pulse" : ""}`} />
-                </Button>
-                <Input
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                  placeholder="Type a message..."
-                  className="font-sans bg-background/50 border-border/50 focus-visible:ring-primary/30 text-sm"
-                  disabled={!!streamingMsg}
-                />
-                <Button
-                  type="submit"
-                  disabled={(!input.trim() && attachments.length === 0) || !!streamingMsg}
-                  className="shrink-0 w-10"
-                  variant="default"
-                >
-                  <Send className="w-4 h-4" />
-                </Button>
-              </form>
-            </div>
-          </>
-        ) : (
-          <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-40 space-y-3">
-            <MessageSquare className="w-10 h-10" />
-            <p className="font-label text-sm">Select or start a conversation.</p>
           </div>
+        ) : (
+          <ChatArea />
         )}
       </div>
-    </div>
+    </>
   );
 }
