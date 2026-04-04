@@ -26,6 +26,10 @@ author = "agent"
 task = "workflow.run"
 args = "artifacts/opsoul-api: API Server"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "artifacts/opsoul-hub: Frontend"
+
 [[workflows.workflow]]
 name = "artifacts/opsoul-api: API Server"
 author = "agent"
@@ -34,6 +38,17 @@ author = "agent"
 task = "shell.exec"
 args = "pnpm --filter @workspace/opsoul-api run dev"
 waitForPort = 3001
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow]]
+name = "artifacts/opsoul-hub: Frontend"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/opsoul-hub run dev"
 
 [workflows.workflow.metadata]
 outputType = "console"
