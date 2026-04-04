@@ -37,6 +37,30 @@ async function captureBaselines(): Promise<void> {
   }
 }
 
+// T8 — Cumulative Drift utility: retrieve both soul snapshots, embed, return cosine distance (0–1)
+export async function computeSoulDrift(operatorId: string): Promise<{
+  driftScore: number;
+  measuredAt: string;
+}> {
+  const [op] = await db
+    .select({
+      id: operatorsTable.id,
+      layer2Soul: operatorsTable.layer2Soul,
+      layer2SoulOriginal: operatorsTable.layer2SoulOriginal,
+    })
+    .from(operatorsTable)
+    .where(eq(operatorsTable.id, operatorId));
+
+  if (!op) throw new Error(`Operator ${operatorId} not found`);
+  if (!op.layer2SoulOriginal) throw new Error(`No original soul snapshot for operator ${operatorId}`);
+
+  const currentText = soulToText(op.layer2Soul as Layer2Soul);
+  const originalText = soulToText(op.layer2SoulOriginal as Layer2Soul);
+
+  const driftScore = await semanticDistance(originalText, currentText);
+  return { driftScore, measuredAt: new Date().toISOString() };
+}
+
 // T8 — Cumulative Drift: compute semantic drift between original and current soul
 async function runDriftCheck(): Promise<void> {
   console.log('[DRIFT] 90-day cumulative drift check starting:', new Date().toISOString());
@@ -49,7 +73,6 @@ async function runDriftCheck(): Promise<void> {
       id: operatorsTable.id,
       name: operatorsTable.name,
       layer2Soul: operatorsTable.layer2Soul,
-      layer2SoulOriginal: operatorsTable.layer2SoulOriginal,
     })
     .from(operatorsTable)
     .where(isNotNull(operatorsTable.layer2SoulOriginal));
@@ -58,19 +81,12 @@ async function runDriftCheck(): Promise<void> {
 
   for (const op of operators) {
     try {
-      const current = op.layer2Soul as Layer2Soul;
-      const original = op.layer2SoulOriginal as Layer2Soul;
+      const { driftScore, measuredAt } = await computeSoulDrift(op.id);
+      const currentText = soulToText(op.layer2Soul as Layer2Soul);
 
-      // Represent each soul as a prose description for embedding comparison
-      const currentText = soulToText(current);
-      const originalText = soulToText(original);
+      const flagged = driftScore > 0.30;
 
-      const distance = await semanticDistance(originalText, currentText);
-      const driftScore = Math.round(distance * 100);
-
-      const flagged = driftScore > 30;
-
-      // Store in self_awareness_state.soulState (merged with existing)
+      // Store { driftScore, measuredAt } in self_awareness_state.soulState (merged with existing)
       const [existing] = await db
         .select({ id: selfAwarenessStateTable.id, soulState: selfAwarenessStateTable.soulState })
         .from(selfAwarenessStateTable)
@@ -84,8 +100,8 @@ async function runDriftCheck(): Promise<void> {
             soulState: {
               ...existingSoulState,
               driftScore,
+              measuredAt,
               driftFlagged: flagged,
-              driftMeasuredAt: new Date().toISOString(),
             },
           })
           .where(eq(selfAwarenessStateTable.id, existing.id));
@@ -93,13 +109,13 @@ async function runDriftCheck(): Promise<void> {
         await db.insert(selfAwarenessStateTable).values({
           id: crypto.randomUUID(),
           operatorId: op.id,
-          soulState: { driftScore, driftFlagged: flagged, driftMeasuredAt: new Date().toISOString() },
+          soulState: { driftScore, measuredAt, driftFlagged: flagged },
         });
       }
 
       if (flagged) {
         console.log(
-          `[DRIFT] ${op.name} (${op.id}): drift score ${driftScore} — flagged, inserting ops_log and firing curiosity search`
+          `[DRIFT] ${op.name} (${op.id}): drift score ${driftScore.toFixed(3)} — flagged, inserting ops_log and firing curiosity search`
         );
 
         // Insert ops_log row to notify the owner
