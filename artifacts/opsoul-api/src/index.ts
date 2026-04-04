@@ -32,6 +32,7 @@ import contactRouter from './routes/contact.js';
 import { startGrowCron } from './cron/growCron.js';
 import { startMemoryCron } from './cron/memoryCron.js';
 import { startDriftCron } from './cron/driftCron.js';
+import { startKeepAliveCron } from './cron/keepAliveCron.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
