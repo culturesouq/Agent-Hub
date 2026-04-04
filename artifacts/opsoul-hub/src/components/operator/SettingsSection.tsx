@@ -63,16 +63,27 @@ const EVOLUTION_OPTIONS: { value: EvolutionLevel; label: string; description: st
 ];
 
 function CodeBlock({ code, onCopy }: { code: string; onCopy: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    onCopy();
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
   return (
     <div className="relative group">
       <pre className="font-mono text-xs bg-background/80 border border-border/30 rounded-lg p-4 overflow-x-auto text-muted-foreground leading-relaxed whitespace-pre-wrap break-all">
         {code}
       </pre>
       <button
-        onClick={onCopy}
-        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded border border-border/30 bg-card hover:bg-card/80 text-muted-foreground hover:text-foreground"
+        onClick={handleCopy}
+        className={`absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded border bg-card hover:bg-card/80 ${
+          copied
+            ? "border-green-500/40 text-green-500"
+            : "border-border/30 text-muted-foreground hover:text-foreground"
+        }`}
+        title="Copy"
       >
-        <Copy className="w-3 h-3" />
+        {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
       </button>
     </div>
   );
@@ -130,10 +141,13 @@ export default function SettingsSection({ operator, section }: { operator: Opera
     : "CONTROLLED") as EvolutionLevel;
 
   const [evolutionMode, setEvolutionMode] = useState<EvolutionLevel>(currentLevel);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
-  const copy = (text: string, label = "Copied") => {
+  const copy = (text: string, field: string, label = "Copied") => {
     navigator.clipboard.writeText(text);
     toast({ title: label });
+    setCopiedField(field);
+    setTimeout(() => setCopiedField(f => f === field ? null : f), 1500);
   };
 
   const baseUrl = `${window.location.origin}/api`;
@@ -362,8 +376,9 @@ print(response.json()["content"])`;
           <div className="space-y-1">
             <div className="flex items-center justify-between mb-1">
               <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">Operator ID</span>
-              <button onClick={() => copy(operator.id)} className="font-mono text-xs text-primary hover:underline flex items-center gap-1">
-                <Copy className="w-3 h-3" /> Copy
+              <button onClick={() => copy(operator.id, "opid")} className={`font-mono text-xs flex items-center gap-1 transition-colors ${copiedField === "opid" ? "text-green-500" : "text-primary hover:underline"}`}>
+                {copiedField === "opid" ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                {copiedField === "opid" ? "Copied" : "Copy"}
               </button>
             </div>
             <div className="font-mono text-sm bg-background/60 border border-border/30 rounded-lg px-3 py-2.5 break-all select-all text-primary/80">
@@ -374,8 +389,9 @@ print(response.json()["content"])`;
           <div className="space-y-1">
             <div className="flex items-center justify-between mb-1">
               <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">Authentication header</span>
-              <button onClick={() => copy("Authorization: Bearer <YOUR_TOKEN>")} className="font-mono text-xs text-primary hover:underline flex items-center gap-1">
-                <Copy className="w-3 h-3" /> Copy
+              <button onClick={() => copy("Authorization: Bearer <YOUR_TOKEN>", "auth")} className={`font-mono text-xs flex items-center gap-1 transition-colors ${copiedField === "auth" ? "text-green-500" : "text-primary hover:underline"}`}>
+                {copiedField === "auth" ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                {copiedField === "auth" ? "Copied" : "Copy"}
               </button>
             </div>
             <div className="font-mono text-sm bg-background/60 border border-border/30 rounded-lg px-3 py-2.5 text-muted-foreground">
@@ -394,31 +410,34 @@ print(response.json()["content"])`;
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">curl</span>
-              <button onClick={() => copy(curlExample)} className="font-mono text-xs text-primary hover:underline flex items-center gap-1">
-                <Copy className="w-3 h-3" /> Copy
+              <button onClick={() => copy(curlExample, "curl")} className={`font-mono text-xs flex items-center gap-1 transition-colors ${copiedField === "curl" ? "text-green-500" : "text-primary hover:underline"}`}>
+                {copiedField === "curl" ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                {copiedField === "curl" ? "Copied" : "Copy"}
               </button>
             </div>
-            <CodeBlock code={curlExample} onCopy={() => copy(curlExample)} />
+            <CodeBlock code={curlExample} onCopy={() => copy(curlExample, "curl-block")} />
           </div>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">JavaScript</span>
-              <button onClick={() => copy(jsExample)} className="font-mono text-xs text-primary hover:underline flex items-center gap-1">
-                <Copy className="w-3 h-3" /> Copy
+              <button onClick={() => copy(jsExample, "js")} className={`font-mono text-xs flex items-center gap-1 transition-colors ${copiedField === "js" ? "text-green-500" : "text-primary hover:underline"}`}>
+                {copiedField === "js" ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                {copiedField === "js" ? "Copied" : "Copy"}
               </button>
             </div>
-            <CodeBlock code={jsExample} onCopy={() => copy(jsExample)} />
+            <CodeBlock code={jsExample} onCopy={() => copy(jsExample, "js-block")} />
           </div>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">Python</span>
-              <button onClick={() => copy(pythonExample)} className="font-mono text-xs text-primary hover:underline flex items-center gap-1">
-                <Copy className="w-3 h-3" /> Copy
+              <button onClick={() => copy(pythonExample, "py")} className={`font-mono text-xs flex items-center gap-1 transition-colors ${copiedField === "py" ? "text-green-500" : "text-primary hover:underline"}`}>
+                {copiedField === "py" ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                {copiedField === "py" ? "Copied" : "Copy"}
               </button>
             </div>
-            <CodeBlock code={pythonExample} onCopy={() => copy(pythonExample)} />
+            <CodeBlock code={pythonExample} onCopy={() => copy(pythonExample, "py-block")} />
           </div>
         </section>
       )}
