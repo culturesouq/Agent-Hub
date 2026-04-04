@@ -24,7 +24,7 @@ export default function LandingPage() {
               <a href="/login" className="bg-primary-container text-on-primary-container px-10 py-5 font-label uppercase tracking-widest text-xs font-bold hover:opacity-90 transition-all">
                 Get Started
               </a>
-              <a href="/docs" className="border border-outline-variant/30 text-primary px-10 py-5 font-label uppercase tracking-widest text-xs font-bold hover:bg-white/5 transition-all">
+              <a href="/docs" className="border border-outline-variant/30 text-primary px-10 py-5 font-label uppercase tracking-widest text-xs font-bold hover:bg-white/5 transition-all rounded-lg">
                 See How It Works
               </a>
             </div>
@@ -49,7 +49,7 @@ export default function LandingPage() {
         <section className="py-32 bg-surface-container-low/30 px-6 md:px-8">
           <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-20 items-center">
             <div className="order-2 lg:order-1">
-              <div className="glass-panel p-8 rounded-2xl relative overflow-hidden">
+              <div className="glass-panel p-6 rounded-2xl relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-1 h-full bg-destructive/40" />
                 <h3 className="font-label uppercase tracking-widest text-destructive text-xs mb-6">The Systemic Failure</h3>
                 <h2 className="font-headline text-4xl mb-8 text-on-surface">The Stateless Problem.</h2>
@@ -172,8 +172,8 @@ export default function LandingPage() {
         </section>
 
         {/* Founding Banner */}
-        <section className="my-40 px-6 md:px-8 max-w-7xl mx-auto">
-          <div className="relative glass-panel p-12 rounded-2xl overflow-hidden text-center neon-glow-primary">
+        <section className="py-24 md:py-32 px-6 md:px-8 max-w-7xl mx-auto">
+          <div className="relative glass-panel p-6 md:p-8 rounded-2xl overflow-hidden text-center neon-glow-primary">
             <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-primary to-transparent opacity-50" />
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(205,150,255,0.05)_0%,_transparent_70%)]" />
             <h3 className="font-label uppercase tracking-[0.3em] text-secondary text-sm mb-8">Limited Genesis Phase</h3>

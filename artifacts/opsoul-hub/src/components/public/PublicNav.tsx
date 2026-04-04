@@ -1,8 +1,17 @@
 import { useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 
 export default function PublicNav() {
   const [logoError, setLogoError] = useState(false);
+  const [location] = useLocation();
+
+  function navClass(href: string) {
+    const isActive = location === href || (href !== "/" && location.startsWith(href));
+    return [
+      "font-label uppercase tracking-widest text-[10px] transition-colors",
+      isActive ? "text-primary" : "text-on-surface-variant hover:text-primary",
+    ].join(" ");
+  }
 
   return (
     <nav className="fixed top-0 w-full z-50 frosted-nav">
@@ -25,18 +34,10 @@ export default function PublicNav() {
             </span>
           </Link>
           <div className="hidden md:flex gap-8 items-center ml-4">
-            <Link href="/pricing" className="text-on-surface-variant hover:text-primary transition-colors font-label uppercase tracking-widest text-[10px]">
-              Pricing
-            </Link>
-            <Link href="/docs" className="text-on-surface-variant hover:text-primary transition-colors font-label uppercase tracking-widest text-[10px]">
-              Docs
-            </Link>
-            <Link href="/support" className="text-on-surface-variant hover:text-primary transition-colors font-label uppercase tracking-widest text-[10px]">
-              Support
-            </Link>
-            <Link href="/contact" className="text-on-surface-variant hover:text-primary transition-colors font-label uppercase tracking-widest text-[10px]">
-              Contact
-            </Link>
+            <Link href="/pricing" className={navClass("/pricing")}>Pricing</Link>
+            <Link href="/docs" className={navClass("/docs")}>Docs</Link>
+            <Link href="/support" className={navClass("/support")}>Support</Link>
+            <Link href="/contact" className={navClass("/contact")}>Contact</Link>
           </div>
         </div>
         <div className="flex items-center gap-6">
