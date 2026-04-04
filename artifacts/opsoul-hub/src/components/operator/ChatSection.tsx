@@ -461,8 +461,8 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
         <ChatArea />
       </div>
 
-      {/* Mobile: single-panel with list/chat toggle */}
-      <div className="h-[calc(100dvh-112px)] md:hidden flex flex-col glass-panel rounded-2xl border border-border/30 overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+      {/* Mobile: single-panel with list/chat toggle — h-full because parent wrapper removes padding */}
+      <div className="h-full md:hidden flex flex-col glass-panel border border-border/30 overflow-hidden animate-in fade-in zoom-in-95 duration-300">
         {mobileView === "list" ? (
           <div className="flex flex-col flex-1 overflow-hidden">
             <ConversationList />

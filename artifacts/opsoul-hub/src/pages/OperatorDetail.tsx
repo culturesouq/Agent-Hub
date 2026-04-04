@@ -409,8 +409,11 @@ export default function OperatorDetail({ id }: { id: string }) {
         </aside>
 
         {/* Content */}
-        <main className="flex-1 overflow-y-auto bg-background relative">
-          <div className="p-4 md:p-8 max-w-5xl mx-auto h-full w-full">
+        <main className={`flex-1 bg-background relative ${activeTab === "chat" ? "overflow-hidden" : "overflow-y-auto"}`}>
+          <div className={activeTab === "chat"
+            ? "h-full w-full md:p-8 md:max-w-5xl md:mx-auto"
+            : "p-4 md:p-8 max-w-5xl mx-auto"
+          }>
             {renderContent()}
           </div>
         </main>

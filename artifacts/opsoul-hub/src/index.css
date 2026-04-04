@@ -124,6 +124,7 @@
   body {
     @apply antialiased bg-background text-foreground;
     font-family: 'Manrope', sans-serif;
+    overflow-x: hidden;
   }
 
   /* Thin, styled scrollbars */
