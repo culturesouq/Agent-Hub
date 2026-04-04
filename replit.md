@@ -2,6 +2,24 @@
 
 AI operator platform with 5-layer identity architecture, dual knowledge bases, GROW self-evolution system, multi-tenant JWT auth, and pgvector semantic search.
 
+## Services & Startup
+
+The platform has two services that must both be running:
+
+| Service | Workflow | Port | Purpose |
+|---------|----------|------|---------|
+| `opsoul-api` | `artifacts/opsoul-api: API Server` | 3001 | Express REST API + JWT auth |
+| `opsoul-hub` | `artifacts/opsoul-hub: web` | 19165 → served at `/` | React/Vite frontend |
+
+**Development startup:** Both services are managed by the Replit artifact system and auto-start independently. If you need to start them manually, run:
+```bash
+bash scripts/start-dev.sh
+```
+
+**Routing:** The frontend is registered at `previewPath = "/"` via `artifacts/opsoul-hub/.replit-artifact/artifact.toml`. Visiting `/` with no auth token shows LandingPage; with a valid token shows Dashboard. The `[[artifacts]]` section in `.replit` contains a legacy `api-server` entry (stale — no longer used); the live artifact registration is via artifact.toml files.
+
+**Note on .replit [[artifacts]]:** Direct editing of `.replit` is platform-restricted. The opsoul-hub artifact is correctly registered via its own `artifact.toml` which is the authoritative registration mechanism in this Replit version. To update `.replit` artifact entries, a maintainer must edit the file directly.
+
 ## v2.4 GitHub Release — Task #19
 
 **Push record (2026-04-04):**
