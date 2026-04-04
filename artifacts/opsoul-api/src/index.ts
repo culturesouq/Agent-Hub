@@ -3,6 +3,8 @@ import { validateEnv } from '@workspace/opsoul-utils/env';
 validateEnv();
 
 import express from 'express';
+import path from 'path';
+import fs from 'fs';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import { pool } from '@workspace/db';
@@ -65,6 +67,18 @@ app.use('/api/contact', contactRouter);
 app.get('/api/healthz', (_req, res) => {
   res.json({ status: 'ok', service: 'opsoul-api', phase: 8 });
 });
+
+// Serve frontend static files in production
+if (process.env.NODE_ENV === 'production') {
+  const distPath = path.resolve(process.cwd(), 'artifacts/opsoul-hub/dist/public');
+  if (fs.existsSync(distPath)) {
+    app.use(express.static(distPath));
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api')) return next();
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
+}
 
 const SOVEREIGN_ADMIN_EMAIL = 'mohamedhajeri887@gmail.com';
 

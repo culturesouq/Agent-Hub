@@ -19,13 +19,9 @@ run = "pnpm --filter @workspace/opsoul-hub run dev"
 
 [services.production]
 build = [ "pnpm", "--filter", "@workspace/opsoul-hub", "run", "build" ]
-publicDir = "artifacts/opsoul-hub/dist/public"
-serve = "static"
-
-[[services.production.rewrites]]
-from = "/*"
-to = "/index.html"
+run = "pnpm --filter @workspace/opsoul-api run start"
 
 [services.env]
 PORT = "19165"
 BASE_PATH = "/"
+NODE_ENV = "production"
