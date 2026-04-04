@@ -6,41 +6,60 @@ const docNav = [
   {
     section: "Foundation",
     items: [
-      { icon: "play_arrow", label: "Getting Started", active: true },
-      { icon: "auto_awesome", label: "Soul", active: false },
-      { icon: "bolt", label: "Skills", active: false },
+      { icon: "play_arrow", label: "Getting Started", href: "#overview",     active: true  },
+      { icon: "auto_awesome", label: "Soul",           href: "#doc-soul",     active: false },
+      { icon: "bolt",         label: "Skills",         href: "#doc-skills",   active: false },
     ],
   },
   {
     section: "Cognition",
     items: [
-      { icon: "database", label: "Memory", active: false },
-      { icon: "trending_up", label: "Growth", active: false },
+      { icon: "database",    label: "Memory", href: "#doc-memory", active: false },
+      { icon: "trending_up", label: "Growth", href: "#doc-growth", active: false },
     ],
   },
   {
     section: "Execution",
     items: [
-      { icon: "assignment", label: "Tasks", active: false },
-      { icon: "folder", label: "Files", active: false },
+      { icon: "assignment", label: "Tasks", href: "#doc-tasks", active: false },
+      { icon: "folder",     label: "Files", href: "#doc-files", active: false },
     ],
   },
   {
     section: "Networking",
     items: [
-      { icon: "hub", label: "Connections", active: false },
-      { icon: "podcasts", label: "Channels", active: false },
+      { icon: "hub",      label: "Connections", href: "#doc-connections", active: false },
+      { icon: "podcasts", label: "Channels",    href: "#doc-channels",    active: false },
     ],
   },
   {
     section: "System",
     items: [
-      { icon: "settings", label: "Settings", active: false },
-      { icon: "admin_panel_settings", label: "Admin", active: false },
-      { icon: "api", label: "API Reference", active: false },
+      { icon: "settings",           label: "Settings",      href: "#doc-settings",  active: false },
+      { icon: "admin_panel_settings", label: "Admin",       href: "#doc-admin",     active: false },
+      { icon: "api",                label: "API Reference", href: "#doc-api",        active: false },
     ],
   },
 ];
+
+function DocStubSection({ id, icon, title, description }: { id: string; icon: string; title: string; description: string }) {
+  return (
+    <section id={id} className="scroll-mt-24">
+      <h2 className="text-2xl font-headline font-semibold text-primary mb-4 flex items-center gap-3">
+        <span className="w-8 h-px bg-primary/30" />
+        <span className="material-symbols-outlined text-2xl select-none">{icon}</span>
+        {title}
+      </h2>
+      <div className="glass-panel p-6 rounded-2xl border border-outline-variant/10 flex items-start gap-4">
+        <span className="material-symbols-outlined text-slate-600 text-3xl mt-0.5 select-none">construction</span>
+        <div>
+          <p className="text-on-surface-variant font-sans leading-relaxed">{description}</p>
+          <p className="text-[10px] font-label uppercase tracking-widest text-slate-600 mt-3">Full documentation coming soon</p>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 export default function DocsPage() {
   return (
@@ -77,7 +96,7 @@ export default function DocsPage() {
                         ? "text-primary bg-primary/10 rounded-r-full translate-x-1"
                         : "text-slate-500 hover:text-primary hover:bg-white/5"
                     }`}
-                    href="#"
+                    href={item.href}
                   >
                     <span className="material-symbols-outlined text-sm select-none">{item.icon}</span>
                     {item.label}
@@ -106,7 +125,7 @@ export default function DocsPage() {
             </div>
 
             {/* Page header */}
-            <header id="overview" className="mb-12 relative">
+            <header id="overview" className="mb-12 relative scroll-mt-24">
               <div className="status-beacon absolute -left-6 top-6" />
               <h1 className="text-6xl font-headline font-bold text-on-surface tracking-tighter mb-4">
                 What is an <span className="text-primary">Operator</span>?
@@ -132,7 +151,7 @@ export default function DocsPage() {
 
             {/* Content */}
             <div className="space-y-12">
-              <section id="core-architecture">
+              <section id="core-architecture" className="scroll-mt-24">
                 <h2 className="text-2xl font-headline font-semibold text-primary mb-6 flex items-center gap-3">
                   <span className="w-8 h-px bg-primary/30" /> Core Architecture
                 </h2>
@@ -154,7 +173,7 @@ export default function DocsPage() {
                 </div>
               </section>
 
-              <section id="initialization">
+              <section id="initialization" className="scroll-mt-24">
                 <h2 className="text-2xl font-headline font-semibold text-primary mb-6 flex items-center gap-3">
                   <span className="w-8 h-px bg-primary/30" /> Initializing Your First Operator
                 </h2>
@@ -195,7 +214,8 @@ export default function DocsPage() {
                 </div>
               </section>
 
-              <section className="pb-24">
+              {/* CTA */}
+              <section className="pb-4">
                 <div className="bg-gradient-to-br from-primary/10 to-transparent p-8 rounded-3xl border border-primary/20 flex flex-col md:flex-row items-center gap-8">
                   <div className="flex-grow">
                     <h2 className="text-2xl font-headline font-bold text-on-surface mb-2">Ready for the Deep Dive?</h2>
@@ -203,12 +223,88 @@ export default function DocsPage() {
                       Learn how to configure your Operator's 'Soul' parameters to specialize in specific data patterns and high-level logic tasks.
                     </p>
                   </div>
-                  <button className="bg-primary text-on-primary px-8 py-4 rounded-full font-label uppercase tracking-widest text-xs font-black flex items-center gap-3 whitespace-nowrap hover:shadow-[0_0_30px_rgba(224,182,255,0.4)] transition-all">
+                  <a href="#doc-soul" className="bg-primary text-on-primary px-8 py-4 rounded-full font-label uppercase tracking-widest text-xs font-black flex items-center gap-3 whitespace-nowrap hover:shadow-[0_0_30px_rgba(224,182,255,0.4)] transition-all">
                     Protocol Guide: Soul Logic
                     <span className="material-symbols-outlined select-none">arrow_forward</span>
-                  </button>
+                  </a>
                 </div>
               </section>
+
+              {/* Section stubs — Foundation */}
+              <DocStubSection
+                id="doc-soul"
+                icon="auto_awesome"
+                title="Soul"
+                description="The Soul defines your Operator's core identity: name, archetype, mandate, language, and behavioral constraints. It is the root-of-trust for all downstream cognitive behavior and forms an immutable hash once locked."
+              />
+              <DocStubSection
+                id="doc-skills"
+                icon="bolt"
+                title="Skills"
+                description="Skills are modular capability packages that Operators can install, activate, and compose. Platform Skills are globally available; custom Skills can be authored and applied per-Operator."
+              />
+
+              {/* Cognition */}
+              <DocStubSection
+                id="doc-memory"
+                icon="database"
+                title="Memory"
+                description="Operators store and retrieve experiences via pgvector semantic search. Memory entries are scored by relevance and importance, distilled over time, and softly decayed so the most relevant context is always surfaced in chat."
+              />
+              <DocStubSection
+                id="doc-growth"
+                icon="trending_up"
+                title="Growth (GROW)"
+                description="GROW is the autonomous self-evolution engine. It analyzes conversation patterns, generates behavioral proposals, and—with owner approval—applies targeted updates to the Operator's Soul and directive stack."
+              />
+
+              {/* Execution */}
+              <DocStubSection
+                id="doc-tasks"
+                icon="assignment"
+                title="Tasks"
+                description="Operators maintain a persistent task queue. Tasks can be created manually or generated autonomously during conversations. Each task tracks status, priority, and linked context."
+              />
+              <DocStubSection
+                id="doc-files"
+                icon="folder"
+                title="Files"
+                description="Operators can store, retrieve, and reason over uploaded files. Files are indexed and made available as context during chat, enabling document-aware interactions."
+              />
+
+              {/* Networking */}
+              <DocStubSection
+                id="doc-connections"
+                icon="hub"
+                title="Connections"
+                description="Operators connect to external services via the Integrations layer. OAuth-based and API-key connectors enable Operators to read/write data across Gmail, Google Calendar, Outlook, and more."
+              />
+              <DocStubSection
+                id="doc-channels"
+                icon="podcasts"
+                title="Channels"
+                description="Deploy your Operator to messaging channels like Telegram and WhatsApp. Channel adapters route inbound messages directly into the Operator's conversation engine."
+              />
+
+              {/* System */}
+              <DocStubSection
+                id="doc-settings"
+                icon="settings"
+                title="Settings"
+                description="Configure your Operator's underlying AI model, API access tokens, behavior flags (Safe Mode), and danger-zone operations like reset or decommission."
+              />
+              <DocStubSection
+                id="doc-admin"
+                icon="admin_panel_settings"
+                title="Admin"
+                description="Sovereign Admin access provides a platform-level overview: all Operators, all Owners, audit logs, and system health metrics. Only accounts with isSovereignAdmin may access this panel."
+              />
+              <DocStubSection
+                id="doc-api"
+                icon="api"
+                title="API Reference"
+                description="The OpSoul REST API is available to all Pro+ plans. Authenticate via Bearer token and interact with any Operator endpoint programmatically. Full OpenAPI specification available on request."
+              />
             </div>
           </div>
         </main>

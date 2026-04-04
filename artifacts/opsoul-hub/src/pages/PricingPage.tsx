@@ -153,8 +153,15 @@ export default function PricingPage() {
               <div className="mb-8">
                 <div className="text-4xl font-headline font-bold text-on-surface">
                   {annual ? t.annual : t.monthly}
-                  {(annual ? t.annual : t.monthly) !== "Custom" && <span className="text-sm font-light text-slate-500">/mo</span>}
+                  {(annual ? t.annual : t.monthly) !== "Custom" && (
+                    <span className="text-sm font-light text-slate-500">/mo</span>
+                  )}
                 </div>
+                {(annual ? t.annual : t.monthly) !== "Custom" && (
+                  <p className="text-[10px] font-label uppercase tracking-widest text-slate-500 mt-1">
+                    {annual ? "billed annually" : "billed monthly"}
+                  </p>
+                )}
                 <p className={`text-xs mt-2 font-label uppercase tracking-widest ${t.highlighted ? "text-primary" : "text-slate-500"}`}>{t.sub}</p>
               </div>
               <div className="flex-grow space-y-4 mb-10">

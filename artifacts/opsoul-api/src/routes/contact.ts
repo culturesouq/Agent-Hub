@@ -15,7 +15,7 @@ router.post('/', async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, NOW())`,
       [randomUUID(), name, email, subject || 'General Inquiry', message]
     );
-    res.json({ ok: true });
+    res.json({ success: true });
   } catch (err) {
     console.error('[contact]', err);
     res.status(500).json({ error: 'Internal server error' });
