@@ -69,14 +69,19 @@ app.get('/api/healthz', (_req, res) => {
 });
 
 // Serve frontend static files in production
+// pnpm runs with cwd = artifacts/opsoul-api, so go up 2 levels to workspace root
 if (process.env.NODE_ENV === 'production') {
-  const distPath = path.resolve(process.cwd(), 'artifacts/opsoul-hub/dist/public');
+  const distPath = path.resolve(process.cwd(), '../../artifacts/opsoul-hub/dist/public');
+  console.log(`[opsoul-api] Static distPath: ${distPath} (exists: ${fs.existsSync(distPath)})`);
   if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     app.get('*', (req, res, next) => {
       if (req.path.startsWith('/api')) return next();
       res.sendFile(path.join(distPath, 'index.html'));
     });
+    console.log('[opsoul-api] Serving frontend static files from', distPath);
+  } else {
+    console.warn('[opsoul-api] WARNING: Frontend dist not found — frontend will not be served');
   }
 }
 
