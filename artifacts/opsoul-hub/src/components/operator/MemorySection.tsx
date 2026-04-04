@@ -72,7 +72,7 @@ export default function MemorySection({ operatorId }: { operatorId: string }) {
   const archivedMemories = memories?.filter(m => m.archivedAt);
 
   return (
-    <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
+    <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300 glass-panel rounded-2xl border border-border/30 p-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-border/50 pb-4">
         <div>
           <h2 className="headline-lg text-2xl font-bold text-primary flex items-center gap-2">

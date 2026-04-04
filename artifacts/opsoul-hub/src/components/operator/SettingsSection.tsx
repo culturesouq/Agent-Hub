@@ -239,7 +239,7 @@ print(response.json()["content"])`;
   const show = (s: "model" | "secrets" | "api" | "evolution" | "danger" | "safemode") => !section || section === s;
 
   return (
-    <div className="space-y-10 animate-in fade-in zoom-in-95 duration-300 max-w-2xl">
+    <div className="space-y-10 animate-in fade-in zoom-in-95 duration-300 max-w-2xl glass-panel rounded-2xl border border-border/30 p-6">
 
       {show("model") && (
         <section className="space-y-5">

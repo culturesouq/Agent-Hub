@@ -48,8 +48,8 @@ function ComingSoon({ title }: { title: string }) {
       <div className="w-12 h-12 rounded-full bg-muted/30 flex items-center justify-center">
         <Star className="w-5 h-5 text-muted-foreground/50" />
       </div>
-      <p className="font-mono font-bold text-foreground">{title}</p>
-      <p className="font-mono text-sm text-muted-foreground">Coming soon</p>
+      <p className="font-headline font-bold text-foreground">{title}</p>
+      <p className="font-label text-sm text-muted-foreground">Coming soon</p>
     </div>
   );
 }
@@ -73,7 +73,7 @@ function SidebarLeaf({
     <button
       onClick={() => onSelect(item.id)}
       data-testid={`nav-${item.id}`}
-      className={`flex items-center gap-2.5 ${pl} pr-3 py-2 rounded-md text-sm font-mono w-full text-left transition-all
+      className={`flex items-center gap-2.5 ${pl} pr-3 py-2 rounded-md text-sm font-label w-full text-left transition-all
         ${isActive
           ? "bg-sidebar-primary/15 text-sidebar-primary border border-sidebar-primary/25"
           : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground border border-transparent"
@@ -112,7 +112,7 @@ function SidebarGroup({
     <div>
       <button
         onClick={() => toggleGroup(item.id)}
-        className={`flex items-center gap-2.5 ${pl} pr-3 py-2 rounded-md text-sm font-mono w-full text-left transition-all text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground border border-transparent`}
+        className={`flex items-center gap-2.5 ${pl} pr-3 py-2 rounded-md text-sm font-label w-full text-left transition-all text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground border border-transparent`}
       >
         <item.icon className="w-3.5 h-3.5 shrink-0" />
         <span className="truncate flex-1">{item.label}</span>
@@ -342,7 +342,7 @@ export default function OperatorDetail({ id }: { id: string }) {
             <ArrowLeft className="w-4 h-4" />
           </Link>
           {/* Operator name on mobile */}
-          <span className="md:hidden font-mono font-bold text-sm truncate max-w-32">{operator.name}</span>
+          <span className="md:hidden font-headline font-bold text-sm truncate max-w-32">{operator.name}</span>
         </div>
 
         <div className="flex items-center gap-2">
@@ -420,7 +420,7 @@ export default function OperatorDetail({ id }: { id: string }) {
       <Dialog open={capDialogOpen} onOpenChange={setCapDialogOpen}>
         <DialogContent className="border-amber-500/30 bg-card/95 backdrop-blur max-w-lg">
           <DialogHeader>
-            <DialogTitle className="font-mono text-base flex items-center gap-2">
+            <DialogTitle className="font-headline text-base flex items-center gap-2">
               <Bell className="w-4 h-4 text-amber-500" />
               Your operator is asking for permission
             </DialogTitle>
