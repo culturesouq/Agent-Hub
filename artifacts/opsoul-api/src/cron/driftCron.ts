@@ -1,13 +1,48 @@
 import crypto from 'crypto';
 import { db } from '@workspace/db';
-import { operatorsTable, selfAwarenessStateTable } from '@workspace/db';
-import { eq, isNotNull } from 'drizzle-orm';
+import {
+  operatorsTable,
+  selfAwarenessStateTable,
+  opsLogsTable,
+} from '@workspace/db';
+import { eq, isNotNull, isNull } from 'drizzle-orm';
 import { semanticDistance } from '@workspace/opsoul-utils/ai';
 import type { Layer2Soul } from '../validation/operator.js';
+
+// T8 — Cumulative Drift: capture baseline for operators missing layer2SoulOriginal
+async function captureBaselines(): Promise<void> {
+  const unbaselined = await db
+    .select({
+      id: operatorsTable.id,
+      name: operatorsTable.name,
+      layer2Soul: operatorsTable.layer2Soul,
+    })
+    .from(operatorsTable)
+    .where(isNull(operatorsTable.layer2SoulOriginal));
+
+  if (unbaselined.length === 0) return;
+
+  console.log(`[DRIFT] Capturing soul baseline for ${unbaselined.length} operator(s) with no original snapshot`);
+
+  for (const op of unbaselined) {
+    try {
+      await db
+        .update(operatorsTable)
+        .set({ layer2SoulOriginal: op.layer2Soul })
+        .where(eq(operatorsTable.id, op.id));
+      console.log(`[DRIFT] Baseline saved for ${op.name} (${op.id})`);
+    } catch (err) {
+      console.error(`[DRIFT] Failed to save baseline for ${op.name} (${op.id}):`, (err as Error).message);
+    }
+  }
+}
 
 // T8 — Cumulative Drift: compute semantic drift between original and current soul
 async function runDriftCheck(): Promise<void> {
   console.log('[DRIFT] 90-day cumulative drift check starting:', new Date().toISOString());
+
+  // First — ensure every operator has a baseline before we compare
+  await captureBaselines();
 
   const operators = await db
     .select({
@@ -50,7 +85,7 @@ async function runDriftCheck(): Promise<void> {
               ...existingSoulState,
               driftScore,
               driftFlagged: flagged,
-              driftCheckedAt: new Date().toISOString(),
+              driftMeasuredAt: new Date().toISOString(),
             },
           })
           .where(eq(selfAwarenessStateTable.id, existing.id));
@@ -58,15 +93,32 @@ async function runDriftCheck(): Promise<void> {
         await db.insert(selfAwarenessStateTable).values({
           id: crypto.randomUUID(),
           operatorId: op.id,
-          soulState: { driftScore, driftFlagged: flagged, driftCheckedAt: new Date().toISOString() },
+          soulState: { driftScore, driftFlagged: flagged, driftMeasuredAt: new Date().toISOString() },
         });
       }
 
       if (flagged) {
-        console.log(`[DRIFT] ${op.name} (${op.id}): drift score ${driftScore} — flagged, firing curiosity search`);
+        console.log(
+          `[DRIFT] ${op.name} (${op.id}): drift score ${driftScore} — flagged, inserting ops_log and firing curiosity search`
+        );
+
+        // Insert ops_log row to notify the owner
+        try {
+          await db.insert(opsLogsTable).values({
+            id: crypto.randomUUID(),
+            logTier: 'warn',
+            errorType: 'soul_drift_flagged',
+            operatorId: op.id,
+            fixOutcome: `drift_score:${driftScore}`,
+            retryCount: 0,
+            createdAt: new Date(),
+          });
+          console.log(`[DRIFT] ${op.name}: ops_log row inserted (drift_score: ${driftScore})`);
+        } catch (err) {
+          console.error(`[DRIFT] ${op.name}: ops_log insert failed —`, (err as Error).message);
+        }
 
         // Drift detected — Curiosity fires to find the correct state
-        // Build a claim from the soul text difference
         try {
           const { curiositySearch } = await import('../utils/curiosityEngine.js');
           const claim = `Current behavior and values of an AI operator: ${currentText.slice(0, 300)}`;
