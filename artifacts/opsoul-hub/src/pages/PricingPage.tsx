@@ -4,37 +4,37 @@ import PublicLayout from "@/components/public/PublicLayout";
 
 const tiers: { tier: string; name: string; monthly: string; annual: string; sub: string; features: string[]; cta: string; href?: string; highlighted: boolean }[] = [
   {
-    tier: "Tier 01",
+    tier: "Solo",
     name: "Solo",
     monthly: "$49",
     annual: "$41",
     sub: "1 Active Operator",
     features: ["Full Neural Integration", "24/7 Autonomous Sync", "Standard Encryption"],
-    cta: "Initialize Solo",
+    cta: "Get Started",
     highlighted: false,
   },
   {
-    tier: "Tier 02",
+    tier: "Pro",
     name: "Pro",
     monthly: "$99",
     annual: "$83",
     sub: "3 Active Operators",
     features: ["Cross-Node Cooperation", "Advanced Heuristics", "Priority Protocol Access"],
-    cta: "Deploy Pro",
+    cta: "Start Pro",
     highlighted: true,
   },
   {
-    tier: "Tier 03",
+    tier: "Studio",
     name: "Studio",
     monthly: "$249",
     annual: "$207",
     sub: "10 Active Operators",
     features: ["Fleet Management UI", "Shared Context Pools", "Dedicated Support Node"],
-    cta: "Launch Studio",
+    cta: "Start Studio",
     highlighted: false,
   },
   {
-    tier: "Tier 04",
+    tier: "Enterprise",
     name: "Enterprise",
     monthly: "Custom",
     annual: "Custom",
@@ -47,11 +47,11 @@ const tiers: { tier: string; name: string; monthly: string; annual: string; sub:
 ];
 
 const faqs = [
-  { q: "Trial Phase", size: "md:col-span-1", desc: "Every initialize command starts with a 14-day protocol window. No credit card required to begin the sequence." },
-  { q: "Switching Protocols", size: "md:col-span-2", desc: "Scaling up or down is handled instantly at the protocol level. Credits are pro-rated to your next billing cycle." },
+  { q: "Free Trial", size: "md:col-span-1", desc: "Every plan starts with a 14-day free trial. No credit card required — sign up, create your first Operator, and explore the platform before committing." },
+  { q: "Changing Plans", size: "md:col-span-2", desc: "You can upgrade or downgrade your plan at any time from billing settings. Any unused time on your current plan is prorated and credited to your next billing cycle." },
   { q: "What is a Founding Operator?", size: "md:col-span-2", desc: "Founding Operators are our early believers. You aren't just a user; you are a permanent part of the OpSoul ledger. You get the lowest possible price point and every future feature upgrade for life. No exceptions." },
-  { q: "Decommissioning", size: "md:col-span-1", desc: "Deleting an Operator is permanent. All local memory is purged. You can repurpose the slot immediately for a new entity." },
-  { q: "Protocol Integrity", size: "md:col-span-3", desc: "Unlike traditional SaaS, we don't gate features. A Solo operator has the same raw cognitive capacity as an Enterprise fleet. You are paying for the number of entities you wish to sustain simultaneously, not the quality of their existence." },
+  { q: "Deleting an Operator", size: "md:col-span-1", desc: "Deleting an Operator is permanent. All of its memory, conversations, and configuration are removed and cannot be recovered. You can create a new Operator in the freed slot immediately." },
+  { q: "What you're paying for", size: "md:col-span-3", desc: "We don't gate features based on plan. Every Operator — regardless of whether you're on Solo or Enterprise — has the same full capabilities. You're paying for how many Operators you run simultaneously, not for a better or worse version of the AI." },
 ];
 
 export default function PricingPage() {
@@ -71,10 +71,10 @@ export default function PricingPage() {
             <span className="font-label uppercase tracking-[0.2em] text-secondary text-[10px]">Simple, Transparent Pricing</span>
           </div>
           <h1 className="font-headline text-5xl md:text-7xl font-bold tracking-tight text-on-surface mb-6">
-            Scale your <span className="text-primary">Sovereignty</span>
+            Pricing that <span className="text-primary">scales with you</span>
           </h1>
           <p className="max-w-2xl text-on-surface-variant text-lg font-light leading-relaxed font-sans">
-            OpSoul is built for permanent scaling. No feature gating. No tiered capabilities. Just pure, unadulterated operator throughput. Choose your scale.
+            No feature gating. No capability tiers. Every plan gives you the same full-powered Operators — you choose how many you want to run.
           </p>
         </header>
 
@@ -208,7 +208,7 @@ export default function PricingPage() {
 
         {/* FAQ */}
         <section className="mb-32">
-          <h2 className="font-headline text-4xl font-bold mb-12 text-center md:text-left text-on-surface">Operational Intelligence (FAQ)</h2>
+          <h2 className="font-headline text-4xl font-bold mb-12 text-center md:text-left text-on-surface">Common Questions</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {faqs.map((f) => (
               <div key={f.q} className={`glass-panel p-6 rounded-2xl ${f.size}`}>

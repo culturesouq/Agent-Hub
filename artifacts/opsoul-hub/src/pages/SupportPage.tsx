@@ -3,12 +3,12 @@ import PublicLayout from "@/components/public/PublicLayout";
 import { Link } from "wouter";
 
 const faqs = [
-  { q: "How is protocol billing calculated?", a: "Our billing is computed per computational cycle. We utilize a transparent ledger system where you only pay for the specific AI token throughput and neural processing hours consumed by your active operators." },
-  { q: "Why is my Operator not responding?", a: "Response latency typically occurs during global synchronization events or when a node's local cache exceeds 10GB. We recommend a 'Hard Reboot' from the Command Center dashboard or checking the network shards in your sector." },
-  { q: "Can I transfer Operator ownership?", a: "Yes, ownership is cryptographically signed. You can initiate a transfer in the 'Security' settings tab. Both parties must provide a biometric validation signature to complete the handover of neural weights." },
-  { q: "What happens if I delete an Operator?", a: "Deletion is permanent. All unique neural adaptations and memory shards associated with that specific operator profile will be purged from the OpSoul network to ensure privacy compliance." },
-  { q: "Is data encryption mandatory?", a: "Absolutely. OpSoul Protocol v4.2 mandates end-to-end quantum-resistant encryption for all telemetry and interaction logs. We do not have access to your Operator's private logic branches." },
-  { q: "How do I access premium channels?", a: "Premium communication channels are unlocked once your account achieves 'Tier 2 Operator' status. This requires maintaining a 98% uptime for at least 720 processing hours." },
+  { q: "How is billing calculated?", a: "Billing is simple — you pay a flat monthly or annual rate based on your plan. There are no per-message or per-conversation charges. Upgrading or downgrading your plan is prorated automatically at your next billing cycle." },
+  { q: "Why is my Operator not responding?", a: "Try refreshing the page or starting a new conversation. If the issue continues, check our status page to see if there is a known incident. You can also reach our support team and we'll investigate within a few hours." },
+  { q: "Can I transfer Operator ownership?", a: "Yes. You can initiate a transfer from the Operator's Settings tab. Both the current owner and the new owner will receive a confirmation email — once both parties confirm, the Operator and all its memory moves to the new account." },
+  { q: "What happens if I delete an Operator?", a: "Deletion is permanent. All of the Operator's memory, conversations, Soul configuration, and tasks are removed and cannot be recovered. Consider exporting or noting any key context before deleting. You can create a new Operator in the freed slot immediately." },
+  { q: "Is my data encrypted?", a: "Yes. All data — including conversations, memory, and Soul configuration — is encrypted in transit and at rest. We do not have access to your Operator's conversations or private memory." },
+  { q: "How do I run more Operators?", a: "The number of Operators you can run simultaneously depends on your plan. You can upgrade at any time from your billing settings, or add individual Operator slots as a monthly add-on without switching plans." },
 ];
 
 export default function SupportPage() {
@@ -76,7 +76,7 @@ export default function SupportPage() {
                 <span className="material-symbols-outlined text-secondary text-3xl select-none">mail</span>
               </div>
               <h3 className="font-headline text-xl font-bold mb-2 text-on-surface">Email (24hr)</h3>
-              <p className="text-on-surface-variant text-sm mb-6 leading-relaxed font-sans">Send us a message and we'll get back to you within 14 hours.</p>
+              <p className="text-on-surface-variant text-sm mb-6 leading-relaxed font-sans">Send us a message and we'll get back to you within 24 hours.</p>
               <button className="text-[10px] font-label uppercase tracking-widest text-secondary flex items-center gap-2 group-hover:translate-x-1 transition-transform">
                 Email Us <span className="material-symbols-outlined text-sm select-none">arrow_forward</span>
               </button>
@@ -98,7 +98,7 @@ export default function SupportPage() {
           <section className="max-w-4xl mx-auto">
             <div className="flex items-center gap-4 mb-12">
               <div className="h-px flex-1 bg-gradient-to-r from-transparent to-outline-variant/20" />
-              <h2 className="font-headline text-3xl font-bold uppercase tracking-widest text-center px-4 text-on-surface">Knowledge Base</h2>
+              <h2 className="font-headline text-3xl font-bold uppercase tracking-widest text-center px-4 text-on-surface">Common Questions</h2>
               <div className="h-px flex-1 bg-gradient-to-l from-transparent to-outline-variant/20" />
             </div>
             <div className="space-y-4">
