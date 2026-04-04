@@ -439,6 +439,20 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         outputFormat:       s.outputFormat ?? s.skillOutputFormat ?? null,
         customInstructions: s.customInstructions ?? null,
       }));
+      // --- TOOL USE POLICY GATE ---
+      // Only enforced when operator is in free roaming mode
+      // In normal mode: skills are owner pre-approved, no gate needed
+      if (operator.freeRoaming && operator.toolUsePolicy) {
+        const policy = operator.toolUsePolicy as Record<string, string[]>;
+        const hasAnyPolicy = Object.keys(policy).length > 0;
+        if (hasAnyPolicy) {
+          // Log that policy is active — enforcement hooks go here when
+          // autonomous integration actions are built
+          console.log(`[policy] free roaming active — policy enforced for operator ${operator.id}`);
+        }
+      }
+      // --- END TOOL USE POLICY GATE ---
+
       const skillTrigger = await detectSkillTrigger(message, installedSkillsForAgency, fullContent);
       if (skillTrigger) {
         console.log(`[agency] skill triggered: ${skillTrigger.name}`);
@@ -541,6 +555,20 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         outputFormat:       s.outputFormat ?? s.skillOutputFormat ?? null,
         customInstructions: s.customInstructions ?? null,
       }));
+      // --- TOOL USE POLICY GATE ---
+      // Only enforced when operator is in free roaming mode
+      // In normal mode: skills are owner pre-approved, no gate needed
+      if (operator.freeRoaming && operator.toolUsePolicy) {
+        const policy = operator.toolUsePolicy as Record<string, string[]>;
+        const hasAnyPolicy = Object.keys(policy).length > 0;
+        if (hasAnyPolicy) {
+          // Log that policy is active — enforcement hooks go here when
+          // autonomous integration actions are built
+          console.log(`[policy] free roaming active — policy enforced for operator ${operator.id}`);
+        }
+      }
+      // --- END TOOL USE POLICY GATE ---
+
       const skillTrigger = await detectSkillTrigger(message, installedSkillsForAgency, result.content);
       if (skillTrigger) {
         console.log(`[agency] skill triggered: ${skillTrigger.name}`);

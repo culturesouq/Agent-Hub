@@ -16,6 +16,7 @@ export const operatorsTable = pgTable('operators', {
   growLockLevel: text('grow_lock_level').default('CONTROLLED'),
   lockedUntil: timestamp('locked_until'),
   safeMode: boolean('safe_mode').default(false),
+  freeRoaming: boolean('free_roaming').default(false),
   toolUsePolicy: jsonb('tool_use_policy').default({}),
   openrouterApiKey: text('openrouter_api_key'),
   defaultModel: text('default_model'),
