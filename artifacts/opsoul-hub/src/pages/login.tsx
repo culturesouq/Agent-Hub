@@ -36,8 +36,7 @@ export default function Login() {
         <div className="text-center">
           <Link href="/">
             <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-primary transition-colors font-label cursor-pointer">
-              <span className="material-symbols-outlined text-sm select-none">arrow_back</span>
-              Back to home
+              ← OpSoul
             </span>
           </Link>
         </div>
