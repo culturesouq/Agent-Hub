@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  LogOut, Plus, Cpu, ShieldCheck, LayoutGrid, User, Activity,
+  LogOut, Plus, Cpu, ShieldCheck, LayoutGrid, User,
   CreditCard, Settings2, Menu, X, Check, Loader2, Eye, EyeOff,
   AlertTriangle, ChevronRight, BarChart3, Lock,
 } from "lucide-react";
@@ -332,6 +332,23 @@ function AnalyticsPanel({ operators }: { operators: Operator[] | undefined }) {
     ? new Date(owner.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
     : "—";
 
+  // Derive "last active" from most recently created operator, falling back to today
+  const lastActiveDate = (() => {
+    if (operators && operators.length > 0) {
+      const sorted = [...operators].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      const d = new Date(sorted[0].createdAt);
+      const now = new Date();
+      const diffDays = Math.floor((now.getTime() - d.getTime()) / 86400000);
+      if (diffDays === 0) return "Today";
+      if (diffDays === 1) return "Yesterday";
+      if (diffDays < 7) return `${diffDays}d ago`;
+      return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    }
+    return "Today";
+  })();
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div>
@@ -339,8 +356,9 @@ function AnalyticsPanel({ operators }: { operators: Operator[] | undefined }) {
         <p className="text-muted-foreground mt-1 text-sm font-label">Your platform activity at a glance</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Operators" value={count} sub={count === 1 ? "1 active operator" : `${count} active operators`} />
+        <StatCard label="Last Active" value={lastActiveDate} sub="Most recent operator activity" />
         <StatCard label="Messages" value="—" sub="Message tracking coming soon" />
         <StatCard label="Member since" value={joined.split(" ").slice(-1)[0] ?? "—"} sub={joined} />
       </div>
@@ -531,9 +549,12 @@ export default function Dashboard() {
       <div className="p-2 border-t border-sidebar-border flex flex-col gap-0.5">
         {owner?.isSovereignAdmin && (
           <Link href="/admin">
-            <button className="flex items-center gap-2.5 pl-3 pr-3 py-2 rounded-md text-sm font-label w-full text-left transition-all text-primary/70 hover:bg-sidebar-accent hover:text-primary border border-transparent">
-              <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+            <button className="flex items-center gap-2.5 pl-3 pr-3 py-2 rounded-md text-sm font-label w-full text-left transition-all border border-primary/20 bg-primary/5 hover:bg-primary/10 hover:border-primary/40 hover:text-primary text-primary/70 group">
+              <ShieldCheck className="w-3.5 h-3.5 shrink-0 text-primary" />
               <span className="truncate flex-1">Admin Console</span>
+              <span className="shrink-0 font-mono text-[9px] px-1.5 py-0.5 rounded bg-primary/15 border border-primary/30 text-primary uppercase tracking-wider">
+                SA
+              </span>
             </button>
           </Link>
         )}
