@@ -30,11 +30,13 @@ export default function NotFound() {
           The coordinates you entered don't map to any known node in the OpSoul mesh. The sector may have been decommissioned or never deployed.
         </p>
 
-        <Link href="/">
-          <button className="bg-primary text-on-primary font-label uppercase tracking-[0.2em] font-bold px-10 py-4 hover:opacity-90 active:scale-95 transition-all group flex items-center gap-3 mx-auto">
-            <span className="material-symbols-outlined text-sm group-hover:-translate-x-0.5 transition-transform select-none">arrow_back</span>
-            Return to Base
-          </button>
+        <Link href="/" className="mx-auto block w-fit">
+          <div className="iridescent-border">
+            <button className="bg-primary text-on-primary font-label uppercase tracking-[0.2em] font-bold px-10 py-4 hover:opacity-90 active:scale-95 transition-all group flex items-center gap-3">
+              <span className="material-symbols-outlined text-sm group-hover:-translate-x-0.5 transition-transform select-none">arrow_back</span>
+              Return to Base
+            </button>
+          </div>
         </Link>
 
         <div className="mt-16 flex items-center justify-center gap-4 opacity-30">
