@@ -123,7 +123,7 @@ export default function SettingsSection({ operator, section }: { operator: Opera
     if (!apiKeyInput.trim()) return;
     setVerifyStatus("verifying");
     try {
-      const r = await apiFetch(`/operators/${operator.id}/model-settings/verify-key`, {
+      const r = await apiFetch<{ ok: boolean }>(`/operators/${operator.id}/model-settings/verify-key`, {
         method: "POST",
         body: JSON.stringify({ apiKey: apiKeyInput.trim() }),
       });

@@ -251,7 +251,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     }
   };
 
-  const convName = (conv: Conversation) => conv.contextName || "Conversation";
+  const convName = (conv: Conversation) => conv.title || "Conversation";
 
   const selectConv = (id: string) => {
     setActiveConvId(id);

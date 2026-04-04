@@ -210,7 +210,7 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {ownerKb?.map(chunk => (
+              {ownerKb?.map((chunk: KbChunk) => (
                 <Card key={chunk.id} className="bg-card/30 border-border/50 hover:border-primary/30 transition-colors flex flex-col">
                   <CardHeader className="p-4 pb-2">
                     <div className="flex justify-between items-start">
@@ -250,7 +250,7 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {opKb?.map(chunk => (
+              {opKb?.map((chunk: KbChunk) => (
                 <Card key={chunk.id} className="bg-card/30 border-border/50 hover:border-secondary-foreground/30 transition-colors flex flex-col">
                   <CardHeader className="p-4 pb-2">
                     <div className="flex justify-between items-start">

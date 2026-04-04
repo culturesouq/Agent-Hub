@@ -71,12 +71,12 @@ export default function SkillsSection({ operatorId, archetype }: { operatorId: s
 
   const filteredSkills = showAll
     ? platformSkills
-    : platformSkills.filter(s => {
+    : platformSkills.filter((s: PlatformSkill) => {
         const archetypes = Array.isArray(archetype) ? archetype : [archetype];
         return archetypes.includes(s.archetype) || s.archetype === 'All';
       });
 
-  const isInstalled = (platformId: string) => opSkills?.some(s => s.platformSkillId === platformId);
+  const isInstalled = (platformId: string) => opSkills?.some((s: OperatorSkill) => s.platformSkillId === platformId);
 
   return (
     <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300 glass-panel rounded-2xl border border-border/30 p-6">
@@ -118,7 +118,7 @@ export default function SkillsSection({ operatorId, archetype }: { operatorId: s
             ) : filteredSkills?.length === 0 ? (
               <div className="text-center font-mono text-xs text-muted-foreground mt-4">No skills available</div>
             ) : (
-              filteredSkills?.map(skill => (
+              filteredSkills?.map((skill: PlatformSkill) => (
                 <div key={skill.id} className="p-3 border border-border/50 rounded bg-background/50 flex flex-col gap-2">
                   <div className="flex justify-between items-start">
                     <div>
@@ -154,7 +154,7 @@ export default function SkillsSection({ operatorId, archetype }: { operatorId: s
                 No skills installed yet.
               </div>
             ) : (
-              opSkills?.map(skill => (
+              opSkills?.map((skill: OperatorSkill) => (
                 <div key={skill.id} className="p-3 border border-primary/30 rounded bg-primary/5 flex flex-col gap-2 relative overflow-hidden">
                   <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />
                   <div className="flex justify-between items-start pl-2">

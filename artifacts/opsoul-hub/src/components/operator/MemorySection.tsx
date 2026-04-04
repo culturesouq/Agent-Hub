@@ -68,8 +68,8 @@ export default function MemorySection({ operatorId }: { operatorId: string }) {
     }
   };
 
-  const filteredMemories = memories?.filter(m => !m.archivedAt && (searchQuery === "" || m.content.toLowerCase().includes(searchQuery.toLowerCase())));
-  const archivedMemories = memories?.filter(m => m.archivedAt);
+  const filteredMemories = memories?.filter((m: Memory) => !m.archivedAt && (searchQuery === "" || m.content.toLowerCase().includes(searchQuery.toLowerCase())));
+  const archivedMemories = memories?.filter((m: Memory) => m.archivedAt);
 
   return (
     <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300 glass-panel rounded-2xl border border-border/30 p-6">
@@ -162,7 +162,7 @@ export default function MemorySection({ operatorId }: { operatorId: string }) {
                 No memories match the filter.
               </div>
             ) : (
-              filteredMemories?.map(mem => (
+              filteredMemories?.map((mem: Memory) => (
                 <Card key={mem.id} className="bg-card/30 border-border/50 flex flex-col relative overflow-hidden">
                   <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary/20" style={{ opacity: mem.weight }} />
                   <CardHeader className="p-3 pb-0 flex flex-row items-center justify-between space-y-0">
@@ -194,7 +194,7 @@ export default function MemorySection({ operatorId }: { operatorId: string }) {
             <div className="pt-6 border-t border-border/50">
               <h3 className="font-mono text-sm font-bold text-muted-foreground mb-4">Archived memories</h3>
               <div className="flex flex-wrap gap-2 opacity-50">
-                {archivedMemories.map(mem => (
+                {archivedMemories.map((mem: Memory) => (
                   <div key={mem.id} className="text-[10px] font-mono border border-border/30 px-2 py-1 rounded bg-background line-clamp-1 max-w-[200px]" title={mem.content}>
                     {mem.content}
                   </div>
