@@ -144,7 +144,20 @@ export default function SettingsSection({ operator, section }: { operator: Opera
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const copy = (text: string, field: string, label = "Copied") => {
-    navigator.clipboard.writeText(text);
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).catch(() => {});
+    } else {
+      try {
+        const el = document.createElement("textarea");
+        el.value = text;
+        el.style.position = "fixed";
+        el.style.opacity = "0";
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand("copy");
+        document.body.removeChild(el);
+      } catch {}
+    }
     toast({ title: label });
     setCopiedField(field);
     setTimeout(() => setCopiedField(f => f === field ? null : f), 1500);
