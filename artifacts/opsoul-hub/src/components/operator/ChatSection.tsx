@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { Conversation, Message } from "@/types";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Trash2, MessageSquarePlus, Send, MessageSquare, Paperclip, X, Mic, List, ArrowLeft } from "lucide-react";
 import { format } from "date-fns";
@@ -28,8 +27,16 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   const [mobileView, setMobileView] = useState<"list" | "chat">("list");
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+  }, [input]);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -391,7 +398,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,.doc,.docx,.xlsx"
+                accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,.txt,.md,.csv,.json,.yaml,.yml,.doc,.docx,.xlsx,.xls"
                 className="hidden"
                 onChange={handleFileSelect}
               />
@@ -424,12 +431,23 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
               >
                 <Mic className={`w-4 h-4 ${transcribing ? "animate-pulse" : ""}`} />
               </Button>
-              <Input
+              <textarea
+                ref={textareaRef}
                 value={input}
                 onChange={e => setInput(e.target.value)}
-                placeholder="Type a message..."
-                className="font-sans bg-background/50 border-border/50 focus-visible:ring-primary/30 text-sm"
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if ((input.trim() || attachments.length > 0) && !streamingMsg) {
+                      sendMessage(e as any);
+                    }
+                  }
+                }}
+                placeholder="Type a message... (Shift+Enter for new line)"
+                rows={1}
                 disabled={!!streamingMsg}
+                className="flex-1 font-sans bg-background/50 border border-border/50 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/30 resize-none overflow-y-auto leading-relaxed disabled:opacity-50 placeholder:text-muted-foreground"
+                style={{ minHeight: '36px', maxHeight: '200px' }}
               />
               <Button
                 type="submit"
