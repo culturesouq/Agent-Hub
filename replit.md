@@ -87,9 +87,10 @@ All 23 tables in `lib/db/src/schema/`:
 | `ops_logs` | Operational error/event logs |
 | `platform_patterns` | Cross-operator pattern detection |
 | `support_tickets` | Owner-initiated support conversations |
-| `operator_integrations` | Third-party integrations per operator |
+| `operator_integrations` | Third-party integrations per operator (tokens encrypted AES-256-GCM) |
 | `mission_contexts` | Named context presets per operator |
 | `admin_audit_log` | **Immutable** admin action log (DB trigger enforced) |
+| `password_resets` | 1hr password reset tokens (SHA-256 hashed, one-time use) |
 
 ### API Server (`artifacts/opsoul-api`)
 
@@ -97,16 +98,26 @@ Running on **port 3001**.
 
 **Auth routes** (`/api/auth/`):
 - `POST /register` — create owner account (bcrypt 12 rounds)
-- `POST /login` — returns 24hr JWT access token + 30-day refresh cookie
+- `POST /login` — returns 24hr JWT access token + 30-day refresh cookie (graceful error for Google-only accounts)
 - `POST /refresh` — exchange httpOnly refresh cookie for new access token
 - `POST /logout` — revoke session, clear cookie
 - `POST /change-password` — require current password, revoke all sessions
 - `GET /me` — return owner profile (requires Bearer token)
+- `GET /google` — redirect to Google OAuth consent screen (scopes: openid email profile)
+- `GET /google/callback` — exchange code, find-or-create owner by googleId/email, issue session, redirect to `/auth/google/success`
+- `POST /forgot-password` — create 1hr reset token; logs reset URL to console (email delivery stub)
+- `POST /reset-password` — validate token, update password, revoke all sessions
 
 **Auth model:**
 - Access token: 24hr JWT (HS256), signed with `JWT_SECRET`
 - Refresh token: 30-day, stored as SHA-256 hash in `sessions` table, raw value in httpOnly cookie
 - `requireAuth` middleware validates Bearer token on protected routes
+- Google-only owners have `passwordHash = null` and `googleId` set; cannot use password login
+- Google OAuth callback sets httpOnly cookie then redirects to `/auth/google/success` (frontend calls `/refresh` to get JWT)
+
+**Google integration routes** (`/api/integrations/google/`):
+- `POST /initiate` — requireAuth; validates operatorId ownership; returns Google authUrl with HMAC-signed state (10min TTL)
+- `GET /callback` — verifies HMAC state; exchanges code; fetches Google email; upserts `operator_integrations` row (type=google, scopes=[gmail,calendar,drive]); triggers self-awareness; redirects to operator page
 
 **Operator routes** (`/api/operators/`) — all require Bearer token:
 - `POST /` — create operator (validates Layer 1 + Layer 2 soul via Zod)
