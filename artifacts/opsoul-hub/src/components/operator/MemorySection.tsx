@@ -34,6 +34,9 @@ export default function MemorySection({ operatorId }: { operatorId: string }) {
       setIsAddOpen(false);
       setAddForm({ content: "", memoryType: "fact", weight: 0.5 });
       toast({ title: "Memory saved" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to save", description: err.message, variant: "destructive" });
     }
   });
 
@@ -98,14 +101,21 @@ export default function MemorySection({ operatorId }: { operatorId: string }) {
               <DialogHeader>
                 <DialogTitle className="font-mono text-xl">Add a new memory</DialogTitle>
               </DialogHeader>
-              <form onSubmit={(e) => { e.preventDefault(); addMemory.mutate(addForm); }} className="space-y-4 mt-4">
+              <form onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!addForm.content.trim()) {
+                    toast({ title: "Content required", description: "Please enter something to remember", variant: "destructive" });
+                    return;
+                  }
+                  addMemory.mutate(addForm);
+                }} className="space-y-4 mt-4">
                 <div className="space-y-2">
                   <Label className="font-mono text-xs uppercase text-muted-foreground">Content</Label>
                   <Textarea 
                     value={addForm.content} 
                     onChange={e => setAddForm({...addForm, content: e.target.value})} 
-                    required 
-                    className="font-mono" 
+                    className="font-mono"
+                    placeholder="What should your operator remember?"
                   />
                 </div>
                 <div className="space-y-2">

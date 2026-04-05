@@ -77,6 +77,9 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
       setIsAddOpen(false);
       setAddForm({ content: "", sourceName: "", sourceType: "manual", confidenceScore: 80 });
       toast({ title: "Knowledge added" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to save", description: err.message, variant: "destructive" });
     }
   });
 
@@ -87,6 +90,9 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
       setIsAddOpen(false);
       setAddForm({ content: "", sourceName: "", sourceType: "manual", confidenceScore: 80 });
       toast({ title: "Knowledge added" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to save", description: err.message, variant: "destructive" });
     }
   });
 
