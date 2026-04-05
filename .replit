@@ -26,10 +26,6 @@ author = "agent"
 task = "workflow.run"
 args = "artifacts/opsoul-api: API Server"
 
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "artifacts/opsoul-hub: Frontend"
-
 [[workflows.workflow]]
 name = "artifacts/opsoul-api: API Server"
 author = "agent"
@@ -41,17 +37,6 @@ waitForPort = 3001
 
 [workflows.workflow.metadata]
 outputType = "console"
-
-[[workflows.workflow]]
-name = "artifacts/opsoul-hub: Frontend"
-author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "console"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash -c \"fuser 19165/tcp >/dev/null 2>&1 && echo '[opsoul-hub] Already running on port 19165 — skipping startup' || PORT=19165 BASE_PATH=/ pnpm --filter @workspace/opsoul-hub run dev\""
 
 [agent]
 stack = "PNPM_WORKSPACE"
