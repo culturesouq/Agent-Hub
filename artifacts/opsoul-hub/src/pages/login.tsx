@@ -278,7 +278,7 @@ export default function Login() {
               className="font-headline text-2xl md:text-3xl font-medium tracking-tight mb-3"
               style={{ color: "#f3eff5" }}
             >
-              {isLogin ? "Welcome back" : "Create account"}
+              {isLogin ? "Sign in" : "Create account"}
             </h2>
             <p className="text-sm leading-relaxed font-body max-w-[280px] mx-auto" style={{ color: "#adaaaf" }}>
               {isLogin
