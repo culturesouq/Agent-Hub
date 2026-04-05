@@ -37,11 +37,11 @@ function NebulaBackground() {
   );
 }
 
-function LogoMark() {
+function PageHeader({ heading, subtitle }: { heading: string; subtitle: string }) {
   return (
-    <div className="flex flex-col items-center gap-3 mb-6">
+    <div className="flex flex-col items-center text-center mb-8">
       <div
-        className="w-16 h-16 rounded-full p-[2px] flex items-center justify-center"
+        className="w-16 h-16 rounded-full p-[2px] flex items-center justify-center mb-3"
         style={{
           background: "linear-gradient(135deg, #cd96ff, #40cef3)",
           boxShadow: "0 0 24px rgba(205,150,255,0.45)",
@@ -60,7 +60,7 @@ function LogoMark() {
         </div>
       </div>
       <span
-        className="font-headline text-2xl font-bold tracking-tight"
+        className="font-headline text-lg font-bold tracking-tight mb-2"
         style={{
           background: "linear-gradient(90deg, #cd96ff, #40cef3)",
           WebkitBackgroundClip: "text",
@@ -70,6 +70,15 @@ function LogoMark() {
       >
         OpSoul
       </span>
+      <h2
+        className="font-headline text-2xl md:text-3xl font-medium tracking-tight mb-2"
+        style={{ color: "#f3eff5" }}
+      >
+        {heading}
+      </h2>
+      <p className="text-sm leading-relaxed font-body max-w-[280px]" style={{ color: "#adaaaf" }}>
+        {subtitle}
+      </p>
     </div>
   );
 }
@@ -191,20 +200,24 @@ export default function Login() {
       >
         <NebulaBackground />
         <main className="w-full max-w-[460px] z-10">
-          <div style={cardStyle} className="p-10 flex flex-col items-center">
-            <LogoMark />
-
-            <div className="text-center mb-8">
-              <h2
-                className="font-headline text-2xl font-semibold tracking-tight mb-2"
-                style={{ color: "#f3eff5" }}
+          <div className="mb-5 text-center">
+            <Link href="/">
+              <span
+                className="inline-flex items-center gap-1.5 text-xs font-label font-medium transition-colors cursor-pointer"
+                style={{ color: "#767579" }}
+                onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "#f3eff5")}
+                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "#767579")}
               >
-                Forgot your password?
-              </h2>
-              <p className="text-sm leading-relaxed font-body" style={{ color: "#adaaaf" }}>
-                We'll send a reset link to your email.
-              </p>
-            </div>
+                ← OpSoul
+              </span>
+            </Link>
+          </div>
+
+          <div style={cardStyle} className="p-10 flex flex-col items-center">
+            <PageHeader
+              heading="Forgot your password?"
+              subtitle="We'll send a reset link to your email."
+            />
 
             {forgotDone ? (
               <div className="flex flex-col items-center gap-3 py-6 text-center">
@@ -270,22 +283,24 @@ export default function Login() {
       <NebulaBackground />
 
       <main className="w-full max-w-[480px] z-10">
-        <div style={cardStyle} className="p-10 md:p-12 flex flex-col items-center">
-          <LogoMark />
-
-          <div className="text-center mb-8">
-            <h2
-              className="font-headline text-2xl md:text-3xl font-medium tracking-tight mb-3"
-              style={{ color: "#f3eff5" }}
-            >
-              {isLogin ? "Sign in" : "Create account"}
-            </h2>
-            <p className="text-sm leading-relaxed font-body max-w-[280px] mx-auto" style={{ color: "#adaaaf" }}>
-              {isLogin
-                ? "Sign in to your OpSoul workspace."
-                : "Start building your AI operators."}
-            </p>
+          <div className="mb-5 text-center">
+            <Link href="/">
+              <span
+                className="inline-flex items-center gap-1.5 text-xs font-label font-medium transition-colors cursor-pointer"
+                style={{ color: "#767579" }}
+                onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "#f3eff5")}
+                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "#767579")}
+              >
+                ← OpSoul
+              </span>
+            </Link>
           </div>
+
+        <div style={cardStyle} className="p-10 md:p-12 flex flex-col items-center">
+          <PageHeader
+            heading={isLogin ? "Sign in" : "Create new account"}
+            subtitle={isLogin ? "Sign in to your OpSoul workspace." : "Start building your AI operators."}
+          />
 
           {urlError && (
             <div
@@ -418,34 +433,23 @@ export default function Login() {
               }}
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              {loading ? "Please wait…" : isLogin ? "Sign in" : "Create account"}
+              {loading ? "Please wait…" : isLogin ? "Sign in" : "Create new account"}
             </button>
           </form>
 
-          {/* Toggle & secondary actions */}
-          <div className="mt-8 flex items-center gap-5 text-sm font-label">
+          {/* Toggle */}
+          <div className="mt-8">
             <button
               type="button"
               onClick={() => setIsLogin(!isLogin)}
               data-testid="button-toggle-auth"
-              className="font-medium transition-colors"
+              className="text-sm font-label font-medium transition-colors"
               style={{ color: "#ff6a9f" }}
               onMouseEnter={(e) => (e.currentTarget.style.color = "#ff8eb1")}
               onMouseLeave={(e) => (e.currentTarget.style.color = "#ff6a9f")}
             >
-              {isLogin ? "Create Account" : "Sign In"}
+              {isLogin ? "Create new account" : "Already have an account? Sign in"}
             </button>
-            <div className="w-1 h-1 rounded-full" style={{ background: "#48474c" }} />
-            <Link href="/">
-              <span
-                className="transition-colors cursor-pointer"
-                style={{ color: "#767579" }}
-                onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "#f3eff5")}
-                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "#767579")}
-              >
-                ← OpSoul
-              </span>
-            </Link>
           </div>
         </div>
 
