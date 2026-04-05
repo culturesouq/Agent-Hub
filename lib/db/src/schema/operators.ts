@@ -21,4 +21,5 @@ export const operatorsTable = pgTable('operators', {
   openrouterApiKey: text('openrouter_api_key'),
   defaultModel: text('default_model'),
   createdAt: timestamp('created_at').defaultNow(),
+  deletedAt: timestamp('deleted_at'),
 });

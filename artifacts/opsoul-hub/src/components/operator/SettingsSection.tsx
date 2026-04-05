@@ -622,7 +622,7 @@ print(response.json()["content"])`;
               <div>
                 <p className="font-mono text-sm font-bold text-destructive">Delete {operator.name}</p>
                 <p className="font-mono text-xs text-muted-foreground mt-0.5">
-                  Permanently deletes this operator along with all memory, knowledge, and chat history.
+                  Removes this operator from your dashboard. All data is recoverable for 30 days, then permanently purged.
                 </p>
               </div>
               <AlertDialog>
@@ -635,13 +635,13 @@ print(response.json()["content"])`;
                   <AlertDialogHeader>
                     <AlertDialogTitle className="font-mono text-destructive">Delete {operator.name}?</AlertDialogTitle>
                     <AlertDialogDescription className="font-mono">
-                      This permanently removes {operator.name} including all memory, knowledge, and conversations. There is no way to undo this.
+                      This operator will be permanently deleted after 30 days. All memory, knowledge, and conversations will be removed. Contact support within 30 days to recover it.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel className="font-mono">Cancel</AlertDialogCancel>
                     <AlertDialogAction onClick={() => deleteOperator.mutate()} className="bg-destructive text-destructive-foreground font-mono font-bold">
-                      Delete forever
+                      Delete
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
