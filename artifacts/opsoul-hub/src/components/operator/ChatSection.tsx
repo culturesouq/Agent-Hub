@@ -456,16 +456,16 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
       {/* Desktop: side-by-side layout */}
       <div className="h-[calc(100vh-140px)] hidden md:flex glass-panel rounded-2xl border border-border/30 overflow-hidden animate-in fade-in zoom-in-95 duration-300">
         <div className="w-56 border-r border-border/30 flex flex-col shrink-0">
-          <ConversationList />
+          {ConversationList()}
         </div>
-        <ChatArea />
+        {ChatArea()}
       </div>
 
       {/* Mobile: single-panel with list/chat toggle — h-full because parent wrapper removes padding */}
       <div className="h-full md:hidden flex flex-col glass-panel border border-border/30 overflow-hidden animate-in fade-in zoom-in-95 duration-300">
         {mobileView === "list" ? (
           <div className="flex flex-col flex-1 overflow-hidden">
-            <ConversationList />
+            {ConversationList()}
             <div className="p-3 border-t border-border/30 bg-surface-container/40 shrink-0">
               <Button
                 className="w-full font-mono text-xs"
@@ -478,7 +478,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
             </div>
           </div>
         ) : (
-          <ChatArea />
+          ChatArea()
         )}
       </div>
     </>
