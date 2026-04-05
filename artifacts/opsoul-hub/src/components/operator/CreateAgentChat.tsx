@@ -12,7 +12,9 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Loader2 } from "lucide-react";
 
 interface BootstrapPreview {
-  identityParagraph: string;
+  archetype: string[];
+  mandate: string;
+  rawIdentity?: string;
   personalityParagraph: string;
   openingMessage: string;
   coreValues: string[];
@@ -76,7 +78,9 @@ export default function CreateAgentChat({ open, onClose }: Props) {
         body: JSON.stringify({
           name: trimmedName,
           slug,
-          mandate: preview.identityParagraph,
+          archetype: preview.archetype,
+          mandate: preview.mandate,
+          rawIdentity: preview.rawIdentity ?? null,
           coreValues: preview.coreValues,
           ethicalBoundaries: preview.ethicalBoundaries,
           layer2Soul: preview.layer2Soul,
