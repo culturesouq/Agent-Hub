@@ -74,14 +74,16 @@ export interface Conversation {
 
 export interface GrowProposal {
   id: string;
-  proposalType: string;
   targetField: string;
   proposedValue: any;
+  allProposedChanges: Record<string, unknown>;
   rationale: string;
   confidence: number;
-  status: "queued" | "evaluating" | "applied" | "rejected" | "needs_owner_review";
+  status: string;
   ownerDecision: string | null;
   createdAt: string;
+  claudeReasoning?: string;
+  proposedChanges?: Record<string, unknown>;
 }
 
 export interface TestResult {

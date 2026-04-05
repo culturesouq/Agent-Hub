@@ -26,7 +26,8 @@ const FIELD_LABELS: Record<string, string> = {
   mandate:              "core purpose",
 };
 
-function humanizeField(field: string): string {
+function humanizeField(field: string | undefined | null): string {
+  if (!field) return "this field";
   return FIELD_LABELS[field] ?? field.replace(/([A-Z])/g, " $1").toLowerCase().trim();
 }
 

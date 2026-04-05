@@ -51,6 +51,35 @@ router.post('/trigger', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
+function mapProposal(p: typeof growProposalsTable.$inferSelect) {
+  const proposedChanges = (p.proposedChanges ?? {}) as Record<string, unknown>;
+  const claudeEval = (p.claudeEvaluation ?? {}) as Record<string, unknown>;
+  const needsReview = Array.isArray(claudeEval.needsOwnerReview) ? claudeEval.needsOwnerReview as string[] : [];
+  const approved   = Array.isArray(claudeEval.approved) ? claudeEval.approved as string[] : [];
+
+  // Pick the primary field: prefer first review field, then first approved, then first key
+  const primaryField: string =
+    needsReview[0] ??
+    approved[0] ??
+    Object.keys(proposedChanges)[0] ??
+    '';
+
+  const fieldDecisions = (claudeEval.fieldDecisions ?? {}) as Record<string, { confidence?: number }>;
+  const confidence: number =
+    typeof fieldDecisions[primaryField]?.confidence === 'number'
+      ? (fieldDecisions[primaryField].confidence as number)
+      : 70;
+
+  return {
+    ...p,
+    targetField: primaryField,
+    proposedValue: primaryField ? proposedChanges[primaryField] : undefined,
+    rationale: p.claudeReasoning ?? '',
+    confidence,
+    allProposedChanges: proposedChanges,
+  };
+}
+
 router.get('/proposals', async (req: Request, res: Response): Promise<void> => {
   const operatorId = await resolveOperator(req, res);
   if (!operatorId) return;
@@ -58,13 +87,14 @@ router.get('/proposals', async (req: Request, res: Response): Promise<void> => {
   const limitRaw = parseInt(req.query.limit as string ?? '20', 10);
   const limit = isNaN(limitRaw) || limitRaw < 1 ? 20 : Math.min(limitRaw, 100);
 
-  const proposals = await db
+  const rows = await db
     .select()
     .from(growProposalsTable)
     .where(eq(growProposalsTable.operatorId, operatorId))
     .orderBy(desc(growProposalsTable.createdAt))
     .limit(limit);
 
+  const proposals = rows.map(mapProposal);
   res.json({ operatorId, count: proposals.length, proposals });
 });
 
