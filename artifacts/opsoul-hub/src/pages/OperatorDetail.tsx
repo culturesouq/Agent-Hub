@@ -29,6 +29,8 @@ import GrowSection from "@/components/operator/GrowSection";
 import PersonalitySection from "@/components/operator/PersonalitySection";
 import KbSection from "@/components/operator/KbSection";
 import FilesSection from "@/components/operator/FilesSection";
+import TelegramChannelSection from "@/components/operator/TelegramChannelSection";
+import WhatsAppChannelSection from "@/components/operator/WhatsAppChannelSection";
 import NebulaBlobs from "@/components/ui/NebulaBlobs";
 
 const PERSONA_IMAGES = [
@@ -305,8 +307,8 @@ export default function OperatorDetail({ id }: { id: string }) {
       case "settings.api":       return <SettingsSection operator={operator} section="api" />;
       case "settings.behavior":  return <SettingsSection operator={operator} section="safemode" />;
       case "settings.danger":    return <SettingsSection operator={operator} section="danger" />;
-      case "channels.telegram":  return <ComingSoon title="Telegram" />;
-      case "channels.whatsapp":  return <ComingSoon title="WhatsApp" />;
+      case "channels.telegram":  return <TelegramChannelSection operatorId={operator.id} />;
+      case "channels.whatsapp":  return <WhatsAppChannelSection operatorId={operator.id} />;
       case "feedback":           return <ComingSoon title="Leave Feedback" />;
       default:                   return <ChatSection operatorId={id} />;
     }
