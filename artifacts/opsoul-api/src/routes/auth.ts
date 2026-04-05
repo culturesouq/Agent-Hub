@@ -18,7 +18,7 @@ const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 function getBaseUrl(req: Request): string {
   if (process.env.APP_URL) return process.env.APP_URL;
   const proto = (req.headers['x-forwarded-proto'] as string)?.split(',')[0]?.trim() ?? 'https';
-  const host = (req.headers['x-forwarded-host'] as string) ?? (req.headers['host'] as string) ?? 'localhost';
+  const host = (req.headers['x-forwarded-host'] as string) ?? (req.headers['host'] as string) ?? 'opsoul.io';
   return `${proto}://${host}`;
 }
 
@@ -349,6 +349,8 @@ router.get('/google/callback', async (req: Request, res: Response): Promise<void
 router.post('/forgot-password', async (req: Request, res: Response): Promise<void> => {
   const { email } = req.body as { email: string };
 
+  console.log(`[auth] forgot-password requested for: ${email}`);
+
   if (!email) {
     res.status(400).json({ error: 'email is required' });
     return;
@@ -360,6 +362,7 @@ router.post('/forgot-password', async (req: Request, res: Response): Promise<voi
     .where(eq(ownersTable.email, email.toLowerCase()));
 
   if (!owner || !owner.passwordHash) {
+    console.log(`[auth] forgot-password: no password account found for ${email} — silent ok`);
     res.json({ ok: true, message: 'If that email has a password-based account, a reset link has been sent.' });
     return;
   }
@@ -380,6 +383,7 @@ router.post('/forgot-password', async (req: Request, res: Response): Promise<voi
   });
 
   const resetUrl = `${getBaseUrl(req)}/reset-password?token=${rawToken}`;
+  console.log(`[auth] forgot-password: sending reset link → ${resetUrl}`);
   void sendEmail(owner.email, 'Reset your OpSoul password', forgotPasswordEmail(resetUrl));
 
   res.json({ ok: true, message: 'If that email has a password-based account, a reset link has been sent.' });

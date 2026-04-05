@@ -4,15 +4,19 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
   const apiKey = process.env.SENDGRID_API_KEY;
   const from = process.env.SENDGRID_FROM_EMAIL;
 
+  console.log(`[email] sendEmail called → to=${to} subject="${subject}"`);
+
   if (!apiKey) {
-    console.warn('[email] SENDGRID_API_KEY not set — skipping email to', to);
+    console.error('[email] SENDGRID_API_KEY is NOT set — cannot send email');
     return;
   }
 
   if (!from) {
-    console.warn('[email] SENDGRID_FROM_EMAIL not set — skipping email to', to);
+    console.error('[email] SENDGRID_FROM_EMAIL is NOT set — cannot send email');
     return;
   }
+
+  console.log(`[email] Sending via SendGrid from=${from}`);
 
   const body = JSON.stringify({
     personalizations: [{ to: [{ email: to }] }],
@@ -31,12 +35,14 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
       body,
     });
 
-    if (!res.ok) {
+    if (res.ok) {
+      console.log(`[email] ✓ Sent successfully to ${to} (HTTP ${res.status})`);
+    } else {
       const text = await res.text();
       console.error(`[email] SendGrid error ${res.status}:`, text);
     }
   } catch (err) {
-    console.error('[email] Failed to send email to', to, err);
+    console.error('[email] Network error sending to', to, err);
   }
 }
 
