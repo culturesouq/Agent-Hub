@@ -2,17 +2,12 @@ const SENDGRID_URL = 'https://api.sendgrid.com/v3/mail/send';
 
 export async function sendEmail(to: string, subject: string, html: string): Promise<void> {
   const apiKey = process.env.SENDGRID_API_KEY;
-  const from = process.env.SENDGRID_FROM_EMAIL;
+  const from = process.env.SENDGRID_FROM_EMAIL ?? 'no-reply@opsoul.io';
 
   console.log(`[email] sendEmail called → to=${to} subject="${subject}"`);
 
   if (!apiKey) {
     console.error('[email] SENDGRID_API_KEY is NOT set — cannot send email');
-    return;
-  }
-
-  if (!from) {
-    console.error('[email] SENDGRID_FROM_EMAIL is NOT set — cannot send email');
     return;
   }
 
