@@ -5,7 +5,6 @@ import { db, pool } from '@workspace/db';
 import { operatorKbTable, operatorsTable } from '@workspace/db';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { chunkText } from '../utils/chunker.js';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { eq, and, gte } from 'drizzle-orm';
 
@@ -64,49 +63,39 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   }
 
   const data = parsed.data;
-  const chunks = chunkText(data.text);
 
-  if (chunks.length === 0) {
-    res.status(400).json({ error: 'Text produced no valid chunks' });
+  // Always store as a single entry — no chunking
+  const fullText = data.text.trim();
+  if (!fullText) {
+    res.status(400).json({ error: 'Text produced no valid content' });
     return;
   }
 
-  const embedded = await Promise.all(
-    chunks.map(async (c) => ({
-      chunk: c,
-      embedding: await embed(c.content),
-    })),
-  );
+  // Embed up to 30 000 chars to stay within model token limits
+  const embedding = await embed(fullText.slice(0, 30000));
+  const vecStr = `[${embedding.join(',')}]`;
+  const id = crypto.randomUUID();
 
-  const inserted = await Promise.all(
-    embedded.map(async ({ chunk, embedding }) => {
-      const vecStr = `[${embedding.join(',')}]`;
-      const id = crypto.randomUUID();
-
-      await pool.query(
-        `INSERT INTO operator_kb
-           (id, operator_id, owner_id, content, embedding, source_name, source_url,
-            source_trust_level, confidence_score, intake_tags, is_pipeline_intake,
-            privacy_cleared, content_cleared, verification_status, chunk_index, created_at)
-         VALUES ($1,$2,$3,$4,$5::vector,$6,$7,$8,$9,$10,$11,$12,$13,'pending',$14,NOW())`,
-        [
-          id, operatorId, req.owner!.ownerId, chunk.content, vecStr,
-          data.sourceName ?? null, data.sourceUrl ?? null,
-          data.sourceTrustLevel, data.confidenceScore, data.intakeTags,
-          data.isPipelineIntake, data.privacyCleared, data.contentCleared,
-          chunk.chunkIndex,
-        ],
-      );
-
-      return { id, chunkIndex: chunk.chunkIndex, length: chunk.content.length };
-    }),
+  await pool.query(
+    `INSERT INTO operator_kb
+       (id, operator_id, owner_id, content, embedding, source_name, source_url,
+        source_trust_level, confidence_score, intake_tags, is_pipeline_intake,
+        privacy_cleared, content_cleared, verification_status, chunk_index, created_at)
+     VALUES ($1,$2,$3,$4,$5::vector,$6,$7,$8,$9,$10,$11,$12,$13,'pending',$14,NOW())`,
+    [
+      id, operatorId, req.owner!.ownerId, fullText, vecStr,
+      data.sourceName ?? null, data.sourceUrl ?? null,
+      data.sourceTrustLevel, data.confidenceScore, data.intakeTags,
+      data.isPipelineIntake, data.privacyCleared, data.contentCleared,
+      0,
+    ],
   );
 
   res.status(201).json({
     ok: true,
     operatorId,
-    chunksIngested: inserted.length,
-    chunks: inserted,
+    chunksIngested: 1,
+    chunks: [{ id, chunkIndex: 0, length: fullText.length }],
   });
 
   triggerSelfAwareness(operatorId, 'kb_learn').catch(() => {});

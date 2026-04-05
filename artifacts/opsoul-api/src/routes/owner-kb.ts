@@ -47,17 +47,22 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   }
 
   const { text, sourceName, sourceUrl, sourceType } = parsed.data;
-  const chunks = chunkText(text);
+
+  // Files are stored as a single entry — no chunking
+  const chunks = sourceType === 'file'
+    ? [{ content: text.trim(), chunkIndex: 0 }]
+    : chunkText(text);
 
   if (chunks.length === 0) {
     res.status(400).json({ error: 'Text produced no valid chunks' });
     return;
   }
 
+  // Embed only the first 30 000 chars to stay within model token limits
   const embedded = await Promise.all(
     chunks.map(async (c) => ({
       chunk: c,
-      embedding: await embed(c.content),
+      embedding: await embed(c.content.slice(0, 30000)),
     })),
   );
 
