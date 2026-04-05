@@ -5,14 +5,14 @@ export type GrowLockLevel = (typeof GROW_LOCK_LEVELS)[number];
 
 export const Layer2SoulSchema = z.object({
   backstory: z.string().optional(),
-  personalityTraits: z.array(z.string().min(1)).min(1, 'At least one personality trait required'),
-  toneProfile: z.string().min(1, 'Tone profile required'),
-  communicationStyle: z.string().min(1, 'Communication style required'),
+  personalityTraits: z.array(z.string()).default([]),
+  toneProfile: z.string().default(''),
+  communicationStyle: z.string().default(''),
   quirks: z.array(z.string()).default([]),
   valuesManifestation: z.array(z.string()).default([]),
-  emotionalRange: z.string().min(1, 'Emotional range required'),
-  decisionMakingStyle: z.string().min(1, 'Decision making style required'),
-  conflictResolution: z.string().min(1, 'Conflict resolution required'),
+  emotionalRange: z.string().default(''),
+  decisionMakingStyle: z.string().default(''),
+  conflictResolution: z.string().default(''),
   openingMessage: z.string().optional(),
 });
 
@@ -27,12 +27,9 @@ export const CreateOperatorSchema = z.object({
     .max(60)
     .regex(/^[a-z0-9-]+$/, 'slug must be lowercase letters, numbers, and hyphens only'),
   archetype: z.array(z.string().min(1).max(100)).min(1, 'At least one archetype required'),
-  mandate: z.string().min(10, 'Mandate must be at least 10 characters'),
-  coreValues: z.array(z.string().min(1)).min(1, 'At least one core value required').max(10),
-  ethicalBoundaries: z
-    .array(z.string().min(1))
-    .min(1, 'At least one ethical boundary required')
-    .max(20),
+  mandate: z.string().default(''),
+  coreValues: z.array(z.string()).default([]),
+  ethicalBoundaries: z.array(z.string()).default([]),
   layer2Soul: Layer2SoulSchema,
   growLockLevel: z.enum(GROW_LOCK_LEVELS).default('CONTROLLED'),
   safeMode: z.boolean().default(false),
