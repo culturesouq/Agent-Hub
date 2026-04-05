@@ -135,9 +135,9 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
       return;
     }
     if (activeTab === "owner") {
-      addOwnerKb.mutate({ content: addForm.content, sourceName: addForm.sourceName || "Manual Entry", sourceType: addForm.sourceType });
+      addOwnerKb.mutate({ text: addForm.content, sourceName: addForm.sourceName || "Manual Entry", sourceType: addForm.sourceType });
     } else {
-      addOpKb.mutate({ content: addForm.content, sourceName: addForm.sourceName || "Manual Entry", sourceType: addForm.sourceType, confidenceScore: addForm.confidenceScore });
+      addOpKb.mutate({ text: addForm.content, sourceName: addForm.sourceName || "Manual Entry", sourceType: addForm.sourceType, confidenceScore: addForm.confidenceScore });
     }
   };
 
@@ -215,8 +215,8 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="manual">Manual entry</SelectItem>
-                      <SelectItem value="document">Document</SelectItem>
-                      <SelectItem value="link">Web link</SelectItem>
+                      <SelectItem value="file">Document</SelectItem>
+                      <SelectItem value="url">Web link</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
