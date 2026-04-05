@@ -108,7 +108,7 @@ function OperatorCard({ operator, onClick }: { operator: Operator; onClick: () =
         </div>
         <div className="min-w-0 flex-1">
           <h3 className="font-headline font-bold text-sm text-foreground truncate leading-tight">{operator.name}</h3>
-          <p className="font-label text-[11px] text-muted-foreground/70 mt-0.5">{operator.archetype ?? "Operator"}</p>
+          <p className="font-label text-[11px] text-muted-foreground/70 mt-0.5">Operator</p>
         </div>
       </div>
       <div className="px-4 pb-4 flex-1">
@@ -374,7 +374,7 @@ function AnalyticsPanel({ operators }: { operators: Operator[] | undefined }) {
                 <div>
                   <div className="font-sans text-sm text-foreground">{op.name}</div>
                   <div className="font-label text-[10px] text-muted-foreground mt-0.5">
-                    {Array.isArray(op.archetype) ? op.archetype.slice(0, 2).join(", ") : "Operator"}
+                    Operator
                   </div>
                 </div>
                 <span className="status-beacon ml-4" />
