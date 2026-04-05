@@ -23,7 +23,7 @@ export default function MissionContextsSection({ operatorId }: { operatorId: str
 
   const { data: contexts, isLoading } = useQuery({
     queryKey: ["operators", operatorId, "mission-contexts"],
-    queryFn: () => apiFetch<MissionContext[]>(`/operators/${operatorId}/mission-contexts`),
+    queryFn: () => apiFetch<{ contexts: MissionContext[] }>(`/operators/${operatorId}/mission-contexts`).then(r => r.contexts ?? []),
   });
 
   const addContext = useMutation({
