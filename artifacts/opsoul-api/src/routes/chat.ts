@@ -160,7 +160,7 @@ ${transcript}
 Extract exactly:
 - name: what the owner said to call the operator (just the name, cleaned up, no extra text)
 - rawIdentity: a 200-400 word first-person story, written as the operator speaking, based on what the owner described as the purpose
-- archetype: 1 or 2 values only from this exact list: ["Navigator", "Connector", "Guardian", "Builder", "Sage", "Catalyst"] — choose what best fits the described purpose
+- archetype: 1 or 2 values only from this exact list: ["Executor", "Advisor", "Expert", "Connector", "Creator", "Guardian", "Builder", "Catalyst", "Analyst"] — choose what best fits the described purpose
 - mandate: one sentence starting with a verb, stating the operator's core purpose
 
 Return ONLY valid JSON, no markdown, no explanation:

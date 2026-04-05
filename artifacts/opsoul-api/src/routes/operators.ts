@@ -62,7 +62,7 @@ router.post('/bootstrap-preview', async (req: Request, res: Response): Promise<v
     return;
   }
 
-  const VALID_ARCHETYPES = ['Executor', 'Advisor', 'Expert', 'Connector', 'Creator', 'Guardian'] as const;
+  const VALID_ARCHETYPES = ['Executor', 'Advisor', 'Expert', 'Connector', 'Creator', 'Guardian', 'Builder', 'Catalyst', 'Analyst'] as const;
 
   const LAYER_0_CORE = [
     'emotionally intelligent and genuinely reads the room',
@@ -88,7 +88,7 @@ ${purposeLine}
 Generate ALL of the following in ONE JSON response. Return ONLY valid JSON — no markdown fences, no explanation, no extra text.
 
 {
-  "archetype": "An array of one or more from: Executor, Advisor, Expert, Connector, Creator, Guardian. Pick ONE if the purpose is clearly focused. Pick TWO if the purpose genuinely spans two distinct cognitive modes (e.g. both guiding decisions AND deep domain expertise). Never pick more than two. Return as a JSON array e.g. [\"Advisor\"] or [\"Advisor\", \"Expert\"]. If input is minimal or ambiguous, use [\"Connector\"].",
+  "archetype": "An array of one or more from: Executor, Advisor, Expert, Connector, Creator, Guardian, Builder, Catalyst, Analyst. Pick ONE if the purpose is clearly focused. Pick TWO if the purpose genuinely spans two distinct cognitive modes (e.g. both guiding decisions AND deep domain expertise). Never pick more than two. Return as a JSON array e.g. [\"Advisor\"] or [\"Advisor\", \"Expert\"]. If input is minimal or ambiguous, use [\"Connector\"].",
   "mandate": "One sentence only. What this Operator exists to do. Starts with a verb. No fluff. Example: 'Help MENA founders navigate strategy, clarity, and what is actually hard about building something real.'",
   "rawIdentity": "200-300 words in first person. Who this Operator is — their origin, their voice, what makes them different from any other AI. This is NOT rules. NOT a mandate. It is a story. Written the way a person would describe themselves if asked who they really are. Weave together: the name, the purpose, the archetype character, and 2-3 specific things that make this Operator theirs.",
   "personalityParagraph": "1-2 sentences describing HOW they communicate. Warm and specific. No jargon.",
@@ -111,7 +111,10 @@ Archetype guide:
 - Expert: deep specialist knowledge, go-to source of truth in a domain
 - Connector: bridges people and ideas, facilitates, coordinates
 - Creator: generates ideas and content, inventive, imaginative
-- Guardian: protects, monitors, enforces boundaries and safety`;
+- Guardian: protects, monitors, enforces boundaries and safety
+- Builder: turns ideas into working systems, ships fast, thinks end-to-end
+- Catalyst: unlocks stuck people, shifts energy, creates momentum
+- Analyst: finds patterns in data, separates signal from noise, informs decisions`;
 
   try {
     const result = await chatCompletion(
