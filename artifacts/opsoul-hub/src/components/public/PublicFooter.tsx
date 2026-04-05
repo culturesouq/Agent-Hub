@@ -39,6 +39,12 @@ export default function PublicFooter() {
           <a className="text-on-surface-variant hover:text-secondary font-label uppercase tracking-widest text-[10px] hover:translate-x-1 transition-transform" href="/contact">
             Contact
           </a>
+          <a className="text-on-surface-variant hover:text-secondary font-label uppercase tracking-widest text-[10px] hover:translate-x-1 transition-transform" href="/privacy">
+            Privacy Policy
+          </a>
+          <a className="text-on-surface-variant hover:text-secondary font-label uppercase tracking-widest text-[10px] hover:translate-x-1 transition-transform" href="/terms">
+            Terms
+          </a>
         </div>
         <div className="flex items-center gap-3 text-secondary opacity-60 hover:opacity-100 transition-opacity">
           <span className="material-symbols-outlined text-sm select-none">verified_user</span>

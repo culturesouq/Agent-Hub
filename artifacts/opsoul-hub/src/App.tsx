@@ -13,6 +13,8 @@ import SupportPage from "@/pages/SupportPage";
 import DocsPage from "@/pages/DocsPage";
 import ContactPage from "@/pages/ContactPage";
 import AdminPage from "@/pages/AdminPage";
+import PrivacyPage from "@/pages/PrivacyPage";
+import TermsPage from "@/pages/TermsPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -69,6 +71,8 @@ function Router() {
       <Route path="/support" component={SupportPage} />
       <Route path="/docs" component={DocsPage} />
       <Route path="/contact" component={ContactPage} />
+      <Route path="/privacy" component={PrivacyPage} />
+      <Route path="/terms" component={TermsPage} />
       <Route path="/operators/:id">
         {(params) => <ProtectedRoute component={OperatorDetail} {...params} />}
       </Route>
