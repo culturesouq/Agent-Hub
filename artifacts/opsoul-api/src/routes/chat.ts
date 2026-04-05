@@ -19,7 +19,7 @@ import { embed, semanticDistance } from '@workspace/opsoul-utils/ai';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { lockLayer1IfUnlocked } from '../utils/lockLayer1.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
-import { buildSystemPrompt } from '../utils/systemPrompt.js';
+import { buildSystemPrompt, buildBirthSystemPrompt } from '../utils/systemPrompt.js';
 import type { ActiveSkill, ActiveMissionContext, SelfAwarenessSnapshot, BuildSystemPromptOpts } from '../utils/systemPrompt.js';
 import { searchMemory, buildMemoryContext, distillMemoriesFromConversations, storeMemory } from '../utils/memoryEngine.js';
 import type { MemoryHit } from '../utils/memoryEngine.js';
@@ -138,6 +138,60 @@ async function loadMissionContext(missionContextId: string | null | undefined): 
     .where(eq(missionContextsTable.id, missionContextId));
 
   return ctx ?? null;
+}
+
+// BIRTH EXTRACTION — silently extracts name/rawIdentity/archetype/mandate from the birth conversation
+async function extractBirthIdentity(operatorId: string, conversationId: string): Promise<void> {
+  const msgs = await db
+    .select({ role: messagesTable.role, content: messagesTable.content })
+    .from(messagesTable)
+    .where(eq(messagesTable.conversationId, conversationId))
+    .orderBy(asc(messagesTable.createdAt));
+
+  const transcript = msgs
+    .map(m => `${m.role === 'user' ? 'Owner' : 'Operator'}: ${m.content}`)
+    .join('\n');
+
+  const extractionPrompt = `You are extracting the founding identity of an AI Operator from a birth conversation. The owner named the operator and described its purpose.
+
+Conversation:
+${transcript}
+
+Extract exactly:
+- name: what the owner said to call the operator (just the name, cleaned up, no extra text)
+- rawIdentity: a 200-400 word first-person story, written as the operator speaking, based on what the owner described as the purpose
+- archetype: 1 or 2 values only from this exact list: ["Navigator", "Connector", "Guardian", "Builder", "Sage", "Catalyst"] — choose what best fits the described purpose
+- mandate: one sentence starting with a verb, stating the operator's core purpose
+
+Return ONLY valid JSON, no markdown, no explanation:
+{"name":"...","rawIdentity":"...","archetype":["..."],"mandate":"..."}`;
+
+  const result = await chatCompletion(
+    [
+      { role: 'system', content: 'You extract structured identity data from conversations. Return only valid JSON, no markdown, no explanation.' },
+      { role: 'user', content: extractionPrompt },
+    ],
+    { model: CHAT_MODEL },
+  );
+
+  let extracted: { name: string; rawIdentity: string; archetype: string[]; mandate: string };
+  try {
+    const raw = typeof result.content === 'string' ? result.content : '';
+    extracted = JSON.parse(raw.replace(/```json\n?|\n?```/g, '').trim());
+  } catch {
+    return;
+  }
+
+  if (!extracted.name || !extracted.rawIdentity || !extracted.archetype?.length || !extracted.mandate) return;
+
+  await db.update(operatorsTable)
+    .set({
+      name: extracted.name,
+      rawIdentity: extracted.rawIdentity,
+      archetype: extracted.archetype,
+      mandate: extracted.mandate,
+    })
+    .where(eq(operatorsTable.id, operatorId));
 }
 
 router.post('/', async (req: Request, res: Response): Promise<void> => {
@@ -303,23 +357,28 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     return resolved;
   })();
 
-  const systemPrompt = buildSystemPrompt(
-    {
-      name: operator.name,
-      archetype: operator.archetype,
-      rawIdentity: operator.rawIdentity ?? undefined,
-      mandate: operator.mandate,
-      coreValues: operator.coreValues,
-      ethicalBoundaries: operator.ethicalBoundaries,
-      layer2Soul: operator.layer2Soul as Layer2Soul,
-    },
-    kbContext,
-    skills,
-    missionContext,
-    memoryHits,
-    selfAwareness,
-    promptOpts,
-  );
+  // BIRTH MODE — operator has no identity yet; use birth system prompt instead of Layer 1
+  const isBirthMode = !operator.rawIdentity;
+
+  const systemPrompt = isBirthMode
+    ? buildBirthSystemPrompt()
+    : buildSystemPrompt(
+        {
+          name: operator.name,
+          archetype: operator.archetype,
+          rawIdentity: operator.rawIdentity ?? undefined,
+          mandate: operator.mandate,
+          coreValues: operator.coreValues,
+          ethicalBoundaries: operator.ethicalBoundaries,
+          layer2Soul: operator.layer2Soul as Layer2Soul,
+        },
+        kbContext,
+        skills,
+        missionContext,
+        memoryHits,
+        selfAwareness,
+        promptOpts,
+      );
 
   // Build user content — plain string or multimodal array when attachments present
   let userContent: string | ContentPart[] = message;
@@ -542,6 +601,18 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       }
       // --- END [LEARN:] EXTRACTION ---
 
+      // --- BIRTH EXTRACTION ---
+      if (isBirthMode) {
+        const userMessages = await db
+          .select({ id: messagesTable.id })
+          .from(messagesTable)
+          .where(and(eq(messagesTable.conversationId, conv.id), eq(messagesTable.role, 'user')));
+        if (userMessages.length >= 2) {
+          extractBirthIdentity(operator.id, conv.id).catch(() => {});
+        }
+      }
+      // --- END BIRTH EXTRACTION ---
+
       if (!operator.safeMode) {
         triggerSelfAwareness(operator.id, 'conversation_end').catch(() => {});
         distillMemoriesFromConversations(operator.id, operator.ownerId, operator.name).catch(() => {});
@@ -671,6 +742,18 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         }
       }
       // --- END [LEARN:] EXTRACTION ---
+
+      // --- BIRTH EXTRACTION ---
+      if (isBirthMode) {
+        const userMessages = await db
+          .select({ id: messagesTable.id })
+          .from(messagesTable)
+          .where(and(eq(messagesTable.conversationId, conv.id), eq(messagesTable.role, 'user')));
+        if (userMessages.length >= 2) {
+          extractBirthIdentity(operator.id, conv.id).catch(() => {});
+        }
+      }
+      // --- END BIRTH EXTRACTION ---
 
       if (!operator.safeMode) {
         triggerSelfAwareness(operator.id, 'conversation_end').catch(() => {});

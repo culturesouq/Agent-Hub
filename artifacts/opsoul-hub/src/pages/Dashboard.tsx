@@ -12,7 +12,6 @@ import {
   AlertTriangle, ChevronRight, BarChart3, Lock,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import CreateAgentChat from "@/components/operator/CreateAgentChat";
 import NebulaBlobs from "@/components/ui/NebulaBlobs";
 
 type Section = "operators" | "account" | "analytics" | "billing" | "platform";
@@ -124,10 +123,11 @@ function OperatorCard({ operator, onClick }: { operator: Operator; onClick: () =
 }
 
 function OperatorsPanel({
-  operators, isLoading, onCreateOpen, onNavigate,
+  operators, isLoading, isCreating, onCreateOpen, onNavigate,
 }: {
   operators: Operator[] | undefined;
   isLoading: boolean;
+  isCreating: boolean;
   onCreateOpen: () => void;
   onNavigate: (id: string) => void;
 }) {
@@ -140,10 +140,12 @@ function OperatorsPanel({
         </div>
         <Button
           onClick={onCreateOpen}
+          disabled={isCreating}
           className="font-label font-semibold text-sm px-5 h-10 rounded-xl shrink-0"
           data-testid="button-create-operator"
         >
-          <Plus className="w-4 h-4 mr-1.5" /> New Operator
+          {isCreating ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Plus className="w-4 h-4 mr-1.5" />}
+          {isCreating ? "Creating..." : "New Operator"}
         </Button>
       </div>
 
@@ -162,9 +164,11 @@ function OperatorsPanel({
           </p>
           <button
             onClick={onCreateOpen}
-            className="font-label font-semibold text-sm px-6 h-10 rounded-xl border border-primary/40 text-primary hover:bg-primary/10 transition-colors flex items-center gap-2"
+            disabled={isCreating}
+            className="font-label font-semibold text-sm px-6 h-10 rounded-xl border border-primary/40 text-primary hover:bg-primary/10 transition-colors flex items-center gap-2 disabled:opacity-50"
           >
-            <Plus className="w-4 h-4" /> Create Operator
+            {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            {isCreating ? "Creating..." : "Create Operator"}
           </button>
         </div>
       ) : (
@@ -493,14 +497,24 @@ function PlatformPanel() {
 
 export default function Dashboard() {
   const { logout, owner } = useAuth();
+  const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [section, setSection] = useState<Section>("operators");
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const { data: operators, isLoading } = useQuery({
     queryKey: ["operators"],
     queryFn: () => apiFetch<Operator[]>("/operators"),
+  });
+
+  const createBlank = useMutation({
+    mutationFn: () => apiFetch<{ operatorId: string; conversationId: string }>("/operators/blank", { method: "POST" }),
+    onSuccess: (data) => {
+      setLocation(`/operators/${data.operatorId}`);
+    },
+    onError: () => {
+      toast({ title: "Could not create operator", variant: "destructive" });
+    },
   });
 
   const handleSelect = (id: Section) => {
@@ -515,7 +529,8 @@ export default function Dashboard() {
           <OperatorsPanel
             operators={operators}
             isLoading={isLoading}
-            onCreateOpen={() => setIsCreateOpen(true)}
+            isCreating={createBlank.isPending}
+            onCreateOpen={() => createBlank.mutate()}
             onNavigate={id => setLocation(`/operators/${id}`)}
           />
         );
@@ -590,11 +605,13 @@ export default function Dashboard() {
         {section === "operators" && (
           <Button
             size="sm"
-            onClick={() => setIsCreateOpen(true)}
+            onClick={() => createBlank.mutate()}
+            disabled={createBlank.isPending}
             className="font-label text-xs h-8 px-4"
             data-testid="button-create-operator"
           >
-            <Plus className="w-3.5 h-3.5 mr-1.5" /> New Operator
+            {createBlank.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Plus className="w-3.5 h-3.5 mr-1.5" />}
+            {createBlank.isPending ? "Creating..." : "New Operator"}
           </Button>
         )}
       </header>
@@ -624,7 +641,6 @@ export default function Dashboard() {
         </main>
       </div>
 
-      <CreateAgentChat open={isCreateOpen} onClose={() => setIsCreateOpen(false)} />
     </div>
   );
 }
