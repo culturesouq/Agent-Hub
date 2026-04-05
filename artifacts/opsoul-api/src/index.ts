@@ -29,6 +29,7 @@ import transcribeRouter from './routes/transcribe.js';
 import operatorFilesRouter from './routes/operatorFiles.js';
 import adminRouter from './routes/admin.js';
 import contactRouter from './routes/contact.js';
+import googleIntegrationRouter from './routes/google-integration.js';
 import { startGrowCron } from './cron/growCron.js';
 import { startMemoryCron } from './cron/memoryCron.js';
 import { startDriftCron } from './cron/driftCron.js';
@@ -64,6 +65,7 @@ app.use('/api/upload', uploadRouter);
 app.use('/api/transcribe', transcribeRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/contact', contactRouter);
+app.use('/api/integrations/google', googleIntegrationRouter);
 
 app.get('/api/healthz', (_req, res) => {
   // Fire a non-blocking DB ping to keep the Neon endpoint warm.

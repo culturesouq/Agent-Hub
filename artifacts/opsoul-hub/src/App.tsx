@@ -15,6 +15,8 @@ import ContactPage from "@/pages/ContactPage";
 import AdminPage from "@/pages/AdminPage";
 import PrivacyPage from "@/pages/PrivacyPage";
 import TermsPage from "@/pages/TermsPage";
+import GoogleCallback from "@/pages/GoogleCallback";
+import ResetPassword from "@/pages/ResetPassword";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -73,6 +75,8 @@ function Router() {
       <Route path="/contact" component={ContactPage} />
       <Route path="/privacy" component={PrivacyPage} />
       <Route path="/terms" component={TermsPage} />
+      <Route path="/auth/google/success" component={GoogleCallback} />
+      <Route path="/reset-password" component={ResetPassword} />
       <Route path="/operators/:id">
         {(params) => <ProtectedRoute component={OperatorDetail} {...params} />}
       </Route>
