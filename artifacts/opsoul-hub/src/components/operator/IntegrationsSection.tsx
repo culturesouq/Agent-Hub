@@ -5,7 +5,17 @@ import { Integration } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, XCircle, Network, Trash2, Plug, Loader2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { CheckCircle2, XCircle, Network, Trash2, Plug, Loader2, Key } from "lucide-react";
 
 interface ConnectorDef {
   id: string;
@@ -15,6 +25,9 @@ interface ConnectorDef {
   color: string;
   border: string;
   googleOAuth: boolean;
+  tokenHint?: string;
+  tokenLabel?: string;
+  tokenDocsUrl?: string;
 }
 
 function GoogleLogo() {
@@ -149,6 +162,9 @@ const OTHER_CONNECTORS: ConnectorDef[] = [
     color: "from-neutral-500/10 to-neutral-500/5",
     border: "border-neutral-500/20 hover:border-neutral-500/40",
     googleOAuth: false,
+    tokenLabel: "Personal Access Token",
+    tokenHint: "ghp_xxxxxxxxxxxxxxxxxxxx",
+    tokenDocsUrl: "https://github.com/settings/tokens",
   },
   {
     id: "notion",
@@ -158,6 +174,9 @@ const OTHER_CONNECTORS: ConnectorDef[] = [
     color: "from-neutral-400/10 to-neutral-400/5",
     border: "border-neutral-400/20 hover:border-neutral-400/40",
     googleOAuth: false,
+    tokenLabel: "Internal Integration Token",
+    tokenHint: "secret_xxxxxxxxxxxxxxxxxxxx",
+    tokenDocsUrl: "https://www.notion.so/my-integrations",
   },
   {
     id: "slack",
@@ -167,6 +186,9 @@ const OTHER_CONNECTORS: ConnectorDef[] = [
     color: "from-purple-500/10 to-pink-500/5",
     border: "border-purple-500/20 hover:border-purple-500/40",
     googleOAuth: false,
+    tokenLabel: "Bot Token",
+    tokenHint: "xoxb-xxxxxxxxxxxxxxxxxxxx",
+    tokenDocsUrl: "https://api.slack.com/apps",
   },
   {
     id: "telegram",
@@ -176,6 +198,9 @@ const OTHER_CONNECTORS: ConnectorDef[] = [
     color: "from-sky-500/10 to-sky-500/5",
     border: "border-sky-500/20 hover:border-sky-500/40",
     googleOAuth: false,
+    tokenLabel: "Bot Token",
+    tokenHint: "1234567890:AAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    tokenDocsUrl: "https://t.me/BotFather",
   },
   {
     id: "whatsapp",
@@ -185,6 +210,9 @@ const OTHER_CONNECTORS: ConnectorDef[] = [
     color: "from-green-500/10 to-green-500/5",
     border: "border-green-500/20 hover:border-green-500/40",
     googleOAuth: false,
+    tokenLabel: "API Token",
+    tokenHint: "EAAxxxxxxxxxxxxxxxxxxxx",
+    tokenDocsUrl: "https://developers.facebook.com/apps",
   },
 ];
 
@@ -294,10 +322,108 @@ function ComingSoonCard({ name, description, icon }: { name: string; description
   );
 }
 
+function TokenModal({
+  connector,
+  open,
+  onClose,
+  onSave,
+  saving,
+}: {
+  connector: ConnectorDef | null;
+  open: boolean;
+  onClose: () => void;
+  onSave: (token: string, label: string) => void;
+  saving: boolean;
+}) {
+  const [token, setToken] = useState("");
+  const [label, setLabel] = useState("");
+
+  if (!connector) return null;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token.trim()) return;
+    onSave(token.trim(), label.trim() || connector.name);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="sm:max-w-md font-mono">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <span className="w-6 h-6 flex items-center justify-center">{connector.logo}</span>
+            Connect {connector.name}
+          </DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground mt-1">
+            {connector.description}
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="token-input" className="text-xs font-mono">
+              {connector.tokenLabel ?? "API Token"}
+            </Label>
+            <Input
+              id="token-input"
+              type="password"
+              placeholder={connector.tokenHint ?? "Paste your token here"}
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              className="font-mono text-xs"
+              autoFocus
+              autoComplete="off"
+            />
+            {connector.tokenDocsUrl && (
+              <p className="text-[11px] text-muted-foreground">
+                Get your token from{" "}
+                <a
+                  href={connector.tokenDocsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline underline-offset-2"
+                >
+                  {connector.tokenDocsUrl.replace(/^https?:\/\//, "")}
+                </a>
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="label-input" className="text-xs font-mono">
+              Label <span className="text-muted-foreground">(optional)</span>
+            </Label>
+            <Input
+              id="label-input"
+              type="text"
+              placeholder={`My ${connector.name} account`}
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              className="font-mono text-xs"
+              autoComplete="off"
+            />
+          </div>
+
+          <DialogFooter className="pt-2">
+            <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={saving} className="font-mono text-xs">
+              Cancel
+            </Button>
+            <Button type="submit" size="sm" disabled={!token.trim() || saving} className="font-mono text-xs">
+              {saving ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <Key className="w-3 h-3 mr-1.5" />}
+              {saving ? "Saving…" : "Save & Connect"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function IntegrationsSection({ operatorId }: { operatorId: string }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [connectingId, setConnectingId] = useState<string | null>(null);
+  const [tokenModal, setTokenModal] = useState<ConnectorDef | null>(null);
 
   const { data: integrations = [], isLoading } = useQuery({
     queryKey: ["operators", operatorId, "integrations"],
@@ -317,30 +443,59 @@ export default function IntegrationsSection({ operatorId }: { operatorId: string
       toast({ title: "Disconnect failed", description: err.message, variant: "destructive" }),
   });
 
+  const saveTokenIntegration = useMutation({
+    mutationFn: ({ connectorId, token, label }: { connectorId: string; token: string; label: string }) =>
+      apiFetch(`/operators/${operatorId}/integrations`, {
+        method: "POST",
+        body: JSON.stringify({
+          integrationType: connectorId,
+          integrationLabel: label,
+          token,
+          scopes: [connectorId],
+        }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "integrations"] });
+      toast({ title: "Connected", description: `${tokenModal?.name ?? "Integration"} connected successfully.` });
+      setTokenModal(null);
+      setConnectingId(null);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Connection failed", description: err.message, variant: "destructive" });
+      setConnectingId(null);
+    },
+  });
+
   const getConnected = (type: string): Integration | undefined =>
     (integrations as Integration[]).find((i: Integration) => i.integrationType === type);
 
-  const handleConnect = async (connectorId: string, googleOAuth: boolean) => {
-    if (!googleOAuth) return;
-
-    setConnectingId(connectorId);
-    try {
-      const { authUrl } = await apiFetch<{ authUrl: string }>("/integrations/google/initiate", {
-        method: "POST",
-        body: JSON.stringify({ operatorId }),
-      });
-      window.location.href = authUrl;
-    } catch (err: any) {
-      toast({
-        title: "Could not start Google connection",
-        description: err.message,
-        variant: "destructive",
-      });
-      setConnectingId(null);
+  const handleConnect = async (connector: ConnectorDef) => {
+    if (connector.googleOAuth) {
+      setConnectingId(connector.id);
+      try {
+        const { authUrl } = await apiFetch<{ authUrl: string }>("/integrations/google/initiate", {
+          method: "POST",
+          body: JSON.stringify({ operatorId }),
+        });
+        window.location.href = authUrl;
+      } catch (err: any) {
+        toast({
+          title: "Could not start Google connection",
+          description: err.message,
+          variant: "destructive",
+        });
+        setConnectingId(null);
+      }
+    } else {
+      setTokenModal(connector);
     }
   };
 
-  const allConnectors = [...GOOGLE_CONNECTORS, ...OTHER_CONNECTORS];
+  const handleTokenSave = (token: string, label: string) => {
+    if (!tokenModal) return;
+    setConnectingId(tokenModal.id);
+    saveTokenIntegration.mutate({ connectorId: tokenModal.id, token, label });
+  };
 
   return (
     <div className="space-y-8 animate-in fade-in zoom-in-95 duration-300 glass-panel rounded-2xl border border-border/30 p-6">
@@ -373,7 +528,7 @@ export default function IntegrationsSection({ operatorId }: { operatorId: string
                   key={connector.id}
                   connector={connector}
                   connected={getConnected(connector.id)}
-                  onConnect={() => handleConnect(connector.id, connector.googleOAuth)}
+                  onConnect={() => handleConnect(connector)}
                   onDisconnect={(id) => deleteIntegration.mutate(id)}
                   disconnecting={deleteIntegration.isPending}
                   connecting={connectingId === connector.id}
@@ -382,7 +537,7 @@ export default function IntegrationsSection({ operatorId }: { operatorId: string
             </div>
           </div>
 
-          {/* Other Integrations */}
+          {/* Messaging & Productivity */}
           <div className="space-y-3">
             <p className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
               Messaging & Productivity
@@ -393,7 +548,7 @@ export default function IntegrationsSection({ operatorId }: { operatorId: string
                   key={connector.id}
                   connector={connector}
                   connected={getConnected(connector.id)}
-                  onConnect={() => handleConnect(connector.id, connector.googleOAuth)}
+                  onConnect={() => handleConnect(connector)}
                   onDisconnect={(id) => deleteIntegration.mutate(id)}
                   disconnecting={deleteIntegration.isPending}
                   connecting={connectingId === connector.id}
@@ -420,6 +575,14 @@ export default function IntegrationsSection({ operatorId }: { operatorId: string
           </div>
         </>
       )}
+
+      <TokenModal
+        connector={tokenModal}
+        open={!!tokenModal}
+        onClose={() => setTokenModal(null)}
+        onSave={handleTokenSave}
+        saving={saveTokenIntegration.isPending}
+      />
     </div>
   );
 }
