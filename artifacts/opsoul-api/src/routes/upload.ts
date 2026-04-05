@@ -9,17 +9,29 @@ const ALLOWED_MIME_TYPES = new Set([
   'image/jpeg', 'image/png', 'image/gif', 'image/webp',
   'application/pdf',
   'text/plain',
+  'text/markdown',
+  'text/x-markdown',
+  'text/csv',
+  'application/json',
+  'application/octet-stream',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 ]);
 
+const TEXT_EXTENSIONS = new Set(['.txt', '.md', '.markdown', '.csv', '.json', '.log', '.yaml', '.yml', '.toml', '.ini', '.env']);
+
+function isTextExtension(filename: string): boolean {
+  const ext = '.' + filename.split('.').pop()?.toLowerCase();
+  return TEXT_EXTENSIONS.has(ext);
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    if (ALLOWED_MIME_TYPES.has(file.mimetype)) {
+    if (ALLOWED_MIME_TYPES.has(file.mimetype) || isTextExtension(file.originalname)) {
       cb(null, true);
     } else {
       cb(new Error(`Unsupported file type: ${file.mimetype}`));
@@ -53,8 +65,16 @@ router.post('/', upload.single('file'), async (req: Request, res: Response): Pro
       return;
     }
 
-    // Plain text
-    if (mimetype === 'text/plain') {
+    // Plain text and all text-like formats (.txt, .md, .csv, .json, .yaml, etc.)
+    if (
+      mimetype === 'text/plain' ||
+      mimetype === 'text/markdown' ||
+      mimetype === 'text/x-markdown' ||
+      mimetype === 'text/csv' ||
+      mimetype === 'application/json' ||
+      mimetype.startsWith('text/') ||
+      isTextExtension(originalname)
+    ) {
       const content = buffer.toString('utf-8').slice(0, 12000);
       res.json({ type: 'text', content, name: originalname });
       return;

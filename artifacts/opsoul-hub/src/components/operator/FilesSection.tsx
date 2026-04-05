@@ -104,7 +104,7 @@ export default function FilesSection({ operator }: { operator: Operator }) {
       <input
         ref={uploadInputRef}
         type="file"
-        accept=".txt,.md,.pdf,.doc,.docx,.xlsx,.xls"
+        accept=".txt,.md,.csv,.json,.yaml,.yml,.pdf,.doc,.docx,.xlsx,.xls"
         className="hidden"
         onChange={handleFileUpload}
       />

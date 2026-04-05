@@ -124,6 +124,10 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
 
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!addForm.content.trim()) {
+      toast({ title: "Content required", description: "Please type, paste, or upload a file first", variant: "destructive" });
+      return;
+    }
     if (activeTab === "owner") {
       addOwnerKb.mutate({ content: addForm.content, sourceName: addForm.sourceName || "Manual Entry", sourceType: addForm.sourceType });
     } else {
@@ -158,7 +162,7 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".txt,.md,.pdf,.doc,.docx,.xlsx,.xls"
+                  accept=".txt,.md,.csv,.json,.pdf,.doc,.docx,.xlsx,.xls"
                   className="hidden"
                   onChange={handleFileUpload}
                 />
@@ -183,11 +187,10 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
                   <Textarea
                     value={addForm.content}
                     onChange={e => setAddForm({ ...addForm, content: e.target.value })}
-                    required
                     className="font-mono min-h-[120px]"
                     placeholder="Paste or type the knowledge here, or upload a file above..."
                   />
-                  <p className="font-mono text-[10px] text-muted-foreground/60">Supports PDF, Word (.docx), Excel, and plain text files</p>
+                  <p className="font-mono text-[10px] text-muted-foreground/60">Supports .txt, .md, .csv, .json, PDF, Word (.docx), and Excel</p>
                 </div>
                 <div className="space-y-2">
                   <Label className="font-mono text-xs uppercase text-muted-foreground">Title</Label>
