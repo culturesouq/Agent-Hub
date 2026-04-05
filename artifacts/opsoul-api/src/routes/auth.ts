@@ -7,6 +7,7 @@ import { hashToken } from '@workspace/opsoul-utils/crypto';
 import { signAccessToken, refreshTokenExpiresAt } from '../utils/jwt.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { eq, and, isNull } from 'drizzle-orm';
+import { sendEmail, forgotPasswordEmail, welcomeEmail } from '../lib/email.js';
 
 const router = Router();
 
@@ -74,6 +75,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
   }).returning();
 
   const accessToken = await issueSession(res, owner);
+  void sendEmail(owner.email, 'Welcome to OpSoul', welcomeEmail(owner.name ?? ''));
 
   res.status(201).json({
     accessToken,
@@ -332,6 +334,7 @@ router.get('/google/callback', async (req: Request, res: Response): Promise<void
             passwordHash: null,
           })
           .returning();
+        void sendEmail(owner.email, 'Welcome to OpSoul', welcomeEmail(owner.name ?? ''));
       }
     }
 
@@ -377,7 +380,7 @@ router.post('/forgot-password', async (req: Request, res: Response): Promise<voi
   });
 
   const resetUrl = `${getBaseUrl(req)}/reset-password?token=${rawToken}`;
-  console.log(`[auth] Password reset link for ${email}: ${resetUrl}`);
+  void sendEmail(owner.email, 'Reset your OpSoul password', forgotPasswordEmail(resetUrl));
 
   res.json({ ok: true, message: 'If that email has a password-based account, a reset link has been sent.' });
 });

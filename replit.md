@@ -105,7 +105,7 @@ Running on **port 3001**.
 - `GET /me` — return owner profile (requires Bearer token)
 - `GET /google` — redirect to Google OAuth consent screen (scopes: openid email profile)
 - `GET /google/callback` — exchange code, find-or-create owner by googleId/email, issue session, redirect to `/auth/google/success`
-- `POST /forgot-password` — create 1hr reset token; logs reset URL to console (email delivery stub)
+- `POST /forgot-password` — create 1hr reset token; sends reset email via SendGrid (`forgotPasswordEmail` template)
 - `POST /reset-password` — validate token, update password, revoke all sessions
 
 **Auth model:**
@@ -184,6 +184,8 @@ All stored as Replit Secrets:
 | `OPENAI_API_KEY` | OpenAI API key (embeddings only) |
 | `DATABASE_URL` | Auto-managed by Replit |
 | `SESSION_SECRET` | Auto-managed |
+| `SENDGRID_API_KEY` | SendGrid API key — used by the email utility for forgot-password and welcome emails |
+| `SENDGRID_FROM_EMAIL` | Verified sender address in SendGrid (e.g. `noreply@opsoul.io`) |
 
 ## Build Phases
 
