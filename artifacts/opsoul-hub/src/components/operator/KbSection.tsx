@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { KbChunk } from "@/types";
@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
-import { Search, Database, Plus, Trash2, ShieldCheck } from "lucide-react";
+import { Search, Database, Plus, Trash2, ShieldCheck, Upload, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 
 export default function KbSection({ operatorId }: { operatorId: string }) {
@@ -23,6 +23,39 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingFile(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const result = await apiFetch<{ type: string; content?: string; base64?: string; name: string }>("/upload", {
+        method: "POST",
+        body: fd,
+      });
+      if (result.type === "text" && result.content) {
+        const titleFromFile = file.name.replace(/\.[^.]+$/, "");
+        setAddForm(prev => ({
+          ...prev,
+          content: result.content!,
+          sourceName: prev.sourceName || titleFromFile,
+          sourceType: "document",
+        }));
+        toast({ title: "File loaded", description: `${file.name} extracted successfully` });
+      } else {
+        toast({ title: "Unsupported file", description: "Only text, PDF, Word, and Excel files can be added as knowledge", variant: "destructive" });
+      }
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setUploadingFile(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const { data: ownerKb = [], isLoading: ownerLoading } = useQuery({
     queryKey: ["operators", operatorId, "owner-kb"],
@@ -122,39 +155,61 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
                 </DialogTitle>
               </DialogHeader>
               <form onSubmit={handleAddSubmit} className="space-y-4 mt-4">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".txt,.md,.pdf,.doc,.docx,.xlsx,.xls"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                />
                 <div className="space-y-2">
-                  <Label className="font-mono text-xs uppercase text-muted-foreground">Content</Label>
+                  <div className="flex items-center justify-between">
+                    <Label className="font-mono text-xs uppercase text-muted-foreground">Content</Label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs gap-1.5 font-mono border-primary/30 text-primary hover:bg-primary/10"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadingFile}
+                    >
+                      {uploadingFile ? (
+                        <><Loader2 className="w-3 h-3 animate-spin" /> Extracting...</>
+                      ) : (
+                        <><Upload className="w-3 h-3" /> Upload File</>
+                      )}
+                    </Button>
+                  </div>
                   <Textarea
                     value={addForm.content}
                     onChange={e => setAddForm({ ...addForm, content: e.target.value })}
                     required
                     className="font-mono min-h-[120px]"
-                    placeholder="Paste or type the knowledge here..."
+                    placeholder="Paste or type the knowledge here, or upload a file above..."
+                  />
+                  <p className="font-mono text-[10px] text-muted-foreground/60">Supports PDF, Word (.docx), Excel, and plain text files</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="font-mono text-xs uppercase text-muted-foreground">Title</Label>
+                  <Input
+                    value={addForm.sourceName}
+                    onChange={e => setAddForm({ ...addForm, sourceName: e.target.value })}
+                    className="font-mono"
+                    placeholder="e.g. Company handbook, Product FAQ..."
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="font-mono text-xs uppercase text-muted-foreground">Source name</Label>
-                    <Input
-                      value={addForm.sourceName}
-                      onChange={e => setAddForm({ ...addForm, sourceName: e.target.value })}
-                      className="font-mono"
-                      placeholder="e.g. Company handbook"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="font-mono text-xs uppercase text-muted-foreground">Type</Label>
-                    <Select value={addForm.sourceType} onValueChange={(val) => setAddForm({ ...addForm, sourceType: val })}>
-                      <SelectTrigger className="font-mono">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="manual">Manual entry</SelectItem>
-                        <SelectItem value="document">Document</SelectItem>
-                        <SelectItem value="link">Web link</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="space-y-2">
+                  <Label className="font-mono text-xs uppercase text-muted-foreground">Type</Label>
+                  <Select value={addForm.sourceType} onValueChange={(val) => setAddForm({ ...addForm, sourceType: val })}>
+                    <SelectTrigger className="font-mono">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="manual">Manual entry</SelectItem>
+                      <SelectItem value="document">Document</SelectItem>
+                      <SelectItem value="link">Web link</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 {activeTab === "operator" && (
