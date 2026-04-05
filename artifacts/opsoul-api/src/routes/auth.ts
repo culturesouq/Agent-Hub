@@ -408,7 +408,13 @@ router.post('/reset-password', async (req: Request, res: Response): Promise<void
     .from(passwordResetsTable)
     .where(and(eq(passwordResetsTable.tokenHash, tokenHash), isNull(passwordResetsTable.usedAt)));
 
-  if (!reset || new Date() > reset.expiresAt) {
+  if (!reset) {
+    console.warn('[auth] reset-password: token not found in DB (may have been superseded or already used)');
+    res.status(400).json({ error: 'Reset link is invalid or has expired.' });
+    return;
+  }
+  if (new Date() > reset.expiresAt) {
+    console.warn('[auth] reset-password: token expired at', reset.expiresAt);
     res.status(400).json({ error: 'Reset link is invalid or has expired.' });
     return;
   }
