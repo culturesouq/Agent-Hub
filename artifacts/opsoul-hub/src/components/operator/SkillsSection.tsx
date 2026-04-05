@@ -37,8 +37,8 @@ export default function SkillsSection({ operatorId, archetype }: { operatorId: s
   });
 
   const installSkill = useMutation({
-    mutationFn: ({ skillId, config }: { skillId: string; config?: any }) =>
-      apiFetch(`/operators/${operatorId}/skills`, { method: "POST", body: JSON.stringify({ platformSkillId: skillId, config }) }),
+    mutationFn: ({ skillId }: { skillId: string }) =>
+      apiFetch(`/operators/${operatorId}/skills`, { method: "POST", body: JSON.stringify({ skillId }) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "skills"] });
       setSelectedPlatformSkill(null);
@@ -76,7 +76,7 @@ export default function SkillsSection({ operatorId, archetype }: { operatorId: s
         return archetypes.includes(s.archetype) || s.archetype === 'All';
       });
 
-  const isInstalled = (platformId: string) => opSkills?.some((s: OperatorSkill) => s.platformSkillId === platformId);
+  const isInstalled = (platformId: string) => opSkills?.some((s: OperatorSkill) => s.skillId === platformId);
 
   return (
     <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300 glass-panel rounded-2xl border border-border/30 p-6">
@@ -159,15 +159,15 @@ export default function SkillsSection({ operatorId, archetype }: { operatorId: s
                   <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />
                   <div className="flex justify-between items-start pl-2">
                     <div>
-                      <div className="font-mono text-sm font-bold">{skill.name}</div>
-                      <Badge variant="outline" className="font-mono text-[9px] mt-1 border-primary/20 text-primary/80">{skill.category}</Badge>
+                      <div className="font-mono text-sm font-bold">{skill.skillName}</div>
+                      <Badge variant="outline" className="font-mono text-[9px] mt-1 border-primary/20 text-primary/80">{skill.isActive ? 'Active' : 'Inactive'}</Badge>
                     </div>
                     <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => removeSkill.mutate(skill.id)}>
                       <Trash2 className="w-3 h-3" />
                     </Button>
                   </div>
                   <div className="font-mono text-[10px] text-muted-foreground pl-2 border-t border-border/30 pt-2 flex justify-between">
-                    <span>{Object.keys(skill.config || {}).length} configured</span>
+                    <span>{skill.customInstructions ? 'Custom instructions set' : 'Default instructions'}</span>
                     <span>Added {format(new Date(skill.installedAt), 'MMM d, yyyy')}</span>
                   </div>
                 </div>

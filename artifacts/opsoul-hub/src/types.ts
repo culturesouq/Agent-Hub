@@ -141,11 +141,12 @@ export interface PlatformSkill {
 
 export interface OperatorSkill {
   id: string;
-  platformSkillId: string;
-  name: string;
-  category: string;
+  skillId: string;
+  skillName: string;
+  skillDescription?: string;
+  customInstructions?: string;
+  isActive: boolean;
   installedAt: string;
-  config: any;
 }
 
 export interface CapabilityRequest {

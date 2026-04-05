@@ -95,7 +95,7 @@ function OperatorCard({ operator, onClick }: { operator: Operator; onClick: () =
           className="w-full h-full object-cover object-top opacity-60 group-hover:opacity-90 scale-110 group-hover:scale-100 transition-all duration-500"
         />
         <div className="absolute inset-0" style={{ background: `radial-gradient(ellipse at 50% 120%, ${PERSONA_GLOWS[idx]} 0%, transparent 65%)`, mixBlendMode: "screen" }} />
-        <div className="absolute inset-0 bg-gradient-to-t from-card via-card/40 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-card/90 from-[5%] via-card/20 via-[30%] to-transparent to-[60%]" />
         <div className="absolute top-2 right-2 z-10"><HealthBadge operatorId={operator.id} /></div>
       </div>
       <div className="px-4 pt-3 pb-2 flex items-center gap-3">

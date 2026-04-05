@@ -31,6 +31,13 @@ import KbSection from "@/components/operator/KbSection";
 import FilesSection from "@/components/operator/FilesSection";
 import NebulaBlobs from "@/components/ui/NebulaBlobs";
 
+const PERSONA_IMAGES = [
+  "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=400&q=80",
+  "https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=400&q=80",
+  "https://images.unsplash.com/photo-1675557009875-79c69a33e26c?w=400&q=80",
+];
+const PERSONA_GLOWS = ["#9b59f4", "#22d3ee", "#ec4899"];
+
 function OperatorAvatar({ name }: { name: string }) {
   const letter = name.charAt(0).toUpperCase();
   const colors = [
@@ -382,10 +389,21 @@ export default function OperatorDetail({ id }: { id: string }) {
             onClick={() => setMobileNavOpen(false)}
           />
           <aside className="absolute left-0 top-0 bottom-0 w-64 bg-sidebar border-r border-sidebar-border flex flex-col overflow-y-auto shadow-2xl shadow-black/40 animate-in slide-in-from-left duration-200">
-            <div className="p-4 border-b border-sidebar-border flex items-center gap-3">
-              <OperatorAvatar name={operator.name} />
-              <div className="min-w-0">
-                <div className="font-headline font-bold text-sm truncate leading-tight text-sidebar-foreground">{operator.name}</div>
+            <div className="shrink-0">
+              <div className="h-20 relative overflow-hidden bg-[#0a0a0f]">
+                <img
+                  src={PERSONA_IMAGES[operator.name.charCodeAt(0) % 3]}
+                  alt={`${operator.name} portrait`}
+                  className="w-full h-full object-cover object-top opacity-60"
+                />
+                <div className="absolute inset-0" style={{ background: `radial-gradient(ellipse at 50% 120%, ${PERSONA_GLOWS[operator.name.charCodeAt(0) % 3]} 0%, transparent 65%)`, mixBlendMode: "screen" }} />
+                <div className="absolute inset-0 bg-gradient-to-t from-sidebar/90 from-[5%] via-sidebar/20 via-[30%] to-transparent to-[60%]" />
+              </div>
+              <div className="px-4 py-3 border-b border-sidebar-border flex items-center gap-3">
+                <OperatorAvatar name={operator.name} />
+                <div className="min-w-0">
+                  <div className="font-headline font-bold text-sm truncate leading-tight text-sidebar-foreground">{operator.name}</div>
+                </div>
               </div>
             </div>
             <div className="p-2 flex flex-col gap-0.5 flex-1 overflow-y-auto">
@@ -401,10 +419,21 @@ export default function OperatorDetail({ id }: { id: string }) {
       <div className="flex flex-1 overflow-hidden">
         {/* Desktop Sidebar */}
         <aside className="w-56 border-r border-sidebar-border bg-sidebar flex-col shrink-0 overflow-y-auto hidden md:flex">
-          <div className="p-4 border-b border-sidebar-border flex items-center gap-3">
-            <OperatorAvatar name={operator.name} />
-            <div className="min-w-0">
-              <div className="font-headline font-bold text-sm truncate leading-tight text-sidebar-foreground">{operator.name}</div>
+          <div className="shrink-0">
+            <div className="h-20 relative overflow-hidden bg-[#0a0a0f]">
+              <img
+                src={PERSONA_IMAGES[operator.name.charCodeAt(0) % 3]}
+                alt={`${operator.name} portrait`}
+                className="w-full h-full object-cover object-top opacity-60"
+              />
+              <div className="absolute inset-0" style={{ background: `radial-gradient(ellipse at 50% 120%, ${PERSONA_GLOWS[operator.name.charCodeAt(0) % 3]} 0%, transparent 65%)`, mixBlendMode: "screen" }} />
+              <div className="absolute inset-0 bg-gradient-to-t from-sidebar/90 from-[5%] via-sidebar/20 via-[30%] to-transparent to-[60%]" />
+            </div>
+            <div className="px-4 py-3 border-b border-sidebar-border flex items-center gap-3">
+              <OperatorAvatar name={operator.name} />
+              <div className="min-w-0">
+                <div className="font-headline font-bold text-sm truncate leading-tight text-sidebar-foreground">{operator.name}</div>
+              </div>
             </div>
           </div>
           <div className="p-2 flex flex-col gap-0.5 flex-1 overflow-y-auto">
