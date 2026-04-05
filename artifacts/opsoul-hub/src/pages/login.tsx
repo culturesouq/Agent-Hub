@@ -199,10 +199,10 @@ export default function Login() {
                 className="font-headline text-2xl font-semibold tracking-tight mb-2"
                 style={{ color: "#f3eff5" }}
               >
-                Reset Access
+                Forgot your password?
               </h2>
               <p className="text-sm leading-relaxed font-body" style={{ color: "#adaaaf" }}>
-                Enter your email and we'll send a reset link.
+                We'll send a reset link to your email.
               </p>
             </div>
 
@@ -221,8 +221,8 @@ export default function Login() {
                 <NebulaInput
                   id="forgot-email"
                   type="email"
-                  label="Access Key"
-                  placeholder="name@opsoul.system"
+                  label="Email"
+                  placeholder="you@example.com"
                   value={forgotEmail}
                   onChange={(e) => setForgotEmail(e.target.value)}
                   required
@@ -278,12 +278,12 @@ export default function Login() {
               className="font-headline text-2xl md:text-3xl font-medium tracking-tight mb-3"
               style={{ color: "#f3eff5" }}
             >
-              {isLogin ? "Initialize Your Connection" : "Create Your Workspace"}
+              {isLogin ? "Welcome back" : "Create account"}
             </h2>
             <p className="text-sm leading-relaxed font-body max-w-[280px] mx-auto" style={{ color: "#adaaaf" }}>
               {isLogin
-                ? "Select a secure gateway to enter your workspace."
-                : "Forge your OpSoul identity and launch your first operator."}
+                ? "Sign in to your OpSoul workspace."
+                : "Start building your AI operators."}
             </p>
           </div>
 
@@ -349,8 +349,8 @@ export default function Login() {
             <NebulaInput
               id="email"
               type="email"
-              label="Access Key"
-              placeholder="name@opsoul.system"
+              label="Email"
+              placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -365,7 +365,7 @@ export default function Login() {
                   className="font-label text-[10px] font-bold uppercase tracking-[0.22em]"
                   style={{ color: "#adaaaf" }}
                 >
-                  Passphrase
+                  Password
                 </label>
                 {isLogin && (
                   <button
@@ -376,7 +376,7 @@ export default function Login() {
                     onMouseEnter={(e) => (e.currentTarget.style.color = "#f3eff5")}
                     onMouseLeave={(e) => (e.currentTarget.style.color = "#767579")}
                   >
-                    Trouble signing in?
+                    Forgot your password?
                   </button>
                 )}
               </div>
@@ -418,7 +418,7 @@ export default function Login() {
               }}
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              {loading ? "Please wait…" : isLogin ? "Continue" : "Create Account"}
+              {loading ? "Please wait…" : isLogin ? "Sign in" : "Create account"}
             </button>
           </form>
 
