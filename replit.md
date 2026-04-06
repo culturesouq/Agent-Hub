@@ -1,201 +1,59 @@
-# OpSoul v2.4 — Complete
+# OpSoul
 
-AI operator platform with 5-layer identity architecture, dual knowledge bases, GROW self-evolution system, multi-tenant JWT auth, and pgvector semantic search.
+## Overview
 
-## Services & Startup
+OpSoul is an AI operator platform featuring a 5-layer identity architecture, dual knowledge bases, and a GROW self-evolution system. It includes multi-tenant JWT authentication and pgvector semantic search for enhanced AI capabilities. The platform aims to provide a robust framework for managing and evolving AI agents, offering advanced features for identity management, self-improvement, and integration with external services. The business vision is to empower users with highly capable and adaptable AI operators, enhancing productivity and enabling complex AI-driven workflows.
 
-The platform has two services that must both be running:
+## User Preferences
 
-| Service | Workflow | Port | Purpose |
-|---------|----------|------|---------|
-| `opsoul-api` | `artifacts/opsoul-api: API Server` | 3001 | Express REST API + JWT auth |
-| `opsoul-hub` | `artifacts/opsoul-hub: web` | 19165 → served at `/` | React/Vite frontend |
+I want iterative development and detailed explanations. Ask before making major changes.
 
-**Development startup:** Both services are managed by the Replit artifact system and auto-start independently. If you need to start them manually, run:
-```bash
-bash scripts/start-dev.sh
-```
+## System Architecture
 
-**Routing:** The frontend is registered at `previewPath = "/"` via `artifacts/opsoul-hub/.replit-artifact/artifact.toml`. Visiting `/` with no auth token shows LandingPage; with a valid token shows Dashboard.
+OpSoul is structured as a monorepo containing shared libraries and distinct services. The core components include an Express-based API server (`opsoul-api`) and a React/Vite frontend (`opsoul-hub`).
 
-**Artifact registration (confirmed):**
-- `artifacts/opsoul-hub` — registered as kind `web`, title "OpSoul Hub" (id: `artifacts/opsoul-hub`)
-- `artifacts/mockup-sandbox` — registered as kind `design`, title "Canvas"
-- `artifacts/opsoul-api` — Express API server (no artifact registration needed; managed as a workflow)
+**Monorepo Structure:**
+- `lib/db`: Drizzle ORM with PostgreSQL schema for all OpSoul tables.
+- `lib/opsoul-utils`: Shared utilities for environment validation, AES-256-GCM encryption, and OpenAI embeddings.
+- `artifacts/opsoul-api`: Express REST API server running on port 3001, handling authentication, operator management, and core business logic.
+- `artifacts/opsoul-hub`: React/Vite frontend application served at `/`, providing the user interface for interacting with the platform.
 
-**Note on .replit [[artifacts]]:** The `[[artifacts]]` entries in `.replit` are managed by the platform's artifact bootstrap system and cannot be modified by agents directly (agent file tools block `.replit` edits). The stale `artifacts/api-server` entry is a legacy reference from a previous scaffold — it is harmless but cannot be cleaned up. The live artifact registrations are stored in per-artifact `artifact.toml` files and confirmed via the platform artifact registry above.
+**Database:**
+The system uses PostgreSQL with Drizzle ORM, managing 23 tables. Key tables include `owners`, `operators` (with 5-layer identity), `conversations`, `grow_proposals`, `owner_kb`, `operator_kb` (for knowledge bases), and `self_awareness`. Encryption (AES-256-GCM) is used for sensitive data like integration tokens.
 
-## v2.4 GitHub Release — Task #19
+**API Server (`opsoul-api`):**
+- **Auth:** JWT-based authentication with 24-hour access tokens and 30-day refresh tokens. Supports email/password and Google OAuth.
+- **Operator Management:** CRUD operations for AI operators, including setting identity layers, managing GROW lock levels (OPEN, CONTROLLED, LOCKED, FROZEN), and handling Layer 1 identity locking (preventing operator self-modification).
+- **Soul Schema:** A Zod-validated schema defines the Layer 2 soul, encompassing personality traits, tone, communication style, quirks, values, emotional range, decision-making, and conflict resolution.
+- **Integrations:** Routes for initiating and handling Google OAuth integrations, securely storing encrypted tokens.
 
-**Push record (2026-04-04):**
-- Staged: `.gitignore` — added `.env`, `.env.*`, `!.env.example` entries (no `.env` files existed)
-- Pre-push check: `git status --short` confirmed no sensitive files staged
-- Commit SHA: `4b7339f` — `"feat: OpSoul v2.4 Complete — persistence, GROW, Safe Mode, mobile, i18n"`
-- Remote: `https://github.com/culturesouq/Agent-Hub.git` branch `main`
-- Push range: `7062494..4b7339f` — 91 objects, 70.32 KiB — **SUCCESS**
-- Command used: `GIT_TERMINAL_PROMPT=0 git -c credential.helper="" push "https://x-access-token:${GITHUB_PERSONAL_ACCESS_TOKEN}@github.com/culturesouq/Agent-Hub.git" main`
+**AI Stack:**
+- **Live Chat:** `meta-llama/llama-3.3-70b-instruct` via OpenRouter.
+- **GROW Evaluation:** `anthropic/claude-sonnet-4-5` via OpenRouter.
+- **Embeddings:** `text-embedding-3-small` via OpenAI direct.
 
-## v2.4 Session Completed Features
+**Frontend (`opsoul-hub`):**
+- Built with React and Vite, featuring a dark mission-control aesthetic.
+- Provides a dashboard for operator management and a detailed workspace for each operator, including sections for Identity, Chat, Knowledge Base, GROW & Self-Awareness, Memory, Integrations, Mission Contexts, Skills, and Capability Requests.
+- Implements SSE streaming chat with live typing indicators.
+- Supports mobile navigation with a hamburger menu.
 
-- **T2 Arabic detection** — Unicode `/[\u0600-\u06FF...]` detected in chat.ts → `languageInstruction` injected silently into system prompt
-- **T3 API Reference** — Full code examples (curl, JS, Python) with copy buttons in Settings → API
-- **T4 Connector Cards** — 5 connector cards (Gmail, GCal, Outlook, OneDrive, LinkedIn) with connect/disconnect in Integrations
-- **T5 GROW Test Mode** — `POST /operators/:id/grow/test-proposal/:proposalId` runs 3 test messages through current vs proposed soul; before/after preview panel in GrowSection
-- **T6 Behavior Diff Card** — Humanized proposed change display: arrays shown as pill chips, strings as readable prose (removed raw JSON pre block)
-- **T7 Safe Mode** — `PATCH /:id/safe-mode` backend; toggle in Settings → Safe Mode; amber badge in header; growCron filters `safeMode = false`
-- **T8 Drift Cron** — `driftCron.ts` runs every 90 days (`0 3 1 */3 *`); computes `semanticDistance(soulOriginal, soulCurrent)` → stored in `soulState`; alerts if drift > 0.30
-- **T9 Theme** — Sidebar lightness raised from 14% → 18% (clearer visual separation from dark chat area); thin custom scrollbars; consistent spacing
-- **T10 Mobile Nav** — Hamburger button → slide-in overlay with full sidebar nav; replaced horizontal tab bar
-- **T11 GitHub** — Committed as "OpSoul v2.4 Complete" (9 files, 132 insertions); push with `git push origin main` (requires GitHub PAT — remote is `https://github.com/culturesouq/Agent-Hub`)
-- **T12 Text** — All UI "assistant" strings replaced with "operator"
+**Key Features:**
+- **5-Layer Identity Architecture:** Comprehensive definition of an AI operator's identity.
+- **GROW Self-Evolution System:** AI operators can propose and evaluate changes to their own "soul" based on interactions and learning.
+- **Dual Knowledge Bases:** Owner-level and operator-level knowledge bases with pgvector semantic search and RAG context assembly.
+- **Memory System:** Semantic memory entries with vector embeddings, decay, and AI-driven distillation from conversations.
+- **Self-Awareness Engine:** Computes and tracks an operator's `identity_state`, `soul_state`, `capability_state`, `task_history`, and a `health_score`.
+- **Skills Engine:** Platform-wide library of skills and per-operator skill assignment.
+- **Mission Contexts:** Allows for conversation-specific overrides of tone, KB, and GROW behavior.
+- **Safe Mode:** A toggle to restrict GROW cron operations.
+- **Drift Cron:** Periodically calculates semantic distance between original and current operator souls to detect behavioral drift.
 
-## Architecture
+## External Dependencies
 
-### Monorepo Structure
-
-```
-lib/
-  db/               — Drizzle ORM + PostgreSQL schema (all OpSoul tables)
-  opsoul-utils/     — Shared utilities: env validation, AES-256-GCM crypto, OpenAI embeddings
-artifacts/
-  opsoul-api/       — Express API server (port 3001)
-  mockup-sandbox/   — Vite component preview server
-```
-
-### Database (`lib/db`)
-
-All 23 tables in `lib/db/src/schema/`:
-
-| Table | Purpose |
-|---|---|
-| `owners` | Platform account holders (Sovereign Admins) |
-| `sessions` | Refresh token store (SHA-256 hash, 30-day TTL) |
-| `operators` | AI agents with 5-layer identity; layer1 locked on first message |
-| `conversations` | Chat sessions per operator |
-| `messages` | Individual turn records with token counts |
-| `grow_proposals` | GROW self-evolution proposals (cron: 02:00 UTC daily) |
-| `grow_blocked_log` | Audit log of rejected GROW proposals |
-| `self_awareness` | Operator introspection snapshots |
-| `owner_kb` | Owner-level knowledge base chunks (pgvector) |
-| `operator_kb` | Operator-level knowledge base chunks (pgvector) |
-| `kb_verification` | KB chunk verification status |
-| `memory` | Semantic memory entries (pgvector) |
-| `capability_requests` | Operator capability expansion requests |
-| `tasks` | Operator task queue |
-| `platform_skills` | Platform-wide skills library |
-| `operator_skills` | Skills assigned to operators |
-| `ops_logs` | Operational error/event logs |
-| `platform_patterns` | Cross-operator pattern detection |
-| `support_tickets` | Owner-initiated support conversations |
-| `operator_integrations` | Third-party integrations per operator (tokens encrypted AES-256-GCM) |
-| `mission_contexts` | Named context presets per operator |
-| `admin_audit_log` | **Immutable** admin action log (DB trigger enforced) |
-| `password_resets` | 1hr password reset tokens (SHA-256 hashed, one-time use) |
-
-### API Server (`artifacts/opsoul-api`)
-
-Running on **port 3001**.
-
-**Auth routes** (`/api/auth/`):
-- `POST /register` — create owner account (bcrypt 12 rounds)
-- `POST /login` — returns 24hr JWT access token + 30-day refresh cookie (graceful error for Google-only accounts)
-- `POST /refresh` — exchange httpOnly refresh cookie for new access token
-- `POST /logout` — revoke session, clear cookie
-- `POST /change-password` — require current password, revoke all sessions
-- `GET /me` — return owner profile (requires Bearer token)
-- `GET /google` — redirect to Google OAuth consent screen (scopes: openid email profile)
-- `GET /google/callback` — exchange code, find-or-create owner by googleId/email, issue session, redirect to `/auth/google/success`
-- `POST /forgot-password` — create 1hr reset token; sends reset email via SendGrid (`forgotPasswordEmail` template)
-- `POST /reset-password` — validate token, update password, revoke all sessions
-
-**Auth model:**
-- Access token: 24hr JWT (HS256), signed with `JWT_SECRET`
-- Refresh token: 30-day, stored as SHA-256 hash in `sessions` table, raw value in httpOnly cookie
-- `requireAuth` middleware validates Bearer token on protected routes
-- Google-only owners have `passwordHash = null` and `googleId` set; cannot use password login
-- Google OAuth callback sets httpOnly cookie then redirects to `/auth/google/success` (frontend calls `/refresh` to get JWT)
-
-**Google integration routes** (`/api/integrations/google/`):
-- `POST /initiate` — requireAuth; validates operatorId ownership; returns Google authUrl with HMAC-signed state (10min TTL)
-- `GET /callback` — verifies HMAC state; exchanges code; fetches Google email; upserts `operator_integrations` row (type=google, scopes=[gmail,calendar,drive]); triggers self-awareness; redirects to operator page
-
-**Operator routes** (`/api/operators/`) — all require Bearer token:
-- `POST /` — create operator (validates Layer 1 + Layer 2 soul via Zod)
-- `GET /` — list all operators for authenticated owner
-- `GET /:id` — get single operator with full identity layers
-- `PATCH /:id` — update Layer 1 fields (owner always allowed; lock only prevents operator self-modification)
-- `DELETE /:id` — permanently delete operator
-- `POST /:id/lock-layer1` — lock Layer 1 identity (idempotent-safe, 409 if already locked)
-- `GET /:id/soul` — get Layer 2 soul + original snapshot
-- `PATCH /:id/soul` — field-level soul update (never deep merge; blocked if FROZEN)
-- `POST /:id/soul/reset` — restore Layer 2 soul to original (blocked if FROZEN)
-- `PATCH /:id/grow-lock` — set GROW lock level (OPEN/CONTROLLED/LOCKED/FROZEN) + optional expiry
-
-**Layer 1 lock behavior:**
-- `layer1LockedAt` is `null` at creation time
-- Set explicitly via `POST /:id/lock-layer1`
-- Also set automatically on first message sent (via `lockLayer1IfUnlocked` helper, called from Phase 4 chat routes)
-- Lock meaning: prevents the **operator** from self-modifying its identity during GROW cycles or conversations
-- Owner (authenticated user) can always update Layer 1 fields via `PATCH /:id` and `PATCH /:id/identity-from-description` regardless of lock status
-
-**Layer 2 Soul schema (Zod-validated):**
-```
-personalityTraits  string[]   — e.g. ["analytical","warm","curious"]
-toneProfile        string     — e.g. "calm and professional"
-communicationStyle string     — e.g. "concise, avoids jargon"
-quirks             string[]   — distinctive behaviors
-valuesManifestation string[]  — how core values show up
-emotionalRange     string     — stability profile
-decisionMakingStyle string    — reasoning approach
-conflictResolution string     — de-escalation strategy
-```
-
-**GROW lock levels:**
-- `OPEN` — GROW can freely propose soul changes
-- `CONTROLLED` (default) — GROW proposals allowed at higher confidence threshold
-- `LOCKED` — GROW proposals blocked; only manual soul edits allowed
-- `FROZEN` — No changes at all (manual or GROW) until `lockedUntil` expires
-
-### Shared Utilities (`lib/opsoul-utils`)
-
-- `validateEnv()` — hard-fails at startup if any required env var is missing
-- `encryptToken(raw)` / `decryptToken(ciphertext)` — AES-256-GCM, key from `ENCRYPTION_KEY`
-- `hashToken(raw)` — SHA-256 hex digest (used for refresh token storage)
-- `embed(text)` — OpenAI `text-embedding-3-small` embeddings (1536-dim)
-- `cosineSimilarity(a, b)` / `semanticDistance(a, b)` — vector math
-
-## AI Stack
-
-| Purpose | Model | Provider |
-|---|---|---|
-| Live chat | `meta-llama/llama-3.3-70b-instruct` | OpenRouter |
-| GROW evaluation | `anthropic/claude-sonnet-4-5` | OpenRouter |
-| Embeddings | `text-embedding-3-small` | OpenAI direct |
-
-## Required Secrets
-
-All stored as Replit Secrets:
-
-| Secret | Description |
-|---|---|
-| `JWT_SECRET` | 64-char hex — signs access tokens |
-| `ENCRYPTION_KEY` | 64-char hex (32 bytes) — AES-256-GCM key |
-| `OPENROUTER_API_KEY` | OpenRouter API key |
-| `OPENAI_API_KEY` | OpenAI API key (embeddings only) |
-| `DATABASE_URL` | Auto-managed by Replit |
-| `SESSION_SECRET` | Auto-managed |
-| `SENDGRID_API_KEY` | SendGrid API key — used by the email utility for forgot-password and welcome emails |
-| `SENDGRID_FROM_EMAIL` | Verified sender address in SendGrid (e.g. `noreply@opsoul.io`) |
-
-## Build Phases
-
-- **Phase 1 (complete):** Environment validation, shared utilities, full DB schema (23 tables), JWT auth API
-- **Phase 2 (complete):** Operator CRUD, 5-layer identity management, Layer 1 lock logic, soul field-level updates, GROW lock control
-- **Phase 3 (complete):** Dual KB ingestion (owner + operator), pgvector semantic search, confidence/verification filtering, RAG context assembly
-- **Phase 4 (complete):** OpenRouter streaming/sync chat (Llama 3.3 70B), SSE, conversation CRUD, message history, KB RAG context injection, auto Layer 1 lock on first message
-- **Phase 5 (complete):** GROW self-evolution system — Claude Sonnet 4-5 soul evaluation, proposal lifecycle (queued→evaluating→applied/rejected/needs_owner_review), owner decide flow, self-awareness state, daily cron 02:00 UTC, FROZEN/LOCKED guards
-- **Phase 6 (complete):** Skills engine (platform library + per-operator install), integrations (AES-256-GCM token vault, never returned), mission contexts (tone/KB/GROW overrides, per-conversation activation), full system prompt injection at Layer 3
-- **Phase 7 (complete):** Memory system — `operator_memory` store with vector embeddings; CRUD + semantic search + manual decay + distillation routes at `/api/operators/:id/memory`; daily 04:00 UTC decay cron (-0.05/day, auto-archive at ≤0.05); AI distillation (Llama 3.3 70B extracts facts/preferences/patterns from recent conversations, stores at confidence ≥0.7); injected into Layer 3 "Remembered Context" block at chat time (top-5, cosine ≥0.40, weight >0.1); `memoryCount` in chat responses
-- **Phase 9 (complete):** OpSoul Hub frontend — React + Vite app (`artifacts/opsoul-hub`, port 19165, preview at `/`); Vite proxy `/api → localhost:3001`; custom JWT auth layer (`src/lib/api.ts` apiFetch + `src/contexts/AuthContext.tsx`); dark mission-control aesthetic (deep navy + cyan); pages: `/login` (register + login), `/` (operator dashboard with create/delete), `/operators/:id` (9-section operator workspace: Identity, Chat, Knowledge Base, GROW & Self-Awareness, Memory, Integrations, Mission Contexts, Skills, Capability Requests); SSE streaming chat with live typing indicator; all 9 sections wire directly to Phases 1-8 API endpoints; TypeScript clean
-
-- **Phase 8 (complete):** Self-Awareness Engine — `buildSelfAwarenessState()` computes live identity_state (Layer 1 snapshot), soul_state (soul + GROW history counts), capability_state (integrations + skills + KB chunk counts + avg confidence), task_history (last 30 tasks + per-type success/failure breakdown), mandate_gaps (task types with ≥50% failure), health score (v2.4 weights: mandateCoverage×0.30 + mandateGaps×0.20 + kbConfidence×0.25 + growActivity×0.15 + soulIntegrity×0.10 → Strong≥70/Developing≥40/Needs Attention<40); `recomputeSelfAwareness()` preserves previous state + logs to ops_logs on failure; `triggerSelfAwareness()` is a non-blocking `setImmediate` wrapper; 5 event triggers: chat (conversation_end), owner-kb/operator-kb POST (kb_learn), integrations POST/PATCH/DELETE (integration_change), GROW decide approve (grow_approved), capability-requests POST (capability_request); `health_score` jsonb column added to `self_awareness_state`; GET route returns DB state or live-computes if no cache; POST /recompute for explicit refresh; capability-requests route: `/api/operators/:id/capability-requests` — full CRUD (GET list, POST create→fires trigger, GET single, PATCH :id/respond, DELETE)
+- **OpenRouter:** For AI model access (Llama 3.3 70B for chat, Claude Sonnet 4-5 for GROW evaluation).
+- **OpenAI:** For `text-embedding-3-small` embeddings.
+- **PostgreSQL:** The primary database.
+- **SendGrid:** For email services (e.g., forgot password, welcome emails).
+- **Google OAuth:** For user authentication and integration with Google services (Gmail, Calendar, Drive).
+- **GitHub:** For version control and deployment (requires GitHub PAT).
