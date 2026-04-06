@@ -10,6 +10,7 @@ import {
 } from '@workspace/db';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { eq, and, inArray } from 'drizzle-orm';
+import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -77,6 +78,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     growLockOverride: parsed.data.growLockOverride,
   }).returning();
 
+  triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});
   res.status(201).json(ctx);
 });
 
@@ -168,6 +170,7 @@ router.patch('/:ctxId', async (req: Request, res: Response): Promise<void> => {
     .where(eq(missionContextsTable.id, req.params.ctxId))
     .returning();
 
+  triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});
   res.json(updated);
 });
 
@@ -197,6 +200,7 @@ router.delete('/:ctxId', async (req: Request, res: Response): Promise<void> => {
     );
 
   await db.delete(missionContextsTable).where(eq(missionContextsTable.id, req.params.ctxId));
+  triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});
   res.json({ ok: true, deleted: req.params.ctxId });
 });
 
@@ -238,6 +242,7 @@ router.post('/:ctxId/activate', async (req: Request, res: Response): Promise<voi
     .set({ missionContextId: ctx.id })
     .where(eq(conversationsTable.id, convId));
 
+  triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});
   res.json({ ok: true, conversationId: convId, missionContextId: ctx.id, missionContextName: ctx.name });
 });
 
@@ -267,6 +272,7 @@ router.delete('/:ctxId/activate', async (req: Request, res: Response): Promise<v
     .set({ missionContextId: null })
     .where(eq(conversationsTable.id, convId));
 
+  triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});
   res.json({ ok: true, conversationId: convId, missionContextId: null });
 });
 

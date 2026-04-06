@@ -3,6 +3,7 @@ import { db } from '@workspace/db';
 import { operatorFilesTable } from '@workspace/db';
 import { eq, and } from 'drizzle-orm';
 import crypto from 'crypto';
+import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 
 const router = Router({ mergeParams: true });
 
@@ -36,6 +37,7 @@ router.post('/', async (req, res) => {
       createdAt: new Date(),
       updatedAt: new Date(),
     }).returning();
+    triggerSelfAwareness(id, 'kb_learn').catch(() => {});
     res.json(file);
   } catch (err) {
     res.status(500).json({ error: 'Failed to create file' });
@@ -53,6 +55,7 @@ router.patch('/:fileId', async (req, res) => {
       .where(and(eq(operatorFilesTable.id, fileId), eq(operatorFilesTable.ownerId, ownerId)))
       .returning();
     if (!file) { res.status(404).json({ error: 'File not found' }); return; }
+    triggerSelfAwareness((req.params as any).id, 'kb_learn').catch(() => {});
     res.json(file);
   } catch (err) {
     res.status(500).json({ error: 'Failed to update file' });
@@ -66,6 +69,7 @@ router.delete('/:fileId', async (req, res) => {
     await db
       .delete(operatorFilesTable)
       .where(and(eq(operatorFilesTable.id, fileId), eq(operatorFilesTable.ownerId, ownerId)));
+    triggerSelfAwareness((req.params as any).id, 'kb_learn').catch(() => {});
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete file' });

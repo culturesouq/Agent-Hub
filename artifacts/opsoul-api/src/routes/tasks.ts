@@ -5,6 +5,7 @@ import { tasksTable, operatorsTable } from '@workspace/db';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { eq, and, desc } from 'drizzle-orm';
 import crypto from 'crypto';
+import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -90,6 +91,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     })
     .returning();
 
+  triggerSelfAwareness(operatorId, 'conversation_end').catch(() => {});
   res.status(201).json({
     id: created.id,
     operatorId: created.operatorId,
@@ -139,6 +141,7 @@ router.patch('/:taskId', async (req: Request, res: Response): Promise<void> => {
     .where(eq(tasksTable.id, existing.id))
     .returning();
 
+  triggerSelfAwareness(operatorId, 'conversation_end').catch(() => {});
   res.json({
     id: updated.id,
     operatorId: updated.operatorId,
@@ -166,6 +169,7 @@ router.delete('/:taskId', async (req: Request, res: Response): Promise<void> => 
   }
 
   await db.delete(tasksTable).where(eq(tasksTable.id, existing.id));
+  triggerSelfAwareness(operatorId, 'conversation_end').catch(() => {});
   res.json({ ok: true });
 });
 

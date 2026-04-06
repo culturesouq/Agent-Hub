@@ -5,6 +5,7 @@ import { db } from '@workspace/db';
 import { operatorSkillsTable, platformSkillsTable, operatorsTable } from '@workspace/db';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { eq, and } from 'drizzle-orm';
+import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -80,6 +81,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     .set({ installCount: (skill.installCount ?? 0) + 1 })
     .where(eq(platformSkillsTable.id, parsed.data.skillId));
 
+  triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});
   res.status(201).json({ ...install, skill: { name: skill.name, description: skill.description } });
 });
 
@@ -143,6 +145,7 @@ router.patch('/:installId', async (req: Request, res: Response): Promise<void> =
     .where(eq(operatorSkillsTable.id, req.params.installId))
     .returning();
 
+  triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});
   res.json(updated);
 });
 
@@ -175,6 +178,7 @@ router.delete('/:installId', async (req: Request, res: Response): Promise<void> 
       .where(eq(platformSkillsTable.id, existing.skillId));
   }
 
+  triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});
   res.json({ ok: true, uninstalled: req.params.installId });
 });
 

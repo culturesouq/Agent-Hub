@@ -6,6 +6,7 @@ import { operatorSecretsTable, operatorsTable } from '@workspace/db';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { eq, and } from 'drizzle-orm';
 import { encryptToken, decryptToken } from '@workspace/opsoul-utils/crypto';
+import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -86,6 +87,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       .set({ valueEncrypted: encryptToken(value) })
       .where(eq(operatorSecretsTable.id, existing.id))
       .returning({ id: operatorSecretsTable.id, key: operatorSecretsTable.key, createdAt: operatorSecretsTable.createdAt });
+    triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});
     res.status(200).json(updated);
     return;
   }
@@ -101,6 +103,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     })
     .returning({ id: operatorSecretsTable.id, key: operatorSecretsTable.key, createdAt: operatorSecretsTable.createdAt });
 
+  triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});
   res.status(201).json(created);
 });
 
@@ -145,6 +148,7 @@ router.delete('/:secretId', async (req: Request, res: Response): Promise<void> =
     .delete(operatorSecretsTable)
     .where(eq(operatorSecretsTable.id, req.params.secretId));
 
+  triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});
   res.json({ ok: true, deleted: req.params.secretId });
 });
 
