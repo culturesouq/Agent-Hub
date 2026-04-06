@@ -18,6 +18,8 @@ export interface SkillTrigger {
   outputFormat: string | null;
   customInstructions: string | null;
   extractedParams: string;
+  operatorId?: string;
+  integrationType?: string;
 }
 
 // Returns the first skill triggered by the USER MESSAGE, or null.

@@ -472,11 +472,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     let promptTokens = 0;
 
     try {
-      if (searchContext) {
-        const notice = "I don't have that in my knowledge base — let me search and verify…\n\n";
-        fullContent += notice;
-      }
-
       for await (const chunk of streamChat(messages, chatOpts)) {
         if (chunk.delta) {
           fullContent += chunk.delta;
@@ -515,6 +510,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       let finalContent = fullContent;
       let finalTokens = completionTokens;
       if (skillTrigger) {
+        skillTrigger.operatorId = operator.id;
         console.log(`[agency] skill triggered: ${skillTrigger.name}`);
         const skillResult = await executeSkill(skillTrigger, chatModel);
         if (skillResult.success) {
@@ -680,6 +676,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       let finalPromptTokens = result.promptTokens;
       let finalCompletionTokens = result.completionTokens;
       if (skillTrigger) {
+        skillTrigger.operatorId = operator.id;
         console.log(`[agency] skill triggered: ${skillTrigger.name}`);
         const skillResult = await executeSkill(skillTrigger, chatModel);
         if (skillResult.success) {
