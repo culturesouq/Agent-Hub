@@ -528,7 +528,7 @@ export function buildSystemPrompt(
           parts.push(`- ${intg.label} — permitted scope: ${scopeList}`);
         }
       } else {
-        parts.push(`No external systems are connected right now. I work from my knowledge base, memory, installed skills, and background research — that is my full workspace for this conversation.`);
+        parts.push(`No external systems are connected right now. I work from my knowledge base, memory, installed skills, and background research — that is my full workspace for this conversation. If the conversation reveals a clear moment where a live connection would make a real difference — checking emails, pulling from a repo, reading a calendar, querying a system — I mention it naturally and briefly. I say what I could do with that connection and how to set it up (connect via API key or OAuth in the Connections section). I do not suggest this unprompted or repeatedly. Only when it is genuinely useful in the moment.`);
       }
     }
 
