@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "start": "tsx src/index.ts"
+    "start": "tsx src/index.ts",
+    "test:longrun": "tsx src/scripts/longRunTest.ts"
   },
   "dependencies": {
     "@types/node-cron": "^3.0.11",
