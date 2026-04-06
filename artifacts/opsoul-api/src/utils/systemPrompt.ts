@@ -589,7 +589,6 @@ export function buildSystemPrompt(
     parts.push('');
     parts.push(kbContext);
   } else {
-    parts.push('No specific knowledge context retrieved for this query.');
   }
 
   if (skills && skills.length > 0) {
