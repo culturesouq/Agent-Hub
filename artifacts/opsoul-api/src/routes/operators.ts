@@ -12,6 +12,7 @@ import {
   type Layer2Soul,
 } from '../validation/operator.js';
 import { chatCompletion, MODEL_OPTIONS, CHAT_MODEL } from '../utils/openrouter.js';
+import { recomputeSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { encryptToken, decryptToken } from '@workspace/opsoul-utils/crypto';
 import { eq, and, isNull } from 'drizzle-orm';
 import { ZodError } from 'zod';
@@ -710,6 +711,12 @@ router.patch('/:id/safe-mode', async (req: Request, res: Response): Promise<void
     .returning({ id: operatorsTable.id, safeMode: operatorsTable.safeMode });
 
   res.json({ ok: true, operatorId: updated.id, safeMode: updated.safeMode });
+});
+
+router.post('/:operatorId/recompute-awareness', async (req: Request, res: Response): Promise<void> => {
+  const { operatorId } = req.params;
+  await recomputeSelfAwareness(operatorId, 'force');
+  res.json({ ok: true });
 });
 
 export default router;
