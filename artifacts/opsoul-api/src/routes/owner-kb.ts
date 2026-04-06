@@ -48,10 +48,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   const { text, sourceName, sourceUrl, sourceType } = parsed.data;
 
-  // Files are stored as a single entry — no chunking
-  const chunks = sourceType === 'file'
-    ? [{ content: text.trim(), chunkIndex: 0 }]
-    : chunkText(text);
+  const chunks = chunkText(text);
 
   if (chunks.length === 0) {
     res.status(400).json({ error: 'Text produced no valid chunks' });

@@ -40,7 +40,8 @@ export default function SkillsSection({ operatorId, archetype }: { operatorId: s
     mutationFn: ({ skillId }: { skillId: string }) =>
       apiFetch(`/operators/${operatorId}/skills`, { method: "POST", body: JSON.stringify({ skillId }) }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "skills"] });
+      queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "skills"], refetchType: 'all' });
+      queryClient.refetchQueries({ queryKey: ["operators", operatorId, "skills"] });
       setSelectedPlatformSkill(null);
       toast({ title: "Skill installed" });
     },
