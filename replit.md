@@ -28,8 +28,8 @@ The system uses PostgreSQL with Drizzle ORM, managing 23 tables. Key tables incl
 - **Integrations:** Routes for initiating and handling Google OAuth integrations, securely storing encrypted tokens.
 
 **AI Stack:**
-- **Live Chat:** `meta-llama/llama-3.3-70b-instruct` via OpenRouter.
-- **GROW Evaluation:** `anthropic/claude-sonnet-4-5` via OpenRouter.
+- **Live Chat:** `anthropic/claude-sonnet-4-5` (default), `anthropic/claude-haiku-4-5` (short/no context), `google/gemini-flash-2.0` (attachments) via OpenRouter. Operator can override per-operator in Model & AI settings.
+- **GROW Evaluation:** `anthropic/claude-sonnet-4-5` via OpenRouter (explicit, separate from CHAT_MODEL).
 - **Embeddings:** `text-embedding-3-small` via OpenAI direct.
 
 **Frontend (`opsoul-hub`):**

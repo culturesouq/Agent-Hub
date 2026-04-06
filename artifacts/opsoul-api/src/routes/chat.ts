@@ -356,7 +356,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     const hasContext = kbContext.length > 0 || memoryHits.length > 0;
     const resolved = hasAttachment
       ? 'google/gemini-flash-2.0'
-      : 'meta-llama/llama-3.3-70b-instruct';
+      : isShort && !hasContext
+        ? 'anthropic/claude-haiku-4-5'
+        : 'anthropic/claude-sonnet-4-5';
     console.log(`[AUTO] routed → ${resolved} | short=${isShort} attachment=${hasAttachment} hasContext=${hasContext}`);
     return resolved;
   })();

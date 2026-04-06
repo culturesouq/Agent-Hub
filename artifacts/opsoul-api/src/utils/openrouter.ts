@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 
-export const CHAT_MODEL = 'meta-llama/llama-3.3-70b-instruct';
+export const CHAT_MODEL = 'anthropic/claude-sonnet-4-5';
 export const AUTO_MODEL = 'opsoul/auto';
 
 export const MODEL_OPTIONS = [
