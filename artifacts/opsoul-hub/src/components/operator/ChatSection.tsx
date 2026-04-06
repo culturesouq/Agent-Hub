@@ -305,6 +305,8 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   let lastDay = "";
   for (const msg of msgsArray) {
     if ((msg.role as string) === 'system') continue;
+    if (msg.content?.startsWith('[Skill:')) continue;
+    if (msg.content?.startsWith('[Tool:')) continue;
     const day = format(new Date(msg.createdAt), "yyyy-MM-dd");
     if (day !== lastDay) {
       items.push({
@@ -318,7 +320,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   }
 
   const chatContent = (
-    <div className="flex flex-col h-full bg-background/50 relative">
+    <div className="flex flex-col h-full bg-background/50 relative overflow-hidden">
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4" ref={scrollRef}>
         {msgsLoading || (!activeConvId && createConv.isPending) ? (

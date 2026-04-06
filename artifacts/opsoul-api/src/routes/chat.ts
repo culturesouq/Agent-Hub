@@ -358,7 +358,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   })();
 
   // BIRTH MODE — operator has no identity yet; use birth system prompt instead of Layer 1
-  const isBirthMode = !operator.rawIdentity;
+  const isBirthMode = !operator.rawIdentity && !operator.name;
 
   const systemPrompt = isBirthMode
     ? buildBirthSystemPrompt()
@@ -475,6 +475,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       for await (const chunk of streamChat(messages, chatOpts)) {
         if (chunk.delta) {
           fullContent += chunk.delta;
+          res.write(`data: ${JSON.stringify({ delta: chunk.delta })}\n\n`);
         }
         if (chunk.done && chunk.usage) {
           promptTokens = chunk.usage.promptTokens;
@@ -565,11 +566,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           }
           finalContent = secondContent;
           finalTokens = secondTokens;
-        } else {
-          res.write(`data: ${JSON.stringify({ delta: fullContent })}\n\n`);
         }
-      } else {
-        res.write(`data: ${JSON.stringify({ delta: fullContent })}\n\n`);
       }
       // --- END AGENCY LAYER ---
 
