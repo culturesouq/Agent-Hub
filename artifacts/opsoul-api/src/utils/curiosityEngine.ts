@@ -63,6 +63,18 @@ export async function curiositySearch(
   operatorId: string,
   context?: string,
 ): Promise<CuriosityResult> {
+  if (!process.env.SERPER_API_KEY) {
+    console.warn('[curiosityEngine] SERPER_API_KEY not set — skipping web search');
+    return {
+      verified: false,
+      tier: null,
+      sources: [],
+      corroborated: false,
+      bestSource: '',
+      confidence: 0,
+    };
+  }
+
   // Build a focused search query from the claim
   const query = context
     ? `${claim} ${context}`.slice(0, 200)
