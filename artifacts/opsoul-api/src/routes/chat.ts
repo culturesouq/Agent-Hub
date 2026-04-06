@@ -358,7 +358,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   })();
 
   // BIRTH MODE — operator has no identity yet; use birth system prompt instead of Layer 1
-  const isBirthMode = !operator.rawIdentity && !operator.name;
+  const isBirthMode = !operator.rawIdentity;
 
   const systemPrompt = isBirthMode
     ? buildBirthSystemPrompt()
