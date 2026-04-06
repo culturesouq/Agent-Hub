@@ -343,7 +343,7 @@ export default function OperatorDetail({ id }: { id: string }) {
     });
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className={`${activeTab === "chat" ? "h-screen overflow-hidden" : "min-h-screen"} flex flex-col bg-background`}>
       {/* Header */}
       <header className="h-12 border-b border-border/30 frosted-nav flex items-center px-3 shrink-0 justify-between sticky top-0 z-40 gap-2">
         <div className="flex items-center gap-2">
