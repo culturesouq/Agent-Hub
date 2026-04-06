@@ -636,7 +636,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
       if (!operator.safeMode) {
         triggerSelfAwareness(operator.id, 'conversation_end').catch(() => {});
-        distillMemoriesFromConversations(operator.id, operator.ownerId, operator.name).catch(() => {});
+        const shouldDistill = ((conv.messageCount ?? 0) % 10 === 0);
+        if (shouldDistill) {
+          distillMemoriesFromConversations(operator.id, operator.ownerId, operator.name).catch(() => {});
+        }
       }
     } catch (err) {
       res.write(`data: ${JSON.stringify({ error: (err as Error).message })}\n\n`);
@@ -793,7 +796,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
       if (!operator.safeMode) {
         triggerSelfAwareness(operator.id, 'conversation_end').catch(() => {});
-        distillMemoriesFromConversations(operator.id, operator.ownerId, operator.name).catch(() => {});
+        const shouldDistill = ((conv.messageCount ?? 0) % 10 === 0);
+        if (shouldDistill) {
+          distillMemoriesFromConversations(operator.id, operator.ownerId, operator.name).catch(() => {});
+        }
       }
     } catch (err) {
       res.status(502).json({ error: 'AI backend error', detail: (err as Error).message });

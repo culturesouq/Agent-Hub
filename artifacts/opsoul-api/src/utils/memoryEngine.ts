@@ -13,7 +13,7 @@ export const MEMORY_DECAY_RATE_PER_DAY = 0.05;
 export const MEMORY_ARCHIVE_THRESHOLD = 0.05;
 
 const DISTILL_MODEL = 'meta-llama/llama-3.3-70b-instruct';
-const DISTILL_MESSAGE_LIMIT = 40;
+const DISTILL_MESSAGE_LIMIT = 20;
 
 export const MEMORY_TYPES = ['fact', 'preference', 'interaction', 'pattern', 'context'] as const;
 export const SOURCE_TRUST_LEVELS = ['user', 'owner', 'ai_distilled'] as const;
@@ -249,7 +249,7 @@ export async function distillMemoriesFromConversations(
     throw new Error(`Memory distillation parse failed: ${(err as Error).message}`);
   }
 
-  const highConfidence = distilled.filter((m) => m.confidence >= 0.7);
+  const highConfidence = distilled.filter((m) => m.confidence >= 0.80);
 
   let stored = 0;
   for (const m of highConfidence) {
@@ -266,13 +266,13 @@ export async function distillMemoriesFromConversations(
          LIMIT 1`,
         [vecStr, operatorId],
       );
-      if (dupCheck.rows.length > 0 && (1 - dupCheck.rows[0].distance) > 0.92) {
+      if (dupCheck.rows.length > 0 && (1 - dupCheck.rows[0].distance) > 0.85) {
         console.log(`[memory] skipped duplicate — similarity: ${(1 - dupCheck.rows[0].distance).toFixed(3)}`);
         continue;
       }
       await storeMemory(operatorId, ownerId, m.content, m.memoryType, 'ai_distilled', m.confidence);
-      // Promote memories with 70%+ confidence — only if externally corroborated
-      if (m.confidence >= 0.7) {
+      // Promote memories with 80%+ confidence — only if externally corroborated
+      if (m.confidence >= 0.80) {
         const operatorRow = await db.select({ mandate: operatorsTable.mandate })
           .from(operatorsTable)
           .where(eq(operatorsTable.id, operatorId))
