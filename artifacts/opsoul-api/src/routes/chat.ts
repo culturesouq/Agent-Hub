@@ -314,22 +314,27 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       const { curiositySearch } = await import('../utils/curiosityEngine.js');
       const curiosity = await curiositySearch(message, operator.id);
 
-      if (curiosity.corroborated && curiosity.tier) {
-        // Build context only from trusted, corroborated sources
-        searchContext = `[Background research findings — use these as factual grounding, synthesize into your response as natural insights, never list URLs or source names]\n\n` +
-          curiosity.sources
-          .filter(s => s.tier === 1 || s.tier === 2)
+      const usableSources = curiosity.sources.filter(s => s.snippet && s.snippet.trim().length > 20);
+
+      if (usableSources.length > 0) {
+        const label = curiosity.corroborated && curiosity.tier
+          ? `[Research findings — verified by multiple sources — synthesize as natural insights, never list URLs or source names]`
+          : `[Research findings — limited sourcing, treat as directional only — synthesize carefully, do not state as confirmed fact]`;
+
+        searchContext = `${label}\n\n` +
+          usableSources
           .map(s => `• ${s.title}: ${s.snippet}`)
           .join('\n\n');
 
         console.log(
           `[chat] curiosity search — tier: ${curiosity.tier}, ` +
           `corroborated: ${curiosity.corroborated}, ` +
-          `confidence: ${curiosity.confidence}`
+          `confidence: ${curiosity.confidence}, ` +
+          `sources used: ${usableSources.length}`
         );
       } else {
         console.log(
-          `[chat] curiosity search — no corroborated source found (tier: ${curiosity.tier})`
+          `[chat] curiosity search — no usable sources found (tier: ${curiosity.tier})`
         );
       }
     } catch (e) {
