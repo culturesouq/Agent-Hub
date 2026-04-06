@@ -489,6 +489,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         }
       }
 
+      // Signal to the frontend that streaming is done but processing continues
+      res.write(`data: ${JSON.stringify({ processing: true })}\n\n`);
+
       // --- AGENCY LAYER ---
       const installedSkillsForAgency: InstalledSkill[] = skills.map((s: any) => ({
         installId:          s.id ?? s.skillId,

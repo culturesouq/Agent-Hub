@@ -23,6 +23,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [streamingMsg, setStreamingMsg] = useState("");
+  const [isAgencyProcessing, setIsAgencyProcessing] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -249,10 +250,14 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                 const data = JSON.parse(line.slice(6));
                 if (data.error) {
                   setStreamingMsg("");
+                  setIsAgencyProcessing(false);
                 } else if (data.delta) {
                   currentStream += data.delta;
                   setStreamingMsg(currentStream);
+                } else if (data.processing) {
+                  setIsAgencyProcessing(true);
                 } else if (data.done) {
+                  setIsAgencyProcessing(false);
                   setStreamingMsg("");
                   queryClient.invalidateQueries({
                     queryKey: ["operators", operatorId, "conversations", activeConvId, "messages"],
@@ -268,6 +273,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     } catch (err) {
       console.error(err);
       setStreamingMsg("");
+      setIsAgencyProcessing(false);
     }
   };
 
@@ -370,6 +376,15 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
               <div className="flex justify-start">
                 <div className="max-w-[85%] rounded-2xl rounded-tl-none px-4 py-3 text-sm leading-relaxed bg-card border border-border/50 text-foreground">
                   <div className="break-words">{renderContent(streamingMsg)}</div>
+                </div>
+              </div>
+            )}
+            {isAgencyProcessing && (
+              <div className="flex justify-start">
+                <div className="flex items-center gap-1.5 px-4 py-3">
+                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:0ms]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:150ms]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:300ms]" />
                 </div>
               </div>
             )}
