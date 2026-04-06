@@ -5,6 +5,7 @@ import { operatorMemoryTable, operatorsTable } from '@workspace/db';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { eq, and, isNull, isNotNull, desc } from 'drizzle-orm';
 import { embed } from '@workspace/opsoul-utils/ai';
+import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import {
   MEMORY_TYPES,
   SOURCE_TRUST_LEVELS,
@@ -81,6 +82,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     parsed.data.weight,
     parsed.data.startDecay,
   );
+
+  triggerSelfAwareness(op.id, 'kb_learn').catch(() => {});
 
   res.status(201).json({
     id: memory.id,
