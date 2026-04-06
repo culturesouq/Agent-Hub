@@ -30,6 +30,7 @@ import operatorFilesRouter from './routes/operatorFiles.js';
 import adminRouter from './routes/admin.js';
 import contactRouter from './routes/contact.js';
 import googleIntegrationRouter from './routes/google-integration.js';
+import operatorSecretsRouter from './routes/operator-secrets.js';
 import { startGrowCron } from './cron/growCron.js';
 import { startMemoryCron } from './cron/memoryCron.js';
 import { startDriftCron } from './cron/driftCron.js';
@@ -66,6 +67,7 @@ app.use('/api/transcribe', transcribeRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/contact', contactRouter);
 app.use('/api/integrations/google', googleIntegrationRouter);
+app.use('/api/operators/:operatorId/secrets', operatorSecretsRouter);
 
 app.get('/api/healthz', (_req, res) => {
   // Fire a non-blocking DB ping to keep the Neon endpoint warm.
@@ -139,6 +141,7 @@ async function start(): Promise<void> {
     console.log(`[opsoul-api] Integrations: /api/operators/:id/integrations — register, list, patch, delete`);
     console.log(`[opsoul-api] Mission Contexts: /api/operators/:id/mission-contexts — CRUD + activate`);
     console.log(`[opsoul-api] Memory: /api/operators/:id/memory — store, list, search, distill, decay`);
+    console.log(`[opsoul-api] Operator Secrets: /api/operators/:id/secrets — list, save, reveal, delete`);
   });
 
   startGrowCron();

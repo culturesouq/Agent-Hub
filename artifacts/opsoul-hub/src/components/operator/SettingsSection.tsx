@@ -1,12 +1,13 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiFetch } from "@/lib/api";
 import { Operator } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Lock, AlertTriangle, RefreshCw, Key, Globe, ShieldCheck, Copy, Shield, Cpu, Eye, EyeOff, Check, Loader2, ChevronDown, Info, Zap } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Lock, AlertTriangle, RefreshCw, Key, Globe, ShieldCheck, Copy, Shield, Cpu, Eye, EyeOff, Check, Loader2, ChevronDown, Info, Zap, Plus, Trash2 } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -86,6 +87,192 @@ function CodeBlock({ code, onCopy }: { code: string; onCopy: () => void }) {
         {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
       </button>
     </div>
+  );
+}
+
+interface OperatorSecret {
+  id: string;
+  key: string;
+  createdAt: string;
+}
+
+function SecretsPanel({ operatorId }: { operatorId: string }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [newKey, setNewKey] = useState("");
+  const [newValue, setNewValue] = useState("");
+  const [revealedIds, setRevealedIds] = useState<Record<string, string>>({});
+  const [revealingId, setRevealingId] = useState<string | null>(null);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["operators", operatorId, "secrets"],
+    queryFn: () =>
+      apiFetch<{ secrets: OperatorSecret[] }>(`/operators/${operatorId}/secrets`)
+        .then((r) => r.secrets ?? []),
+  });
+  const secrets: OperatorSecret[] = data ?? [];
+
+  const saveSecret = useMutation({
+    mutationFn: () =>
+      apiFetch(`/operators/${operatorId}/secrets`, {
+        method: "POST",
+        body: JSON.stringify({ key: newKey.trim().toUpperCase(), value: newValue.trim() }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "secrets"] });
+      toast({ title: "Secret saved" });
+      setNewKey("");
+      setNewValue("");
+    },
+    onError: (err: Error) =>
+      toast({ title: "Save failed", description: err.message, variant: "destructive" }),
+  });
+
+  const deleteSecret = useMutation({
+    mutationFn: (id: string) =>
+      apiFetch(`/operators/${operatorId}/secrets/${id}`, { method: "DELETE" }),
+    onSuccess: (_, id) => {
+      queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "secrets"] });
+      setRevealedIds((prev) => { const n = { ...prev }; delete n[id]; return n; });
+      toast({ title: "Secret deleted" });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Delete failed", description: err.message, variant: "destructive" }),
+  });
+
+  const handleReveal = async (id: string) => {
+    if (revealedIds[id]) {
+      setRevealedIds((prev) => { const n = { ...prev }; delete n[id]; return n; });
+      return;
+    }
+    setRevealingId(id);
+    try {
+      const { value } = await apiFetch<{ value: string }>(`/operators/${operatorId}/secrets/${id}/reveal`);
+      setRevealedIds((prev) => ({ ...prev, [id]: value }));
+    } catch (err: any) {
+      toast({ title: "Could not reveal secret", description: err.message, variant: "destructive" });
+    } finally {
+      setRevealingId(null);
+    }
+  };
+
+  const handleKeyInput = (v: string) => {
+    setNewKey(v.toUpperCase().replace(/[^A-Z0-9_]/g, ""));
+  };
+
+  return (
+    <section className="space-y-5">
+      <div className="flex items-center gap-2 border-b border-border/50 pb-3">
+        <Key className="w-4 h-4 text-muted-foreground" />
+        <div>
+          <h2 className="font-headline font-bold text-base">Keys & Secrets</h2>
+          <p className="font-mono text-xs text-muted-foreground mt-0.5">
+            Store API keys and tokens your operator can use during tasks — webhooks, third-party tools, external services.
+          </p>
+        </div>
+      </div>
+
+      {/* Add new */}
+      <div className="rounded-xl border border-border/30 bg-card/20 p-4 space-y-3">
+        <p className="font-mono text-xs text-muted-foreground uppercase tracking-wider">Add secret</p>
+        <div className="flex gap-2 flex-col sm:flex-row">
+          <Input
+            placeholder="KEY_NAME"
+            value={newKey}
+            onChange={(e) => handleKeyInput(e.target.value)}
+            className="font-mono text-xs sm:w-44 shrink-0 uppercase"
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <Input
+            type="password"
+            placeholder="value / token"
+            value={newValue}
+            onChange={(e) => setNewValue(e.target.value)}
+            className="font-mono text-xs flex-1"
+            autoComplete="off"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && newKey.trim() && newValue.trim()) saveSecret.mutate();
+            }}
+          />
+          <Button
+            size="sm"
+            onClick={() => saveSecret.mutate()}
+            disabled={!newKey.trim() || !newValue.trim() || saveSecret.isPending}
+            className="font-mono text-xs shrink-0"
+          >
+            {saveSecret.isPending ? (
+              <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+            ) : (
+              <Plus className="w-3.5 h-3.5 mr-1.5" />
+            )}
+            Save
+          </Button>
+        </div>
+      </div>
+
+      {/* List */}
+      {isLoading ? (
+        <div className="space-y-2">
+          {[...Array(2)].map((_, i) => (
+            <div key={i} className="h-12 rounded-lg border border-border/20 bg-card/10 animate-pulse" />
+          ))}
+        </div>
+      ) : secrets.length === 0 ? (
+        <div className="rounded-xl border border-border/20 bg-card/10 p-6 text-center">
+          <Key className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+          <p className="font-mono text-xs text-muted-foreground">
+            No secrets yet. Add API keys or tokens your operator can use during tasks.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {secrets.map((secret) => {
+            const isRevealed = !!revealedIds[secret.id];
+            const isRevealing = revealingId === secret.id;
+            return (
+              <div
+                key={secret.id}
+                className="flex items-center gap-3 rounded-lg border border-border/30 bg-card/20 px-4 py-3"
+              >
+                <code className="font-mono text-xs font-bold text-primary w-40 truncate shrink-0">
+                  {secret.key}
+                </code>
+                <div className="flex-1 font-mono text-xs text-muted-foreground tracking-widest overflow-hidden">
+                  {isRevealed ? (
+                    <span className="text-foreground break-all tracking-normal">{revealedIds[secret.id]}</span>
+                  ) : (
+                    "••••••••••••"
+                  )}
+                </div>
+                <button
+                  onClick={() => handleReveal(secret.id)}
+                  disabled={isRevealing}
+                  className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                  title={isRevealed ? "Hide" : "Reveal"}
+                >
+                  {isRevealing ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : isRevealed ? (
+                    <EyeOff className="w-3.5 h-3.5" />
+                  ) : (
+                    <Eye className="w-3.5 h-3.5" />
+                  )}
+                </button>
+                <button
+                  onClick={() => deleteSecret.mutate(secret.id)}
+                  disabled={deleteSecret.isPending}
+                  className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                  title="Delete"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -362,17 +549,7 @@ print(response.json()["content"])`;
       )}
 
       {show("secrets") && (
-        <section className="space-y-4">
-          <div>
-            <h3 className="font-mono font-bold text-sm text-foreground">Keys & Secrets</h3>
-            <p className="font-mono text-xs text-muted-foreground mt-1">
-              Store API keys and tokens your operator can use during conversations — webhooks, third-party tools, external services.
-            </p>
-          </div>
-          <div className="rounded-lg border border-border/30 bg-muted/20 px-4 py-3">
-            <p className="font-mono text-xs text-muted-foreground">Coming soon — external integration secrets.</p>
-          </div>
-        </section>
+        <SecretsPanel operatorId={operator.id} />
       )}
 
       {show("api") && (

@@ -24,3 +24,4 @@ export * from './admin_audit_log';
 export * from './operator_files';
 export * from './contact_submissions';
 export * from './password_resets';
+export * from './operator_secrets';
