@@ -35,6 +35,7 @@ import { startGrowCron } from './cron/growCron.js';
 import { startMemoryCron } from './cron/memoryCron.js';
 import { startDriftCron } from './cron/driftCron.js';
 import { startKeepAliveCron } from './cron/keepAliveCron.js';
+import { runInitSeed } from './utils/initSeed.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
@@ -143,6 +144,8 @@ async function start(): Promise<void> {
     console.log(`[opsoul-api] Memory: /api/operators/:id/memory — store, list, search, distill, decay`);
     console.log(`[opsoul-api] Operator Secrets: /api/operators/:id/secrets — list, save, reveal, delete`);
   });
+
+  runInitSeed().catch((err) => console.error('[initSeed] failed:', err?.message));
 
   startGrowCron();
   startMemoryCron();
