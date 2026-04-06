@@ -96,6 +96,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
       isActive: operatorSkillsTable.isActive,
       installedAt: operatorSkillsTable.installedAt,
       skillName: platformSkillsTable.name,
+      skillCategory: platformSkillsTable.category,
       skillDescription: platformSkillsTable.description,
       skillInstructions: platformSkillsTable.instructions,
       skillOutputFormat: platformSkillsTable.outputFormat,
