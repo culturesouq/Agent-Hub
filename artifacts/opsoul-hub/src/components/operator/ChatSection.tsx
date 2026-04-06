@@ -27,7 +27,9 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -68,12 +70,17 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     ? messages
     : ((messages as any)?.messages ?? []);
 
-  // Fix 1 — auto-scroll on new messages or streaming state change
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    setTimeout(() => {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 50);
+  }, [messages, streamingMsg]);
+
+  useEffect(() => {
+    if (showAll) {
+      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
     }
-  }, [messages, isStreaming]);
+  }, [showAll]);
 
   const createConv = useMutation({
     mutationFn: (contextName: string) =>
@@ -264,10 +271,40 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     }
   };
 
+  function renderContent(content: string) {
+    const parts: React.ReactNode[] = [];
+    const codeBlockRegex = /```[\w]*\n?([\s\S]*?)```/g;
+    let last = 0, match, key = 0;
+    while ((match = codeBlockRegex.exec(content)) !== null) {
+      if (match.index > last) {
+        parts.push(
+          <span key={key++} className="whitespace-pre-wrap break-words">
+            {content.slice(last, match.index)}
+          </span>
+        );
+      }
+      parts.push(
+        <pre key={key++} className="bg-background/80 rounded-lg p-3 text-xs font-mono overflow-x-auto my-2 border border-border/30">
+          {match[1].trim()}
+        </pre>
+      );
+      last = match.index + match[0].length;
+    }
+    if (last < content.length) {
+      parts.push(
+        <span key={key++} className="whitespace-pre-wrap break-words">
+          {content.slice(last)}
+        </span>
+      );
+    }
+    return <>{parts}</>;
+  }
+
   // Build flat list with date separators
   const items: RenderedItem[] = [];
   let lastDay = "";
   for (const msg of msgsArray) {
+    if ((msg.role as string) === 'system') continue;
     const day = format(new Date(msg.createdAt), "yyyy-MM-dd");
     if (day !== lastDay) {
       items.push({
@@ -295,7 +332,15 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
           </div>
         ) : (
           <>
-            {items.map((item) =>
+            {!showAll && items.length > 20 && (
+              <button
+                onClick={() => setShowAll(true)}
+                className="text-xs text-muted-foreground/50 font-mono mx-auto block py-2 hover:text-muted-foreground transition-colors"
+              >
+                ↑ Show earlier messages
+              </button>
+            )}
+            {(showAll ? items : items.slice(-20)).map((item) =>
               item.kind === "separator" ? (
                 <div key={item.key} className="flex items-center gap-3 my-4">
                   <div className="flex-1 h-px bg-border/30" />
@@ -314,7 +359,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                         : "bg-card border border-border/50 text-foreground rounded-tl-none"
                       }`}
                   >
-                    <div className="whitespace-pre-wrap break-words">{item.msg.content}</div>
+                    <div className="break-words">{renderContent(item.msg.content)}</div>
                   </div>
                 </div>
               )
@@ -322,10 +367,11 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
             {streamingMsg && (
               <div className="flex justify-start">
                 <div className="max-w-[85%] rounded-2xl rounded-tl-none px-4 py-3 text-sm leading-relaxed bg-card border border-border/50 text-foreground">
-                  <div className="whitespace-pre-wrap">{streamingMsg}</div>
+                  <div className="break-words">{renderContent(streamingMsg)}</div>
                 </div>
               </div>
             )}
+            <div ref={bottomRef} />
           </>
         )}
       </div>

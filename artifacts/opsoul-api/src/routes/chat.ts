@@ -474,14 +474,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     try {
       if (searchContext) {
         const notice = "I don't have that in my knowledge base — let me search and verify…\n\n";
-        res.write(`data: ${JSON.stringify({ delta: notice })}\n\n`);
         fullContent += notice;
       }
 
       for await (const chunk of streamChat(messages, chatOpts)) {
         if (chunk.delta) {
           fullContent += chunk.delta;
-          res.write(`data: ${JSON.stringify({ delta: chunk.delta })}\n\n`);
         }
         if (chunk.done && chunk.usage) {
           promptTokens = chunk.usage.promptTokens;
@@ -514,6 +512,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       // --- END TOOL USE POLICY GATE ---
 
       const skillTrigger = await detectSkillTrigger(message, installedSkillsForAgency, fullContent);
+      let finalContent = fullContent;
+      let finalTokens = completionTokens;
       if (skillTrigger) {
         console.log(`[agency] skill triggered: ${skillTrigger.name}`);
         const skillResult = await executeSkill(skillTrigger, chatModel);
@@ -548,7 +548,32 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             'ai_distilled',
             0.6,
           ).catch(() => {});
+          // Second call — stream synthesized response incorporating skill result
+          const secondMessages: ChatMessage[] = [
+            ...messages,
+            { role: 'assistant', content: fullContent },
+            { role: 'system', content: `[Skill: ${skillResult.skillName}] Result:\n${skillResult.output}` },
+            { role: 'user', content: 'Synthesize the skill result into your response naturally. Do not mention the skill ran. Just respond.' },
+          ];
+          let secondContent = '';
+          let secondTokens = 0;
+          for await (const chunk of streamChat(secondMessages, chatOpts)) {
+            if (chunk.delta) {
+              secondContent += chunk.delta;
+              res.write(`data: ${JSON.stringify({ delta: chunk.delta })}\n\n`);
+            }
+            if (chunk.done && chunk.usage) {
+              promptTokens = chunk.usage.promptTokens;
+              secondTokens = chunk.usage.completionTokens;
+            }
+          }
+          finalContent = secondContent;
+          finalTokens = secondTokens;
+        } else {
+          res.write(`data: ${JSON.stringify({ delta: fullContent })}\n\n`);
         }
+      } else {
+        res.write(`data: ${JSON.stringify({ delta: fullContent })}\n\n`);
       }
       // --- END AGENCY LAYER ---
 
@@ -558,8 +583,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         conversationId: conv.id,
         operatorId: operator.id,
         role: 'assistant',
-        content: fullContent,
-        tokenCount: completionTokens || null,
+        content: finalContent,
+        tokenCount: finalTokens || null,
       });
 
       await db.update(conversationsTable)
@@ -573,7 +598,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         done: true,
         messageId: asstMsgId,
         model: chatModel,
-        usage: { promptTokens, completionTokens },
+        usage: { promptTokens, completionTokens: finalTokens },
         activeSkillCount: skills.length,
         missionContext: missionContext?.name ?? null,
         memoryCount: memoryHits.length,
@@ -582,7 +607,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
       // --- [LEARN:] EXTRACTION ---
       if (!operator.safeMode) {
-        const learnMatches = fullContent.match(/\[LEARN:\s*(.*?)\]/gs);
+        const learnMatches = finalContent.match(/\[LEARN:\s*(.*?)\]/gs);
         if (learnMatches && learnMatches.length > 0) {
           for (const match of learnMatches) {
             const text = match.replace(/\[LEARN:\s*/i, '').replace(/\]$/, '').trim();
@@ -651,6 +676,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       // --- END TOOL USE POLICY GATE ---
 
       const skillTrigger = await detectSkillTrigger(message, installedSkillsForAgency, result.content);
+      let finalContent = result.content;
+      let finalPromptTokens = result.promptTokens;
+      let finalCompletionTokens = result.completionTokens;
       if (skillTrigger) {
         console.log(`[agency] skill triggered: ${skillTrigger.name}`);
         const skillResult = await executeSkill(skillTrigger, chatModel);
@@ -685,6 +713,17 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             'ai_distilled',
             0.6,
           ).catch(() => {});
+          // Second call — synthesize skill result into final response
+          const secondMessages: ChatMessage[] = [
+            ...messages,
+            { role: 'assistant', content: result.content },
+            { role: 'system', content: `[Skill: ${skillResult.skillName}] Result:\n${skillResult.output}` },
+            { role: 'user', content: 'Synthesize the skill result into your response naturally. Do not mention the skill ran. Just respond.' },
+          ];
+          const secondResult = await chatCompletion(secondMessages, chatOpts);
+          finalContent = secondResult.content;
+          finalPromptTokens = secondResult.promptTokens;
+          finalCompletionTokens = secondResult.completionTokens;
         }
       }
       // --- END AGENCY LAYER ---
@@ -695,8 +734,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         conversationId: conv.id,
         operatorId: operator.id,
         role: 'assistant',
-        content: result.content,
-        tokenCount: result.completionTokens || null,
+        content: finalContent,
+        tokenCount: finalCompletionTokens || null,
       });
 
       await db.update(conversationsTable)
@@ -710,11 +749,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         messageId: asstMsgId,
         conversationId: conv.id,
         role: 'assistant',
-        content: result.content,
+        content: finalContent,
         model: chatModel,
         usage: {
-          promptTokens: result.promptTokens,
-          completionTokens: result.completionTokens,
+          promptTokens: finalPromptTokens,
+          completionTokens: finalCompletionTokens,
         },
         activeSkillCount: skills.length,
         missionContext: missionContext?.name ?? null,
@@ -724,7 +763,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
       // --- [LEARN:] EXTRACTION ---
       if (!operator.safeMode) {
-        const learnMatches = result.content.match(/\[LEARN:\s*(.*?)\]/gs);
+        const learnMatches = finalContent.match(/\[LEARN:\s*(.*?)\]/gs);
         if (learnMatches && learnMatches.length > 0) {
           for (const match of learnMatches) {
             const text = match.replace(/\[LEARN:\s*/i, '').replace(/\]$/, '').trim();
