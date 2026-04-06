@@ -200,6 +200,7 @@ export default function OperatorDetail({ id }: { id: string }) {
     queryKey: ["operators", id],
     queryFn: () => apiFetch<Operator>(`/operators/${id}`),
     enabled: !!id,
+    refetchInterval: (query) => !query.state.data?.rawIdentity ? 3000 : false,
   });
 
   const { data: saData } = useQuery({
