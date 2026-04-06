@@ -22,9 +22,10 @@ export interface SkillTrigger {
   integrationType?: string;
 }
 
-// Returns the first skill triggered by the USER MESSAGE, or null.
+// Returns the BEST matching skill for the USER MESSAGE, or null.
 // Compares the user's message against each skill's triggerDescription using cosine similarity.
-// Threshold: 0.55 — loose enough to catch intent, tight enough to avoid false positives.
+// Evaluates ALL installed skills and selects the highest similarity match above threshold.
+// Threshold: 0.45 — balanced to catch clear intent while avoiding false positives across large skill libraries.
 // The operatorResponse is passed separately as executor context only.
 export async function detectSkillTrigger(
   userMessage: string,
@@ -33,7 +34,12 @@ export async function detectSkillTrigger(
 ): Promise<SkillTrigger | null> {
   if (!installedSkills.length) return null;
 
+  const TRIGGER_THRESHOLD = 0.45;
+
   const messageEmbed = await embed(userMessage);
+
+  let bestSkill: InstalledSkill | null = null;
+  let bestSimilarity = 0;
 
   for (const skill of installedSkills) {
     if (!skill.triggerDescription) continue;
@@ -43,20 +49,25 @@ export async function detectSkillTrigger(
     const magB = Math.sqrt(triggerEmbed.reduce((s, v) => s + v * v, 0));
     const similarity = dot / (magA * magB);
 
-    console.log(`[agency] skill "${skill.name}" similarity=${similarity.toFixed(3)} threshold=0.35`);
+    console.log(`[agency] skill "${skill.name}" similarity=${similarity.toFixed(3)} threshold=${TRIGGER_THRESHOLD}`);
 
-    if (similarity >= 0.35) {
-      return {
-        installId:   skill.installId,
-        skillId:     skill.skillId,
-        name:        skill.name,
-        instructions: skill.instructions,
-        outputFormat: skill.outputFormat,
-        customInstructions: skill.customInstructions,
-        extractedParams: operatorResponse ?? userMessage, // executor context
-      };
+    if (similarity >= TRIGGER_THRESHOLD && similarity > bestSimilarity) {
+      bestSimilarity = similarity;
+      bestSkill = skill;
     }
   }
 
-  return null;
+  if (!bestSkill) return null;
+
+  console.log(`[agency] best match → "${bestSkill.name}" similarity=${bestSimilarity.toFixed(3)}`);
+
+  return {
+    installId:          bestSkill.installId,
+    skillId:            bestSkill.skillId,
+    name:               bestSkill.name,
+    instructions:       bestSkill.instructions,
+    outputFormat:       bestSkill.outputFormat,
+    customInstructions: bestSkill.customInstructions,
+    extractedParams:    operatorResponse ?? userMessage,
+  };
 }

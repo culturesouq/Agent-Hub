@@ -4,7 +4,7 @@ import { embed } from '@workspace/opsoul-utils/ai';
 import { chatCompletion } from './openrouter.js';
 import { curiositySearch } from './curiosityEngine.js';
 
-const DISTILL_MODEL = 'meta-llama/llama-3.3-70b-instruct';
+const DISTILL_MODEL = 'anthropic/claude-haiku-4-5';
 
 export type IntakeStatus = 'verified' | 'pending' | 'skipped';
 

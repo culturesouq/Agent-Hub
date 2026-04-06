@@ -30,7 +30,10 @@ The system uses PostgreSQL with Drizzle ORM, managing 23 tables. Key tables incl
 **AI Stack:**
 - **Live Chat:** `anthropic/claude-sonnet-4-5` (default), `anthropic/claude-haiku-4-5` (short/no context), `google/gemini-flash-2.0` (attachments) via OpenRouter. Operator can override per-operator in Model & AI settings.
 - **GROW Evaluation:** `anthropic/claude-sonnet-4-5` via OpenRouter (explicit, separate from CHAT_MODEL).
+- **Memory Distillation:** `anthropic/claude-haiku-4-5` — used in both memoryEngine.ts and kbIntake.ts.
 - **Embeddings:** `text-embedding-3-small` via OpenAI direct.
+- **Llama is permanently removed** — `meta-llama/llama-3.3-70b-instruct` has been purged from all code paths: model picker, memory distillation, KB intake, and API key verification. It is not available as an operator default model.
+- **Agency (Skill Trigger):** Evaluates ALL installed skills per message via cosine similarity. Selects the BEST match (highest similarity) above threshold 0.45. Does NOT take the first match — all skills are scored before a winner is chosen.
 
 **Frontend (`opsoul-hub`):**
 - Built with React and Vite, featuring a dark mission-control aesthetic.

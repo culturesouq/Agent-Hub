@@ -6,7 +6,6 @@ export const AUTO_MODEL = 'opsoul/auto';
 export const MODEL_OPTIONS = [
   { id: 'anthropic/claude-sonnet-4-5', label: 'Claude Sonnet', description: 'Best quality — deeper reasoning and richer responses' },
   { id: 'anthropic/claude-haiku-4-5', label: 'Claude Haiku', description: 'Fast and balanced — great for most conversations' },
-  { id: 'meta-llama/llama-3.3-70b-instruct', label: 'Llama 3.3 70B', description: 'Free tier — solid performance at no extra cost' },
 ] as const;
 
 const MAX_TOKENS = 2048;

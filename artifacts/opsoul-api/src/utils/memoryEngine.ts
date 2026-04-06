@@ -12,7 +12,7 @@ export const MEMORY_MIN_WEIGHT = 0.1;
 export const MEMORY_DECAY_RATE_PER_DAY = 0.05;
 export const MEMORY_ARCHIVE_THRESHOLD = 0.05;
 
-const DISTILL_MODEL = 'meta-llama/llama-3.3-70b-instruct';
+const DISTILL_MODEL = 'anthropic/claude-haiku-4-5';
 const DISTILL_MESSAGE_LIMIT = 20;
 
 export const MEMORY_TYPES = ['fact', 'preference', 'interaction', 'pattern', 'context'] as const;

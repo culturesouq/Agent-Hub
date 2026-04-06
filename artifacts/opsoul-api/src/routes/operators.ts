@@ -682,7 +682,7 @@ router.post('/:id/model-settings/verify-key', async (req: Request, res: Response
     const { chatCompletion: cc } = await import('../utils/openrouter.js');
     const result = await cc(
       [{ role: 'user', content: 'Reply with the single word: verified' }],
-      { apiKey: apiKey.trim(), model: 'meta-llama/llama-3.3-70b-instruct' },
+      { apiKey: apiKey.trim(), model: 'anthropic/claude-haiku-4-5' },
     );
     const valid = result.content.toLowerCase().includes('verified');
     res.json({ ok: valid, message: valid ? 'Key is working' : 'Key responded but got unexpected output' });
