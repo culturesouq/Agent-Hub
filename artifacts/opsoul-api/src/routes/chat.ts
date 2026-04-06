@@ -316,9 +316,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
       if (curiosity.corroborated && curiosity.tier) {
         // Build context only from trusted, corroborated sources
-        searchContext = curiosity.sources
+        searchContext = `[Background research findings — use these as factual grounding, synthesize into your response as natural insights, never list URLs or source names]\n\n` +
+          curiosity.sources
           .filter(s => s.tier === 1 || s.tier === 2)
-          .map(s => `Source: ${s.title} (${s.url})\n${s.snippet}`)
+          .map(s => `• ${s.title}: ${s.snippet}`)
           .join('\n\n');
 
         console.log(
@@ -549,8 +550,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           const secondMessages: ChatMessage[] = [
             ...messages,
             { role: 'assistant', content: fullContent },
-            { role: 'system', content: `[Skill: ${skillResult.skillName}] Result:\n${skillResult.output}` },
-            { role: 'user', content: 'Synthesize the skill result into your response naturally. Do not mention the skill ran. Just respond.' },
+            { role: 'system', content: `[Task completed — findings below]\n${skillResult.output}` },
+            { role: 'user', content: `You just completed a task. Report back to the owner directly — as if you did the work yourself and are now sharing what you found.\n\nBe specific. Highlight what matters. Be conversational.\n\nNever mention tool names, skill names, raw JSON, raw URLs, or API responses. Never say "the result" or "the skill". Just speak naturally as their operator who got something done.` },
           ];
           let secondContent = '';
           let secondTokens = 0;
@@ -714,8 +715,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           const secondMessages: ChatMessage[] = [
             ...messages,
             { role: 'assistant', content: result.content },
-            { role: 'system', content: `[Skill: ${skillResult.skillName}] Result:\n${skillResult.output}` },
-            { role: 'user', content: 'Synthesize the skill result into your response naturally. Do not mention the skill ran. Just respond.' },
+            { role: 'system', content: `[Task completed — findings below]\n${skillResult.output}` },
+            { role: 'user', content: `You just completed a task. Report back to the owner directly — as if you did the work yourself and are now sharing what you found.\n\nBe specific. Highlight what matters. Be conversational.\n\nNever mention tool names, skill names, raw JSON, raw URLs, or API responses. Never say "the result" or "the skill". Just speak naturally as their operator who got something done.` },
           ];
           const secondResult = await chatCompletion(secondMessages, chatOpts);
           finalContent = secondResult.content;

@@ -115,7 +115,9 @@ export async function executeSkill(
     }
   }
 
-  const prompt = `You are executing a skill on behalf of an Operator.
+  const hasLiveData = !!apiContext;
+
+  const prompt = `You are executing a skill on behalf of an AI Operator. Your output will be used by the operator to report findings back to their owner.
 
 Skill: ${trigger.name}
 Instructions: ${instructions}${outputFormatLine}
@@ -123,7 +125,10 @@ Instructions: ${instructions}${outputFormatLine}
 Context from the Operator's response (what triggered this skill):
 ${trigger.extractedParams}${apiContext}
 
-Execute the skill now. Return only the result — no explanation, no preamble.`;
+${hasLiveData
+  ? `The live API data above contains raw information. Interpret it. Extract what matters. Return a clear, human-readable findings report — specific facts, key items, important numbers, relevant names. No raw JSON, no raw URLs, no API field names. Write as if you are an agent reporting back after completing research.`
+  : `Execute the skill now. Return a clear, specific result the operator can act on.`
+}`;
 
   try {
     const result = await chatCompletion(
