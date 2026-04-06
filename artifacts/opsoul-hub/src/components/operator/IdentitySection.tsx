@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { Operator } from "@/types";
@@ -37,6 +37,15 @@ export default function IdentitySection({ operator, panel }: Props) {
   const [soulDesc, setSoulDesc] = useState(
     operator.soul?.backstory ?? operator.soul?.communicationStyle ?? ""
   );
+
+  // Sync local state when operator data refreshes (e.g. after birth flow auto-poll)
+  useEffect(() => {
+    setIdentityDesc(operator.rawIdentity ?? operator.mandate ?? operator.name);
+  }, [operator.rawIdentity]);
+
+  useEffect(() => {
+    setSoulDesc(operator.soul?.backstory ?? operator.soul?.communicationStyle ?? "");
+  }, [operator.soul?.backstory, operator.soul?.communicationStyle]);
 
   const [needsName, setNeedsName] = useState(false);
   const [confirmedName, setConfirmedName] = useState("");
