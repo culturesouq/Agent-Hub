@@ -8,6 +8,7 @@ import { signAccessToken, refreshTokenExpiresAt } from '../utils/jwt.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { eq, and, isNull } from 'drizzle-orm';
 import { sendEmail, forgotPasswordEmail, welcomeEmail } from '../lib/email.js';
+import { seedOwnerOperators, OWNER_EMAIL } from '../utils/initSeed.js';
 
 const router = Router();
 
@@ -76,6 +77,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
 
   const accessToken = await issueSession(res, owner);
   void sendEmail(owner.email, 'Welcome to OpSoul', welcomeEmail(owner.name ?? ''));
+  if (owner.email === OWNER_EMAIL) void seedOwnerOperators(owner.id);
 
   res.status(201).json({
     accessToken,
@@ -109,6 +111,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
   }
 
   const accessToken = await issueSession(res, owner);
+  if (owner.email === OWNER_EMAIL) void seedOwnerOperators(owner.id);
 
   res.json({
     accessToken,

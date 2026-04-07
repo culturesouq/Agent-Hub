@@ -3,6 +3,7 @@ import { platformSkillsTable, ownersTable, operatorsTable } from '@workspace/db'
 import { eq, and, inArray } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { OWNER_EMAIL, OWNER_OPERATORS } from './ownerOperatorsSeed';
+export { OWNER_EMAIL } from './ownerOperatorsSeed';
 
 const SKILLS_TO_SEED = [
   // ── Executor ─────────────────────────────────────────────────────────────
@@ -120,7 +121,7 @@ export async function runInitSeed(): Promise<void> {
     console.log('[initSeed] Blank operator already exists — skipping.');
   }
 
-  // ── Owner operators ──────────────────────────────────────────────────────
+  // ── Owner operators (by email lookup) ───────────────────────────────────
   const ownerRows = await db
     .select({ id: ownersTable.id })
     .from(ownersTable)
@@ -130,47 +131,46 @@ export async function runInitSeed(): Promise<void> {
   if (ownerRows.length === 0) {
     console.log(`[initSeed] Owner ${OWNER_EMAIL} not yet registered — skipping operator seed.`);
   } else {
-    const ownerId = ownerRows[0].id;
+    await seedOwnerOperators(ownerRows[0].id);
+  }
+}
 
-    const existingOps = await db
-      .select({ name: operatorsTable.name })
-      .from(operatorsTable)
-      .where(eq(operatorsTable.ownerId, ownerId));
+// ── Exported: call this after login/register for instant operator seeding ──
+export async function seedOwnerOperators(ownerId: string): Promise<void> {
+  const existingOps = await db
+    .select({ name: operatorsTable.name })
+    .from(operatorsTable)
+    .where(eq(operatorsTable.ownerId, ownerId));
 
-    const existingNames = new Set(existingOps.map((r) => r.name));
-    let seeded = 0;
+  const existingNames = new Set(existingOps.map((r) => r.name));
+  let seeded = 0;
 
-    for (const op of OWNER_OPERATORS) {
-      if (existingNames.has(op.name)) {
-        continue;
-      }
-      const newId = randomUUID();
-      await db.insert(operatorsTable).values({
-        id: newId,
-        ownerId,
-        slug: op.slug,
-        name: op.name,
-        archetype: op.archetype,
-        mandate: op.mandate,
-        rawIdentity: op.rawIdentity,
-        layer2Soul: op.layer2Soul,
-        layer2SoulOriginal: op.layer2Soul,
-        coreValues: op.coreValues,
-        ethicalBoundaries: op.ethicalBoundaries,
-        growLockLevel: op.growLockLevel as 'CONTROLLED' | 'OPEN' | 'LOCKED',
-        safeMode: op.safeMode,
-        freeRoaming: false,
-        toolUsePolicy: 'auto',
-        deletedAt: null,
-      });
-      console.log(`[initSeed]   + operator: ${op.name}`);
-      seeded++;
-    }
+  for (const op of OWNER_OPERATORS) {
+    if (existingNames.has(op.name)) continue;
+    const newId = randomUUID();
+    await db.insert(operatorsTable).values({
+      id: newId,
+      ownerId,
+      slug: op.slug,
+      name: op.name,
+      archetype: op.archetype,
+      mandate: op.mandate,
+      rawIdentity: op.rawIdentity,
+      layer2Soul: op.layer2Soul,
+      layer2SoulOriginal: op.layer2Soul,
+      coreValues: op.coreValues,
+      ethicalBoundaries: op.ethicalBoundaries,
+      growLockLevel: op.growLockLevel as 'CONTROLLED' | 'OPEN' | 'LOCKED',
+      safeMode: op.safeMode,
+      freeRoaming: false,
+      toolUsePolicy: 'auto',
+      deletedAt: null,
+    });
+    console.log(`[initSeed]   + operator: ${op.name}`);
+    seeded++;
+  }
 
-    if (seeded > 0) {
-      console.log(`[initSeed] ${seeded} owner operator(s) seeded for ${OWNER_EMAIL}.`);
-    } else {
-      console.log(`[initSeed] All owner operators already exist — skipping.`);
-    }
+  if (seeded > 0) {
+    console.log(`[initSeed] ${seeded} owner operator(s) seeded for owner ${ownerId}.`);
   }
 }
