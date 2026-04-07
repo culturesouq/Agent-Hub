@@ -5,8 +5,6 @@ import { Conversation, Message } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Send, MessageSquare, Paperclip, X, Mic, ChevronDown } from "lucide-react";
 import { format } from "date-fns";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 
 type Attachment = {
   type: "image" | "text";
@@ -27,52 +25,88 @@ const THINKING_STEPS = [
   "Preparing response…",
 ];
 
+// Inline token parser — handles **bold**, *italic*, `code`
+function parseInline(text: string): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  const re = /(\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+?)`)/g;
+  let last = 0; let k = 0; let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    if (m[2]) parts.push(<strong key={k++} className="font-semibold text-foreground">{m[2]}</strong>);
+    else if (m[3]) parts.push(<em key={k++} className="italic">{m[3]}</em>);
+    else if (m[4]) parts.push(<code key={k++} className="bg-background/60 rounded px-1 py-0.5 text-xs font-mono border border-border/20">{m[4]}</code>);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
+}
+
 function MarkdownMessage({ content }: { content: string }) {
-  return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      components={{
-        p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
-        strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
-        em: ({ children }) => <em className="italic">{children}</em>,
-        ul: ({ children }) => <ul className="list-disc pl-4 my-2 space-y-1">{children}</ul>,
-        ol: ({ children }) => <ol className="list-decimal pl-4 my-2 space-y-1">{children}</ol>,
-        li: ({ children }) => <li className="text-sm leading-relaxed">{children}</li>,
-        hr: () => <hr className="border-border/30 my-3" />,
-        h1: ({ children }) => <h1 className="text-base font-bold mt-3 mb-1 text-foreground">{children}</h1>,
-        h2: ({ children }) => <h2 className="text-sm font-bold mt-3 mb-1 text-foreground">{children}</h2>,
-        h3: ({ children }) => <h3 className="text-sm font-semibold mt-2 mb-1 text-foreground/90">{children}</h3>,
-        a: ({ href, children }) => (
-          <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2 hover:opacity-80">
-            {children}
-          </a>
-        ),
-        code: ({ className, children, ...props }) => {
-          const isBlock = className?.includes("language-");
-          if (isBlock) {
-            return (
-              <pre className="bg-background/80 rounded-lg p-3 text-xs font-mono overflow-x-auto my-2 border border-border/30">
-                <code>{children}</code>
-              </pre>
-            );
-          }
-          return (
-            <code className="bg-background/60 rounded px-1 py-0.5 text-xs font-mono border border-border/20" {...props}>
-              {children}
-            </code>
-          );
-        },
-        pre: ({ children }) => <>{children}</>,
-        blockquote: ({ children }) => (
-          <blockquote className="border-l-2 border-primary/40 pl-3 my-2 text-muted-foreground italic">
-            {children}
-          </blockquote>
-        ),
-      }}
-    >
-      {content}
-    </ReactMarkdown>
-  );
+  const lines = content.split('\n');
+  const nodes: React.ReactNode[] = [];
+  let k = 0; let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Fenced code block
+    if (line.startsWith('```')) {
+      const codeLines: string[] = [];
+      i++;
+      while (i < lines.length && !lines[i].startsWith('```')) { codeLines.push(lines[i]); i++; }
+      i++;
+      nodes.push(<pre key={k++} className="bg-background/80 rounded-lg p-3 text-xs font-mono overflow-x-auto my-2 border border-border/30">{codeLines.join('\n')}</pre>);
+      continue;
+    }
+
+    // Horizontal rule
+    if (/^---+$/.test(line.trim())) {
+      nodes.push(<hr key={k++} className="border-border/30 my-3" />);
+      i++; continue;
+    }
+
+    // Headings
+    if (line.startsWith('### ')) { nodes.push(<h3 key={k++} className="text-sm font-semibold mt-2 mb-0.5 text-foreground/90">{parseInline(line.slice(4))}</h3>); i++; continue; }
+    if (line.startsWith('## '))  { nodes.push(<h2 key={k++} className="text-sm font-bold mt-3 mb-1 text-foreground">{parseInline(line.slice(3))}</h2>); i++; continue; }
+    if (line.startsWith('# '))   { nodes.push(<h1 key={k++} className="text-base font-bold mt-3 mb-1 text-foreground">{parseInline(line.slice(2))}</h1>); i++; continue; }
+
+    // Unordered list
+    if (/^[-*] /.test(line)) {
+      const items: React.ReactNode[] = [];
+      while (i < lines.length && /^[-*] /.test(lines[i])) {
+        items.push(<li key={k++} className="text-sm leading-relaxed">{parseInline(lines[i].slice(2))}</li>);
+        i++;
+      }
+      nodes.push(<ul key={k++} className="list-disc pl-4 my-1.5 space-y-0.5">{items}</ul>);
+      continue;
+    }
+
+    // Ordered list
+    if (/^\d+\. /.test(line)) {
+      const items: React.ReactNode[] = [];
+      while (i < lines.length && /^\d+\. /.test(lines[i])) {
+        items.push(<li key={k++} className="text-sm leading-relaxed">{parseInline(lines[i].replace(/^\d+\. /, ''))}</li>);
+        i++;
+      }
+      nodes.push(<ol key={k++} className="list-decimal pl-4 my-1.5 space-y-0.5">{items}</ol>);
+      continue;
+    }
+
+    // Blockquote
+    if (line.startsWith('> ')) {
+      nodes.push(<blockquote key={k++} className="border-l-2 border-primary/40 pl-3 my-2 text-muted-foreground italic">{parseInline(line.slice(2))}</blockquote>);
+      i++; continue;
+    }
+
+    // Blank line — paragraph break
+    if (line.trim() === '') { i++; continue; }
+
+    // Paragraph
+    nodes.push(<p key={k++} className="mb-1.5 leading-relaxed">{parseInline(line)}</p>);
+    i++;
+  }
+
+  return <div className="space-y-0 text-sm">{nodes}</div>;
 }
 
 function ThinkingIndicator() {
