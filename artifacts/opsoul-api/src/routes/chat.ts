@@ -468,6 +468,28 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     let fullContent = '';
     let completionTokens = 0;
     let promptTokens = 0;
+    let messageSaved = false;
+
+    req.on('close', async () => {
+      if (!messageSaved && fullContent.length > 20) {
+        try {
+          await db.insert(messagesTable).values({
+            id: crypto.randomUUID(),
+            conversationId: conv.id,
+            operatorId: operator.id,
+            role: 'assistant',
+            content: fullContent,
+            tokenCount: null,
+          });
+          await db.update(conversationsTable)
+            .set({ messageCount: (conv.messageCount ?? 0) + 2, lastMessageAt: new Date() })
+            .where(eq(conversationsTable.id, conv.id));
+          console.log(`[chat] partial message saved on disconnect (${fullContent.length} chars)`);
+        } catch {
+          // best-effort
+        }
+      }
+    });
 
     try {
       for await (const chunk of streamChat(messages, chatOpts)) {
@@ -622,6 +644,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       }
       // --- END AGENCY LAYER ---
 
+      messageSaved = true;
       const asstMsgId = crypto.randomUUID();
       await db.insert(messagesTable).values({
         id: asstMsgId,
