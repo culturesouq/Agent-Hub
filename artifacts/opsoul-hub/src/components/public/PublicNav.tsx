@@ -1,8 +1,7 @@
-import { useState } from "react";
 import { Link, useLocation } from "wouter";
+import OpsoulLogo from "@/components/OpsoulLogo";
 
 export default function PublicNav() {
-  const [logoError, setLogoError] = useState(false);
   const [location] = useLocation();
 
   function navClass(href: string) {
@@ -19,18 +18,7 @@ export default function PublicNav() {
         <div className="flex items-center gap-8">
           <Link href="/">
             <span className="flex items-center gap-2 cursor-pointer">
-              {logoError ? (
-                <span className="text-2xl font-bold tracking-tighter text-primary font-headline">
-                  OpSoul
-                </span>
-              ) : (
-                <img
-                  src="/logo.svg"
-                  alt="OpSoul"
-                  className="h-7 w-auto"
-                  onError={() => setLogoError(true)}
-                />
-              )}
+              <OpsoulLogo className="h-7 w-auto" />
             </span>
           </Link>
           <div className="hidden md:flex gap-8 items-center ml-4">
