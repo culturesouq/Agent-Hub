@@ -21,6 +21,10 @@ const GOOGLE_SCOPES = [
 
 function getBaseUrl(req: Request): string {
   if (process.env.APP_URL) return process.env.APP_URL;
+  if (process.env.REPLIT_DOMAINS) {
+    const domain = process.env.REPLIT_DOMAINS.split(',')[0].trim();
+    return `https://${domain}`;
+  }
   const proto = (req.headers['x-forwarded-proto'] as string)?.split(',')[0]?.trim() ?? 'https';
   const host = (req.headers['x-forwarded-host'] as string) ?? (req.headers['host'] as string) ?? 'localhost';
   return `${proto}://${host}`;
