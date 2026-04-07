@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { Conversation, Message } from "@/types";
 import { Button } from "@/components/ui/button";
-import { Send, MessageSquare, Paperclip, X, Mic, ChevronDown } from "lucide-react";
+import { Send, MessageSquare, Paperclip, X, Mic, ChevronDown, Search, Zap } from "lucide-react";
 import { format } from "date-fns";
 
 type Attachment = {
@@ -16,7 +16,8 @@ type Attachment = {
 
 type RenderedItem =
   | { kind: "msg"; msg: Message }
-  | { kind: "separator"; label: string; key: string };
+  | { kind: "separator"; label: string; key: string }
+  | { kind: "tool"; skillName: string; output: string; key: string };
 
 const THINKING_STEPS = [
   "Thinking…",
@@ -135,6 +136,30 @@ function ThinkingIndicator() {
             {THINKING_STEPS[step]}
           </span>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ToolOutputBlock({ skillName, output }: { skillName: string; output: string }) {
+  const [open, setOpen] = useState(false);
+  const isSearch = skillName.toLowerCase().includes('research') || skillName.toLowerCase().includes('search');
+  return (
+    <div className="flex justify-start my-1">
+      <div className="max-w-[85%]">
+        <button
+          onClick={() => setOpen(o => !o)}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-border/40 bg-muted/30 text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors text-[11px] font-mono"
+        >
+          {isSearch ? <Search className="w-3 h-3" /> : <Zap className="w-3 h-3" />}
+          <span>{skillName}</span>
+          <ChevronDown className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} />
+        </button>
+        {open && (
+          <div className="mt-1.5 ml-1 p-3 rounded-xl border border-border/30 bg-muted/20 text-xs font-mono text-muted-foreground whitespace-pre-wrap leading-relaxed max-h-64 overflow-y-auto">
+            {output}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -443,12 +468,19 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     }
   };
 
-  // Build flat list with date separators
+  // Build flat list with date separators and tool outputs
   const items: RenderedItem[] = [];
   let lastDay = "";
   for (const msg of msgsArray) {
-    if ((msg.role as string) === 'system') continue;
-    if (msg.content?.startsWith('[Skill:')) continue;
+    // Surface [Skill:] system messages as collapsible tool blocks
+    if ((msg.role as string) === 'system') {
+      const content = msg.content ?? '';
+      const skillMatch = content.match(/^\[Skill:\s*(.+?)\]\s*Result:\n([\s\S]*)$/);
+      if (skillMatch) {
+        items.push({ kind: "tool", skillName: skillMatch[1].trim(), output: skillMatch[2].trim(), key: msg.id });
+      }
+      continue;
+    }
     if (msg.content?.startsWith('[Tool:')) continue;
     const day = format(new Date(msg.createdAt), "yyyy-MM-dd");
     if (day !== lastDay) {
@@ -495,6 +527,8 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                   <span className="text-[10px] font-mono text-muted-foreground/50">{item.label}</span>
                   <div className="flex-1 h-px bg-border/30" />
                 </div>
+              ) : item.kind === "tool" ? (
+                <ToolOutputBlock key={item.key} skillName={item.skillName} output={item.output} />
               ) : (
                 <div
                   key={item.msg.id}
