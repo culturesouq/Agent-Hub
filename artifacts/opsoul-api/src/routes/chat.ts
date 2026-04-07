@@ -8,7 +8,6 @@ import {
   messagesTable,
   operatorSkillsTable,
   platformSkillsTable,
-  missionContextsTable,
   selfAwarenessStateTable,
   tasksTable,
 } from '@workspace/db';
@@ -20,7 +19,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { lockLayer1IfUnlocked } from '../utils/lockLayer1.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { buildSystemPrompt, buildBirthSystemPrompt } from '../utils/systemPrompt.js';
-import type { ActiveSkill, ActiveMissionContext, SelfAwarenessSnapshot, BuildSystemPromptOpts } from '../utils/systemPrompt.js';
+import type { ActiveSkill, SelfAwarenessSnapshot, BuildSystemPromptOpts } from '../utils/systemPrompt.js';
 import { searchMemory, buildMemoryContext, distillMemoriesFromConversations, storeMemory } from '../utils/memoryEngine.js';
 import type { MemoryHit } from '../utils/memoryEngine.js';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
@@ -125,21 +124,6 @@ async function loadActiveSkills(operatorId: string): Promise<ActiveSkill[]> {
   return installs as unknown as ActiveSkill[];
 }
 
-async function loadMissionContext(missionContextId: string | null | undefined): Promise<ActiveMissionContext | null> {
-  if (!missionContextId) return null;
-  const [ctx] = await db
-    .select({
-      name: missionContextsTable.name,
-      toneInstructions: missionContextsTable.toneInstructions,
-      integrationsAllowed: missionContextsTable.integrationsAllowed,
-      growLockOverride: missionContextsTable.growLockOverride,
-    })
-    .from(missionContextsTable)
-    .where(eq(missionContextsTable.id, missionContextId));
-
-  return ctx ?? null;
-}
-
 // BIRTH EXTRACTION — silently extracts name/rawIdentity/archetype/mandate from the birth conversation
 async function extractBirthIdentity(operatorId: string, conversationId: string): Promise<void> {
   const msgs = await db
@@ -215,9 +199,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   let chatModel = rawModel;
   const chatOpts = { apiKey: chatApiKey, get model() { return chatModel; } };
 
-  const [skills, missionContext, selfAwarenessRow, history] = await Promise.all([
+  const [skills, selfAwarenessRow, history] = await Promise.all([
     loadActiveSkills(operator.id),
-    loadMissionContext(conv.missionContextId),
     db.select().from(selfAwarenessStateTable).where(eq(selfAwarenessStateTable.operatorId, operator.id)).limit(1),
     buildMessageHistory(conv.id),
   ]);
@@ -380,7 +363,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         },
         kbContext,
         skills,
-        missionContext,
         memoryHits,
         selfAwareness,
         promptOpts,
@@ -602,7 +584,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         model: chatModel,
         usage: { promptTokens, completionTokens: finalTokens },
         activeSkillCount: skills.length,
-        missionContext: missionContext?.name ?? null,
         memoryCount: memoryHits.length,
       })}\n\n`);
       res.end();
@@ -762,7 +743,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           completionTokens: finalCompletionTokens,
         },
         activeSkillCount: skills.length,
-        missionContext: missionContext?.name ?? null,
         memoryCount: memoryHits.length,
         layer1WasLocked: operator.layer1LockedAt === null,
       });

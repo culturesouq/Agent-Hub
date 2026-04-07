@@ -5,7 +5,6 @@ export const conversationsTable = pgTable('conversations', {
   operatorId: text('operator_id').notNull(),
   ownerId: text('owner_id').notNull(),
   contextName: text('context_name').notNull(),
-  missionContextId: text('mission_context_id'),
   scopeId: text('scope_id').notNull(),
   scopeType: text('scope_type').notNull().default('owner'),
   messageCount: integer('message_count').default(0),

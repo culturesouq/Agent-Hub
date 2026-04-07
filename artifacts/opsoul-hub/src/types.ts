@@ -121,17 +121,6 @@ export interface Integration {
   createdAt: string;
 }
 
-export interface MissionContext {
-  id: string;
-  name: string;
-  description: string;
-  isActive: boolean;
-  createdAt: string;
-  toneOverride?: string;
-  kbFilterTag?: string;
-  growLockOverride?: string;
-}
-
 export interface PlatformSkill {
   id: string;
   name: string;

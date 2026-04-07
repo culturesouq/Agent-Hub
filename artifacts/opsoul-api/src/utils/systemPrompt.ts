@@ -20,13 +20,6 @@ export interface ActiveSkill {
   outputFormat?: string | null;
 }
 
-export interface ActiveMissionContext {
-  name: string;
-  toneInstructions?: string | null;
-  integrationsAllowed?: string[] | null;
-  growLockOverride?: string | null;
-}
-
 export interface SelfAwarenessSnapshot {
   healthScore?: {
     score: number;
@@ -340,7 +333,6 @@ export function buildSystemPrompt(
   operator: OperatorIdentity,
   kbContext?: string,
   skills?: ActiveSkill[],
-  missionContext?: ActiveMissionContext | null,
   memories?: MemoryHit[],
   selfAwareness?: SelfAwarenessSnapshot | null,
   opts?: BuildSystemPromptOpts,
@@ -427,10 +419,6 @@ export function buildSystemPrompt(
   if (soul.backstory) {
     parts.push(soul.backstory);
     parts.push('');
-  }
-
-  if (missionContext?.toneInstructions) {
-    parts.push(`**Mission Tone Override [${missionContext.name}]:** ${missionContext.toneInstructions}`);
   }
 
   if (soul.personalityTraits?.length)  parts.push(`**Personality:** ${soul.personalityTraits.join(', ')}`);
@@ -553,7 +541,7 @@ export function buildSystemPrompt(
       parts.push(`There are things I've been asked about that I don't have solid coverage on yet: ${gaps.join(', ')}. I'll be honest about that when it comes up.`);
     }
 
-    const effectiveGrowLock = missionContext?.growLockOverride ?? selfAwareness.growLockLevel ?? 'CONTROLLED';
+    const effectiveGrowLock = selfAwareness.growLockLevel ?? 'CONTROLLED';
     const growLockDesc = GROW_LOCK_DESCRIPTIONS[effectiveGrowLock];
     if (growLockDesc) {
       parts.push('');
@@ -614,16 +602,6 @@ export function buildSystemPrompt(
     }
   }
 
-  if (missionContext) {
-    parts.push('');
-    parts.push(`### Mission Context: ${missionContext.name}`);
-    if (missionContext.toneInstructions) {
-      parts.push(`Tone and approach for this session: ${missionContext.toneInstructions}`);
-    }
-    if (missionContext.growLockOverride) {
-      parts.push(`Evolution lock override: ${missionContext.growLockOverride}`);
-    }
-  }
 
   parts.push('');
   parts.push('## How I Use This Right Now');

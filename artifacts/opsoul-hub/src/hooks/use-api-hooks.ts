@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
-import { Operator, HealthScore, SelfAwareness, Message, Conversation, GrowProposal, KbChunk, Memory, Integration, MissionContext, PlatformSkill, OperatorSkill, CapabilityRequest } from "@/types";
+import { Operator, HealthScore, SelfAwareness, Message, Conversation, GrowProposal, KbChunk, Memory, Integration, PlatformSkill, OperatorSkill, CapabilityRequest } from "@/types";
 
 export const useOperators = () => {
   return useQuery({

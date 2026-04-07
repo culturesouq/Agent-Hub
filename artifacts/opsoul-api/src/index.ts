@@ -20,7 +20,6 @@ import growRouter from './routes/grow.js';
 import platformSkillsRouter from './routes/platform-skills.js';
 import operatorSkillsRouter from './routes/operator-skills.js';
 import integrationsRouter from './routes/integrations.js';
-import missionContextsRouter from './routes/mission-contexts.js';
 import memoryRouter from './routes/memory.js';
 import capabilityRequestsRouter from './routes/capability-requests.js';
 import tasksRouter from './routes/tasks.js';
@@ -57,7 +56,6 @@ app.use('/api/operators/:operatorId/conversations/:convId/messages', chatRouter)
 app.use('/api/operators/:operatorId/grow', growRouter);
 app.use('/api/operators/:operatorId/skills', operatorSkillsRouter);
 app.use('/api/operators/:operatorId/integrations', integrationsRouter);
-app.use('/api/operators/:operatorId/mission-contexts', missionContextsRouter);
 app.use('/api/operators/:operatorId/memory', memoryRouter);
 app.use('/api/operators/:operatorId/capability-requests', capabilityRequestsRouter);
 app.use('/api/operators/:operatorId/tasks', tasksRouter);
@@ -140,7 +138,6 @@ async function start(): Promise<void> {
     console.log(`[opsoul-api] Platform Skills: /api/platform-skills — CRUD skill library`);
     console.log(`[opsoul-api] Operator Skills: /api/operators/:id/skills — install, list, patch, delete`);
     console.log(`[opsoul-api] Integrations: /api/operators/:id/integrations — register, list, patch, delete`);
-    console.log(`[opsoul-api] Mission Contexts: /api/operators/:id/mission-contexts — CRUD + activate`);
     console.log(`[opsoul-api] Memory: /api/operators/:id/memory — store, list, search, distill, decay`);
     console.log(`[opsoul-api] Operator Secrets: /api/operators/:id/secrets — list, save, reveal, delete`);
   });
