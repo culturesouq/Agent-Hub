@@ -149,15 +149,15 @@ function ToolOutputBlock({ skillName, output }: { skillName: string; output: str
       <div className="max-w-[85%]">
         <button
           onClick={() => setOpen(o => !o)}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-border/40 bg-muted/30 text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors text-[11px] font-mono"
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-primary/20 bg-primary/5 text-primary/60 hover:bg-primary/10 hover:text-primary transition-colors text-[11px] font-mono"
         >
           {isSearch ? <Search className="w-3 h-3" /> : <Zap className="w-3 h-3" />}
           <span>{skillName}</span>
-          <ChevronDown className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} />
+          <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
         </button>
         {open && (
-          <div className="mt-1.5 ml-1 p-3 rounded-xl border border-border/30 bg-muted/20 text-xs font-mono text-muted-foreground whitespace-pre-wrap leading-relaxed max-h-64 overflow-y-auto">
-            {output}
+          <div className="mt-1.5 ml-1 p-4 rounded-xl border border-primary/15 bg-primary/5 text-sm leading-relaxed max-h-80 overflow-y-auto">
+            <MarkdownMessage content={output} />
           </div>
         )}
       </div>
