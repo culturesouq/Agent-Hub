@@ -1,10 +1,12 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { Conversation, Message } from "@/types";
 import { Button } from "@/components/ui/button";
-import { Send, MessageSquare, Paperclip, X, Mic } from "lucide-react";
+import { Send, MessageSquare, Paperclip, X, Mic, ChevronDown } from "lucide-react";
 import { format } from "date-fns";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 type Attachment = {
   type: "image" | "text";
@@ -18,17 +20,105 @@ type RenderedItem =
   | { kind: "msg"; msg: Message }
   | { kind: "separator"; label: string; key: string };
 
+const THINKING_STEPS = [
+  "Thinking…",
+  "Searching knowledge base…",
+  "Reading context…",
+  "Preparing response…",
+];
+
+function MarkdownMessage({ content }: { content: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
+        strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+        em: ({ children }) => <em className="italic">{children}</em>,
+        ul: ({ children }) => <ul className="list-disc pl-4 my-2 space-y-1">{children}</ul>,
+        ol: ({ children }) => <ol className="list-decimal pl-4 my-2 space-y-1">{children}</ol>,
+        li: ({ children }) => <li className="text-sm leading-relaxed">{children}</li>,
+        hr: () => <hr className="border-border/30 my-3" />,
+        h1: ({ children }) => <h1 className="text-base font-bold mt-3 mb-1 text-foreground">{children}</h1>,
+        h2: ({ children }) => <h2 className="text-sm font-bold mt-3 mb-1 text-foreground">{children}</h2>,
+        h3: ({ children }) => <h3 className="text-sm font-semibold mt-2 mb-1 text-foreground/90">{children}</h3>,
+        a: ({ href, children }) => (
+          <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2 hover:opacity-80">
+            {children}
+          </a>
+        ),
+        code: ({ className, children, ...props }) => {
+          const isBlock = className?.includes("language-");
+          if (isBlock) {
+            return (
+              <pre className="bg-background/80 rounded-lg p-3 text-xs font-mono overflow-x-auto my-2 border border-border/30">
+                <code>{children}</code>
+              </pre>
+            );
+          }
+          return (
+            <code className="bg-background/60 rounded px-1 py-0.5 text-xs font-mono border border-border/20" {...props}>
+              {children}
+            </code>
+          );
+        },
+        pre: ({ children }) => <>{children}</>,
+        blockquote: ({ children }) => (
+          <blockquote className="border-l-2 border-primary/40 pl-3 my-2 text-muted-foreground italic">
+            {children}
+          </blockquote>
+        ),
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  );
+}
+
+function ThinkingIndicator() {
+  const [step, setStep] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setStep((s) => (s + 1) % THINKING_STEPS.length);
+    }, 3500);
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="flex justify-start">
+      <div className="max-w-[85%] rounded-2xl rounded-tl-none px-4 py-3 bg-card border border-border/50">
+        <div className="flex items-center gap-2.5">
+          <div className="flex gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-bounce [animation-delay:0ms]" />
+            <span className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-bounce [animation-delay:150ms]" />
+            <span className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-bounce [animation-delay:300ms]" />
+          </div>
+          <span
+            key={step}
+            className="text-xs text-muted-foreground font-mono animate-in fade-in duration-500"
+          >
+            {THINKING_STEPS[step]}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ChatSection({ operatorId }: { operatorId: string }) {
   const queryClient = useQueryClient();
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [streamingMsg, setStreamingMsg] = useState("");
+  const [lastStreamSnapshot, setLastStreamSnapshot] = useState("");
   const [isAgencyProcessing, setIsAgencyProcessing] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const [isAtBottom, setIsAtBottom] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -38,7 +128,35 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
 
   const isStreaming = !!streamingMsg;
 
-  // Textarea auto-resize
+  const scrollToBottom = useCallback((instant = false) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (instant) {
+      el.scrollTop = el.scrollHeight;
+    } else {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    }
+  }, []);
+
+  const checkAtBottom = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setIsAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 80);
+  }, []);
+
+  // Scroll event listener
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.addEventListener("scroll", checkAtBottom, { passive: true });
+    return () => el.removeEventListener("scroll", checkAtBottom);
+  }, [checkAtBottom]);
+
+  // Re-check when messages change (catches load + stream completion)
+  useEffect(() => {
+    checkAtBottom();
+  }, [msgsArray.length, checkAtBottom]);
+
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -72,16 +190,16 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     : ((messages as any)?.messages ?? []);
 
   useEffect(() => {
-    setTimeout(() => {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 50);
-  }, [messages, streamingMsg]);
+    if (isAtBottom) {
+      scrollToBottom(true);
+    }
+  }, [msgsArray, streamingMsg, isAtBottom, scrollToBottom]);
 
   useEffect(() => {
     if (showAll) {
-      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+      setTimeout(() => scrollToBottom(true), 50);
     }
-  }, [showAll]);
+  }, [showAll, scrollToBottom]);
 
   const createConv = useMutation({
     mutationFn: (contextName: string) =>
@@ -95,14 +213,12 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     },
   });
 
-  // Auto-select the first existing conversation on load
   useEffect(() => {
     if (convosArray.length > 0 && !activeConvId) {
       setActiveConvId(convosArray[0].id);
     }
   }, [convosArray, activeConvId]);
 
-  // Auto-create a conversation if none exists
   useEffect(() => {
     if (!convosLoading && convosArray.length === 0 && !createConv.isPending && !activeConvId) {
       createConv.mutate("Thread");
@@ -197,7 +313,8 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     const pendingAttachments = [...attachments];
     setInput("");
     setAttachments([]);
-    setStreamingMsg("...");
+    setStreamingMsg("…");
+    setLastStreamSnapshot("");
 
     const tempUserMsg: Message = {
       id: `temp-${Date.now()}`,
@@ -211,6 +328,8 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
       ["operators", operatorId, "conversations", activeConvId, "messages"],
       (old: Message[] | undefined) => [...(old || []), tempUserMsg],
     );
+
+    scrollToBottom(true);
 
     try {
       const token = localStorage.getItem("opsoul_token");
@@ -250,10 +369,13 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                 const data = JSON.parse(line.slice(6));
                 if (data.error) {
                   setStreamingMsg("");
+                  setLastStreamSnapshot("");
                   setIsAgencyProcessing(false);
                 } else if (data.delta) {
                   currentStream += data.delta;
                   setStreamingMsg(currentStream);
+                  setLastStreamSnapshot(currentStream);
+                  scrollToBottom(true);
                 } else if (data.processing) {
                   setIsAgencyProcessing(true);
                 } else if (data.done) {
@@ -262,6 +384,10 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                   queryClient.invalidateQueries({
                     queryKey: ["operators", operatorId, "conversations", activeConvId, "messages"],
                   });
+                  setTimeout(() => {
+                    setLastStreamSnapshot("");
+                    scrollToBottom(true);
+                  }, 120);
                 }
               } catch {
                 // ignore parse errors on individual SSE lines
@@ -273,38 +399,10 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     } catch (err) {
       console.error(err);
       setStreamingMsg("");
+      setLastStreamSnapshot("");
       setIsAgencyProcessing(false);
     }
   };
-
-  function renderContent(content: string) {
-    const parts: React.ReactNode[] = [];
-    const codeBlockRegex = /```[\w]*\n?([\s\S]*?)```/g;
-    let last = 0, match, key = 0;
-    while ((match = codeBlockRegex.exec(content)) !== null) {
-      if (match.index > last) {
-        parts.push(
-          <span key={key++} className="whitespace-pre-wrap break-words">
-            {content.slice(last, match.index)}
-          </span>
-        );
-      }
-      parts.push(
-        <pre key={key++} className="bg-background/80 rounded-lg p-3 text-xs font-mono overflow-x-auto my-2 border border-border/30">
-          {match[1].trim()}
-        </pre>
-      );
-      last = match.index + match[0].length;
-    }
-    if (last < content.length) {
-      parts.push(
-        <span key={key++} className="whitespace-pre-wrap break-words">
-          {content.slice(last)}
-        </span>
-      );
-    }
-    return <>{parts}</>;
-  }
 
   // Build flat list with date separators
   const items: RenderedItem[] = [];
@@ -325,15 +423,18 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     items.push({ kind: "msg", msg });
   }
 
+  const showingStream = !!streamingMsg;
+  const showingFallback = !showingStream && !!lastStreamSnapshot;
+
   const chatContent = (
     <div className="flex flex-col h-full bg-background/50 relative overflow-hidden">
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4" ref={scrollRef}>
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 relative" ref={scrollRef}>
         {msgsLoading || (!activeConvId && createConv.isPending) ? (
           <div className="h-full flex items-center justify-center font-mono text-sm text-muted-foreground animate-pulse">
             Loading…
           </div>
-        ) : msgsArray.length === 0 && !streamingMsg ? (
+        ) : msgsArray.length === 0 && !showingStream && !showingFallback ? (
           <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-40 space-y-3">
             <MessageSquare className="w-10 h-10" />
             <p className="font-label text-sm">Send a message to get started.</p>
@@ -367,31 +468,46 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                         : "bg-card border border-border/50 text-foreground rounded-tl-none"
                       }`}
                   >
-                    <div className="break-words">{renderContent(item.msg.content)}</div>
+                    <div className="break-words">
+                      {item.msg.role === "user"
+                        ? <span className="whitespace-pre-wrap">{item.msg.content}</span>
+                        : <MarkdownMessage content={item.msg.content} />
+                      }
+                    </div>
                   </div>
                 </div>
               )
             )}
-            {streamingMsg && (
+
+            {/* Streaming or fallback — no flash between stream end and history load */}
+            {(showingStream || showingFallback) && (
               <div className="flex justify-start">
                 <div className="max-w-[85%] rounded-2xl rounded-tl-none px-4 py-3 text-sm leading-relaxed bg-card border border-border/50 text-foreground">
-                  <div className="break-words">{renderContent(streamingMsg)}</div>
+                  <div className="break-words">
+                    <MarkdownMessage content={showingStream ? streamingMsg : lastStreamSnapshot} />
+                  </div>
                 </div>
               </div>
             )}
-            {isAgencyProcessing && (
-              <div className="flex justify-start">
-                <div className="flex items-center gap-1.5 px-4 py-3">
-                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:0ms]" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:150ms]" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:300ms]" />
-                </div>
-              </div>
-            )}
+
+            {/* Thinking indicator */}
+            {isAgencyProcessing && !showingStream && <ThinkingIndicator />}
+
             <div ref={bottomRef} />
           </>
         )}
       </div>
+
+      {/* Scroll to latest button */}
+      {!isAtBottom && (
+        <button
+          onClick={() => scrollToBottom(false)}
+          className="absolute bottom-[72px] right-4 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-card border border-border/60 text-xs text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all shadow-lg animate-in fade-in duration-200"
+        >
+          <ChevronDown className="w-3 h-3" />
+          Latest
+        </button>
+      )}
 
       {/* Input */}
       <div className="p-3 border-t border-border/50 bg-card/30 space-y-2 shrink-0">
@@ -433,7 +549,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
             size="icon"
             className="shrink-0 w-9 h-9 text-muted-foreground hover:text-primary"
             onClick={() => fileInputRef.current?.click()}
-            disabled={!!streamingMsg || uploading || recording || transcribing}
+            disabled={isStreaming || uploading || recording || transcribing}
             title="Attach file"
           >
             <Paperclip className={`w-4 h-4 ${uploading ? "animate-pulse text-primary" : ""}`} />
@@ -451,7 +567,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
             }`}
             onPointerDown={startRecording}
             onPointerUp={stopRecording}
-            disabled={!!streamingMsg || uploading}
+            disabled={isStreaming || uploading}
             title={recording ? "Release to transcribe" : transcribing ? "Transcribing…" : "Hold to record"}
           >
             <Mic className={`w-4 h-4 ${transcribing ? "animate-pulse" : ""}`} />
@@ -463,20 +579,20 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                if ((input.trim() || attachments.length > 0) && !streamingMsg) {
+                if ((input.trim() || attachments.length > 0) && !isStreaming) {
                   sendMessage(e as any);
                 }
               }
             }}
             placeholder="Type a message… (Shift+Enter for new line)"
             rows={1}
-            disabled={!!streamingMsg}
+            disabled={isStreaming}
             className="flex-1 font-sans bg-background/50 border border-border/50 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/30 resize-none overflow-y-auto leading-relaxed disabled:opacity-50 placeholder:text-muted-foreground"
             style={{ minHeight: "36px", maxHeight: "200px" }}
           />
           <Button
             type="submit"
-            disabled={(!input.trim() && attachments.length === 0) || !!streamingMsg}
+            disabled={(!input.trim() && attachments.length === 0) || isStreaming}
             className="shrink-0 w-10"
             variant="default"
           >
@@ -489,7 +605,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
 
   return (
     <>
-      {/* Fix 2 — Desktop: full height, no glass wrapper, no left panel */}
+      {/* Desktop: full height, no glass wrapper, no left panel */}
       <div className="h-full hidden md:flex overflow-hidden">
         <div className="flex-1 flex flex-col overflow-hidden">
           {chatContent}
