@@ -88,11 +88,12 @@ function OperatorCard({ operator, onClick }: { operator: Operator; onClick: () =
       onClick={onClick}
       data-testid={`card-operator-${operator.id}`}
     >
-      <div className="h-28 relative overflow-hidden bg-[#0a0a0f] shrink-0">
+      <div className="h-36 relative overflow-hidden bg-[#0a0a0f] shrink-0">
         <img
           src={PERSONA_IMAGES[idx]}
           alt={`${operator.name} portrait`}
-          className="w-full h-full object-cover object-top opacity-60 group-hover:opacity-90 scale-110 group-hover:scale-100 transition-all duration-500"
+          className="w-full h-full object-cover object-[center_20%] opacity-60 group-hover:opacity-90 scale-100 group-hover:scale-105 transition-all duration-500"
+          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
         />
         <div className="absolute inset-0" style={{ background: `radial-gradient(ellipse at 50% 120%, ${PERSONA_GLOWS[idx]} 0%, transparent 65%)`, mixBlendMode: "screen" }} />
         <div className="absolute inset-0 bg-gradient-to-t from-card/90 from-[5%] via-card/20 via-[30%] to-transparent to-[60%]" />
