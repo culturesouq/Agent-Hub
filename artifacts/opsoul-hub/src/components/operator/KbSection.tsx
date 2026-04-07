@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { KbChunk } from "@/types";
@@ -97,9 +97,26 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
   });
 
   const deleteOwnerKb = useMutation({
-    mutationFn: (id: string) => apiFetch(`/operators/${operatorId}/owner-kb/${id}`, { method: "DELETE" }),
+    mutationFn: (ids: string[]) => Promise.all(ids.map(id => apiFetch(`/operators/${operatorId}/owner-kb/${id}`, { method: "DELETE" }))),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "owner-kb"] })
   });
+
+  const ownerKbGroups = useMemo(() => {
+    const map: Record<string, KbChunk[]> = {};
+    for (const chunk of ownerKb as KbChunk[]) {
+      const key = chunk.sourceName ?? 'Unnamed';
+      if (!map[key]) map[key] = [];
+      map[key].push(chunk);
+    }
+    return Object.entries(map).map(([sourceName, chunks]) => ({
+      sourceName,
+      sourceType: chunks[0].sourceType,
+      createdAt: chunks[0].createdAt,
+      chunkCount: chunks.length,
+      preview: chunks[0].content,
+      ids: chunks.map(c => c.id),
+    }));
+  }, [ownerKb]);
 
   const deleteOpKb = useMutation({
     mutationFn: (id: string) => apiFetch(`/operators/${operatorId}/operator-kb/${id}`, { method: "DELETE" }),
@@ -267,29 +284,34 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
 
           {ownerLoading ? (
             <div className="text-center p-8 font-mono text-muted-foreground animate-pulse">Loading...</div>
-          ) : ownerKb?.length === 0 ? (
+          ) : ownerKbGroups.length === 0 ? (
             <div className="text-center p-12 border border-dashed border-border/50 rounded-lg bg-card/20">
               <Database className="w-8 h-8 text-muted-foreground mx-auto mb-3 opacity-30" />
               <p className="font-mono text-sm text-muted-foreground">No facts added yet.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {ownerKb?.map((chunk: KbChunk) => (
-                <Card key={chunk.id} className="bg-card/30 border-border/50 hover:border-primary/30 transition-colors flex flex-col">
+              {ownerKbGroups.map((group) => (
+                <Card key={group.sourceName} className="bg-card/30 border-border/50 hover:border-primary/30 transition-colors flex flex-col">
                   <CardHeader className="p-4 pb-2">
                     <div className="flex justify-between items-start">
-                      <Badge variant="outline" className="font-mono text-[10px] bg-background/50">{chunk.sourceType}</Badge>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0" onClick={() => deleteOwnerKb.mutate(chunk.id)}>
+                      <div className="flex gap-2 items-center flex-wrap">
+                        <Badge variant="outline" className="font-mono text-[10px] bg-background/50">{group.sourceType}</Badge>
+                        {group.chunkCount > 1 && (
+                          <Badge variant="outline" className="font-mono text-[10px] bg-background/50 text-muted-foreground">{group.chunkCount} parts</Badge>
+                        )}
+                      </div>
+                      <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0" onClick={() => deleteOwnerKb.mutate(group.ids)}>
                         <Trash2 className="w-3 h-3" />
                       </Button>
                     </div>
-                    <CardTitle className="font-mono text-sm mt-2">{chunk.sourceName}</CardTitle>
+                    <CardTitle className="font-mono text-sm mt-2">{group.sourceName}</CardTitle>
                   </CardHeader>
                   <CardContent className="p-4 pt-0 flex-1">
-                    <p className="text-xs text-muted-foreground line-clamp-4 font-mono">{chunk.content}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-4 font-mono">{group.preview}</p>
                   </CardContent>
                   <CardFooter className="p-4 pt-0 text-[10px] text-muted-foreground/50 font-mono border-t border-border/20 mt-2">
-                    {format(new Date(chunk.createdAt), 'MMM d, yyyy')}
+                    {format(new Date(group.createdAt), 'MMM d, yyyy')}
                   </CardFooter>
                 </Card>
               ))}
