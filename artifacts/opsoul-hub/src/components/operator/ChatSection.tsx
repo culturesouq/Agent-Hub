@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { Conversation, Message } from "@/types";
 import { Button } from "@/components/ui/button";
-import { Send, MessageSquare, Paperclip, X, Mic, ChevronDown, Search, Zap } from "lucide-react";
+import { Send, MessageSquare, Paperclip, X, Mic, ChevronDown, Search, Zap, Download } from "lucide-react";
 import { format } from "date-fns";
 
 type Attachment = {
@@ -532,7 +532,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
               ) : (
                 <div
                   key={item.msg.id}
-                  className={`flex ${item.msg.role === "user" ? "justify-end" : "justify-start"}`}
+                  className={`flex group ${item.msg.role === "user" ? "justify-end" : "justify-start"}`}
                 >
                   <div
                     className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed
@@ -547,6 +547,26 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                         : <MarkdownMessage content={item.msg.content} />
                       }
                     </div>
+                    {item.msg.role === "assistant" && item.msg.content.length > 150 && (
+                      <div className="mt-2 flex justify-end">
+                        <button
+                          onClick={() => {
+                            const blob = new Blob([item.msg.content], { type: "text/markdown" });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement("a");
+                            a.href = url;
+                            a.download = "response.md";
+                            a.click();
+                            URL.revokeObjectURL(url);
+                          }}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-[10px] text-muted-foreground/50 hover:text-muted-foreground px-1.5 py-0.5 rounded hover:bg-muted/30"
+                          title="Download as Markdown"
+                        >
+                          <Download className="w-2.5 h-2.5" />
+                          .md
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               )
