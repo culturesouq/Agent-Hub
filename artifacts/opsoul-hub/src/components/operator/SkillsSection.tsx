@@ -124,7 +124,6 @@ export default function SkillsSection({ operatorId, archetype }: { operatorId: s
                   <div className="flex justify-between items-start">
                     <div>
                       <div className="font-mono text-sm font-bold text-primary">{skill.name}</div>
-                      <Badge variant="outline" className="font-mono text-[9px] mt-1 bg-card/50">{skill.skillCategory}</Badge>
                     </div>
                     {isInstalled(skill.id) ? (
                       <Badge variant="default" className="font-mono text-[10px] bg-primary/20 text-primary border-primary/30">Installed</Badge>
