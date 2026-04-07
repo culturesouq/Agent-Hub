@@ -347,7 +347,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     const pendingAttachments = [...attachments];
     setInput("");
     setAttachments([]);
-    setStreamingMsg("…");
+    setIsAgencyProcessing(true);
     setLastStreamSnapshot("");
 
     const tempUserMsg: Message = {
@@ -390,6 +390,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
 
       if (reader) {
         let currentStream = "";
+        let firstDelta = true;
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -406,6 +407,10 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                   setLastStreamSnapshot("");
                   setIsAgencyProcessing(false);
                 } else if (data.delta) {
+                  if (firstDelta) {
+                    setIsAgencyProcessing(false);
+                    firstDelta = false;
+                  }
                   currentStream += data.delta;
                   setStreamingMsg(currentStream);
                   setLastStreamSnapshot(currentStream);
