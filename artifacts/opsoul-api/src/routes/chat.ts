@@ -30,9 +30,10 @@ import type { Layer2Soul } from '../validation/operator.js';
 import { resolveScope } from '../utils/scopeResolver.js';
 import { scrapeUrl } from '../utils/urlScraper.js';
 import type { ContentPart } from '../utils/openrouter.js';
-import { webSearch } from '../utils/webSearch.js';
 import { verifyAndStore } from '../utils/kbIntake.js';
 import { eq, and, asc } from 'drizzle-orm';
+import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
+import { isWebSearchAvailable, detectWebSearchIntent, executeWebSearch } from '../utils/capabilityEngine.js';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -199,8 +200,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   let chatModel = rawModel;
   const chatOpts = { apiKey: chatApiKey, get model() { return chatModel; } };
 
-  const [skills, selfAwarenessRow, history] = await Promise.all([
+  const [skills, archetypeDefaultSkills, selfAwarenessRow, history] = await Promise.all([
     loadActiveSkills(operator.id),
+    loadArchetypeSkills((operator.archetype as string[]) ?? []),
     db.select().from(selfAwarenessStateTable).where(eq(selfAwarenessStateTable.operatorId, operator.id)).limit(1),
     buildMessageHistory(conv.id),
   ]);
@@ -268,7 +270,15 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     : undefined;
 
   const scopeLine = `[SCOPE: ${conv.scopeType} | ${conv.scopeId}]`;
-  const promptOpts: BuildSystemPromptOpts = { sycophancyWarning, soulAnchorActive, languageInstruction, scopeLine };
+  const promptOpts: BuildSystemPromptOpts = { sycophancyWarning, soulAnchorActive, languageInstruction, scopeLine, webSearchAvailable: isWebSearchAvailable() };
+
+  // Merge archetype-born skills with owner-installed skills.
+  // Installed skills win on name conflict — archetype defaults fill in the rest.
+  const installedNames = new Set(skills.map((s: any) => s.name));
+  const mergedSkills: ActiveSkill[] = [
+    ...skills,
+    ...(archetypeDefaultSkills.filter(a => !installedNames.has(a.name)) as unknown as ActiveSkill[]),
+  ];
 
   let kbContext = '';
   let memoryHits: MemoryHit[] = [];
@@ -362,7 +372,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           layer2Soul: operator.layer2Soul as Layer2Soul,
         },
         kbContext,
-        skills,
+        mergedSkills,
         memoryHits,
         selfAwareness,
         promptOpts,
@@ -475,15 +485,28 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       res.write(`data: ${JSON.stringify({ processing: true })}\n\n`);
 
       // --- AGENCY LAYER ---
-      const installedSkillsForAgency: InstalledSkill[] = skills.map((s: any) => ({
-        installId:          s.id ?? s.skillId,
-        skillId:            s.skillId,
-        name:               s.name ?? s.skillName,
-        triggerDescription: s.triggerDescription ?? '',
-        instructions:       s.instructions ?? s.skillInstructions ?? '',
-        outputFormat:       s.outputFormat ?? s.skillOutputFormat ?? null,
-        customInstructions: s.customInstructions ?? null,
-      }));
+      const installedSkillsForAgency: InstalledSkill[] = [
+        ...skills.map((s: any) => ({
+          installId:          s.id ?? s.skillId,
+          skillId:            s.skillId,
+          name:               s.name ?? s.skillName,
+          triggerDescription: s.triggerDescription ?? '',
+          instructions:       s.instructions ?? s.skillInstructions ?? '',
+          outputFormat:       s.outputFormat ?? s.skillOutputFormat ?? null,
+          customInstructions: s.customInstructions ?? null,
+        })),
+        ...archetypeDefaultSkills
+          .filter(a => !installedNames.has(a.name))
+          .map(a => ({
+            installId:          a.installId,
+            skillId:            a.skillId,
+            name:               a.name,
+            triggerDescription: a.triggerDescription,
+            instructions:       a.instructions,
+            outputFormat:       a.outputFormat,
+            customInstructions: null,
+          })),
+      ];
       // --- TOOL USE POLICY GATE ---
       // Only enforced when operator is in free roaming mode
       // In normal mode: skills are owner pre-approved, no gate needed
@@ -491,14 +514,52 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         const policy = operator.toolUsePolicy as Record<string, string[]>;
         const hasAnyPolicy = Object.keys(policy).length > 0;
         if (hasAnyPolicy) {
-          // Log that policy is active — enforcement hooks go here when
-          // autonomous integration actions are built
           console.log(`[policy] free roaming active — policy enforced for operator ${operator.id}`);
         }
       }
       // --- END TOOL USE POLICY GATE ---
 
-      const skillTrigger = await detectSkillTrigger(message, installedSkillsForAgency, fullContent);
+      // Direct capability: web search (before skill trigger)
+      let capabilityFired = false;
+      if (isWebSearchAvailable()) {
+        const webQuery = await detectWebSearchIntent(message, fullContent);
+        if (webQuery) {
+          console.log(`[agency] web search triggered: "${webQuery}"`);
+          const capResult = await executeWebSearch(webQuery);
+          if (capResult.success) {
+            await db.insert(messagesTable).values({
+              id:             crypto.randomUUID(),
+              operatorId:     operator.id,
+              conversationId: conv.id,
+              role:           'system',
+              content:        `[Skill: Web Search] Result:\n${capResult.output}`,
+            });
+            capabilityFired = true;
+            const secondMessages: ChatMessage[] = [
+              ...messages,
+              { role: 'assistant', content: fullContent },
+              { role: 'system', content: `[Web search completed — findings below]\n${capResult.output}` },
+              { role: 'user', content: `You just searched the web. Report what you found directly — as if you looked it up yourself and are now sharing what matters.\n\nBe specific. Highlight what is relevant. Be conversational.\n\nNever mention tool names, API names, or "the search". Just speak naturally as their operator who got something done.` },
+            ];
+            let secondContent = '';
+            let secondTokens = 0;
+            for await (const chunk of streamChat(secondMessages, chatOpts)) {
+              if (chunk.delta) {
+                secondContent += chunk.delta;
+                res.write(`data: ${JSON.stringify({ delta: chunk.delta })}\n\n`);
+              }
+              if (chunk.done && chunk.usage) {
+                promptTokens = chunk.usage.promptTokens;
+                secondTokens = chunk.usage.completionTokens;
+              }
+            }
+            finalContent = secondContent;
+            finalTokens = secondTokens;
+          }
+        }
+      }
+
+      const skillTrigger = capabilityFired ? null : await detectSkillTrigger(message, installedSkillsForAgency, fullContent);
       let finalContent = fullContent;
       let finalTokens = completionTokens;
       if (skillTrigger) {
@@ -638,15 +699,28 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       const result = await chatCompletion(messages, chatOpts);
 
       // --- AGENCY LAYER ---
-      const installedSkillsForAgency: InstalledSkill[] = skills.map((s: any) => ({
-        installId:          s.id ?? s.skillId,
-        skillId:            s.skillId,
-        name:               s.name ?? s.skillName,
-        triggerDescription: s.triggerDescription ?? '',
-        instructions:       s.instructions ?? s.skillInstructions ?? '',
-        outputFormat:       s.outputFormat ?? s.skillOutputFormat ?? null,
-        customInstructions: s.customInstructions ?? null,
-      }));
+      const installedSkillsForAgency: InstalledSkill[] = [
+        ...skills.map((s: any) => ({
+          installId:          s.id ?? s.skillId,
+          skillId:            s.skillId,
+          name:               s.name ?? s.skillName,
+          triggerDescription: s.triggerDescription ?? '',
+          instructions:       s.instructions ?? s.skillInstructions ?? '',
+          outputFormat:       s.outputFormat ?? s.skillOutputFormat ?? null,
+          customInstructions: s.customInstructions ?? null,
+        })),
+        ...archetypeDefaultSkills
+          .filter(a => !installedNames.has(a.name))
+          .map(a => ({
+            installId:          a.installId,
+            skillId:            a.skillId,
+            name:               a.name,
+            triggerDescription: a.triggerDescription,
+            instructions:       a.instructions,
+            outputFormat:       a.outputFormat,
+            customInstructions: null,
+          })),
+      ];
       // --- TOOL USE POLICY GATE ---
       // Only enforced when operator is in free roaming mode
       // In normal mode: skills are owner pre-approved, no gate needed
@@ -654,14 +728,42 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         const policy = operator.toolUsePolicy as Record<string, string[]>;
         const hasAnyPolicy = Object.keys(policy).length > 0;
         if (hasAnyPolicy) {
-          // Log that policy is active — enforcement hooks go here when
-          // autonomous integration actions are built
           console.log(`[policy] free roaming active — policy enforced for operator ${operator.id}`);
         }
       }
       // --- END TOOL USE POLICY GATE ---
 
-      const skillTrigger = await detectSkillTrigger(message, installedSkillsForAgency, result.content);
+      // Direct capability: web search (before skill trigger)
+      let capabilityFiredSync = false;
+      if (isWebSearchAvailable()) {
+        const webQuery = await detectWebSearchIntent(message, result.content);
+        if (webQuery) {
+          console.log(`[agency] web search triggered (sync): "${webQuery}"`);
+          const capResult = await executeWebSearch(webQuery);
+          if (capResult.success) {
+            await db.insert(messagesTable).values({
+              id:             crypto.randomUUID(),
+              operatorId:     operator.id,
+              conversationId: conv.id,
+              role:           'system',
+              content:        `[Skill: Web Search] Result:\n${capResult.output}`,
+            });
+            capabilityFiredSync = true;
+            const secondMessages: ChatMessage[] = [
+              ...messages,
+              { role: 'assistant', content: result.content },
+              { role: 'system', content: `[Web search completed — findings below]\n${capResult.output}` },
+              { role: 'user', content: `You just searched the web. Report what you found directly — as if you looked it up yourself and are now sharing what matters.\n\nBe specific. Highlight what is relevant. Be conversational.\n\nNever mention tool names, API names, or "the search". Just speak naturally as their operator who got something done.` },
+            ];
+            const secondResult = await chatCompletion(secondMessages, chatOpts);
+            finalContent = secondResult.content;
+            finalPromptTokens = secondResult.promptTokens;
+            finalCompletionTokens = secondResult.completionTokens;
+          }
+        }
+      }
+
+      const skillTrigger = capabilityFiredSync ? null : await detectSkillTrigger(message, installedSkillsForAgency, result.content);
       let finalContent = result.content;
       let finalPromptTokens = result.promptTokens;
       let finalCompletionTokens = result.completionTokens;
