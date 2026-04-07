@@ -12,7 +12,7 @@ export default function LandingPage() {
               <span className="font-label uppercase tracking-[0.2em] text-[10px] text-secondary">Now in early access</span>
             </div>
             <h1 className="headline-lg text-6xl md:text-8xl font-bold text-on-surface mb-8">
-              Your Permanent <br />
+              Your Eternal <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-secondary to-tertiary">
                 AI Operator
               </span>
