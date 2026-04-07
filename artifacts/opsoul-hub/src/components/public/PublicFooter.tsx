@@ -1,4 +1,3 @@
-import OpsoulLogo from "@/components/OpsoulLogo";
 
 export default function PublicFooter() {
   const year = new Date().getFullYear();
@@ -8,7 +7,7 @@ export default function PublicFooter() {
       <div className="flex flex-col md:flex-row justify-between items-center gap-6 w-full max-w-7xl mx-auto">
         <div className="flex flex-col items-center md:items-start gap-2">
           <span className="flex items-center gap-2">
-            <OpsoulLogo className="h-6 w-auto opacity-80 hover:opacity-100 transition-opacity" />
+            <img src="/logo.gif" alt="OpSoul" className="h-6 w-auto opacity-80 hover:opacity-100 transition-opacity" />
           </span>
           <p className="text-on-surface-variant font-label uppercase tracking-widest text-[10px]">
             © {year} OpSoul. All rights reserved.
