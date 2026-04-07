@@ -18,7 +18,7 @@ export default function PublicNav() {
         <div className="flex items-center gap-8">
           <Link href="/">
             <span className="flex items-center gap-2 cursor-pointer">
-              <OpsoulLogo className="h-7 w-auto" />
+              <OpsoulLogo className="h-8 w-auto" />
             </span>
           </Link>
           <div className="hidden md:flex gap-8 items-center ml-4">
