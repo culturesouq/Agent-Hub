@@ -35,7 +35,7 @@ export async function detectWebSearchIntent(
   );
 
   const reply = result.content.trim();
-  if (!reply || reply.toUpperCase() === 'NO' || reply.toLowerCase().startsWith('no ')) return null;
+  if (!reply || /^\s*no[.!?,;\s]*$/i.test(reply) || reply.toLowerCase().startsWith('no ')) return null;
   return reply;
 }
 

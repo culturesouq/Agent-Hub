@@ -520,6 +520,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       // --- END TOOL USE POLICY GATE ---
 
       // Direct capability: web search (before skill trigger)
+      let finalContent = fullContent;
+      let finalTokens = completionTokens;
       let capabilityFired = false;
       if (isWebSearchAvailable()) {
         const webQuery = await detectWebSearchIntent(message, fullContent);
@@ -560,8 +562,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       }
 
       const skillTrigger = capabilityFired ? null : await detectSkillTrigger(message, installedSkillsForAgency, fullContent);
-      let finalContent = fullContent;
-      let finalTokens = completionTokens;
       if (skillTrigger) {
         skillTrigger.operatorId = operator.id;
         console.log(`[agency] skill triggered: ${skillTrigger.name}`);
@@ -734,6 +734,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       // --- END TOOL USE POLICY GATE ---
 
       // Direct capability: web search (before skill trigger)
+      let finalContent = result.content;
+      let finalPromptTokens = result.promptTokens;
+      let finalCompletionTokens = result.completionTokens;
       let capabilityFiredSync = false;
       if (isWebSearchAvailable()) {
         const webQuery = await detectWebSearchIntent(message, result.content);
@@ -764,9 +767,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       }
 
       const skillTrigger = capabilityFiredSync ? null : await detectSkillTrigger(message, installedSkillsForAgency, result.content);
-      let finalContent = result.content;
-      let finalPromptTokens = result.promptTokens;
-      let finalCompletionTokens = result.completionTokens;
       if (skillTrigger) {
         skillTrigger.operatorId = operator.id;
         console.log(`[agency] skill triggered: ${skillTrigger.name}`);
