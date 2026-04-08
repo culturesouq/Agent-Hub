@@ -29,3 +29,9 @@ id = "QUWzJK67wK2iTc6lOZSDj"
 uri = "file://opsoul-v2.4.tar.gz"
 type = "unspecified"
 title = "OpSoul v2.4 — Source Code"
+
+[[outputs]]
+id = "Csf7egpx8ax4Q7j_w0QOe"
+uri = "file://.local/opsoul_patent_brief.md"
+type = "text"
+title = "OpSoul Patent Interview Brief — DED / Dennemeyer"
