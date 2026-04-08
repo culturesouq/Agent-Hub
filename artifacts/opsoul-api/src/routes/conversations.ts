@@ -84,7 +84,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
         eq(conversationsTable.ownerId, req.owner!.ownerId),
       ),
     )
-    .orderBy(desc(conversationsTable.lastMessageAt));
+    .orderBy(sql`${conversationsTable.lastMessageAt} DESC NULLS LAST`);
 
   res.json({ operatorId: op.id, count: convs.length, conversations: convs });
 });

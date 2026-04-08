@@ -20,10 +20,12 @@ type RenderedItem =
   | { kind: "tool"; skillName: string; output: string; key: string };
 
 const THINKING_STEPS = [
-  "Thinking…",
-  "Searching knowledge base…",
-  "Reading context…",
-  "Preparing response…",
+  "Thinking",
+  "Recalling memories",
+  "Checking knowledge base",
+  "Reading context",
+  "Forming a response",
+  "Almost there",
 ];
 
 // Inline token parser — handles **bold**, *italic*, `code`
@@ -122,20 +124,13 @@ function ThinkingIndicator() {
 
   return (
     <div className="flex justify-start">
-      <div className="max-w-[85%] rounded-2xl rounded-tl-none px-4 py-3 bg-card border border-border/50">
-        <div className="flex items-center gap-2.5">
-          <div className="flex gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-bounce [animation-delay:0ms]" />
-            <span className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-bounce [animation-delay:150ms]" />
-            <span className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-bounce [animation-delay:300ms]" />
-          </div>
-          <span
-            key={step}
-            className="text-xs text-muted-foreground font-mono animate-in fade-in duration-500"
-          >
-            {THINKING_STEPS[step]}
-          </span>
-        </div>
+      <div className="max-w-[85%] rounded-2xl rounded-tl-none px-4 py-2.5 bg-card border border-border/50">
+        <span
+          key={step}
+          className="text-xs text-muted-foreground animate-in fade-in duration-700 italic"
+        >
+          {THINKING_STEPS[step]}…
+        </span>
       </div>
     </div>
   );
