@@ -185,6 +185,19 @@ Return ONLY valid JSON, no markdown, no explanation:
     .where(eq(operatorsTable.id, operatorId));
 }
 
+// ─── Search narration fallback ───────────────────────────────────────────────
+// When the operator says "Searching now: X" in text instead of calling the tool,
+// we extract the query and fire the real search. The operator is still deciding
+// what to search — we're just enforcing the action it announced.
+function extractNarratedSearchQuery(content: string, userMessageFallback: string): string | null {
+  // "Searching now: X" or "Searching for: X" or "Searching: X"
+  const explicit = content.match(/Searching(?:\s+now)?(?:\s+for)?:\s*(.+?)(?:\n|$)/i);
+  if (explicit) return explicit[1].trim().slice(0, 200);
+  // "Searching now." or "Searching now\n" with no query — use the user's message
+  if (/\bSearching\s+now\.?\s*$/im.test(content)) return userMessageFallback.slice(0, 200);
+  return null;
+}
+
 // ─── Agency Layer shared helpers ─────────────────────────────────────────────
 
 // Builds the deduplicated skill list and applies the policy gate in one place.
@@ -700,7 +713,40 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       let finalTokens = completionTokens;
       let capabilityFired = false;
 
-      // Web search — operator called the tool
+      // Narration fallback — operator said "Searching now: X" in text but didn't call the tool.
+      // We honour the operator's intent: fire the real search and replace the narration with real results.
+      if (!operatorToolCall && webSearchTool) {
+        const narratedQuery = extractNarratedSearchQuery(fullContent, message);
+        if (narratedQuery) {
+          console.log(`[agency] narration fallback — firing real search: "${narratedQuery}"`);
+          res.write(`data: ${JSON.stringify({ searching: narratedQuery })}\n\n`);
+          const capResult = await executeWebSearch(narratedQuery);
+          if (capResult.success) {
+            await persistWebSearchResult(operator.id, operator.ownerId, conv.id, narratedQuery, capResult, operator.mandate ?? '');
+            capabilityFired = true;
+            const searchMessages: ChatMessage[] = [
+              ...messages,
+              { role: 'system', content: `[Web Search: ${narratedQuery}]\n${capResult.output}` },
+            ];
+            let secondContent = '';
+            let secondTokens = 0;
+            for await (const chunk of streamChat(searchMessages, chatOpts)) {
+              if (chunk.delta) {
+                secondContent += chunk.delta;
+                res.write(`data: ${JSON.stringify({ delta: chunk.delta })}\n\n`);
+              }
+              if (chunk.done && chunk.usage) {
+                promptTokens = chunk.usage.promptTokens;
+                secondTokens = chunk.usage.completionTokens;
+              }
+            }
+            finalContent = secondContent;
+            finalTokens = secondTokens;
+          }
+        }
+      }
+
+      // Web search — operator actually called the tool via function calling
       if (operatorToolCall && operatorToolCall.name === 'web_search') {
         let searchQuery = '';
         try { searchQuery = JSON.parse(operatorToolCall.args).query ?? ''; } catch { /* skip */ }
@@ -813,8 +859,29 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       let finalCompletionTokens = result.completionTokens;
       let capabilityFired = false;
 
-      // Web search — operator called the tool
-      if (result.toolCall && result.toolCall.name === 'web_search') {
+      // Narration fallback — operator said "Searching now: X" in text but didn't call the tool.
+      if (!result.toolCall && webSearchTool) {
+        const narratedQuery = extractNarratedSearchQuery(result.content, message);
+        if (narratedQuery) {
+          console.log(`[agency] narration fallback (sync) — firing real search: "${narratedQuery}"`);
+          const capResult = await executeWebSearch(narratedQuery);
+          if (capResult.success) {
+            await persistWebSearchResult(operator.id, operator.ownerId, conv.id, narratedQuery, capResult, operator.mandate ?? '');
+            capabilityFired = true;
+            const searchMessages: ChatMessage[] = [
+              ...messages,
+              { role: 'system', content: `[Web Search: ${narratedQuery}]\n${capResult.output}` },
+            ];
+            const secondResult = await chatCompletion(searchMessages, chatOpts);
+            finalContent = secondResult.content;
+            finalPromptTokens = secondResult.promptTokens;
+            finalCompletionTokens = secondResult.completionTokens;
+          }
+        }
+      }
+
+      // Web search — operator actually called the tool via function calling
+      if (!capabilityFired && result.toolCall && result.toolCall.name === 'web_search') {
         let searchQuery = '';
         try { searchQuery = JSON.parse(result.toolCall.args).query ?? ''; } catch { /* skip */ }
         if (searchQuery) {
