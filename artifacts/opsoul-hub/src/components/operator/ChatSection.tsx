@@ -168,6 +168,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   const [lastStreamSnapshot, setLastStreamSnapshot] = useState("");
   const [isAgencyProcessing, setIsAgencyProcessing] = useState(false);
   const [searchingQuery, setSearchingQuery] = useState<string | null>(null);
+  const [runningTool, setRunningTool] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -428,13 +429,20 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                   setLastStreamSnapshot("");
                   setIsAgencyProcessing(false);
                   setSearchingQuery(null);
+                  setRunningTool(null);
                 } else if (data.searching) {
                   setSearchingQuery(data.searching);
+                  setRunningTool(null);
+                  setIsAgencyProcessing(false);
+                } else if (data.running) {
+                  setRunningTool(data.running);
+                  setSearchingQuery(null);
                   setIsAgencyProcessing(false);
                 } else if (data.delta) {
                   if (firstDelta) {
                     setIsAgencyProcessing(false);
                     setSearchingQuery(null);
+                    setRunningTool(null);
                     firstDelta = false;
                   }
                   currentStream += data.delta;
@@ -446,6 +454,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                 } else if (data.done) {
                   setIsAgencyProcessing(false);
                   setSearchingQuery(null);
+                  setRunningTool(null);
                   setStreamingMsg("");
                   queryClient.invalidateQueries({
                     queryKey: ["operators", operatorId, "conversations", activeConvId, "messages"],
@@ -588,20 +597,27 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
             {/* Searching indicator — operator called the web search tool */}
             {searchingQuery && !showingStream && (
               <div className="flex justify-start">
-                <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl rounded-tl-none bg-card border border-border/50 text-sm text-muted-foreground">
-                  <Search className="w-3.5 h-3.5 text-primary/60 animate-pulse" />
-                  <span className="text-xs">Searching<span className="text-primary/80 ml-1 font-medium truncate max-w-[200px]">{searchingQuery}</span></span>
-                  <span className="flex gap-0.5 ml-1">
-                    <span className="w-1 h-1 rounded-full bg-muted-foreground/60 animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <span className="w-1 h-1 rounded-full bg-muted-foreground/60 animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <span className="w-1 h-1 rounded-full bg-muted-foreground/60 animate-bounce" style={{ animationDelay: "300ms" }} />
+                <div className="max-w-[85%] rounded-2xl rounded-tl-none px-4 py-2.5 bg-card border border-border/50">
+                  <span className="text-xs text-muted-foreground italic">
+                    Searching <span className="text-primary/80 not-italic font-medium">{searchingQuery}</span>…
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Running tool indicator — operator is executing an integration */}
+            {runningTool && !searchingQuery && !showingStream && (
+              <div className="flex justify-start">
+                <div className="max-w-[85%] rounded-2xl rounded-tl-none px-4 py-2.5 bg-card border border-border/50">
+                  <span className="text-xs text-muted-foreground italic">
+                    Running <span className="text-primary/80 not-italic font-medium">{runningTool}</span>…
                   </span>
                 </div>
               </div>
             )}
 
             {/* Thinking indicator */}
-            {isAgencyProcessing && !showingStream && !searchingQuery && <ThinkingIndicator />}
+            {isAgencyProcessing && !showingStream && !searchingQuery && !runningTool && <ThinkingIndicator />}
 
             <div ref={bottomRef} />
           </>
