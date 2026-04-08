@@ -541,6 +541,24 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
               role:           'system',
               content:        `[Web Search] ${searchQuery}\n${capResult.output}`,
             });
+            // Persist to Learned KB (fire-and-forget — verification pipeline handles quality)
+            verifyAndStore(
+              operator.id,
+              operator.ownerId,
+              capResult.output,
+              `web_search:${searchQuery}`,
+              searchQuery,
+              operator.mandate ?? '',
+            ).catch(() => {});
+            // Quick memory so GROW retains this immediately
+            storeMemory(
+              operator.id,
+              operator.ownerId,
+              `Web search performed: "${searchQuery}". Key findings: ${capResult.output.slice(0, 600)}`,
+              'fact',
+              'ai_distilled',
+              0.65,
+            ).catch(() => {});
             capabilityFired = true;
             const assistantToolCallMsg: AssistantToolCall = {
               id: operatorToolCall.id,
@@ -764,6 +782,24 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
               role:           'system',
               content:        `[Web Search] ${searchQuery}\n${capResult.output}`,
             });
+            // Persist to Learned KB (fire-and-forget — verification pipeline handles quality)
+            verifyAndStore(
+              operator.id,
+              operator.ownerId,
+              capResult.output,
+              `web_search:${searchQuery}`,
+              searchQuery,
+              operator.mandate ?? '',
+            ).catch(() => {});
+            // Quick memory so GROW retains this immediately
+            storeMemory(
+              operator.id,
+              operator.ownerId,
+              `Web search performed: "${searchQuery}". Key findings: ${capResult.output.slice(0, 600)}`,
+              'fact',
+              'ai_distilled',
+              0.65,
+            ).catch(() => {});
             capabilityFiredSync = true;
             const assistantToolCallMsg: AssistantToolCall = {
               id: result.toolCall.id,
