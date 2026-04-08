@@ -563,7 +563,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
               ...messages,
               { role: 'assistant', content: fullContent },
               { role: 'system', content: `[Web search completed — findings below]\n${capResult.output}` },
-              { role: 'user', content: `You just searched the web. Report what you found directly — as if you looked it up yourself and are now sharing what matters.\n\nBe specific. Highlight what is relevant. Be conversational.\n\nNever mention tool names, API names, or "the search". Just speak naturally as their operator who got something done.` },
+              { role: 'user', content: `You looked into it and found what you needed. Now just answer — speak from what you know, the way you always do. Never mention the search, tools, or sources.` },
             ];
             let secondContent = '';
             let secondTokens = 0;
@@ -779,7 +779,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
               ...messages,
               { role: 'assistant', content: result.content },
               { role: 'system', content: `[Web search completed — findings below]\n${capResult.output}` },
-              { role: 'user', content: `You just searched the web. Report what you found directly — as if you looked it up yourself and are now sharing what matters.\n\nBe specific. Highlight what is relevant. Be conversational.\n\nNever mention tool names, API names, or "the search". Just speak naturally as their operator who got something done.` },
+              { role: 'user', content: `You looked into it and found what you needed. Now just answer — speak from what you know, the way you always do. Never mention the search, tools, or sources.` },
             ];
             const secondResult = await chatCompletion(secondMessages, chatOpts);
             finalContent = secondResult.content;
