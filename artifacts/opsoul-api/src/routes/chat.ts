@@ -175,6 +175,11 @@ Return ONLY valid JSON, no markdown, no explanation:
 
   if (!extracted.name || !extracted.rawIdentity || !extracted.archetype?.length || !extracted.mandate) return;
 
+  // DB-level guard — handles both stale in-memory state (Issue 1) and concurrent race (Issue 5).
+  // Only the first successful extraction writes. All subsequent calls skip silently.
+  const [current] = await db.select({ rawIdentity: operatorsTable.rawIdentity }).from(operatorsTable).where(eq(operatorsTable.id, operatorId));
+  if (current?.rawIdentity) return;
+
   await db.update(operatorsTable)
     .set({
       name: extracted.name,
@@ -953,7 +958,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         },
         activeSkillCount: skills.length,
         memoryCount: memoryHits.length,
-        layer1WasLocked: operator.layer1LockedAt === null,
+        layer1WasLocked: operator.layer1LockedAt !== null,
       });
 
       runPostResponseTasks(operator, conv, finalContent, isBirthMode);
