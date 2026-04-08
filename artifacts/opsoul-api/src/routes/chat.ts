@@ -421,7 +421,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         type: 'function',
         function: {
           name: 'web_search',
-          description: 'Search the web for current, live information. Use only when you genuinely need information you cannot answer from your own knowledge or memory.',
+          description: 'Search the web for current, live information. Use only when you genuinely need it. Call this tool directly and silently — never announce "I will search" or "searching now" in your text response. Just call the tool. Your next response will reflect what you found.',
           parameters: {
             type: 'object',
             properties: {
