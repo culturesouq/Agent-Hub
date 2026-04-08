@@ -304,12 +304,14 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     const hasAttachment = Array.isArray(attachments) && attachments.length > 0;
     const isShort = message.length < 200;
     const hasContext = kbContext.length > 0 || memoryHits.length > 0;
+    // Never route to Haiku when web search is available — Haiku narrates instead of calling tools
+    const webSearchActive = isWebSearchAvailable();
     const resolved = hasAttachment
       ? 'google/gemini-flash-2.0'
-      : isShort && !hasContext
+      : isShort && !hasContext && !webSearchActive
         ? 'anthropic/claude-haiku-4-5'
         : 'anthropic/claude-sonnet-4-5';
-    console.log(`[AUTO] routed → ${resolved} | short=${isShort} attachment=${hasAttachment} hasContext=${hasContext}`);
+    console.log(`[AUTO] routed → ${resolved} | short=${isShort} attachment=${hasAttachment} hasContext=${hasContext} webSearch=${webSearchActive}`);
     return resolved;
   })();
 
