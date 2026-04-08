@@ -38,6 +38,8 @@ import { isWebSearchAvailable, executeWebSearch } from '../utils/capabilityEngin
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
 
+// ─── Schemas ────────────────────────────────────────────────────────────────
+
 const AttachmentSchema = z.object({
   type: z.enum(['image', 'text', 'url']),
   content: z.string(),
@@ -53,6 +55,8 @@ const SendMessageSchema = z.object({
   kbMinConfidence: z.number().int().min(0).max(100).default(30),
   attachments: z.array(AttachmentSchema).optional(),
 });
+
+// ─── DB helpers ──────────────────────────────────────────────────────────────
 
 async function resolveOperatorAndConv(
   req: Request,
@@ -125,7 +129,9 @@ async function loadActiveSkills(operatorId: string): Promise<ActiveSkill[]> {
   return installs as unknown as ActiveSkill[];
 }
 
-// BIRTH EXTRACTION — silently extracts name/rawIdentity/archetype/mandate from the birth conversation
+// ─── Birth identity extraction ───────────────────────────────────────────────
+// Silently extracts name/rawIdentity/archetype/mandate from the birth conversation
+
 async function extractBirthIdentity(operatorId: string, conversationId: string): Promise<void> {
   const msgs = await db
     .select({ role: messagesTable.role, content: messagesTable.content })
@@ -178,6 +184,203 @@ Return ONLY valid JSON, no markdown, no explanation:
     })
     .where(eq(operatorsTable.id, operatorId));
 }
+
+// ─── Agency Layer shared helpers ─────────────────────────────────────────────
+
+// Builds the deduplicated skill list and applies the policy gate in one place.
+function buildAgencySkills(
+  skills: any[],
+  archetypeDefaultSkills: InstalledSkill[],
+  installedNames: Set<string>,
+  operator: typeof operatorsTable.$inferSelect,
+): InstalledSkill[] {
+  let list: InstalledSkill[] = [
+    ...skills.map((s: any) => ({
+      installId:          s.id ?? s.skillId,
+      skillId:            s.skillId,
+      name:               s.name ?? s.skillName,
+      triggerDescription: s.triggerDescription ?? '',
+      instructions:       s.instructions ?? s.skillInstructions ?? '',
+      outputFormat:       s.outputFormat ?? s.skillOutputFormat ?? null,
+      customInstructions: s.customInstructions ?? null,
+    })),
+    ...archetypeDefaultSkills
+      .filter(a => !installedNames.has(a.name))
+      .map(a => ({
+        installId:          a.installId,
+        skillId:            a.skillId,
+        name:               a.name,
+        triggerDescription: a.triggerDescription,
+        instructions:       a.instructions,
+        outputFormat:       a.outputFormat,
+        customInstructions: null,
+      })),
+  ];
+
+  // Policy gate — only enforced in free roaming mode.
+  // In normal mode skills are owner pre-approved; no gate needed.
+  if (operator.freeRoaming && operator.toolUsePolicy) {
+    const rawPolicy = operator.toolUsePolicy;
+    if (rawPolicy !== 'auto' && typeof rawPolicy === 'object' && rawPolicy !== null) {
+      const allowedNames = new Set(Object.keys(rawPolicy as Record<string, unknown>));
+      if (allowedNames.size > 0) {
+        const before = list.length;
+        list = list.filter(s => allowedNames.has(s.name));
+        console.log(`[policy] free roaming — filtered skills ${before} → ${list.length} for operator ${operator.id}`);
+      }
+    } else {
+      console.log(`[policy] free roaming — auto policy, all ${list.length} skills allowed for operator ${operator.id}`);
+    }
+  }
+
+  return list;
+}
+
+// Persists web search results to the conversation log, Learned KB, and memory.
+// Fire-and-forget for KB/memory — called the same way from both paths.
+async function persistWebSearchResult(
+  operatorId: string,
+  ownerId: string,
+  convId: string,
+  searchQuery: string,
+  capResult: { output: string },
+  mandate: string,
+): Promise<void> {
+  await db.insert(messagesTable).values({
+    id:             crypto.randomUUID(),
+    operatorId,
+    conversationId: convId,
+    role:           'system',
+    content:        `[Web Search] ${searchQuery}\n${capResult.output}`,
+  });
+
+  verifyAndStore(
+    operatorId,
+    ownerId,
+    capResult.output,
+    `web_search:${searchQuery}`,
+    searchQuery,
+    mandate,
+  ).catch(() => {});
+
+  storeMemory(
+    operatorId,
+    ownerId,
+    `Web search performed: "${searchQuery}". Key findings: ${capResult.output.slice(0, 600)}`,
+    'fact',
+    'ai_distilled',
+    0.65,
+  ).catch(() => {});
+}
+
+// Persists a skill execution result to the conversation log, tasks table, and memory.
+async function persistSkillResult(
+  operatorId: string,
+  ownerId: string,
+  convId: string,
+  skillTrigger: { name: string; skillId: string },
+  skillResult: { skillName: string; output: string },
+): Promise<void> {
+  await db.insert(messagesTable).values({
+    id:             crypto.randomUUID(),
+    operatorId,
+    conversationId: convId,
+    role:           'system',
+    content:        `[Skill: ${skillResult.skillName}] Result:\n${skillResult.output}`,
+  });
+
+  await db.insert(tasksTable).values({
+    id:               crypto.randomUUID(),
+    operatorId,
+    conversationId:   convId,
+    contextName:      skillTrigger.name,
+    taskType:         'skill_execution',
+    integrationLabel: 'platform_skill',
+    payload:          { skillId: skillTrigger.skillId, result: skillResult.output },
+    status:           'completed',
+    summary:          `Executed ${skillTrigger.name}`,
+    completedAt:      new Date(),
+  });
+
+  console.log(`[agency] skill ${skillTrigger.name} executed and logged`);
+
+  triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});
+
+  storeMemory(
+    operatorId,
+    ownerId,
+    `Skill executed: ${skillTrigger.name}. Result: ${skillResult.output.slice(0, 500)}`,
+    'pattern',
+    'ai_distilled',
+    0.6,
+  ).catch(() => {});
+}
+
+// Runs all post-response fire-and-forget tasks — identical for both stream and sync.
+function runPostResponseTasks(
+  operator: typeof operatorsTable.$inferSelect,
+  conv: typeof conversationsTable.$inferSelect,
+  finalContent: string,
+  isBirthMode: boolean,
+): void {
+  // [LEARN:] tag extraction — operator self-learning
+  if (!operator.safeMode) {
+    const learnMatches = finalContent.match(/\[LEARN:\s*(.*?)\]/gs);
+    if (learnMatches && learnMatches.length > 0) {
+      for (const match of learnMatches) {
+        const text = match.replace(/\[LEARN:\s*/i, '').replace(/\]$/, '').trim();
+        if (text.length > 20) {
+          verifyAndStore(
+            operator.id,
+            operator.ownerId,
+            text,
+            'self_learn',
+            'operator_self_learn',
+            operator.mandate ?? '',
+          ).catch(() => {});
+        }
+      }
+    }
+  }
+
+  // Birth extraction — triggered after 2+ user messages in birth mode
+  if (isBirthMode) {
+    db.select({ id: messagesTable.id })
+      .from(messagesTable)
+      .where(and(eq(messagesTable.conversationId, conv.id), eq(messagesTable.role, 'user')))
+      .then(userMessages => {
+        if (userMessages.length >= 2) {
+          extractBirthIdentity(operator.id, conv.id).catch(() => {});
+        }
+      })
+      .catch(() => {});
+  }
+
+  // Self-awareness + periodic memory distillation
+  if (!operator.safeMode) {
+    triggerSelfAwareness(operator.id, 'conversation_end').catch(() => {});
+    const shouldDistill = ((conv.messageCount ?? 0) % 10 === 0);
+    if (shouldDistill) {
+      distillMemoriesFromConversations(operator.id, operator.ownerId, operator.name).catch(() => {});
+    }
+  }
+}
+
+// Second-pass prompt used after a skill executes — same wording for both paths.
+function buildSkillSecondPassMessages(
+  messages: ChatMessage[],
+  firstResponse: string,
+  skillOutput: string,
+): ChatMessage[] {
+  return [
+    ...messages,
+    { role: 'assistant', content: firstResponse },
+    { role: 'system', content: `[Task completed — findings below]\n${skillOutput}` },
+    { role: 'user', content: `You just completed a task. Report back to the owner directly — as if you did the work yourself and are now sharing what you found.\n\nBe specific. Highlight what matters. Be conversational.\n\nNever mention tool names, skill names, raw JSON, raw URLs, or API responses. Never say "the result" or "the skill". Just speak naturally as their operator who got something done.` },
+  ];
+}
+
+// ─── Main route handler ──────────────────────────────────────────────────────
 
 router.post('/', async (req: Request, res: Response): Promise<void> => {
   const ctx = await resolveOperatorAndConv(req, res);
@@ -298,7 +501,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     }
   }
 
-  // Auto routing — resolve final model now that kbContext and memoryHits are known
+  // Auto routing — resolved after kbContext and memoryHits are known
   chatModel = (() => {
     if (rawModel !== 'opsoul/auto') return rawModel;
     const hasAttachment = Array.isArray(attachments) && attachments.length > 0;
@@ -364,9 +567,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     userContent = parts;
   }
 
-  // --- SENSES → KB PERSISTENCE ---
-  // Text attachments and URLs are persisted to Learned KB (fire-and-forget)
-  // Images are context-only (no text to store)
+  // SENSES → KB PERSISTENCE
+  // Text attachments and URLs are persisted to Learned KB (fire-and-forget).
+  // Images are context-only (no text to store).
   if (!operator.safeMode && attachments && attachments.length > 0) {
     for (const att of attachments) {
       if (att.type === 'text' && att.content.length > 100) {
@@ -397,7 +600,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       }
     }
   }
-  // --- END SENSES → KB PERSISTENCE ---
 
   const messages: ChatMessage[] = [
     { role: 'system', content: systemPrompt },
@@ -405,9 +607,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     { role: 'user', content: userContent },
   ];
 
-  const userMsgId = crypto.randomUUID();
+  // Save the user message and lock Layer 1 if still unlocked
   await db.insert(messagesTable).values({
-    id: userMsgId,
+    id: crypto.randomUUID(),
     conversationId: conv.id,
     operatorId: operator.id,
     role: 'user',
@@ -417,7 +619,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   await lockLayer1IfUnlocked(operator.id);
 
-  // Web search tool — offered to the operator; the operator decides when to use it
+  // Web search tool — offered to the operator; the operator decides when to call it
   const webSearchTool: ToolDefinition | null = isWebSearchAvailable()
     ? {
         type: 'function',
@@ -434,6 +636,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         },
       }
     : null;
+
+  // Agency skills — built once, shared by both paths
+  const agencySkills = buildAgencySkills(skills, archetypeDefaultSkills, installedNames, operator);
+
+  // ─── STREAMING PATH ────────────────────────────────────────────────────────
 
   if (stream) {
     res.setHeader('Content-Type', 'text/event-stream');
@@ -489,51 +696,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       // Signal to the frontend that streaming is done but processing continues
       res.write(`data: ${JSON.stringify({ processing: true })}\n\n`);
 
-      // --- AGENCY LAYER ---
-      let installedSkillsForAgency: InstalledSkill[] = [
-        ...skills.map((s: any) => ({
-          installId:          s.id ?? s.skillId,
-          skillId:            s.skillId,
-          name:               s.name ?? s.skillName,
-          triggerDescription: s.triggerDescription ?? '',
-          instructions:       s.instructions ?? s.skillInstructions ?? '',
-          outputFormat:       s.outputFormat ?? s.skillOutputFormat ?? null,
-          customInstructions: s.customInstructions ?? null,
-        })),
-        ...archetypeDefaultSkills
-          .filter(a => !installedNames.has(a.name))
-          .map(a => ({
-            installId:          a.installId,
-            skillId:            a.skillId,
-            name:               a.name,
-            triggerDescription: a.triggerDescription,
-            instructions:       a.instructions,
-            outputFormat:       a.outputFormat,
-            customInstructions: null,
-          })),
-      ];
-      // --- TOOL USE POLICY GATE ---
-      // Only enforced when operator is in free roaming mode
-      // In normal mode: skills are owner pre-approved, no gate needed
-      if (operator.freeRoaming && operator.toolUsePolicy) {
-        const rawPolicy = operator.toolUsePolicy;
-        if (rawPolicy !== 'auto' && typeof rawPolicy === 'object' && rawPolicy !== null) {
-          const allowedNames = new Set(Object.keys(rawPolicy as Record<string, unknown>));
-          if (allowedNames.size > 0) {
-            const before = installedSkillsForAgency.length;
-            installedSkillsForAgency = installedSkillsForAgency.filter(s => allowedNames.has(s.name));
-            console.log(`[policy] free roaming — filtered skills ${before} → ${installedSkillsForAgency.length} for operator ${operator.id}`);
-          }
-        } else {
-          console.log(`[policy] free roaming — auto policy, all ${installedSkillsForAgency.length} skills allowed for operator ${operator.id}`);
-        }
-      }
-      // --- END TOOL USE POLICY GATE ---
-
-      // Operator-initiated web search — the operator decided to call the tool
       let finalContent = fullContent;
       let finalTokens = completionTokens;
       let capabilityFired = false;
+
+      // Web search — operator called the tool
       if (operatorToolCall && operatorToolCall.name === 'web_search') {
         let searchQuery = '';
         try { searchQuery = JSON.parse(operatorToolCall.args).query ?? ''; } catch { /* skip */ }
@@ -542,31 +709,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           res.write(`data: ${JSON.stringify({ searching: searchQuery })}\n\n`);
           const capResult = await executeWebSearch(searchQuery);
           if (capResult.success) {
-            await db.insert(messagesTable).values({
-              id:             crypto.randomUUID(),
-              operatorId:     operator.id,
-              conversationId: conv.id,
-              role:           'system',
-              content:        `[Web Search] ${searchQuery}\n${capResult.output}`,
-            });
-            // Persist to Learned KB (fire-and-forget — verification pipeline handles quality)
-            verifyAndStore(
-              operator.id,
-              operator.ownerId,
-              capResult.output,
-              `web_search:${searchQuery}`,
-              searchQuery,
-              operator.mandate ?? '',
-            ).catch(() => {});
-            // Quick memory so GROW retains this immediately
-            storeMemory(
-              operator.id,
-              operator.ownerId,
-              `Web search performed: "${searchQuery}". Key findings: ${capResult.output.slice(0, 600)}`,
-              'fact',
-              'ai_distilled',
-              0.65,
-            ).catch(() => {});
+            await persistWebSearchResult(operator.id, operator.ownerId, conv.id, searchQuery, capResult, operator.mandate ?? '');
             capabilityFired = true;
             const assistantToolCallMsg: AssistantToolCall = {
               id: operatorToolCall.id,
@@ -596,68 +739,36 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         }
       }
 
-      const skillTrigger = capabilityFired ? null : await detectSkillTrigger(message, installedSkillsForAgency, fullContent);
-      if (skillTrigger) {
-        skillTrigger.operatorId = operator.id;
-        console.log(`[agency] skill triggered: ${skillTrigger.name}`);
-        res.write(`data: ${JSON.stringify({ running: skillTrigger.name })}\n\n`);
-        const skillResult = await executeSkill(skillTrigger, chatModel);
-        if (skillResult.success) {
-          const skillSystemMsg = `[Skill: ${skillResult.skillName}] Result:\n${skillResult.output}`;
-          await db.insert(messagesTable).values({
-            id:             crypto.randomUUID(),
-            operatorId:     operator.id,
-            conversationId: conv.id,
-            role:           'system',
-            content:        skillSystemMsg,
-          });
-          await db.insert(tasksTable).values({
-            id:               crypto.randomUUID(),
-            operatorId:       operator.id,
-            conversationId:   conv.id,
-            contextName:      skillTrigger.name,
-            taskType:         'skill_execution',
-            integrationLabel: 'platform_skill',
-            payload:          { skillId: skillTrigger.skillId, result: skillResult.output },
-            status:           'completed',
-            summary:          `Executed ${skillTrigger.name}`,
-            completedAt:      new Date(),
-          });
-          console.log(`[agency] skill ${skillTrigger.name} executed and logged`);
-          triggerSelfAwareness(operator.id, 'integration_change').catch(() => {});
-          storeMemory(
-            operator.id,
-            operator.ownerId,
-            `Skill executed: ${skillTrigger.name}. Result: ${skillResult.output.slice(0, 500)}`,
-            'pattern',
-            'ai_distilled',
-            0.6,
-          ).catch(() => {});
-          // Second call — stream synthesized response incorporating skill result
-          const secondMessages: ChatMessage[] = [
-            ...messages,
-            { role: 'assistant', content: fullContent },
-            { role: 'system', content: `[Task completed — findings below]\n${skillResult.output}` },
-            { role: 'user', content: `You just completed a task. Report back to the owner directly — as if you did the work yourself and are now sharing what you found.\n\nBe specific. Highlight what matters. Be conversational.\n\nNever mention tool names, skill names, raw JSON, raw URLs, or API responses. Never say "the result" or "the skill". Just speak naturally as their operator who got something done.` },
-          ];
-          let secondContent = '';
-          let secondTokens = 0;
-          for await (const chunk of streamChat(secondMessages, chatOpts)) {
-            if (chunk.delta) {
-              secondContent += chunk.delta;
-              res.write(`data: ${JSON.stringify({ delta: chunk.delta })}\n\n`);
+      // Skill trigger — only if no web search already fired
+      if (!capabilityFired) {
+        const skillTrigger = await detectSkillTrigger(message, agencySkills, fullContent);
+        if (skillTrigger) {
+          skillTrigger.operatorId = operator.id;
+          console.log(`[agency] skill triggered: ${skillTrigger.name}`);
+          res.write(`data: ${JSON.stringify({ running: skillTrigger.name })}\n\n`);
+          const skillResult = await executeSkill(skillTrigger, chatModel);
+          if (skillResult.success) {
+            await persistSkillResult(operator.id, operator.ownerId, conv.id, skillTrigger, skillResult);
+            const secondMessages = buildSkillSecondPassMessages(messages, fullContent, skillResult.output);
+            let secondContent = '';
+            let secondTokens = 0;
+            for await (const chunk of streamChat(secondMessages, chatOpts)) {
+              if (chunk.delta) {
+                secondContent += chunk.delta;
+                res.write(`data: ${JSON.stringify({ delta: chunk.delta })}\n\n`);
+              }
+              if (chunk.done && chunk.usage) {
+                promptTokens = chunk.usage.promptTokens;
+                secondTokens = chunk.usage.completionTokens;
+              }
             }
-            if (chunk.done && chunk.usage) {
-              promptTokens = chunk.usage.promptTokens;
-              secondTokens = chunk.usage.completionTokens;
-            }
+            finalContent = secondContent;
+            finalTokens = secondTokens;
           }
-          finalContent = secondContent;
-          finalTokens = secondTokens;
         }
       }
-      // --- END AGENCY LAYER ---
 
+      // Save assistant message and update conversation
       messageSaved = true;
       const asstMsgId = crypto.randomUUID();
       await db.insert(messagesTable).values({
@@ -670,10 +781,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       });
 
       await db.update(conversationsTable)
-        .set({
-          messageCount: (conv.messageCount ?? 0) + 2,
-          lastMessageAt: new Date(),
-        })
+        .set({ messageCount: (conv.messageCount ?? 0) + 2, lastMessageAt: new Date() })
         .where(eq(conversationsTable.id, conv.id));
 
       res.write(`data: ${JSON.stringify({
@@ -686,102 +794,26 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       })}\n\n`);
       res.end();
 
-      // --- [LEARN:] EXTRACTION ---
-      if (!operator.safeMode) {
-        const learnMatches = finalContent.match(/\[LEARN:\s*(.*?)\]/gs);
-        if (learnMatches && learnMatches.length > 0) {
-          for (const match of learnMatches) {
-            const text = match.replace(/\[LEARN:\s*/i, '').replace(/\]$/, '').trim();
-            if (text.length > 20) {
-              verifyAndStore(
-                operator.id,
-                operator.ownerId,
-                text,
-                'self_learn',
-                'operator_self_learn',
-                operator.mandate ?? '',
-              ).catch(() => {});
-            }
-          }
-        }
-      }
-      // --- END [LEARN:] EXTRACTION ---
+      runPostResponseTasks(operator, conv, finalContent, isBirthMode);
 
-      // --- BIRTH EXTRACTION ---
-      if (isBirthMode) {
-        const userMessages = await db
-          .select({ id: messagesTable.id })
-          .from(messagesTable)
-          .where(and(eq(messagesTable.conversationId, conv.id), eq(messagesTable.role, 'user')));
-        if (userMessages.length >= 2) {
-          extractBirthIdentity(operator.id, conv.id).catch(() => {});
-        }
-      }
-      // --- END BIRTH EXTRACTION ---
-
-      if (!operator.safeMode) {
-        triggerSelfAwareness(operator.id, 'conversation_end').catch(() => {});
-        const shouldDistill = ((conv.messageCount ?? 0) % 10 === 0);
-        if (shouldDistill) {
-          distillMemoriesFromConversations(operator.id, operator.ownerId, operator.name).catch(() => {});
-        }
-      }
     } catch (err) {
       res.write(`data: ${JSON.stringify({ error: (err as Error).message })}\n\n`);
       res.end();
     }
+
+  // ─── SYNC PATH ─────────────────────────────────────────────────────────────
 
   } else {
     try {
       const syncOpts = { ...chatOpts, tools: webSearchTool ? [webSearchTool] : undefined };
       const result = await chatCompletion(messages, syncOpts);
 
-      // --- AGENCY LAYER ---
-      let installedSkillsForAgency: InstalledSkill[] = [
-        ...skills.map((s: any) => ({
-          installId:          s.id ?? s.skillId,
-          skillId:            s.skillId,
-          name:               s.name ?? s.skillName,
-          triggerDescription: s.triggerDescription ?? '',
-          instructions:       s.instructions ?? s.skillInstructions ?? '',
-          outputFormat:       s.outputFormat ?? s.skillOutputFormat ?? null,
-          customInstructions: s.customInstructions ?? null,
-        })),
-        ...archetypeDefaultSkills
-          .filter(a => !installedNames.has(a.name))
-          .map(a => ({
-            installId:          a.installId,
-            skillId:            a.skillId,
-            name:               a.name,
-            triggerDescription: a.triggerDescription,
-            instructions:       a.instructions,
-            outputFormat:       a.outputFormat,
-            customInstructions: null,
-          })),
-      ];
-      // --- TOOL USE POLICY GATE ---
-      // Only enforced when operator is in free roaming mode
-      // In normal mode: skills are owner pre-approved, no gate needed
-      if (operator.freeRoaming && operator.toolUsePolicy) {
-        const rawPolicy = operator.toolUsePolicy;
-        if (rawPolicy !== 'auto' && typeof rawPolicy === 'object' && rawPolicy !== null) {
-          const allowedNames = new Set(Object.keys(rawPolicy as Record<string, unknown>));
-          if (allowedNames.size > 0) {
-            const before = installedSkillsForAgency.length;
-            installedSkillsForAgency = installedSkillsForAgency.filter(s => allowedNames.has(s.name));
-            console.log(`[policy] free roaming — filtered skills ${before} → ${installedSkillsForAgency.length} for operator ${operator.id}`);
-          }
-        } else {
-          console.log(`[policy] free roaming — auto policy, all ${installedSkillsForAgency.length} skills allowed for operator ${operator.id}`);
-        }
-      }
-      // --- END TOOL USE POLICY GATE ---
-
-      // Operator-initiated web search — the operator decided to call the tool
       let finalContent = result.content;
       let finalPromptTokens = result.promptTokens;
       let finalCompletionTokens = result.completionTokens;
-      let capabilityFiredSync = false;
+      let capabilityFired = false;
+
+      // Web search — operator called the tool
       if (result.toolCall && result.toolCall.name === 'web_search') {
         let searchQuery = '';
         try { searchQuery = JSON.parse(result.toolCall.args).query ?? ''; } catch { /* skip */ }
@@ -789,32 +821,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           console.log(`[agency] operator-initiated web search (sync): "${searchQuery}"`);
           const capResult = await executeWebSearch(searchQuery);
           if (capResult.success) {
-            await db.insert(messagesTable).values({
-              id:             crypto.randomUUID(),
-              operatorId:     operator.id,
-              conversationId: conv.id,
-              role:           'system',
-              content:        `[Web Search] ${searchQuery}\n${capResult.output}`,
-            });
-            // Persist to Learned KB (fire-and-forget — verification pipeline handles quality)
-            verifyAndStore(
-              operator.id,
-              operator.ownerId,
-              capResult.output,
-              `web_search:${searchQuery}`,
-              searchQuery,
-              operator.mandate ?? '',
-            ).catch(() => {});
-            // Quick memory so GROW retains this immediately
-            storeMemory(
-              operator.id,
-              operator.ownerId,
-              `Web search performed: "${searchQuery}". Key findings: ${capResult.output.slice(0, 600)}`,
-              'fact',
-              'ai_distilled',
-              0.65,
-            ).catch(() => {});
-            capabilityFiredSync = true;
+            await persistWebSearchResult(operator.id, operator.ownerId, conv.id, searchQuery, capResult, operator.mandate ?? '');
+            capabilityFired = true;
             const assistantToolCallMsg: AssistantToolCall = {
               id: result.toolCall.id,
               type: 'function',
@@ -833,57 +841,25 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         }
       }
 
-      const skillTrigger = capabilityFiredSync ? null : await detectSkillTrigger(message, installedSkillsForAgency, result.content);
-      if (skillTrigger) {
-        skillTrigger.operatorId = operator.id;
-        console.log(`[agency] skill triggered: ${skillTrigger.name}`);
-        const skillResult = await executeSkill(skillTrigger, chatModel);
-        if (skillResult.success) {
-          const skillSystemMsg = `[Skill: ${skillResult.skillName}] Result:\n${skillResult.output}`;
-          await db.insert(messagesTable).values({
-            id:             crypto.randomUUID(),
-            operatorId:     operator.id,
-            conversationId: conv.id,
-            role:           'system',
-            content:        skillSystemMsg,
-          });
-          await db.insert(tasksTable).values({
-            id:               crypto.randomUUID(),
-            operatorId:       operator.id,
-            conversationId:   conv.id,
-            contextName:      skillTrigger.name,
-            taskType:         'skill_execution',
-            integrationLabel: 'platform_skill',
-            payload:          { skillId: skillTrigger.skillId, result: skillResult.output },
-            status:           'completed',
-            summary:          `Executed ${skillTrigger.name}`,
-            completedAt:      new Date(),
-          });
-          console.log(`[agency] skill ${skillTrigger.name} executed and logged`);
-          triggerSelfAwareness(operator.id, 'integration_change').catch(() => {});
-          storeMemory(
-            operator.id,
-            operator.ownerId,
-            `Skill executed: ${skillTrigger.name}. Result: ${skillResult.output.slice(0, 500)}`,
-            'pattern',
-            'ai_distilled',
-            0.6,
-          ).catch(() => {});
-          // Second call — synthesize skill result into final response
-          const secondMessages: ChatMessage[] = [
-            ...messages,
-            { role: 'assistant', content: result.content },
-            { role: 'system', content: `[Task completed — findings below]\n${skillResult.output}` },
-            { role: 'user', content: `You just completed a task. Report back to the owner directly — as if you did the work yourself and are now sharing what you found.\n\nBe specific. Highlight what matters. Be conversational.\n\nNever mention tool names, skill names, raw JSON, raw URLs, or API responses. Never say "the result" or "the skill". Just speak naturally as their operator who got something done.` },
-          ];
-          const secondResult = await chatCompletion(secondMessages, chatOpts);
-          finalContent = secondResult.content;
-          finalPromptTokens = secondResult.promptTokens;
-          finalCompletionTokens = secondResult.completionTokens;
+      // Skill trigger — only if no web search already fired
+      if (!capabilityFired) {
+        const skillTrigger = await detectSkillTrigger(message, agencySkills, result.content);
+        if (skillTrigger) {
+          skillTrigger.operatorId = operator.id;
+          console.log(`[agency] skill triggered: ${skillTrigger.name}`);
+          const skillResult = await executeSkill(skillTrigger, chatModel);
+          if (skillResult.success) {
+            await persistSkillResult(operator.id, operator.ownerId, conv.id, skillTrigger, skillResult);
+            const secondMessages = buildSkillSecondPassMessages(messages, result.content, skillResult.output);
+            const secondResult = await chatCompletion(secondMessages, chatOpts);
+            finalContent = secondResult.content;
+            finalPromptTokens = secondResult.promptTokens;
+            finalCompletionTokens = secondResult.completionTokens;
+          }
         }
       }
-      // --- END AGENCY LAYER ---
 
+      // Save assistant message and update conversation
       const asstMsgId = crypto.randomUUID();
       await db.insert(messagesTable).values({
         id: asstMsgId,
@@ -895,10 +871,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       });
 
       await db.update(conversationsTable)
-        .set({
-          messageCount: (conv.messageCount ?? 0) + 2,
-          lastMessageAt: new Date(),
-        })
+        .set({ messageCount: (conv.messageCount ?? 0) + 2, lastMessageAt: new Date() })
         .where(eq(conversationsTable.id, conv.id));
 
       res.json({
@@ -916,46 +889,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         layer1WasLocked: operator.layer1LockedAt === null,
       });
 
-      // --- [LEARN:] EXTRACTION ---
-      if (!operator.safeMode) {
-        const learnMatches = finalContent.match(/\[LEARN:\s*(.*?)\]/gs);
-        if (learnMatches && learnMatches.length > 0) {
-          for (const match of learnMatches) {
-            const text = match.replace(/\[LEARN:\s*/i, '').replace(/\]$/, '').trim();
-            if (text.length > 20) {
-              verifyAndStore(
-                operator.id,
-                operator.ownerId,
-                text,
-                'self_learn',
-                'operator_self_learn',
-                operator.mandate ?? '',
-              ).catch(() => {});
-            }
-          }
-        }
-      }
-      // --- END [LEARN:] EXTRACTION ---
+      runPostResponseTasks(operator, conv, finalContent, isBirthMode);
 
-      // --- BIRTH EXTRACTION ---
-      if (isBirthMode) {
-        const userMessages = await db
-          .select({ id: messagesTable.id })
-          .from(messagesTable)
-          .where(and(eq(messagesTable.conversationId, conv.id), eq(messagesTable.role, 'user')));
-        if (userMessages.length >= 2) {
-          extractBirthIdentity(operator.id, conv.id).catch(() => {});
-        }
-      }
-      // --- END BIRTH EXTRACTION ---
-
-      if (!operator.safeMode) {
-        triggerSelfAwareness(operator.id, 'conversation_end').catch(() => {});
-        const shouldDistill = ((conv.messageCount ?? 0) % 10 === 0);
-        if (shouldDistill) {
-          distillMemoriesFromConversations(operator.id, operator.ownerId, operator.name).catch(() => {});
-        }
-      }
     } catch (err) {
       res.status(502).json({ error: 'AI backend error', detail: (err as Error).message });
     }
