@@ -531,6 +531,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         try { searchQuery = JSON.parse(operatorToolCall.args).query ?? ''; } catch { /* skip */ }
         if (searchQuery) {
           console.log(`[agency] operator-initiated web search: "${searchQuery}"`);
+          res.write(`data: ${JSON.stringify({ searching: searchQuery })}\n\n`);
           const capResult = await executeWebSearch(searchQuery);
           if (capResult.success) {
             await db.insert(messagesTable).values({

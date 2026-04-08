@@ -172,6 +172,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   const [streamingMsg, setStreamingMsg] = useState("");
   const [lastStreamSnapshot, setLastStreamSnapshot] = useState("");
   const [isAgencyProcessing, setIsAgencyProcessing] = useState(false);
+  const [searchingQuery, setSearchingQuery] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -431,9 +432,14 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                   setStreamingMsg("");
                   setLastStreamSnapshot("");
                   setIsAgencyProcessing(false);
+                  setSearchingQuery(null);
+                } else if (data.searching) {
+                  setSearchingQuery(data.searching);
+                  setIsAgencyProcessing(false);
                 } else if (data.delta) {
                   if (firstDelta) {
                     setIsAgencyProcessing(false);
+                    setSearchingQuery(null);
                     firstDelta = false;
                   }
                   currentStream += data.delta;
@@ -444,6 +450,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                   setIsAgencyProcessing(true);
                 } else if (data.done) {
                   setIsAgencyProcessing(false);
+                  setSearchingQuery(null);
                   setStreamingMsg("");
                   queryClient.invalidateQueries({
                     queryKey: ["operators", operatorId, "conversations", activeConvId, "messages"],
@@ -583,8 +590,23 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
               </div>
             )}
 
+            {/* Searching indicator — operator called the web search tool */}
+            {searchingQuery && !showingStream && (
+              <div className="flex justify-start">
+                <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl rounded-tl-none bg-card border border-border/50 text-sm text-muted-foreground">
+                  <Search className="w-3.5 h-3.5 text-primary/60 animate-pulse" />
+                  <span className="text-xs">Searching<span className="text-primary/80 ml-1 font-medium truncate max-w-[200px]">{searchingQuery}</span></span>
+                  <span className="flex gap-0.5 ml-1">
+                    <span className="w-1 h-1 rounded-full bg-muted-foreground/60 animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="w-1 h-1 rounded-full bg-muted-foreground/60 animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="w-1 h-1 rounded-full bg-muted-foreground/60 animate-bounce" style={{ animationDelay: "300ms" }} />
+                  </span>
+                </div>
+              </div>
+            )}
+
             {/* Thinking indicator */}
-            {isAgencyProcessing && !showingStream && <ThinkingIndicator />}
+            {isAgencyProcessing && !showingStream && !searchingQuery && <ThinkingIndicator />}
 
             <div ref={bottomRef} />
           </>
