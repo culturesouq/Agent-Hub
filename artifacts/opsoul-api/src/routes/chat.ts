@@ -490,7 +490,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       res.write(`data: ${JSON.stringify({ processing: true })}\n\n`);
 
       // --- AGENCY LAYER ---
-      const installedSkillsForAgency: InstalledSkill[] = [
+      let installedSkillsForAgency: InstalledSkill[] = [
         ...skills.map((s: any) => ({
           installId:          s.id ?? s.skillId,
           skillId:            s.skillId,
@@ -516,10 +516,16 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       // Only enforced when operator is in free roaming mode
       // In normal mode: skills are owner pre-approved, no gate needed
       if (operator.freeRoaming && operator.toolUsePolicy) {
-        const policy = operator.toolUsePolicy as Record<string, string[]>;
-        const hasAnyPolicy = Object.keys(policy).length > 0;
-        if (hasAnyPolicy) {
-          console.log(`[policy] free roaming active — policy enforced for operator ${operator.id}`);
+        const rawPolicy = operator.toolUsePolicy;
+        if (rawPolicy !== 'auto' && typeof rawPolicy === 'object' && rawPolicy !== null) {
+          const allowedNames = new Set(Object.keys(rawPolicy as Record<string, unknown>));
+          if (allowedNames.size > 0) {
+            const before = installedSkillsForAgency.length;
+            installedSkillsForAgency = installedSkillsForAgency.filter(s => allowedNames.has(s.name));
+            console.log(`[policy] free roaming — filtered skills ${before} → ${installedSkillsForAgency.length} for operator ${operator.id}`);
+          }
+        } else {
+          console.log(`[policy] free roaming — auto policy, all ${installedSkillsForAgency.length} skills allowed for operator ${operator.id}`);
         }
       }
       // --- END TOOL USE POLICY GATE ---
@@ -731,7 +737,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       const result = await chatCompletion(messages, syncOpts);
 
       // --- AGENCY LAYER ---
-      const installedSkillsForAgency: InstalledSkill[] = [
+      let installedSkillsForAgency: InstalledSkill[] = [
         ...skills.map((s: any) => ({
           installId:          s.id ?? s.skillId,
           skillId:            s.skillId,
@@ -757,10 +763,16 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       // Only enforced when operator is in free roaming mode
       // In normal mode: skills are owner pre-approved, no gate needed
       if (operator.freeRoaming && operator.toolUsePolicy) {
-        const policy = operator.toolUsePolicy as Record<string, string[]>;
-        const hasAnyPolicy = Object.keys(policy).length > 0;
-        if (hasAnyPolicy) {
-          console.log(`[policy] free roaming active — policy enforced for operator ${operator.id}`);
+        const rawPolicy = operator.toolUsePolicy;
+        if (rawPolicy !== 'auto' && typeof rawPolicy === 'object' && rawPolicy !== null) {
+          const allowedNames = new Set(Object.keys(rawPolicy as Record<string, unknown>));
+          if (allowedNames.size > 0) {
+            const before = installedSkillsForAgency.length;
+            installedSkillsForAgency = installedSkillsForAgency.filter(s => allowedNames.has(s.name));
+            console.log(`[policy] free roaming — filtered skills ${before} → ${installedSkillsForAgency.length} for operator ${operator.id}`);
+          }
+        } else {
+          console.log(`[policy] free roaming — auto policy, all ${installedSkillsForAgency.length} skills allowed for operator ${operator.id}`);
         }
       }
       // --- END TOOL USE POLICY GATE ---
