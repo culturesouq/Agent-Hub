@@ -41,20 +41,48 @@ export type ContentPart =
   | { type: 'text'; text: string }
   | { type: 'image_url'; image_url: { url: string } };
 
-export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string | ContentPart[];
+export type ChatMessage =
+  | { role: 'system'; content: string | ContentPart[] }
+  | { role: 'user'; content: string | ContentPart[] }
+  | { role: 'assistant'; content: string | ContentPart[]; tool_calls?: AssistantToolCall[] }
+  | { role: 'tool'; content: string; tool_call_id: string };
+
+export interface AssistantToolCall {
+  id: string;
+  type: 'function';
+  function: { name: string; arguments: string };
+}
+
+export interface ToolDefinition {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: {
+      type: 'object';
+      properties: Record<string, { type: string; description: string }>;
+      required: string[];
+    };
+  };
+}
+
+export interface ToolCall {
+  id: string;
+  name: string;
+  args: string;
 }
 
 export interface StreamChunk {
   delta: string;
   done: boolean;
+  toolCall?: ToolCall;
   usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
 }
 
 export interface ChatOptions {
   apiKey?: string | null;
   model?: string | null;
+  tools?: ToolDefinition[];
 }
 
 export async function* streamChat(
@@ -68,22 +96,47 @@ export async function* streamChat(
   const client = getOpenRouterClient(opts.apiKey);
   const model = opts.model || CHAT_MODEL;
 
-  const stream = await client.chat.completions.create({
+  const requestParams: Parameters<typeof client.chat.completions.create>[0] = {
     model,
     messages: messages as Parameters<typeof client.chat.completions.create>[0]['messages'],
     max_tokens: MAX_TOKENS,
     stream: true,
     stream_options: { include_usage: true },
-  });
+  };
+
+  if (opts.tools && opts.tools.length > 0) {
+    requestParams.tools = opts.tools as Parameters<typeof client.chat.completions.create>[0]['tools'];
+  }
+
+  const stream = await client.chat.completions.create(requestParams);
+
+  let toolCallAccumulator: { id: string; name: string; arguments: string } | null = null;
 
   for await (const chunk of stream) {
-    const delta = chunk.choices[0]?.delta?.content ?? '';
+    const delta = chunk.choices[0]?.delta;
+    const textDelta = delta?.content ?? '';
     const usage = chunk.usage;
+
+    const tcDelta = delta?.tool_calls?.[0];
+    if (tcDelta) {
+      if (tcDelta.id) {
+        toolCallAccumulator = {
+          id: tcDelta.id,
+          name: tcDelta.function?.name ?? '',
+          arguments: tcDelta.function?.arguments ?? '',
+        };
+      } else if (toolCallAccumulator && tcDelta.function?.arguments) {
+        toolCallAccumulator.arguments += tcDelta.function.arguments;
+      }
+    }
 
     if (usage) {
       yield {
-        delta,
+        delta: textDelta,
         done: true,
+        toolCall: toolCallAccumulator
+          ? { id: toolCallAccumulator.id, name: toolCallAccumulator.name, args: toolCallAccumulator.arguments }
+          : undefined,
         usage: {
           promptTokens: usage.prompt_tokens,
           completionTokens: usage.completion_tokens,
@@ -91,15 +144,22 @@ export async function* streamChat(
         },
       };
     } else {
-      yield { delta, done: false };
+      yield { delta: textDelta, done: false };
     }
   }
+}
+
+export interface CompletionResult {
+  content: string;
+  toolCall?: ToolCall;
+  promptTokens: number;
+  completionTokens: number;
 }
 
 export async function chatCompletion(
   messages: ChatMessage[],
   modelOrOptions: string | ChatOptions = CHAT_MODEL,
-): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
+): Promise<CompletionResult> {
   const opts: ChatOptions = typeof modelOrOptions === 'string'
     ? { model: modelOrOptions }
     : modelOrOptions;
@@ -107,15 +167,26 @@ export async function chatCompletion(
   const client = getOpenRouterClient(opts.apiKey);
   const model = opts.model || CHAT_MODEL;
 
-  const response = await client.chat.completions.create({
+  const requestParams: Parameters<typeof client.chat.completions.create>[0] = {
     model,
     messages: messages as Parameters<typeof client.chat.completions.create>[0]['messages'],
     max_tokens: MAX_TOKENS,
     stream: false,
-  });
+  };
+
+  if (opts.tools && opts.tools.length > 0) {
+    requestParams.tools = opts.tools as Parameters<typeof client.chat.completions.create>[0]['tools'];
+  }
+
+  const response = await client.chat.completions.create(requestParams);
+  const choice = response.choices[0];
+  const tc = choice?.message?.tool_calls?.[0];
 
   return {
-    content: response.choices[0]?.message?.content ?? '',
+    content: choice?.message?.content ?? '',
+    toolCall: tc
+      ? { id: tc.id, name: tc.function.name, args: tc.function.arguments }
+      : undefined,
     promptTokens: response.usage?.prompt_tokens ?? 0,
     completionTokens: response.usage?.completion_tokens ?? 0,
   };

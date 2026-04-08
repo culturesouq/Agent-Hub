@@ -25,7 +25,7 @@ import type { MemoryHit } from '../utils/memoryEngine.js';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import { decryptToken } from '@workspace/opsoul-utils/crypto';
-import type { ChatMessage } from '../utils/openrouter.js';
+import type { ChatMessage, ToolDefinition, AssistantToolCall } from '../utils/openrouter.js';
 import type { Layer2Soul } from '../validation/operator.js';
 import { resolveScope } from '../utils/scopeResolver.js';
 import { scrapeUrl } from '../utils/urlScraper.js';
@@ -33,7 +33,7 @@ import type { ContentPart } from '../utils/openrouter.js';
 import { verifyAndStore } from '../utils/kbIntake.js';
 import { eq, and, asc } from 'drizzle-orm';
 import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
-import { isWebSearchAvailable, detectWebSearchIntent, executeWebSearch } from '../utils/capabilityEngine.js';
+import { isWebSearchAvailable, executeWebSearch } from '../utils/capabilityEngine.js';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -298,49 +298,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     }
   }
 
-  // Web search — only trigger on KB miss
-  // Uses curiosityEngine for tier evaluation and corroboration
-  // instead of raw webSearch
-  let searchContext = '';
-  if (!kbContext || kbContext.trim().length < 100) {
-    try {
-      const { curiositySearch } = await import('../utils/curiosityEngine.js');
-      const curiosity = await curiositySearch(message, operator.id);
-
-      const usableSources = curiosity.sources.filter(s => s.snippet && s.snippet.trim().length > 20);
-
-      if (usableSources.length > 0) {
-        const label = curiosity.corroborated && curiosity.tier
-          ? `[Research findings — verified by multiple sources — synthesize as natural insights, never list URLs or source names]`
-          : `[Research findings — limited sourcing, treat as directional only — synthesize carefully, do not state as confirmed fact]`;
-
-        searchContext = `${label}\n\n` +
-          usableSources
-          .map(s => `• ${s.title}: ${s.snippet}`)
-          .join('\n\n');
-
-        console.log(
-          `[chat] curiosity search — tier: ${curiosity.tier}, ` +
-          `corroborated: ${curiosity.corroborated}, ` +
-          `confidence: ${curiosity.confidence}, ` +
-          `sources used: ${usableSources.length}`
-        );
-      } else {
-        console.log(
-          `[chat] curiosity search — no usable sources found (tier: ${curiosity.tier})`
-        );
-      }
-    } catch (e) {
-      console.error('[curiositySearch]', e);
-    }
-  }
-
-  if (searchContext) {
-    kbContext = kbContext
-      ? `${kbContext}\n\n---\n\n${searchContext}`
-      : searchContext;
-  }
-
   // Auto routing — resolve final model now that kbContext and memoryHits are known
   chatModel = (() => {
     if (rawModel !== 'opsoul/auto') return rawModel;
@@ -458,6 +415,24 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   await lockLayer1IfUnlocked(operator.id);
 
+  // Web search tool — offered to the operator; the operator decides when to use it
+  const webSearchTool: ToolDefinition | null = isWebSearchAvailable()
+    ? {
+        type: 'function',
+        function: {
+          name: 'web_search',
+          description: 'Search the web for current, live information. Use only when you genuinely need information you cannot answer from your own knowledge or memory.',
+          parameters: {
+            type: 'object',
+            properties: {
+              query: { type: 'string', description: 'Concise search query, 3–8 words' },
+            },
+            required: ['query'],
+          },
+        },
+      }
+    : null;
+
   if (stream) {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -492,10 +467,16 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     });
 
     try {
-      for await (const chunk of streamChat(messages, chatOpts)) {
+      const streamOpts = { ...chatOpts, tools: webSearchTool ? [webSearchTool] : undefined };
+      let operatorToolCall: { id: string; name: string; args: string } | undefined;
+
+      for await (const chunk of streamChat(messages, streamOpts)) {
         if (chunk.delta) {
           fullContent += chunk.delta;
           res.write(`data: ${JSON.stringify({ delta: chunk.delta })}\n\n`);
+        }
+        if (chunk.toolCall) {
+          operatorToolCall = chunk.toolCall;
         }
         if (chunk.done && chunk.usage) {
           promptTokens = chunk.usage.promptTokens;
@@ -541,33 +522,38 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       }
       // --- END TOOL USE POLICY GATE ---
 
-      // Direct capability: web search (before skill trigger)
+      // Operator-initiated web search — the operator decided to call the tool
       let finalContent = fullContent;
       let finalTokens = completionTokens;
       let capabilityFired = false;
-      if (isWebSearchAvailable()) {
-        const webQuery = await detectWebSearchIntent(message, fullContent);
-        if (webQuery) {
-          console.log(`[agency] web search triggered: "${webQuery}"`);
-          const capResult = await executeWebSearch(webQuery);
+      if (operatorToolCall && operatorToolCall.name === 'web_search') {
+        let searchQuery = '';
+        try { searchQuery = JSON.parse(operatorToolCall.args).query ?? ''; } catch { /* skip */ }
+        if (searchQuery) {
+          console.log(`[agency] operator-initiated web search: "${searchQuery}"`);
+          const capResult = await executeWebSearch(searchQuery);
           if (capResult.success) {
             await db.insert(messagesTable).values({
               id:             crypto.randomUUID(),
               operatorId:     operator.id,
               conversationId: conv.id,
               role:           'system',
-              content:        `[Skill: Web Search] Result:\n${capResult.output}`,
+              content:        `[Web Search] ${searchQuery}\n${capResult.output}`,
             });
             capabilityFired = true;
-            const secondMessages: ChatMessage[] = [
+            const assistantToolCallMsg: AssistantToolCall = {
+              id: operatorToolCall.id,
+              type: 'function',
+              function: { name: 'web_search', arguments: operatorToolCall.args },
+            };
+            const toolResultMessages: ChatMessage[] = [
               ...messages,
-              { role: 'assistant', content: fullContent },
-              { role: 'system', content: `[Web search completed — findings below]\n${capResult.output}` },
-              { role: 'user', content: `You looked into it and found what you needed. Now just answer — speak from what you know, the way you always do. Never mention the search, tools, or sources.` },
+              { role: 'assistant', content: '', tool_calls: [assistantToolCallMsg] },
+              { role: 'tool', content: capResult.output, tool_call_id: operatorToolCall.id },
             ];
             let secondContent = '';
             let secondTokens = 0;
-            for await (const chunk of streamChat(secondMessages, chatOpts)) {
+            for await (const chunk of streamChat(toolResultMessages, chatOpts)) {
               if (chunk.delta) {
                 secondContent += chunk.delta;
                 res.write(`data: ${JSON.stringify({ delta: chunk.delta })}\n\n`);
@@ -719,7 +705,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   } else {
     try {
-      const result = await chatCompletion(messages, chatOpts);
+      const syncOpts = { ...chatOpts, tools: webSearchTool ? [webSearchTool] : undefined };
+      const result = await chatCompletion(messages, syncOpts);
 
       // --- AGENCY LAYER ---
       const installedSkillsForAgency: InstalledSkill[] = [
@@ -756,32 +743,37 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       }
       // --- END TOOL USE POLICY GATE ---
 
-      // Direct capability: web search (before skill trigger)
+      // Operator-initiated web search — the operator decided to call the tool
       let finalContent = result.content;
       let finalPromptTokens = result.promptTokens;
       let finalCompletionTokens = result.completionTokens;
       let capabilityFiredSync = false;
-      if (isWebSearchAvailable()) {
-        const webQuery = await detectWebSearchIntent(message, result.content);
-        if (webQuery) {
-          console.log(`[agency] web search triggered (sync): "${webQuery}"`);
-          const capResult = await executeWebSearch(webQuery);
+      if (result.toolCall && result.toolCall.name === 'web_search') {
+        let searchQuery = '';
+        try { searchQuery = JSON.parse(result.toolCall.args).query ?? ''; } catch { /* skip */ }
+        if (searchQuery) {
+          console.log(`[agency] operator-initiated web search (sync): "${searchQuery}"`);
+          const capResult = await executeWebSearch(searchQuery);
           if (capResult.success) {
             await db.insert(messagesTable).values({
               id:             crypto.randomUUID(),
               operatorId:     operator.id,
               conversationId: conv.id,
               role:           'system',
-              content:        `[Skill: Web Search] Result:\n${capResult.output}`,
+              content:        `[Web Search] ${searchQuery}\n${capResult.output}`,
             });
             capabilityFiredSync = true;
-            const secondMessages: ChatMessage[] = [
+            const assistantToolCallMsg: AssistantToolCall = {
+              id: result.toolCall.id,
+              type: 'function',
+              function: { name: 'web_search', arguments: result.toolCall.args },
+            };
+            const toolResultMessages: ChatMessage[] = [
               ...messages,
-              { role: 'assistant', content: result.content },
-              { role: 'system', content: `[Web search completed — findings below]\n${capResult.output}` },
-              { role: 'user', content: `You looked into it and found what you needed. Now just answer — speak from what you know, the way you always do. Never mention the search, tools, or sources.` },
+              { role: 'assistant', content: '', tool_calls: [assistantToolCallMsg] },
+              { role: 'tool', content: capResult.output, tool_call_id: result.toolCall.id },
             ];
-            const secondResult = await chatCompletion(secondMessages, chatOpts);
+            const secondResult = await chatCompletion(toolResultMessages, chatOpts);
             finalContent = secondResult.content;
             finalPromptTokens = secondResult.promptTokens;
             finalCompletionTokens = secondResult.completionTokens;
