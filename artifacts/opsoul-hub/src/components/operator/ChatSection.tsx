@@ -402,10 +402,12 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                   setSearchingQuery(data.searching);
                   setRunningTool(null);
                   setIsAgencyProcessing(false);
+                  firstDelta = true;
                 } else if (data.running) {
                   setRunningTool(data.running);
                   setSearchingQuery(null);
                   setIsAgencyProcessing(false);
+                  firstDelta = true;
                 } else if (data.delta) {
                   if (firstDelta) {
                     setIsAgencyProcessing(false);
