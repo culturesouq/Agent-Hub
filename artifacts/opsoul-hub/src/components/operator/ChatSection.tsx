@@ -207,13 +207,15 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     : ((messages as any)?.messages ?? []);
 
   // Scroll to bottom on load and on new messages
+  // setTimeout(0) queues AFTER React render + browser layout, so scrollHeight is correct
   useEffect(() => {
     if (msgsArray.length === 0) return;
-    requestAnimationFrame(() => {
+    const id = setTimeout(() => {
       const el = scrollRef.current;
       if (!el) return;
       el.scrollTop = el.scrollHeight;
-    });
+    }, 0);
+    return () => clearTimeout(id);
   }, [activeConvId, msgsArray.length]);
 
   // Follow streaming tokens
