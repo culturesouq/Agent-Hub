@@ -143,6 +143,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   const [transcribing, setTranscribing] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -206,14 +207,12 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     ? messages
     : ((messages as any)?.messages ?? []);
 
-  // Scroll to bottom on load and on new messages
-  // setTimeout(0) queues AFTER React render + browser layout, so scrollHeight is correct
+  // Scroll sentinel into view on load and new messages — scrollIntoView finds the
+  // correct scrollable ancestor automatically, bypassing scrollHeight/clientHeight issues
   useEffect(() => {
     if (msgsArray.length === 0) return;
     const id = setTimeout(() => {
-      const el = scrollRef.current;
-      if (!el) return;
-      el.scrollTop = el.scrollHeight;
+      sentinelRef.current?.scrollIntoView({ behavior: 'instant', block: 'end' });
     }, 0);
     return () => clearTimeout(id);
   }, [activeConvId, msgsArray.length]);
@@ -221,9 +220,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   // Follow streaming tokens
   useEffect(() => {
     if (!streamingMsg) return;
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
+    sentinelRef.current?.scrollIntoView({ behavior: 'instant', block: 'end' });
   }, [streamingMsg]);
 
   const createConv = useMutation({
@@ -583,6 +580,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
               </div>
             )}
 
+            <div ref={sentinelRef} />
           </>
         )}
       </div>
