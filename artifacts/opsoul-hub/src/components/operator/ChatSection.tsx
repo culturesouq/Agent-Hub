@@ -165,7 +165,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   const checkAtBottom = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
-    setIsAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 80);
+    setIsAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 120);
   }, []);
 
   // Scroll event listener
@@ -208,16 +208,15 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     ? messages
     : ((messages as any)?.messages ?? []);
 
-  // Re-check scroll position when messages change (must be after msgsArray is declared)
+  // Auto-scroll when messages or stream updates
   useEffect(() => {
-    checkAtBottom();
-  }, [msgsArray.length, checkAtBottom]);
-
-  useEffect(() => {
-    if (isAtBottom) {
-      scrollToBottom(true);
+    const el = scrollRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distanceFromBottom < 120) {
+      el.scrollTop = el.scrollHeight;
     }
-  }, [msgsArray, streamingMsg, isAtBottom, scrollToBottom]);
+  }, [msgsArray.length, streamingMsg]);
 
   useEffect(() => {
     if (showAll) {
