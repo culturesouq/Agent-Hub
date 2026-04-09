@@ -141,10 +141,8 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
-  const [showAll, setShowAll] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -208,23 +206,23 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     ? messages
     : ((messages as any)?.messages ?? []);
 
-  // Auto-scroll when messages or stream updates
+  // Scroll to bottom on load and on new messages
   useEffect(() => {
+    if (msgsArray.length === 0) return;
     requestAnimationFrame(() => {
       const el = scrollRef.current;
       if (!el) return;
-      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-      if (distanceFromBottom < 200) {
-        el.scrollTop = el.scrollHeight;
-      }
+      el.scrollTop = el.scrollHeight;
     });
-  }, [msgsArray.length, streamingMsg]);
+  }, [activeConvId, msgsArray.length]);
 
+  // Follow streaming tokens
   useEffect(() => {
-    if (showAll) {
-      setTimeout(() => scrollToBottom(true), 50);
-    }
-  }, [showAll, scrollToBottom]);
+    if (!streamingMsg) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [streamingMsg]);
 
   const createConv = useMutation({
     mutationFn: (contextName: string) =>
@@ -500,15 +498,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
           </div>
         ) : (
           <>
-            {!showAll && items.length > 20 && (
-              <button
-                onClick={() => setShowAll(true)}
-                className="text-xs text-muted-foreground/50 font-mono mx-auto block py-2 hover:text-muted-foreground transition-colors"
-              >
-                ↑ Show earlier messages
-              </button>
-            )}
-            {(showAll ? items : items.slice(-20)).map((item) =>
+            {items.map((item) =>
               item.kind === "separator" ? (
                 <div key={item.key} className="flex items-center gap-3 my-4">
                   <div className="flex-1 h-px bg-border/30" />
@@ -591,7 +581,6 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
               </div>
             )}
 
-            <div ref={bottomRef} />
           </>
         )}
       </div>
