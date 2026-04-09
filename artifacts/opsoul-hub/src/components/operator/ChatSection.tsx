@@ -210,12 +210,14 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
 
   // Auto-scroll when messages or stream updates
   useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    if (distanceFromBottom < 120) {
-      el.scrollTop = el.scrollHeight;
-    }
+    requestAnimationFrame(() => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      if (distanceFromBottom < 200) {
+        el.scrollTop = el.scrollHeight;
+      }
+    });
   }, [msgsArray.length, streamingMsg]);
 
   useEffect(() => {
