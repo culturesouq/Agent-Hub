@@ -17,16 +17,7 @@ type Attachment = {
 type RenderedItem =
   | { kind: "msg"; msg: Message }
   | { kind: "separator"; label: string; key: string }
-  | { kind: "tool"; skillName: string; output: string; key: string };
-
-const THINKING_STEPS = [
-  "Thinking",
-  "Recalling memories",
-  "Checking knowledge base",
-  "Reading context",
-  "Forming a response",
-  "Almost there",
-];
+  | { kind: "tool"; skillName: string; output: string; key: string; toolType?: 'skill' | 'search' };
 
 // Inline token parser — handles **bold**, *italic*, `code`
 function parseInline(text: string): React.ReactNode[] {
@@ -112,33 +103,10 @@ function MarkdownMessage({ content }: { content: string }) {
   return <div className="space-y-0 text-sm">{nodes}</div>;
 }
 
-function ThinkingIndicator() {
-  const [step, setStep] = useState(0);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setStep((s) => (s + 1) % THINKING_STEPS.length);
-    }, 3500);
-    return () => clearInterval(timer);
-  }, []);
-
-  return (
-    <div className="flex justify-start">
-      <div className="max-w-[85%] rounded-2xl rounded-tl-none px-4 py-2.5 bg-card border border-border/50">
-        <span
-          key={step}
-          className="text-xs text-muted-foreground animate-in fade-in duration-700 italic"
-        >
-          {THINKING_STEPS[step]}…
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function ToolOutputBlock({ skillName, output }: { skillName: string; output: string }) {
+function ToolOutputBlock({ skillName, output, toolType }: { skillName: string; output: string; toolType?: 'skill' | 'search' }) {
   const [open, setOpen] = useState(false);
-  const isSearch = skillName.toLowerCase().includes('research') || skillName.toLowerCase().includes('search');
+  const isSearch = toolType === 'search';
+  const label = isSearch ? `Searched: ${skillName}` : `Ran: ${skillName}`;
   return (
     <div className="flex justify-start my-1">
       <div className="max-w-[85%]">
@@ -147,7 +115,7 @@ function ToolOutputBlock({ skillName, output }: { skillName: string; output: str
           className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-primary/20 bg-primary/5 text-primary/60 hover:bg-primary/10 hover:text-primary transition-colors text-[11px] font-mono"
         >
           {isSearch ? <Search className="w-3 h-3" /> : <Zap className="w-3 h-3" />}
-          <span>{skillName}</span>
+          <span>{label}</span>
           <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
         </button>
         {open && (
@@ -488,7 +456,13 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
       const content = msg.content ?? '';
       const skillMatch = content.match(/^\[Skill:\s*(.+?)\]\s*Result:\n([\s\S]*)$/);
       if (skillMatch) {
-        items.push({ kind: "tool", skillName: skillMatch[1].trim(), output: skillMatch[2].trim(), key: msg.id });
+        items.push({ kind: "tool", skillName: skillMatch[1].trim(), output: skillMatch[2].trim(), key: msg.id, toolType: 'skill' });
+        continue;
+      }
+      const searchMatch = content.match(/^\[Web Search\]\s*(.+?)\n([\s\S]*)$/);
+      if (searchMatch) {
+        items.push({ kind: "tool", skillName: searchMatch[1].trim(), output: searchMatch[2].trim(), key: msg.id, toolType: 'search' });
+        continue;
       }
       continue;
     }
@@ -539,7 +513,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                   <div className="flex-1 h-px bg-border/30" />
                 </div>
               ) : item.kind === "tool" ? (
-                <ToolOutputBlock key={item.key} skillName={item.skillName} output={item.output} />
+                <ToolOutputBlock key={item.key} skillName={item.skillName} output={item.output} toolType={item.toolType} />
               ) : (
                 <div
                   key={item.msg.id}
@@ -594,30 +568,25 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
               </div>
             )}
 
-            {/* Searching indicator — operator called the web search tool */}
-            {searchingQuery && !showingStream && (
+            {/* Unified live status pill */}
+            {!showingStream && (searchingQuery || runningTool) && (
               <div className="flex justify-start">
-                <div className="max-w-[85%] rounded-2xl rounded-tl-none px-4 py-2.5 bg-card border border-border/50">
-                  <span className="text-xs text-muted-foreground italic">
-                    Searching <span className="text-primary/80 not-italic font-medium">{searchingQuery}</span>…
-                  </span>
-                </div>
+                <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-primary/20 bg-primary/5 text-primary/60 text-[11px] font-mono">
+                  {searchingQuery ? `🔍 Searching…` : `⚡ Running ${runningTool}…`}
+                </span>
               </div>
             )}
 
-            {/* Running tool indicator — operator is executing an integration */}
-            {runningTool && !searchingQuery && !showingStream && (
+            {/* Waiting for first token — bouncing dots */}
+            {isAgencyProcessing && !streamingMsg && !searchingQuery && !runningTool && (
               <div className="flex justify-start">
-                <div className="max-w-[85%] rounded-2xl rounded-tl-none px-4 py-2.5 bg-card border border-border/50">
-                  <span className="text-xs text-muted-foreground italic">
-                    Running <span className="text-primary/80 not-italic font-medium">{runningTool}</span>…
-                  </span>
+                <div className="flex items-center gap-1 px-3 py-2.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:0ms]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:150ms]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:300ms]" />
                 </div>
               </div>
             )}
-
-            {/* Thinking indicator */}
-            {isAgencyProcessing && !showingStream && !searchingQuery && !runningTool && <ThinkingIndicator />}
 
             <div ref={bottomRef} />
           </>
