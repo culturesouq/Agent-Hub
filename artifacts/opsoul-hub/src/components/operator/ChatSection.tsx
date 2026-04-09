@@ -483,7 +483,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   const showingFallback = !showingStream && !!lastStreamSnapshot;
 
   const chatContent = (
-    <div className="flex flex-col h-full bg-background/50 relative overflow-hidden">
+    <div className="flex flex-col flex-1 min-h-0 bg-background/50 relative overflow-hidden">
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 relative" ref={scrollRef}>
         {msgsLoading || (!activeConvId && createConv.isPending) ? (
@@ -691,18 +691,8 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   );
 
   return (
-    <>
-      {/* Desktop: full height, no glass wrapper, no left panel */}
-      <div className="h-full hidden md:flex overflow-hidden">
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {chatContent}
-        </div>
-      </div>
-
-      {/* Mobile: same single-column chat, full height */}
-      <div className="h-full md:hidden flex flex-col glass-panel border border-border/30 overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-        {chatContent}
-      </div>
-    </>
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      {chatContent}
+    </div>
   );
 }
