@@ -13,4 +13,6 @@ export const operatorMemoryTable = pgTable('operator_memory', {
   decayStartedAt: timestamp('decay_started_at'),
   archivedAt: timestamp('archived_at'),
   createdAt: timestamp('created_at').defaultNow(),
+  scopeId: text('scope_id'),
+  scopeTrust: text('scope_trust').default('owner'),
 });

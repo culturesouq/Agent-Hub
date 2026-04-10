@@ -43,8 +43,19 @@ export async function searchMemory(
   topN: number = MEMORY_TOP_N,
   minSimilarity: number = MEMORY_MIN_SIMILARITY,
   minWeight: number = MEMORY_MIN_WEIGHT,
+  scopeId?: string,
 ): Promise<MemoryHit[]> {
   const vecStr = `[${embedding.join(',')}]`;
+
+  let scopeClause = '';
+  const params: (string | number)[] = [vecStr, operatorId, minWeight, minSimilarity, topN];
+
+  if (scopeId) {
+    // slot/guest scope: see their own memories + owner-level memories (scope_id IS NULL)
+    params.push(scopeId);
+    scopeClause = `AND (scope_id = $${params.length} OR scope_id IS NULL)`;
+  }
+  // if no scopeId (owner workspace): no additional filter — sees everything
 
   const result = await pool.query<{
     id: string;
@@ -63,9 +74,10 @@ export async function searchMemory(
        AND archived_at IS NULL
        AND weight >= $3
        AND (1 - (embedding <=> $1::vector)) >= $4
+       ${scopeClause}
      ORDER BY distance ASC
      LIMIT $5`,
-    [vecStr, operatorId, minWeight, minSimilarity, topN],
+    params,
   );
 
   return result.rows.map((r) => ({
@@ -94,6 +106,8 @@ export async function storeMemory(
   sourceTrustLevel: SourceTrustLevel = 'user',
   weight: number = 1.0,
   startDecay: boolean = false,
+  scopeId?: string,
+  scopeTrust?: string,
 ): Promise<typeof operatorMemoryTable.$inferSelect> {
   const embedding = await embed(content);
 
@@ -107,6 +121,8 @@ export async function storeMemory(
     sourceTrustLevel,
     weight,
     decayStartedAt: startDecay ? new Date() : undefined,
+    scopeId: scopeId ?? null,
+    scopeTrust: scopeTrust ?? 'owner',
   }).returning();
 
   return memory;
@@ -207,11 +223,18 @@ export async function distillMemoriesFromConversations(
   operatorId: string,
   ownerId: string,
   operatorName: string,
+  scopeId?: string,
+  scopeTrust?: string,
 ): Promise<{ stored: number; extracted: number; memories: DistilledMemory[] }> {
   const convs = await db
     .select({ id: conversationsTable.id })
     .from(conversationsTable)
-    .where(eq(conversationsTable.operatorId, operatorId))
+    .where(
+      and(
+        eq(conversationsTable.operatorId, operatorId),
+        scopeId ? eq(conversationsTable.scopeId, scopeId) : undefined,
+      ),
+    )
     .orderBy(desc(conversationsTable.lastMessageAt))
     .limit(5);
 
@@ -270,7 +293,7 @@ export async function distillMemoriesFromConversations(
         console.log(`[memory] skipped duplicate — similarity: ${(1 - dupCheck.rows[0].distance).toFixed(3)}`);
         continue;
       }
-      await storeMemory(operatorId, ownerId, m.content, m.memoryType, 'ai_distilled', m.confidence);
+      await storeMemory(operatorId, ownerId, m.content, m.memoryType, 'ai_distilled', m.confidence, false, scopeId, scopeTrust);
       // Promote memories with 80%+ confidence — only if externally corroborated
       if (m.confidence >= 0.80) {
         const operatorRow = await db.select({ mandate: operatorsTable.mandate })
@@ -279,8 +302,6 @@ export async function distillMemoriesFromConversations(
           .limit(1);
         const mandate = operatorRow[0]?.mandate ?? '';
 
-        // Validate via real-world source before promoting to KB
-        // ai_distilled memories must be corroborated externally
         const { curiositySearch } = await import('./curiosityEngine.js');
         const curiosity = await curiositySearch(m.content, operatorId, mandate);
 

@@ -8,7 +8,7 @@ import {
   User, Zap, Archive, Network,
   CheckSquare, FileText, Settings2, Key, Code2, AlertTriangle,
   Radio, MessageCircle, Send, Star, ChevronRight, Bell,
-  Shield, Menu, X, Cpu, ShieldAlert,
+  Shield, Menu, X, Cpu, ShieldAlert, Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +30,7 @@ import KbSection from "@/components/operator/KbSection";
 import FilesSection from "@/components/operator/FilesSection";
 import TelegramChannelSection from "@/components/operator/TelegramChannelSection";
 import WhatsAppChannelSection from "@/components/operator/WhatsAppChannelSection";
+import DeploymentsSection from "@/components/operator/DeploymentsSection";
 import NebulaBlobs from "@/components/ui/NebulaBlobs";
 
 const PERSONA_IMAGES = [
@@ -159,6 +160,7 @@ const NAV_MAIN: NavItem[] = [
   { kind: "leaf", id: "tasks",       label: "Tasks",       icon: CheckSquare, depth: 0 },
   { kind: "leaf", id: "files",       label: "Files",       icon: FileText,    depth: 0 },
   { kind: "leaf", id: "connections", label: "Connections", icon: Network,     depth: 0 },
+  { kind: "leaf", id: "deployments", label: "Deployments", icon: Globe,       depth: 0 },
   {
     kind: "group", id: "settings", label: "Settings", icon: Settings2, depth: 0,
     children: [
@@ -300,6 +302,7 @@ export default function OperatorDetail({ id }: { id: string }) {
       case "tasks":              return <TasksSection operatorId={id} />;
       case "files":              return <FilesSection operator={operator} />;
       case "connections":        return <IntegrationsSection operatorId={id} />;
+      case "deployments":        return <DeploymentsSection operatorId={id} />;
       case "settings.model":     return <SettingsSection operator={operator} section="model" />;
       case "settings.secrets":   return <SettingsSection operator={operator} section="secrets" />;
       case "settings.api":       return <SettingsSection operator={operator} section="api" />;

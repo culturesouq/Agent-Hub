@@ -30,6 +30,9 @@ import adminRouter from './routes/admin.js';
 import contactRouter from './routes/contact.js';
 import googleIntegrationRouter from './routes/google-integration.js';
 import operatorSecretsRouter from './routes/operator-secrets.js';
+import deploymentSlotsRouter from './routes/deployment-slots.js';
+import publicChatRouter from './routes/public-chat.js';
+import publicCrudRouter from './routes/public-crud.js';
 import { startGrowCron } from './cron/growCron.js';
 import { startMemoryCron } from './cron/memoryCron.js';
 import { startDriftCron } from './cron/driftCron.js';
@@ -67,6 +70,9 @@ app.use('/api/admin', adminRouter);
 app.use('/api/contact', contactRouter);
 app.use('/api/integrations/google', googleIntegrationRouter);
 app.use('/api/operators/:operatorId/secrets', operatorSecretsRouter);
+app.use('/api/operators/:operatorId/slots', deploymentSlotsRouter);
+app.use('/v1/chat', publicChatRouter);
+app.use('/v1/action', publicCrudRouter);
 
 app.get('/api/healthz', (_req, res) => {
   // Fire a non-blocking DB ping to keep the Neon endpoint warm.
@@ -140,6 +146,9 @@ async function start(): Promise<void> {
     console.log(`[opsoul-api] Integrations: /api/operators/:id/integrations — register, list, patch, delete`);
     console.log(`[opsoul-api] Memory: /api/operators/:id/memory — store, list, search, distill, decay`);
     console.log(`[opsoul-api] Operator Secrets: /api/operators/:id/secrets — list, save, reveal, delete`);
+    console.log(`[opsoul-api] Deployment Slots: /api/operators/:id/slots — create, list, patch, revoke`);
+    console.log(`[opsoul-api] Public Chat: POST /v1/chat — slot-key authenticated, guest/authenticated surfaces`);
+    console.log(`[opsoul-api] Public CRUD: POST /v1/action — slot-key authenticated, crud surface only`);
   });
 
   runInitSeed().catch((err) => console.error('[initSeed] failed:', err?.message));
