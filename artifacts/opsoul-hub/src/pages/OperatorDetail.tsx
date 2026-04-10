@@ -31,6 +31,7 @@ import FilesSection from "@/components/operator/FilesSection";
 import TelegramChannelSection from "@/components/operator/TelegramChannelSection";
 import WhatsAppChannelSection from "@/components/operator/WhatsAppChannelSection";
 import DeploymentsSection from "@/components/operator/DeploymentsSection";
+import ApiKeysSection from "@/components/operator/ApiKeysSection";
 import NebulaBlobs from "@/components/ui/NebulaBlobs";
 
 const PERSONA_IMAGES = [
@@ -160,6 +161,7 @@ const NAV_MAIN: NavItem[] = [
   { kind: "leaf", id: "tasks",       label: "Tasks",       icon: CheckSquare, depth: 0 },
   { kind: "leaf", id: "files",       label: "Files",       icon: FileText,    depth: 0 },
   { kind: "leaf", id: "connections", label: "Connections", icon: Network,     depth: 0 },
+  { kind: "leaf", id: "api-keys",    label: "API Keys",    icon: Key,         depth: 0 },
   { kind: "leaf", id: "deployments", label: "Deployments", icon: Globe,       depth: 0 },
   {
     kind: "group", id: "settings", label: "Settings", icon: Settings2, depth: 0,
@@ -302,6 +304,7 @@ export default function OperatorDetail({ id }: { id: string }) {
       case "tasks":              return <TasksSection operatorId={id} />;
       case "files":              return <FilesSection operator={operator} />;
       case "connections":        return <IntegrationsSection operatorId={id} />;
+      case "api-keys":           return <ApiKeysSection operatorId={id} />;
       case "deployments":        return <DeploymentsSection operatorId={id} />;
       case "settings.model":     return <SettingsSection operator={operator} section="model" />;
       case "settings.secrets":   return <SettingsSection operator={operator} section="secrets" />;
