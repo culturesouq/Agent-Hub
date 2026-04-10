@@ -1,7 +1,7 @@
 import { chatCompletion } from './openrouter.js';
 import { db } from '@workspace/db';
 import { operatorIntegrationsTable } from '@workspace/db';
-import { decryptToken } from '@workspace/opsoul-utils/crypto';
+import { decryptToken, encryptToken } from '@workspace/opsoul-utils/crypto';
 import { eq, and } from 'drizzle-orm';
 import type { SkillTrigger } from './skillTriggerEngine.js';
 
@@ -31,7 +31,7 @@ async function fetchIntegrationData(
   baseUrl: string,
   token: string,
   instructions: string,
-  integration?: { tokenEncrypted: string },
+  integration?: { id: string; tokenEncrypted: string },
 ): Promise<string | null> {
   try {
     // Ask the LLM to construct the right endpoint path from the instructions
@@ -80,6 +80,19 @@ async function fetchIntegrationData(
             });
             const newTokens = await refreshRes.json() as { access_token?: string };
             if (newTokens.access_token) {
+              // Persist refreshed token back to DB so future requests use it directly
+              const newPayload = JSON.stringify({
+                access_token: newTokens.access_token,
+                refresh_token: parsed.refresh_token,
+                email: parsed.email ?? '',
+              });
+              const newEncrypted = encryptToken(newPayload);
+              await db
+                .update(operatorIntegrationsTable)
+                .set({ tokenEncrypted: newEncrypted })
+                .where(eq(operatorIntegrationsTable.id, integration.id));
+              console.log(`[skillExecutor] Google token refreshed and persisted for integration ${integration.id}`);
+
               const retryRes = await fetch(url, {
                 headers: {
                   Authorization: `Bearer ${newTokens.access_token}`,
