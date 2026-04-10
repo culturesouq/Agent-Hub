@@ -30,7 +30,6 @@ import KbSection from "@/components/operator/KbSection";
 import FilesSection from "@/components/operator/FilesSection";
 import TelegramChannelSection from "@/components/operator/TelegramChannelSection";
 import WhatsAppChannelSection from "@/components/operator/WhatsAppChannelSection";
-import DeploymentsSection from "@/components/operator/DeploymentsSection";
 import NebulaBlobs from "@/components/ui/NebulaBlobs";
 
 const PERSONA_IMAGES = [
@@ -301,7 +300,6 @@ export default function OperatorDetail({ id }: { id: string }) {
       case "tasks":              return <TasksSection operatorId={id} />;
       case "files":              return <FilesSection operator={operator} />;
       case "connections":        return <IntegrationsSection operatorId={id} />;
-      case "deployments":        return <DeploymentsSection operatorId={id} />;
       case "settings.model":     return <SettingsSection operator={operator} section="model" />;
       case "settings.secrets":   return <SettingsSection operator={operator} section="secrets" />;
       case "settings.api":       return <SettingsSection operator={operator} section="api" />;
