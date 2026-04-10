@@ -384,6 +384,11 @@ export default function IntegrationsSection({ operatorId }: { operatorId: string
   const queryClient = useQueryClient();
   const [connectingId, setConnectingId] = useState<string | null>(null);
   const [tokenModal, setTokenModal] = useState<ConnectorDef | null>(null);
+  const [appUrl, setAppUrl] = useState('');
+  const [appApiKey, setAppApiKey] = useState('');
+  const [appLabel, setAppLabel] = useState('');
+  const [connectAppStatus, setConnectAppStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [connectAppMessage, setConnectAppMessage] = useState('');
 
   const { data: integrations = [], isLoading } = useQuery({
     queryKey: ["operators", operatorId, "integrations"],
@@ -425,6 +430,28 @@ export default function IntegrationsSection({ operatorId }: { operatorId: string
       setConnectingId(null);
     },
   });
+
+  const connectCustomApp = useMutation({
+    mutationFn: ({ baseUrl, apiKey, label }: { baseUrl: string; apiKey: string; label: string }) =>
+      apiFetch<{ integration: Integration; schema: unknown; message: string }>(
+        `/operators/${operatorId}/integrations/connect-app`,
+        { method: "POST", body: JSON.stringify({ baseUrl, apiKey, label }) },
+      ),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "integrations"] });
+      setConnectAppStatus("success");
+      setConnectAppMessage(data.message ?? "App connected successfully.");
+      setAppUrl("");
+      setAppApiKey("");
+      setAppLabel("");
+    },
+    onError: (err: Error) => {
+      setConnectAppStatus("error");
+      setConnectAppMessage(err.message);
+    },
+  });
+
+  const customApps = (integrations as any[]).filter((i) => i.isCustomApp === true);
 
   const getConnected = (type: string): Integration | undefined =>
     (integrations as Integration[]).find((i: Integration) => i.integrationType === type);
@@ -535,6 +562,126 @@ export default function IntegrationsSection({ operatorId }: { operatorId: string
           </div>
         </>
       )}
+
+      {/* Connect Your App */}
+      <div className="border-t border-border/30 pt-6 space-y-4">
+        <div>
+          <p className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider mb-1">
+            Connect Your App
+          </p>
+          <p className="font-mono text-xs text-muted-foreground">
+            Connect any app with an API — your operator will discover what it can do.
+          </p>
+        </div>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!appUrl.trim() || !appApiKey.trim()) return;
+            setConnectAppStatus("loading");
+            connectCustomApp.mutate({ baseUrl: appUrl.trim(), apiKey: appApiKey.trim(), label: appLabel.trim() });
+          }}
+          className="space-y-3 max-w-lg"
+        >
+          <div className="space-y-1.5">
+            <Label className="text-xs font-mono">App URL</Label>
+            <Input
+              type="url"
+              placeholder="https://api.yourapp.com"
+              value={appUrl}
+              onChange={(e) => setAppUrl(e.target.value)}
+              className="font-mono text-xs"
+              disabled={connectAppStatus === "loading"}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-mono">API Key</Label>
+            <Input
+              type="password"
+              placeholder="Your API key or token"
+              value={appApiKey}
+              onChange={(e) => setAppApiKey(e.target.value)}
+              className="font-mono text-xs"
+              disabled={connectAppStatus === "loading"}
+              autoComplete="off"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-mono">
+              Label <span className="text-muted-foreground">(optional)</span>
+            </Label>
+            <Input
+              type="text"
+              placeholder="My App"
+              value={appLabel}
+              onChange={(e) => setAppLabel(e.target.value)}
+              className="font-mono text-xs"
+              disabled={connectAppStatus === "loading"}
+            />
+          </div>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={!appUrl.trim() || !appApiKey.trim() || connectAppStatus === "loading"}
+            className="font-mono text-xs"
+          >
+            {connectAppStatus === "loading" ? (
+              <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Connecting…</>
+            ) : (
+              <><Plug className="w-3 h-3 mr-1.5" />Connect App</>
+            )}
+          </Button>
+        </form>
+
+        {connectAppStatus === "success" && (
+          <div className="rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3 font-mono text-xs text-green-400 flex items-start gap-2">
+            <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+            <span>{connectAppMessage}</span>
+          </div>
+        )}
+        {connectAppStatus === "error" && (
+          <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 font-mono text-xs text-red-400 flex items-start gap-2">
+            <XCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+            <span>{connectAppMessage}</span>
+          </div>
+        )}
+
+        {customApps.length > 0 && (
+          <div className="space-y-2 pt-2">
+            <p className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
+              Connected Apps
+            </p>
+            {customApps.map((app) => (
+              <div
+                key={app.id}
+                className="rounded-xl border border-border/20 bg-card/20 p-4 flex items-center justify-between gap-3"
+              >
+                <div className="min-w-0">
+                  <p className="font-mono text-sm font-bold text-foreground truncate">{app.integrationLabel}</p>
+                  <p className="font-mono text-[10px] text-muted-foreground truncate">{app.baseUrl}</p>
+                  {app.createdAt && (
+                    <p className="font-mono text-[10px] text-muted-foreground/60">
+                      Connected {new Date(app.createdAt).toLocaleDateString()}
+                    </p>
+                  )}
+                </div>
+                <button
+                  onClick={() => deleteIntegration.mutate(app.id)}
+                  disabled={deleteIntegration.isPending}
+                  className="font-mono text-[11px] text-muted-foreground hover:text-destructive flex items-center gap-1 transition-colors disabled:opacity-50 shrink-0"
+                >
+                  {deleteIntegration.isPending ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-3 h-3" />
+                  )}
+                  Disconnect
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <TokenModal
         connector={tokenModal}

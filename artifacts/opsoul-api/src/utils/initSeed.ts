@@ -70,8 +70,44 @@ const SKILLS_TO_SEED = [
   { name: 'Assumption Audit', archetype: 'Analyst', description: 'Surfaces and stress-tests the assumptions embedded in a plan, argument, or decision.', triggerDescription: 'user has a plan or argument and needs the hidden assumptions identified and tested', instructions: `Read their plan or argument carefully. Extract every assumption.\nFor each assumption:\n1. State it explicitly ("This assumes that X")\n2. Is it validated or taken for granted?\n3. What is the risk if this assumption is wrong? Low / Medium / High\n4. How could it be tested or de-risked?\n5. Which assumption is the most load-bearing — the one that, if wrong, breaks everything?\nAssumptions are not problems. Unexamined assumptions are.`, outputFormat: 'Assumption → validated? → risk if wrong → how to test → most load-bearing' },
 ];
 
+const PLATFORM_SKILLS_GENERIC = [
+  {
+    name: 'Explore Connected App',
+    archetype: 'All',
+    description: 'Explores what actions are possible with a custom connected app and suggests where to start.',
+    triggerDescription: 'user asks what operator can do with their app, wants to explore connected app capabilities, or mentions a custom app connection',
+    instructions: `When a user asks what you can do with their connected app, check the app schema if available. Summarize in plain language what actions are possible. Suggest 3 specific things to start with. Ask which one they want. Never dump raw schema. Talk like a person.`,
+    outputFormat: 'conversational',
+  },
+];
+
 export async function runInitSeed(): Promise<void> {
   console.log('[initSeed] Checking seed state...');
+
+  // ── Generic platform skills (non-archetype) ──────────────────────────────
+  const genericNames = PLATFORM_SKILLS_GENERIC.map(s => s.name);
+  const existingGeneric = await db
+    .select({ name: platformSkillsTable.name })
+    .from(platformSkillsTable)
+    .where(inArray(platformSkillsTable.name, genericNames));
+  const existingGenericNames = new Set(existingGeneric.map(r => r.name));
+  const missingGeneric = PLATFORM_SKILLS_GENERIC.filter(s => !existingGenericNames.has(s.name));
+  if (missingGeneric.length > 0) {
+    for (const skill of missingGeneric) {
+      await db.insert(platformSkillsTable).values({
+        id: randomUUID(),
+        name: skill.name,
+        description: skill.description,
+        triggerDescription: skill.triggerDescription,
+        instructions: skill.instructions,
+        outputFormat: skill.outputFormat,
+        archetype: skill.archetype,
+        author: 'opsoul',
+        installCount: 0,
+      });
+      console.log(`[initSeed]   + platform / ${skill.name}`);
+    }
+  }
 
   // ── Skills ──────────────────────────────────────────────────────────────
   const targetArchetypes = ['Executor', 'Advisor', 'Expert', 'Connector', 'Creator', 'Guardian', 'Builder', 'Catalyst', 'Analyst'];

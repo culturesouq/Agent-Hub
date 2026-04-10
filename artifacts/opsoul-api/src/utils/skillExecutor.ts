@@ -12,6 +12,8 @@ export interface SkillResult {
   error?:    string;
 }
 
+type IntegrationRow = typeof operatorIntegrationsTable.$inferSelect;
+
 const KNOWN_BASE_URLS: Record<string, string> = {
   github:           'https://api.github.com',
   notion:           'https://api.notion.com/v1',
@@ -23,18 +25,124 @@ const KNOWN_BASE_URLS: Record<string, string> = {
   google_drive:     'https://www.googleapis.com/drive/v3',
 };
 
-function baseUrlFor(type: string): string {
-  return KNOWN_BASE_URLS[type.toLowerCase()] ?? `https://api.${type.toLowerCase()}.com`;
+async function refreshAccessToken(integration: IntegrationRow): Promise<string | null> {
+  try {
+    let refreshToken: string | null = null;
+
+    if (integration.tokenEncrypted) {
+      try {
+        const raw = decryptToken(integration.tokenEncrypted);
+        const parsed = JSON.parse(raw);
+        refreshToken = parsed?.refresh_token ?? null;
+      } catch { /* not JSON or no refresh token */ }
+    }
+
+    if (!refreshToken && integration.refreshTokenEncrypted) {
+      try {
+        refreshToken = decryptToken(integration.refreshTokenEncrypted);
+      } catch { /* ignore */ }
+    }
+
+    if (!refreshToken) return null;
+
+    const googleTypes = ['gmail', 'google_calendar', 'google_drive'];
+    if (googleTypes.includes(integration.integrationType)) {
+      const refreshRes = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: process.env.GOOGLE_CLIENT_ID!,
+          client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+          refresh_token: refreshToken,
+          grant_type: 'refresh_token',
+        }),
+      });
+      const newTokens = await refreshRes.json() as { access_token?: string };
+      if (!newTokens.access_token) return null;
+
+      const raw = decryptToken(integration.tokenEncrypted!);
+      const parsed = JSON.parse(raw);
+      const newPayload = JSON.stringify({
+        access_token: newTokens.access_token,
+        refresh_token: parsed.refresh_token,
+        email: parsed.email ?? '',
+      });
+      await db
+        .update(operatorIntegrationsTable)
+        .set({ tokenEncrypted: encryptToken(newPayload) })
+        .where(eq(operatorIntegrationsTable.id, integration.id));
+      console.log(`[skillExecutor] Google token refreshed for integration ${integration.id}`);
+      return newTokens.access_token;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function extractAccessToken(integration: IntegrationRow): Promise<string | null> {
+  if (!integration.tokenEncrypted) return null;
+  try {
+    const raw = decryptToken(integration.tokenEncrypted);
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed?.access_token) return parsed.access_token;
+    } catch { /* not JSON */ }
+    return raw;
+  } catch {
+    return null;
+  }
+}
+
+async function callIntegrationApi(
+  url: string,
+  token: string,
+  integration: IntegrationRow,
+): Promise<string | null> {
+  const doFetch = (t: string) =>
+    fetch(url, {
+      headers: {
+        Authorization: `Bearer ${t}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+    });
+
+  let res = await doFetch(token);
+
+  if (res.status === 401) {
+    const newToken = await refreshAccessToken(integration);
+    if (newToken) {
+      res = await doFetch(newToken);
+    }
+  }
+
+  if (!res.ok) {
+    console.warn(`[skillExecutor] API returned ${res.status} for ${url}`);
+    return null;
+  }
+
+  const data = await res.text();
+  return data.slice(0, 4000);
 }
 
 async function fetchIntegrationData(
-  baseUrl: string,
-  token: string,
+  integration: IntegrationRow,
   instructions: string,
-  integration?: { id: string; tokenEncrypted: string },
 ): Promise<string | null> {
   try {
-    // Ask the LLM to construct the right endpoint path from the instructions
+    const token = await extractAccessToken(integration);
+    if (!token) return null;
+
+    const baseUrl = (integration.baseUrl as string | null)
+      ?? KNOWN_BASE_URLS[integration.integrationType.toLowerCase()]
+      ?? `https://api.${integration.integrationType.toLowerCase()}.com`;
+
+    const schemaContext = integration.appSchema
+      ? `\n\nApp schema (available entities and actions):\n${JSON.stringify(integration.appSchema, null, 2).slice(0, 2000)}`
+      : '';
+
     const endpointResult = await chatCompletion(
       [
         {
@@ -43,7 +151,7 @@ async function fetchIntegrationData(
         },
         {
           role: 'user',
-          content: `Base URL: ${baseUrl}\nTask: ${instructions}\n\nReturn only the endpoint path.`,
+          content: `Base URL: ${baseUrl}\nTask: ${instructions}${schemaContext}\n\nReturn only the endpoint path.`,
         },
       ],
       'anthropic/claude-haiku-4-5',
@@ -54,70 +162,9 @@ async function fetchIntegrationData(
 
     console.log(`[skillExecutor] calling integration API: ${url}`);
 
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      if (response.status === 401 && integration) {
-        try {
-          const rawAgain = decryptToken(integration.tokenEncrypted);
-          const parsed = JSON.parse(rawAgain);
-          if (parsed?.refresh_token) {
-            const refreshRes = await fetch('https://oauth2.googleapis.com/token', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: new URLSearchParams({
-                client_id: process.env.GOOGLE_CLIENT_ID!,
-                client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-                refresh_token: parsed.refresh_token,
-                grant_type: 'refresh_token',
-              }),
-            });
-            const newTokens = await refreshRes.json() as { access_token?: string };
-            if (newTokens.access_token) {
-              // Persist refreshed token back to DB so future requests use it directly
-              const newPayload = JSON.stringify({
-                access_token: newTokens.access_token,
-                refresh_token: parsed.refresh_token,
-                email: parsed.email ?? '',
-              });
-              const newEncrypted = encryptToken(newPayload);
-              await db
-                .update(operatorIntegrationsTable)
-                .set({ tokenEncrypted: newEncrypted })
-                .where(eq(operatorIntegrationsTable.id, integration.id));
-              console.log(`[skillExecutor] Google token refreshed and persisted for integration ${integration.id}`);
-
-              const retryRes = await fetch(url, {
-                headers: {
-                  Authorization: `Bearer ${newTokens.access_token}`,
-                  'Content-Type': 'application/json',
-                  Accept: 'application/json',
-                },
-              });
-              if (retryRes.ok) {
-                const retryData = await retryRes.text();
-                return retryData.slice(0, 4000);
-              }
-            }
-          }
-        } catch {
-          // refresh failed — fall through to null
-        }
-      }
-      console.warn(`[skillExecutor] integration API returned ${response.status}`);
-      return null;
-    }
-
-    const data = await response.text();
-    return data.slice(0, 4000);
+    return await callIntegrationApi(url, token, integration);
   } catch (err: any) {
-    console.warn('[skillExecutor] integration API call failed:', err?.message);
+    console.warn('[skillExecutor] fetchIntegrationData failed:', err?.message);
     return null;
   }
 }
@@ -136,7 +183,6 @@ export async function executeSkill(
 
   let apiContext = '';
 
-  // Attempt live integration call if operatorId + integrationType are set
   if (trigger.operatorId && trigger.integrationType) {
     try {
       const [integration] = await db
@@ -150,17 +196,8 @@ export async function executeSkill(
         )
         .limit(1);
 
-      if (integration?.tokenEncrypted) {
-        const rawToken = decryptToken(integration.tokenEncrypted);
-        let accessToken = rawToken;
-        try {
-          const parsed = JSON.parse(rawToken);
-          if (parsed?.access_token) accessToken = parsed.access_token;
-        } catch {
-          // not JSON — use as-is (PAT tokens etc.)
-        }
-        const baseUrl = baseUrlFor(trigger.integrationType);
-        const data = await fetchIntegrationData(baseUrl, accessToken, instructions, integration);
+      if (integration) {
+        const data = await fetchIntegrationData(integration, instructions);
         if (data) {
           apiContext = `\n\nLive API response from ${trigger.integrationType}:\n${data}`;
           console.log(`[skillExecutor] integration data fetched for ${trigger.integrationType}`);

@@ -11,17 +11,20 @@ import {
 } from '@workspace/db';
 import { requireSlotKey } from '../middleware/requireSlotKey.js';
 import { resolveScope } from '../utils/scopeResolver.js';
-import { searchMemory, buildMemoryContext, distillMemoriesFromConversations } from '../utils/memoryEngine.js';
+import { searchMemory, distillMemoriesFromConversations } from '../utils/memoryEngine.js';
+import type { MemoryHit } from '../utils/memoryEngine.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { buildSystemPrompt } from '../utils/systemPrompt.js';
+import type { ActiveSkill } from '../utils/systemPrompt.js';
 import { detectSkillTrigger } from '../utils/skillTriggerEngine.js';
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
 import { executeSkill } from '../utils/skillExecutor.js';
 import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
+import type { ChatMessage } from '../utils/openrouter.js';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
+import type { Layer2Soul } from '../validation/operator.js';
 import { eq, and, desc, sql } from 'drizzle-orm';
-import type { ActiveSkill } from '../utils/systemPrompt.js';
 
 const router = Router();
 router.use(requireSlotKey);
@@ -33,10 +36,24 @@ const PublicChatSchema = z.object({
   stream:         z.boolean().default(false),
 });
 
+function buildSkillSecondPassMessages(
+  systemPrompt: string,
+  messages: ChatMessage[],
+  firstResponse: string,
+  skillOutput: string,
+): ChatMessage[] {
+  return [
+    { role: 'system', content: systemPrompt },
+    ...messages,
+    { role: 'assistant', content: firstResponse },
+    { role: 'system', content: `[Task completed — findings below]\n${skillOutput}` },
+    { role: 'user', content: `You just completed a task. Report back to the owner directly — as if you did the work yourself and are now sharing what you found.\n\nBe specific. Highlight what matters. Be conversational.\n\nNever mention tool names, skill names, raw JSON, raw URLs, or API responses. Just speak naturally as their operator who got something done.` },
+  ];
+}
+
 router.post('/', async (req: Request, res: Response): Promise<void> => {
   const slot = req.slot!;
 
-  // surface guards
   if (slot.surfaceType === 'workspace') {
     res.status(403).json({ error: 'workspace slots do not support the public chat endpoint' });
     return;
@@ -54,7 +71,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   const { message, userId, conversationId, stream } = parsed.data;
 
-  // authenticated requires userId
   if (slot.surfaceType === 'authenticated' && !userId) {
     res.status(400).json({ error: 'userId is required for authenticated slots' });
     return;
@@ -132,7 +148,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     .where(eq(messagesTable.conversationId, conv.id))
     .orderBy(messagesTable.createdAt);
 
-  const history = historyRows.map(r => ({ role: r.role as 'user' | 'assistant', content: r.content }));
+  const history: ChatMessage[] = historyRows.map(r => ({
+    role: r.role as 'user' | 'assistant',
+    content: r.content,
+  }));
 
   // ── Skills ──
   const installedRows = await db
@@ -179,84 +198,63 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   ];
 
   const activeSkills: ActiveSkill[] = allSkills.map(s => ({
-    name: s.name,
-    description: s.triggerDescription,
+    name:         s.name,
+    description:  s.triggerDescription,
     instructions: s.instructions,
     outputFormat: s.outputFormat ?? undefined,
   }));
 
-  // ── Memory search ──
-  let memoryContext = '';
-  try {
-    const embedding = await embed(message);
-    const hits = await searchMemory(slot.operatorId, embedding, 8, 0.55, 0.1, scope.scopeId);
-    memoryContext = buildMemoryContext(hits);
-  } catch { /* non-fatal */ }
-
-  // ── KB search ──
+  // ── Memory + KB search ──
+  let memoryHits: MemoryHit[] = [];
   let ragContext = '';
+
   try {
     const embedding = await embed(message);
-    const kbHits = await searchBothKbs(slot.operatorId, slot.ownerId, embedding, 8, 30);
+    const [hits, kbHits] = await Promise.all([
+      searchMemory(slot.operatorId, embedding, 8, 0.55, 0.1, scope.scopeId),
+      searchBothKbs(slot.operatorId, slot.ownerId, embedding, 8, 30),
+    ]);
+    memoryHits = hits;
     ragContext = buildRagContext(kbHits);
   } catch { /* non-fatal */ }
 
-  // ── Skill trigger detection ──
-  const trigger = await detectSkillTrigger(message, allSkills, operator.name);
-
   // ── System prompt ──
-  const systemPrompt = buildSystemPrompt({
-    operator,
-    skills: activeSkills,
+  const systemPrompt = buildSystemPrompt(
+    {
+      name:              operator.name,
+      archetype:         operator.archetype as string[],
+      rawIdentity:       operator.rawIdentity ?? undefined,
+      mandate:           operator.mandate,
+      coreValues:        operator.coreValues as string[],
+      ethicalBoundaries: operator.ethicalBoundaries as string[],
+      layer2Soul:        operator.layer2Soul as Layer2Soul,
+    },
     ragContext,
-    memoryContext,
-  });
+    activeSkills,
+    memoryHits,
+    null,
+    { webSearchAvailable: false },
+  );
 
-  const messages = [
+  const messages: ChatMessage[] = [
     ...history,
-    { role: 'user' as const, content: message },
+    { role: 'user', content: message },
   ];
 
   // ── Store user message ──
-  const userMsgId = crypto.randomUUID();
   await db.insert(messagesTable).values({
-    id: userMsgId,
+    id: crypto.randomUUID(),
     conversationId: conv.id,
     operatorId: slot.operatorId,
     role: 'user',
     content: message,
   });
 
-  // ── Execute skill or normal LLM call ──
-  if (trigger) {
-    try {
-      const skillResult = await executeSkill(trigger, slot.operatorId, slot.ownerId, message);
-
-      await db.insert(messagesTable).values({
-        id: crypto.randomUUID(),
-        conversationId: conv.id,
-        operatorId: slot.operatorId,
-        role: 'assistant',
-        content: skillResult,
-      });
-
-      await db.update(conversationsTable)
-        .set({ messageCount: sql`message_count + 2`, lastMessageAt: new Date() })
-        .where(eq(conversationsTable.id, conv.id));
-
-      res.json({
-        conversationId: conv.id,
-        message: { role: 'assistant', content: skillResult },
-        scopeId: scope.scopeId,
-      });
-      return;
-    } catch { /* fall through to LLM */ }
-  }
-
   const model = (operator.defaultModel && operator.defaultModel !== 'opsoul/auto')
     ? operator.defaultModel
     : CHAT_MODEL;
 
+  // ── STREAM PATH ────────────────────────────────────────────────────────────
   if (stream) {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -275,12 +273,35 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         },
       );
 
+      let finalContent = fullContent;
+
+      // ── Skill trigger detection (after first LLM response) ──
+      const trigger = await detectSkillTrigger(message, allSkills, fullContent);
+      if (trigger) {
+        trigger.operatorId = slot.operatorId;
+        res.write(`data: ${JSON.stringify({ running: trigger.name })}\n\n`);
+        const skillResult = await executeSkill(trigger, model);
+        if (skillResult.success) {
+          const secondMessages = buildSkillSecondPassMessages(systemPrompt, messages, fullContent, skillResult.output);
+          let secondContent = '';
+          await streamChat(
+            secondMessages,
+            model,
+            (chunk) => {
+              secondContent += chunk;
+              res.write(`data: ${JSON.stringify({ delta: chunk })}\n\n`);
+            },
+          );
+          finalContent = secondContent;
+        }
+      }
+
       await db.insert(messagesTable).values({
         id: crypto.randomUUID(),
         conversationId: conv.id,
         operatorId: slot.operatorId,
         role: 'assistant',
-        content: fullContent,
+        content: finalContent,
       });
 
       await db.update(conversationsTable)
@@ -289,31 +310,46 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
       res.write(`data: ${JSON.stringify({ done: true, conversationId: conv.id, scopeId: scope.scopeId })}\n\n`);
       res.end();
-    } catch (err) {
+    } catch {
       res.write(`data: ${JSON.stringify({ error: 'Stream failed' })}\n\n`);
       res.end();
     }
+
+  // ── SYNC PATH ──────────────────────────────────────────────────────────────
   } else {
     const result = await chatCompletion(
       [{ role: 'system', content: systemPrompt }, ...messages],
       model,
     );
 
-    const assistantContent = result.content;
+    let finalContent = result.content;
+
+    // ── Skill trigger detection (after first LLM response) ──
+    try {
+      const trigger = await detectSkillTrigger(message, allSkills, result.content);
+      if (trigger) {
+        trigger.operatorId = slot.operatorId;
+        const skillResult = await executeSkill(trigger, model);
+        if (skillResult.success) {
+          const secondMessages = buildSkillSecondPassMessages(systemPrompt, messages, result.content, skillResult.output);
+          const secondResult = await chatCompletion(secondMessages, model);
+          finalContent = secondResult.content;
+        }
+      }
+    } catch { /* skill path failure — return first response */ }
 
     await db.insert(messagesTable).values({
       id: crypto.randomUUID(),
       conversationId: conv.id,
       operatorId: slot.operatorId,
       role: 'assistant',
-      content: assistantContent,
+      content: finalContent,
     });
 
     await db.update(conversationsTable)
       .set({ messageCount: sql`message_count + 2`, lastMessageAt: new Date() })
       .where(eq(conversationsTable.id, conv.id));
 
-    // Async memory distillation (authenticated only — guest memories don't persist)
     if (slot.surfaceType === 'authenticated') {
       distillMemoriesFromConversations(
         slot.operatorId,
@@ -326,7 +362,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
     res.json({
       conversationId: conv.id,
-      message: { role: 'assistant', content: assistantContent },
+      message: { role: 'assistant', content: finalContent },
       scopeId: scope.scopeId,
     });
   }

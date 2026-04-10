@@ -7,6 +7,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { eq, and } from 'drizzle-orm';
 import { encryptToken, decryptToken } from '@workspace/opsoul-utils/crypto';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
+import { chatCompletion } from '../utils/openrouter.js';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -47,8 +48,8 @@ const UpdateIntegrationSchema = z.object({
 });
 
 function safeSerialize(integration: typeof operatorIntegrationsTable.$inferSelect) {
-  const { tokenEncrypted: _, ...safe } = integration;
-  return { ...safe, hasToken: !!_ };
+  const { tokenEncrypted: _t, refreshTokenEncrypted: _r, ...safe } = integration;
+  return { ...safe, hasToken: !!_t };
 }
 
 router.post('/', async (req: Request, res: Response): Promise<void> => {
@@ -101,6 +102,91 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     operatorId,
     count: integrations.length,
     integrations: integrations.map(safeSerialize),
+  });
+});
+
+// ── Connect custom app ── must be before /:integrationId to avoid Express catching it as an ID
+router.post('/connect-app', async (req: Request, res: Response): Promise<void> => {
+  const operatorId = await resolveOperator(req, res);
+  if (!operatorId) return;
+
+  const { baseUrl: rawBaseUrl, apiKey, label } = req.body as {
+    baseUrl?: string;
+    apiKey?: string;
+    label?: string;
+  };
+
+  if (!rawBaseUrl || !apiKey) {
+    res.status(400).json({ error: 'baseUrl and apiKey are required' });
+    return;
+  }
+
+  const baseUrl = rawBaseUrl.trim().replace(/\/$/, '');
+
+  let appSchema: Record<string, unknown> | null = null;
+  const schemaPaths = ['/api/schema', '/api/entities', '/openapi.json', '/schema.json'];
+
+  for (const path of schemaPaths) {
+    try {
+      const schemaRes = await fetch(`${baseUrl}${path}`, {
+        headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (schemaRes.ok) {
+        const raw = await schemaRes.json();
+        const normalized = await chatCompletion(
+          [
+            {
+              role: 'system',
+              content: 'Normalize the following API schema into a JSON object with this shape: { "appName": string, "entities": [{ "name": string, "description": string, "fields": string[], "actions": string[] }] }. Return ONLY valid JSON, no markdown.',
+            },
+            { role: 'user', content: JSON.stringify(raw).slice(0, 4000) },
+          ],
+          'anthropic/claude-haiku-4-5',
+        );
+        try {
+          appSchema = JSON.parse(normalized.content.trim().replace(/```json\n?|\n?```/g, ''));
+        } catch { /* normalization failed */ }
+        break;
+      }
+    } catch { /* try next path */ }
+  }
+
+  const tokenEncrypted = encryptToken(apiKey);
+
+  let integrationLabel = label?.trim() || '';
+  if (!integrationLabel) {
+    try {
+      integrationLabel = (appSchema as any)?.appName || new URL(baseUrl).hostname;
+    } catch {
+      integrationLabel = baseUrl;
+    }
+  }
+
+  const [integration] = await db.insert(operatorIntegrationsTable).values({
+    id: crypto.randomUUID(),
+    operatorId,
+    ownerId: req.owner!.ownerId,
+    integrationType: 'custom_app',
+    integrationLabel,
+    tokenEncrypted,
+    isCustomApp: true,
+    baseUrl,
+    appSchema: appSchema ?? null,
+    status: 'connected',
+    scopes: [],
+    scopeUpdatePending: false,
+    contextsAssigned: [],
+  }).returning();
+
+  triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});
+
+  res.status(201).json({
+    integration: safeSerialize(integration),
+    schema: appSchema,
+    message: appSchema
+      ? `Connected to ${integrationLabel}. Schema found — I know what actions are available.`
+      : `Connected to ${integrationLabel}. No schema found — I'll reason based on common API patterns.`,
   });
 });
 
