@@ -116,6 +116,7 @@ async function loadActiveSkills(operatorId: string): Promise<ActiveSkill[]> {
       instructions: platformSkillsTable.instructions,
       outputFormat: platformSkillsTable.outputFormat,
       triggerDescription: platformSkillsTable.triggerDescription,
+      integrationType: platformSkillsTable.integrationType,
     })
     .from(operatorSkillsTable)
     .innerJoin(platformSkillsTable, eq(operatorSkillsTable.skillId, platformSkillsTable.id))
@@ -221,6 +222,7 @@ function buildAgencySkills(
       instructions:       s.instructions ?? s.skillInstructions ?? '',
       outputFormat:       s.outputFormat ?? s.skillOutputFormat ?? null,
       customInstructions: s.customInstructions ?? null,
+      integrationType:    s.integrationType ?? null,
     })),
     ...archetypeDefaultSkills
       .filter(a => !installedNames.has(a.name))
@@ -232,6 +234,7 @@ function buildAgencySkills(
         instructions:       a.instructions,
         outputFormat:       a.outputFormat,
         customInstructions: null,
+        integrationType:    a.integrationType ?? null,
       })),
   ];
 

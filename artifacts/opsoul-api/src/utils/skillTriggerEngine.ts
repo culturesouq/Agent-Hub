@@ -8,6 +8,7 @@ export interface InstalledSkill {
   instructions:       string;
   outputFormat:       string | null;
   customInstructions: string | null;
+  integrationType?:   string | null;
 }
 
 export interface SkillTrigger {
@@ -69,5 +70,6 @@ export async function detectSkillTrigger(
     outputFormat:       bestSkill.outputFormat,
     customInstructions: bestSkill.customInstructions,
     extractedParams:    operatorResponse ?? userMessage,
+    integrationType:    bestSkill.integrationType ?? undefined,
   };
 }

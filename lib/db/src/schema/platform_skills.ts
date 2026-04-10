@@ -10,5 +10,6 @@ export const platformSkillsTable = pgTable('platform_skills', {
   archetype: text('archetype').default('All'),
   author: text('author').default('opsoul'),
   installCount: integer('install_count').default(0),
+  integrationType: text('integration_type'),
   createdAt: timestamp('created_at').defaultNow(),
 });

@@ -23,6 +23,7 @@ export interface ArchetypeSkill {
   triggerDescription: string;
   customInstructions: null;
   isArchetypeDefault: true;
+  integrationType:    string | null;
 }
 
 export async function loadArchetypeSkills(archetypes: string[]): Promise<ArchetypeSkill[]> {
@@ -40,6 +41,7 @@ export async function loadArchetypeSkills(archetypes: string[]): Promise<Archety
       instructions:       platformSkillsTable.instructions,
       outputFormat:       platformSkillsTable.outputFormat,
       triggerDescription: platformSkillsTable.triggerDescription,
+      integrationType:    platformSkillsTable.integrationType,
     })
     .from(platformSkillsTable)
     .where(inArray(platformSkillsTable.name, [...skillNames]));
@@ -53,5 +55,6 @@ export async function loadArchetypeSkills(archetypes: string[]): Promise<Archety
     triggerDescription: s.triggerDescription ?? '',
     customInstructions: null,
     isArchetypeDefault: true as const,
+    integrationType:    s.integrationType ?? null,
   }));
 }
