@@ -264,14 +264,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     let fullContent = '';
 
     try {
-      await streamChat(
-        [{ role: 'system', content: systemPrompt }, ...messages],
-        model,
-        (chunk) => {
-          fullContent += chunk;
-          res.write(`data: ${JSON.stringify({ delta: chunk })}\n\n`);
-        },
-      );
+      for await (const chunk of streamChat([{ role: 'system', content: systemPrompt }, ...messages], model)) {
+        if (chunk.delta) {
+          fullContent += chunk.delta;
+          res.write(`data: ${JSON.stringify({ delta: chunk.delta })}\n\n`);
+        }
+      }
 
       let finalContent = fullContent;
 
@@ -284,14 +282,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         if (skillResult.success) {
           const secondMessages = buildSkillSecondPassMessages(systemPrompt, messages, fullContent, skillResult.output);
           let secondContent = '';
-          await streamChat(
-            secondMessages,
-            model,
-            (chunk) => {
-              secondContent += chunk;
-              res.write(`data: ${JSON.stringify({ delta: chunk })}\n\n`);
-            },
-          );
+          for await (const chunk of streamChat(secondMessages, model)) {
+            if (chunk.delta) {
+              secondContent += chunk.delta;
+              res.write(`data: ${JSON.stringify({ delta: chunk.delta })}\n\n`);
+            }
+          }
           finalContent = secondContent;
         }
       }
