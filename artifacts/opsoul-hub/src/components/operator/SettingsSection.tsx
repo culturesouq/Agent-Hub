@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
-import { Lock, AlertTriangle, RefreshCw, Key, Globe, ShieldCheck, Copy, Shield, Cpu, Eye, EyeOff, Check, Loader2, ChevronDown, Info, Zap, Plus, Trash2 } from "lucide-react";
+import { Lock, AlertTriangle, RefreshCw, Key, Globe, ShieldCheck, Copy, Shield, Cpu, Eye, EyeOff, Check, Loader2, ChevronDown, Info, Zap, Plus, Trash2, CheckCircle2, User, Circle } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -87,6 +87,124 @@ function CodeBlock({ code, onCopy }: { code: string; onCopy: () => void }) {
         {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
       </button>
     </div>
+  );
+}
+
+const PUBLIC_ENDPOINT = "https://api.opsoul.io/v1/chat";
+
+const PUBLIC_ENDPOINT_BLOCK = `POST ${PUBLIC_ENDPOINT}
+
+Headers:
+  Authorization: Bearer <your-slot-key>
+  Content-Type: application/json
+
+Body:
+  {
+    "message": "Hello",
+    "conversationId": "optional — for multi-turn",
+    "stream": false
+  }`;
+
+interface ApiSlot {
+  id: string;
+  name: string;
+  surfaceType: "guest" | "authenticated" | "workspace" | "crud";
+  apiKeyPreview: string;
+  apiKey?: string;
+  isActive: boolean | null;
+  createdAt: string;
+  revokedAt: string | null;
+}
+
+const API_SLOT_META = {
+  guest: {
+    label: "Guest Chat",
+    icon: Globe,
+    color: "bg-slate-500/15 text-slate-400 border-slate-500/30",
+    description: "Anonymous users — ephemeral sessions",
+  },
+  authenticated: {
+    label: "Auth Chat",
+    icon: User,
+    color: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+    description: "Signed-in users — persistent memory per userId",
+  },
+} as const;
+
+function ApiCopyButton({ text, title }: { text: string; title?: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={() => {
+        navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }}
+      title={title ?? "Copy"}
+      className="p-1.5 rounded border border-border/40 bg-background/60 text-muted-foreground hover:text-foreground transition-colors"
+    >
+      {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+    </button>
+  );
+}
+
+function PublicEndpointBlock() {
+  return (
+    <div className="relative group">
+      <pre className="bg-black/40 border border-border/30 rounded-xl p-4 text-xs font-mono text-slate-300 overflow-x-auto whitespace-pre leading-relaxed">
+        {PUBLIC_ENDPOINT_BLOCK}
+      </pre>
+      <div className="absolute top-2 right-2">
+        <ApiCopyButton text={PUBLIC_ENDPOINT} title="Copy public endpoint URL" />
+      </div>
+    </div>
+  );
+}
+
+function KeyRevealCard({ slot, onDone }: { slot: ApiSlot & { apiKey: string }; onDone: () => void }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-card border border-amber-500/40 rounded-xl p-6 max-w-lg w-full mx-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+        <div className="flex items-center gap-2.5 mb-1">
+          <div className="w-8 h-8 rounded-full bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0">
+            <AlertTriangle className="w-4 h-4 text-amber-500" />
+          </div>
+          <h3 className="font-headline font-bold text-base">Copy this key now</h3>
+        </div>
+        <p className="font-mono text-xs text-muted-foreground mt-1 mb-4">
+          It will <span className="text-amber-500 font-bold">never be shown again</span>. We do not store it.
+        </p>
+        <div className="relative group mb-3">
+          <div className="bg-black/50 border border-amber-500/30 rounded-lg px-3 py-2.5 font-mono text-xs text-amber-300 break-all leading-relaxed pr-10">
+            {slot.apiKey}
+          </div>
+          <button
+            onClick={() => { navigator.clipboard.writeText(slot.apiKey); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+            className="absolute top-2 right-2 p-1.5 rounded border border-border/40 bg-background/60 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+        <div className="bg-muted/10 border border-border/30 rounded-lg p-3 mb-5 font-mono text-[11px] text-muted-foreground space-y-1">
+          <p className="text-foreground/60 font-semibold text-xs">Use it like this:</p>
+          <p><span className="text-slate-400">Authorization:</span>{" "}<span className="text-amber-300/80">Bearer {slot.apiKey.slice(0, 24)}…</span></p>
+          <p><span className="text-slate-400">Endpoint:</span>{" "}<span className="text-blue-400/80">POST {PUBLIC_ENDPOINT}</span></p>
+        </div>
+        <Button className="w-full font-mono text-sm" onClick={onDone}>I've copied it — Done</Button>
+      </div>
+    </div>
+  );
+}
+
+function ApiSlotPill({ type }: { type: keyof typeof API_SLOT_META }) {
+  const meta = API_SLOT_META[type];
+  const Icon = meta.icon;
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold border ${meta.color}`}>
+      <Icon className="w-3 h-3" />
+      {meta.label}
+    </span>
   );
 }
 
@@ -329,6 +447,10 @@ export default function SettingsSection({ operator, section }: { operator: Opera
 
   const [evolutionMode, setEvolutionMode] = useState<EvolutionLevel>(currentLevel);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [showKeyForm, setShowKeyForm] = useState(false);
+  const [revealSlot, setRevealSlot] = useState<(ApiSlot & { apiKey: string }) | null>(null);
+  const [revokeConfirm, setRevokeConfirm] = useState<string | null>(null);
+  const [keyForm, setKeyForm] = useState({ name: "", surfaceType: "guest" as "guest" | "authenticated" });
 
   const copy = (text: string, field: string, label = "Copied") => {
     if (navigator.clipboard) {
@@ -448,12 +570,46 @@ print(response.json()["content"])`;
     },
   });
 
+  const { data: slotsData, isLoading: slotsLoading } = useQuery({
+    queryKey: ["operators", operator.id, "slots"],
+    queryFn: () => apiFetch<{ slots: ApiSlot[] }>(`/operators/${operator.id}/slots`),
+    enabled: section === "api" || !section,
+  });
+
+  const chatSlots = (slotsData?.slots ?? []).filter(
+    (s) => s.surfaceType === "guest" || s.surfaceType === "authenticated",
+  );
+
+  const createSlot = useMutation({
+    mutationFn: () =>
+      apiFetch<ApiSlot & { apiKey: string }>(`/operators/${operator.id}/slots`, {
+        method: "POST",
+        body: JSON.stringify({ name: keyForm.name.trim(), surfaceType: keyForm.surfaceType }),
+      }),
+    onSuccess: (slot) => {
+      queryClient.invalidateQueries({ queryKey: ["operators", operator.id, "slots"] });
+      setShowKeyForm(false);
+      setKeyForm({ name: "", surfaceType: "guest" });
+      setRevealSlot(slot);
+    },
+  });
+
+  const revokeSlot = useMutation({
+    mutationFn: (slotId: string) =>
+      apiFetch(`/operators/${operator.id}/slots/${slotId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["operators", operator.id, "slots"] });
+      setRevokeConfirm(null);
+    },
+  });
+
   const isLocked = !!operator.layer1LockedAt;
 
   const show = (s: "model" | "secrets" | "api" | "evolution" | "danger" | "safemode") => !section || section === s;
 
   return (
     <div className="space-y-10 animate-in fade-in zoom-in-95 duration-300 max-w-2xl glass-panel rounded-2xl border border-border/30 p-6">
+      {revealSlot && <KeyRevealCard slot={revealSlot} onDone={() => setRevealSlot(null)} />}
 
       {show("model") && (
         <section className="space-y-5">
@@ -628,6 +784,175 @@ print(response.json()["content"])`;
               </button>
             </div>
             <CodeBlock code={pythonExample} onCopy={() => copy(pythonExample, "py-block")} />
+          </div>
+
+          {/* ── API Keys ── */}
+          <div className="border-t border-border/40 pt-6 space-y-6">
+
+            {/* Section 1 — Public Endpoint */}
+            <div className="space-y-2">
+              <p className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">Public Endpoint</p>
+              <PublicEndpointBlock />
+            </div>
+
+            {/* Section 2 — Create New Key */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">Create New Key</p>
+                {!showKeyForm && (
+                  <Button size="sm" className="font-mono text-xs gap-1.5 h-7" onClick={() => setShowKeyForm(true)}>
+                    <Plus className="w-3.5 h-3.5" />
+                    New Key
+                  </Button>
+                )}
+              </div>
+
+              {showKeyForm && (
+                <div className="border border-border/50 rounded-xl p-5 bg-card/60 backdrop-blur space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-mono text-muted-foreground">Key Name</label>
+                    <input
+                      value={keyForm.name}
+                      onChange={(e) => setKeyForm((f) => ({ ...f, name: e.target.value }))}
+                      placeholder="e.g. My Website, FM App, Telegram Bot"
+                      className="w-full bg-background/60 border border-border/50 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-primary/50 transition-colors"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-mono text-muted-foreground">Surface Type</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(["guest", "authenticated"] as const).map((type) => {
+                        const meta = API_SLOT_META[type];
+                        const Icon = meta.icon;
+                        return (
+                          <button
+                            key={type}
+                            onClick={() => setKeyForm((f) => ({ ...f, surfaceType: type }))}
+                            className={`flex items-start gap-2.5 p-3 rounded-xl border text-left transition-all ${
+                              keyForm.surfaceType === type
+                                ? "border-primary/50 bg-primary/10"
+                                : "border-border/40 hover:border-border/80 bg-background/40"
+                            }`}
+                          >
+                            <Icon className="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground" />
+                            <div>
+                              <p className="text-xs font-semibold font-mono">{meta.label}</p>
+                              <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">{meta.description}</p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <Button
+                      size="sm"
+                      className="font-mono text-xs"
+                      onClick={() => createSlot.mutate()}
+                      disabled={!keyForm.name.trim() || createSlot.isPending}
+                    >
+                      {createSlot.isPending
+                        ? <><RefreshCw className="w-3 h-3 mr-1.5 animate-spin" />Creating…</>
+                        : <><Key className="w-3 h-3 mr-1.5" />Create Key</>}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="font-mono text-xs"
+                      onClick={() => { setShowKeyForm(false); setKeyForm({ name: "", surfaceType: "guest" }); }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Section 3 — Active Keys */}
+            <div className="space-y-3">
+              <p className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">Active Keys</p>
+              {slotsLoading ? (
+                <div className="text-center py-8 font-mono text-sm text-muted-foreground animate-pulse">Loading keys…</div>
+              ) : chatSlots.length === 0 ? (
+                <div className="border border-dashed border-border/40 rounded-xl p-8 text-center space-y-2">
+                  <Key className="w-7 h-7 text-muted-foreground/30 mx-auto" />
+                  <p className="font-mono font-semibold text-sm text-foreground/60">No API keys yet</p>
+                  <p className="text-xs text-muted-foreground font-mono">Create a key to embed this operator in your product.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {chatSlots.map((slot) => {
+                    const isRevoked = !!slot.revokedAt || !slot.isActive;
+                    const isConfirming = revokeConfirm === slot.id;
+                    return (
+                      <div
+                        key={slot.id}
+                        className={`border rounded-xl p-4 transition-all ${
+                          isRevoked ? "border-border/20 bg-card/20 opacity-50" : "border-border/40 bg-card/40"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="flex-1 min-w-0 space-y-1.5">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-semibold text-sm font-mono truncate">{slot.name}</span>
+                              <ApiSlotPill type={slot.surfaceType as keyof typeof API_SLOT_META} />
+                              <span className={`inline-flex items-center gap-1 font-mono text-[10px] font-semibold ${isRevoked ? "text-muted-foreground/50" : "text-green-500"}`}>
+                                <Circle className={`w-2 h-2 fill-current ${isRevoked ? "opacity-40" : ""}`} />
+                                {isRevoked ? "Revoked" : "Active"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="font-mono text-[11px] text-muted-foreground">
+                                {slot.apiKeyPreview}<span className="opacity-30">••••••••••••••••••</span>
+                              </span>
+                              <span className="text-[10px] text-muted-foreground/60 font-mono">
+                                {new Date(slot.createdAt).toLocaleDateString()}
+                              </span>
+                            </div>
+                          </div>
+                          {!isRevoked && !isConfirming && (
+                            <button
+                              onClick={() => setRevokeConfirm(slot.id)}
+                              className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              Revoke
+                            </button>
+                          )}
+                        </div>
+                        {isConfirming && (
+                          <div className="mt-3 pt-3 border-t border-border/30 animate-in fade-in duration-150">
+                            <p className="font-mono text-xs text-muted-foreground mb-2.5">
+                              Revoke <span className="text-foreground font-semibold">"{slot.name}"</span>? Apps using it will stop working immediately.
+                            </p>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="font-mono text-xs h-7 text-destructive border-destructive/30 hover:bg-destructive/10"
+                                onClick={() => revokeSlot.mutate(slot.id)}
+                                disabled={revokeSlot.isPending}
+                              >
+                                {revokeSlot.isPending ? <RefreshCw className="w-3 h-3 animate-spin" /> : "Yes, revoke it"}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="font-mono text-xs h-7"
+                                onClick={() => setRevokeConfirm(null)}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </section>
       )}
