@@ -152,38 +152,46 @@ router.get('/callback', async (req: Request, res: Response): Promise<void> => {
     });
     const encrypted = encryptToken(tokenPayload);
 
-    const [existing] = await db
-      .select({ id: operatorIntegrationsTable.id })
-      .from(operatorIntegrationsTable)
-      .where(
-        and(
-          eq(operatorIntegrationsTable.operatorId, operatorId),
-          eq(operatorIntegrationsTable.ownerId, ownerId),
-          eq(operatorIntegrationsTable.integrationType, 'google'),
-        )
-      );
+    const googleSubTypes = [
+      { type: 'gmail',           label: `Gmail — ${gUser.email ?? 'connected'}` },
+      { type: 'google_calendar', label: `Google Calendar — ${gUser.email ?? 'connected'}` },
+      { type: 'google_drive',    label: `Google Drive — ${gUser.email ?? 'connected'}` },
+    ];
 
-    if (existing) {
-      await db
-        .update(operatorIntegrationsTable)
-        .set({
+    for (const sub of googleSubTypes) {
+      const [existing] = await db
+        .select({ id: operatorIntegrationsTable.id })
+        .from(operatorIntegrationsTable)
+        .where(
+          and(
+            eq(operatorIntegrationsTable.operatorId, operatorId),
+            eq(operatorIntegrationsTable.ownerId, ownerId),
+            eq(operatorIntegrationsTable.integrationType, sub.type),
+          )
+        );
+
+      if (existing) {
+        await db
+          .update(operatorIntegrationsTable)
+          .set({
+            tokenEncrypted: encrypted,
+            integrationLabel: sub.label,
+            status: 'connected',
+            scopes: ['gmail', 'calendar', 'drive'],
+          })
+          .where(eq(operatorIntegrationsTable.id, existing.id));
+      } else {
+        await db.insert(operatorIntegrationsTable).values({
+          id: crypto.randomUUID(),
+          operatorId,
+          ownerId,
+          integrationType: sub.type,
+          integrationLabel: sub.label,
           tokenEncrypted: encrypted,
-          integrationLabel: gUser.email ?? 'Google Account',
           status: 'connected',
           scopes: ['gmail', 'calendar', 'drive'],
-        })
-        .where(eq(operatorIntegrationsTable.id, existing.id));
-    } else {
-      await db.insert(operatorIntegrationsTable).values({
-        id: crypto.randomUUID(),
-        operatorId,
-        ownerId,
-        integrationType: 'google',
-        integrationLabel: gUser.email ?? 'Google Account',
-        tokenEncrypted: encrypted,
-        status: 'connected',
-        scopes: ['gmail', 'calendar', 'drive'],
-      });
+        });
+      }
     }
 
     await triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});

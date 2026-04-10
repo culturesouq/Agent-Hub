@@ -13,11 +13,14 @@ export interface SkillResult {
 }
 
 const KNOWN_BASE_URLS: Record<string, string> = {
-  github:  'https://api.github.com',
-  notion:  'https://api.notion.com/v1',
-  slack:   'https://slack.com/api',
-  hubspot: 'https://api.hubapi.com',
-  linear:  'https://api.linear.app/graphql',
+  github:           'https://api.github.com',
+  notion:           'https://api.notion.com/v1',
+  slack:            'https://slack.com/api',
+  hubspot:          'https://api.hubapi.com',
+  linear:           'https://api.linear.app/graphql',
+  gmail:            'https://gmail.googleapis.com/gmail/v1',
+  google_calendar:  'https://www.googleapis.com/calendar/v3',
+  google_drive:     'https://www.googleapis.com/drive/v3',
 };
 
 function baseUrlFor(type: string): string {
@@ -28,6 +31,7 @@ async function fetchIntegrationData(
   baseUrl: string,
   token: string,
   instructions: string,
+  integration?: { tokenEncrypted: string },
 ): Promise<string | null> {
   try {
     // Ask the LLM to construct the right endpoint path from the instructions
@@ -59,6 +63,40 @@ async function fetchIntegrationData(
     });
 
     if (!response.ok) {
+      if (response.status === 401 && integration) {
+        try {
+          const rawAgain = decryptToken(integration.tokenEncrypted);
+          const parsed = JSON.parse(rawAgain);
+          if (parsed?.refresh_token) {
+            const refreshRes = await fetch('https://oauth2.googleapis.com/token', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: new URLSearchParams({
+                client_id: process.env.GOOGLE_CLIENT_ID!,
+                client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+                refresh_token: parsed.refresh_token,
+                grant_type: 'refresh_token',
+              }),
+            });
+            const newTokens = await refreshRes.json() as { access_token?: string };
+            if (newTokens.access_token) {
+              const retryRes = await fetch(url, {
+                headers: {
+                  Authorization: `Bearer ${newTokens.access_token}`,
+                  'Content-Type': 'application/json',
+                  Accept: 'application/json',
+                },
+              });
+              if (retryRes.ok) {
+                const retryData = await retryRes.text();
+                return retryData.slice(0, 4000);
+              }
+            }
+          }
+        } catch {
+          // refresh failed — fall through to null
+        }
+      }
       console.warn(`[skillExecutor] integration API returned ${response.status}`);
       return null;
     }
@@ -100,9 +138,16 @@ export async function executeSkill(
         .limit(1);
 
       if (integration?.tokenEncrypted) {
-        const token = decryptToken(integration.tokenEncrypted);
+        const rawToken = decryptToken(integration.tokenEncrypted);
+        let accessToken = rawToken;
+        try {
+          const parsed = JSON.parse(rawToken);
+          if (parsed?.access_token) accessToken = parsed.access_token;
+        } catch {
+          // not JSON — use as-is (PAT tokens etc.)
+        }
         const baseUrl = baseUrlFor(trigger.integrationType);
-        const data = await fetchIntegrationData(baseUrl, token, instructions);
+        const data = await fetchIntegrationData(baseUrl, accessToken, instructions, integration);
         if (data) {
           apiContext = `\n\nLive API response from ${trigger.integrationType}:\n${data}`;
           console.log(`[skillExecutor] integration data fetched for ${trigger.integrationType}`);
@@ -127,7 +172,10 @@ ${trigger.extractedParams}${apiContext}
 
 ${hasLiveData
   ? `The live API data above contains raw information. Interpret it. Extract what matters. Return a clear, human-readable findings report — specific facts, key items, important numbers, relevant names. No raw JSON, no raw URLs, no API field names. Write as if you are an agent reporting back after completing research.`
-  : `Execute the skill now. Return a clear, specific result the operator can act on.`
+  : `You have no live data for this task. The integration is either not connected or did not return results.
+Execute this skill using your reasoning and general knowledge only.
+You MUST begin your response with: "Note: I'm working from reasoning only — no live data was available for this task."
+Never present your output as verified data. Use language like "based on what I know", "my assessment is", or "from general knowledge".`
 }`;
 
   try {
