@@ -209,6 +209,17 @@ export default function OperatorDetail({ id }: { id: string }) {
     refetchInterval: 60000,
   });
 
+  const autoRecompute = useMutation({
+    mutationFn: () =>
+      apiFetch(`/operators/${id}/grow/self-awareness/recompute`, { method: "POST" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["operators", id, "self-awareness"] });
+    },
+  });
+  useEffect(() => {
+    if (id) autoRecompute.mutate();
+  }, [id]);
+
   const { data: capabilityRequests = [] } = useQuery({
     queryKey: ["operators", id, "capability-requests"],
     queryFn: () => apiFetch<CapabilityRequest[]>(`/operators/${id}/capability-requests`),
