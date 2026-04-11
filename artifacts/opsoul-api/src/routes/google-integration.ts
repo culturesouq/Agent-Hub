@@ -6,6 +6,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { eq, and } from 'drizzle-orm';
 import { encryptToken, decryptToken } from '@workspace/opsoul-utils/crypto';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
+import { autoInstallIntegrationSkills } from '../utils/autoInstallIntegrationSkills.js';
 
 const router = Router();
 
@@ -195,6 +196,12 @@ router.get('/callback', async (req: Request, res: Response): Promise<void> => {
     }
 
     await triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});
+
+    for (const sub of googleSubTypes) {
+      autoInstallIntegrationSkills(operatorId, sub.type).catch((err) =>
+        console.warn(`[google-integration] autoInstall failed for ${sub.type}:`, err?.message),
+      );
+    }
 
     res.redirect(`${baseUrl}/operators/${operatorId}?tab=connections&connected=google`);
   } catch (err) {

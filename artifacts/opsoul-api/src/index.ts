@@ -38,6 +38,7 @@ import { startMemoryCron } from './cron/memoryCron.js';
 import { startDriftCron } from './cron/driftCron.js';
 import { startKeepAliveCron } from './cron/keepAliveCron.js';
 import { runInitSeed } from './utils/initSeed.js';
+import { backfillIntegrationSkills } from './utils/autoInstallIntegrationSkills.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
@@ -152,6 +153,7 @@ async function start(): Promise<void> {
   });
 
   runInitSeed().catch((err) => console.error('[initSeed] failed:', err?.message));
+  backfillIntegrationSkills().catch((err) => console.error('[autoInstall] backfill failed:', err?.message));
 
   startGrowCron();
   startMemoryCron();

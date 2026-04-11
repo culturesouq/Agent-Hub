@@ -8,6 +8,7 @@ import { eq, and } from 'drizzle-orm';
 import { encryptToken, decryptToken } from '@workspace/opsoul-utils/crypto';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { chatCompletion } from '../utils/openrouter.js';
+import { autoRemoveIntegrationSkills } from '../utils/autoInstallIntegrationSkills.js';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -250,7 +251,7 @@ router.delete('/:integrationId', async (req: Request, res: Response): Promise<vo
   if (!operatorId) return;
 
   const [existing] = await db
-    .select({ id: operatorIntegrationsTable.id })
+    .select({ id: operatorIntegrationsTable.id, integrationType: operatorIntegrationsTable.integrationType })
     .from(operatorIntegrationsTable)
     .where(
       and(
@@ -266,6 +267,7 @@ router.delete('/:integrationId', async (req: Request, res: Response): Promise<vo
 
   res.json({ ok: true, deleted: req.params.integrationId });
 
+  autoRemoveIntegrationSkills(operatorId, existing.integrationType).catch(() => {});
   triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});
 });
 
