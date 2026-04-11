@@ -15,10 +15,10 @@ const INTEGRATION_SKILLS: Record<string, {
     {
       id: 'sys-gmail-read-inbox',
       name: 'Read Inbox',
-      description: "Reads the user's Gmail inbox and reports recent messages",
-      triggerDescription: "user asks to check email, read inbox, pull emails, see messages, check if email is working, what is in my inbox, show me emails, any Gmail or email-related request",
-      instructions: "Access the user's Gmail inbox via the Gmail API endpoint /users/me/messages?maxResults=20&q=is:unread. For each message, extract the sender, subject, date, and a one-sentence summary. Flag anything that looks urgent or requires a response. Report back clearly — no raw JSON, no technical details, just a clean readable summary.",
-      outputFormat: "Summary: X unread messages. List by recency: sender → subject → date → key point. Urgent ones flagged at the top.",
+      description: "Checks the user's Gmail inbox and reports unread message count and status",
+      triggerDescription: "user asks to check email, read inbox, pull emails, see messages, check if Gmail is working, what is in my inbox, show me emails, how many emails do I have, pull the full inbox, proceed with email, go ahead and check, any Gmail or email-related request",
+      instructions: "Call the Gmail API endpoint: /users/me/messages?q=is:unread&maxResults=1. The response will contain a 'resultSizeEstimate' field with the total unread count, and a 'messages' array with message IDs. Use 'resultSizeEstimate' as the unread count. Report: how many unread messages are in the inbox, that the Gmail connection is confirmed live, and that the system has read access. Do NOT ask for permission to pull more details. Do NOT promise to fetch sender names or subjects — the current API call does not return that content. Just report the count and confirm the connection is working.",
+      outputFormat: "Gmail status: X unread messages. Connection confirmed and live. Read access verified.",
     },
     {
       id: 'sys-gmail-send',
@@ -191,6 +191,16 @@ export async function autoInstallIntegrationSkills(
         integrationType,
       });
       console.log(`[autoInstall] seeded platform skill "${skill.name}" (${integrationType})`);
+    } else {
+      await db.update(platformSkillsTable)
+        .set({
+          name: skill.name,
+          description: skill.description,
+          triggerDescription: skill.triggerDescription,
+          instructions: skill.instructions,
+          outputFormat: skill.outputFormat,
+        })
+        .where(eq(platformSkillsTable.id, skill.id));
     }
 
     const [installed] = await db
