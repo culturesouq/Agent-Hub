@@ -25,6 +25,20 @@ const KNOWN_BASE_URLS: Record<string, string> = {
   google_drive:     'https://www.googleapis.com/drive/v3',
 };
 
+// Integration types that use GraphQL (POST with {query} body)
+const GRAPHQL_INTEGRATIONS = new Set(['linear']);
+
+// Integration types that require POST for search/read operations
+const POST_SEARCH_INTEGRATIONS = new Set(['notion']);
+
+// Extra headers required by specific integrations
+function getExtraHeaders(integrationType: string): Record<string, string> {
+  if (integrationType === 'notion') {
+    return { 'Notion-Version': '2022-06-28' };
+  }
+  return {};
+}
+
 async function refreshAccessToken(integration: IntegrationRow): Promise<string | null> {
   try {
     let refreshToken: string | null = null;
@@ -95,17 +109,19 @@ async function extractAccessToken(integration: IntegrationRow): Promise<string |
   }
 }
 
-async function callIntegrationApi(
+async function callRestApi(
   url: string,
   token: string,
   integration: IntegrationRow,
 ): Promise<string | null> {
+  const extraHeaders = getExtraHeaders(integration.integrationType);
   const doFetch = (t: string) =>
     fetch(url, {
       headers: {
         Authorization: `Bearer ${t}`,
         'Content-Type': 'application/json',
         Accept: 'application/json',
+        ...extraHeaders,
       },
     });
 
@@ -120,6 +136,80 @@ async function callIntegrationApi(
 
   if (!res.ok) {
     console.warn(`[skillExecutor] API returned ${res.status} for ${url}`);
+    return null;
+  }
+
+  const data = await res.text();
+  return data.slice(0, 4000);
+}
+
+async function callGraphQL(
+  baseUrl: string,
+  query: string,
+  token: string,
+  integration: IntegrationRow,
+): Promise<string | null> {
+  const extraHeaders = getExtraHeaders(integration.integrationType);
+  const doFetch = (t: string) =>
+    fetch(baseUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${t}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...extraHeaders,
+      },
+      body: JSON.stringify({ query }),
+    });
+
+  let res = await doFetch(token);
+
+  if (res.status === 401) {
+    const newToken = await refreshAccessToken(integration);
+    if (newToken) {
+      res = await doFetch(newToken);
+    }
+  }
+
+  if (!res.ok) {
+    console.warn(`[skillExecutor] GraphQL API returned ${res.status} for ${baseUrl}`);
+    return null;
+  }
+
+  const data = await res.text();
+  return data.slice(0, 4000);
+}
+
+async function callPostSearch(
+  url: string,
+  searchBody: object,
+  token: string,
+  integration: IntegrationRow,
+): Promise<string | null> {
+  const extraHeaders = getExtraHeaders(integration.integrationType);
+  const doFetch = (t: string) =>
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${t}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...extraHeaders,
+      },
+      body: JSON.stringify(searchBody),
+    });
+
+  let res = await doFetch(token);
+
+  if (res.status === 401) {
+    const newToken = await refreshAccessToken(integration);
+    if (newToken) {
+      res = await doFetch(newToken);
+    }
+  }
+
+  if (!res.ok) {
+    console.warn(`[skillExecutor] POST search API returned ${res.status} for ${url}`);
     return null;
   }
 
@@ -143,11 +233,56 @@ async function fetchIntegrationData(
       ? `\n\nApp schema (available entities and actions):\n${JSON.stringify(integration.appSchema, null, 2).slice(0, 2000)}`
       : '';
 
+    const isGraphQL = GRAPHQL_INTEGRATIONS.has(integration.integrationType.toLowerCase());
+    const isPostSearch = POST_SEARCH_INTEGRATIONS.has(integration.integrationType.toLowerCase());
+
+    if (isGraphQL) {
+      const queryResult = await chatCompletion(
+        [
+          {
+            role: 'system',
+            content: 'You determine the correct GraphQL query for a given task. Return ONLY the GraphQL operation string — no markdown fences, no explanation, no variable declarations. Example: { viewer { name } }',
+          },
+          {
+            role: 'user',
+            content: `API: ${baseUrl}\nTask: ${instructions}${schemaContext}\n\nReturn only the GraphQL operation.`,
+          },
+        ],
+        'anthropic/claude-haiku-4-5',
+      );
+
+      const gqlQuery = queryResult.content.trim().replace(/^```[\w]*\n?|```$/g, '');
+      console.log(`[skillExecutor] calling GraphQL API: ${baseUrl}`);
+      return await callGraphQL(baseUrl, gqlQuery, token, integration);
+    }
+
+    if (isPostSearch) {
+      const searchTermResult = await chatCompletion(
+        [
+          {
+            role: 'system',
+            content: 'Extract the search term or query from the task description. Return ONLY the search term as a plain string. No explanation.',
+          },
+          {
+            role: 'user',
+            content: `Task: ${instructions}\n\nReturn only the search term.`,
+          },
+        ],
+        'anthropic/claude-haiku-4-5',
+      );
+
+      const searchTerm = searchTermResult.content.trim();
+      const url = `${baseUrl}/search`;
+      console.log(`[skillExecutor] calling POST search API: ${url}`);
+      return await callPostSearch(url, { query: searchTerm, page_size: 15 }, token, integration);
+    }
+
+    // Standard REST GET
     const endpointResult = await chatCompletion(
       [
         {
           role: 'system',
-          content: 'You determine the correct REST API endpoint path for a given task. Return ONLY the path (e.g. /repos/owner/repo/issues). No explanation.',
+          content: 'You determine the correct REST API endpoint path for a given task. Return ONLY the path with query parameters (e.g. /repos/owner/repo/issues?state=open). No explanation.',
         },
         {
           role: 'user',
@@ -160,9 +295,9 @@ async function fetchIntegrationData(
     const path = endpointResult.content.trim().replace(/^["']|["']$/g, '');
     const url = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
 
-    console.log(`[skillExecutor] calling integration API: ${url}`);
+    console.log(`[skillExecutor] calling REST API: ${url}`);
 
-    return await callIntegrationApi(url, token, integration);
+    return await callRestApi(url, token, integration);
   } catch (err: any) {
     console.warn('[skillExecutor] fetchIntegrationData failed:', err?.message);
     return null;
