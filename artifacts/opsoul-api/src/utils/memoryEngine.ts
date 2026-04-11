@@ -190,6 +190,13 @@ function buildDistillPrompt(
 
   return `You are analysing a conversation transcript to extract persistent memory entries for an Operator named "${operatorName}".
 
+## Role clarification — CRITICAL
+In the transcript below:
+- ASSISTANT = the AI Operator ("${operatorName}") — the AI assistant
+- USER = the human having the conversation
+
+Memories you extract are things "${operatorName}" should remember ABOUT THE HUMAN USER across future conversations.
+
 Extract only factual, preference, interaction pattern, or context information that would be genuinely useful for this Operator to remember across future conversations. Do NOT extract trivial greetings or one-time tasks.
 
 Memory types:
@@ -204,6 +211,8 @@ ${transcript}
 
 ## Phrasing instruction
 Write each memory so it can be retrieved by the QUESTIONS a user will ask in future conversations — not just what they literally said. Include likely retrieval keywords. For example, instead of "User is planning to expand into vegetable farming, specifically tomatoes", write "User plans to expand their farm — next crop is tomatoes, vegetable farming expansion planned for next year".
+
+CRITICAL PHRASING RULE: Memories are about the HUMAN (USER role). Always write them as "User ..." — NEVER as "${operatorName} ..." unless the memory specifically captures "${operatorName}"'s behaviour pattern toward this user (e.g. "${operatorName} declines to answer X for this user"). The human's life, job, relationships, and context must never be attributed to the operator by name.
 
 Respond ONLY with valid JSON:
 {
