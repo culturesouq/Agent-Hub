@@ -558,7 +558,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
             {/* Streaming or fallback — no flash between stream end and history load */}
             {ranSkill && (showingStream || showingFallback) && (
               <div className="flex justify-start my-1">
-                <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-primary/30 bg-primary/8 text-primary/70 text-[11px] font-mono">
+                <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-primary/30 bg-primary/5 text-primary/70 text-[11px] font-mono">
                   <Zap className="w-3 h-3" />
                   Ran: {ranSkill}
                 </span>
