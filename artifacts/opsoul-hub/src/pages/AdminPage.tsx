@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
 import { apiFetch } from "@/lib/api";
@@ -43,7 +43,42 @@ interface DriftAlert {
   resolvedAt: string | null;
 }
 
-type Tab = "overview" | "owners" | "operators" | "drift";
+interface RagEntry {
+  id: string;
+  layer: "builder" | "archetype" | "collective";
+  archetype: string | null;
+  title: string;
+  content: string;
+  tags: string[];
+  isActive: boolean;
+  hasEmbedding: boolean;
+  createdAt: string;
+}
+
+interface RagStats {
+  builderCount: number;
+  archetypeCount: number;
+  collectiveCount: number;
+  totalActive: number;
+  pipelineEnabled: boolean;
+  lastRunAt: string | null;
+  lastRunCount: number;
+  totalExtracted: number;
+}
+
+interface PipelineConfig {
+  id: string;
+  enabled: boolean;
+  minConfidenceScore: number;
+  deduplicationThreshold: number;
+  lastRunAt: string | null;
+  lastRunCount: number;
+  totalExtracted: number;
+}
+
+const ARCHETYPES = ["Advisor", "Executor", "Expert", "Connector", "Creator", "Guardian", "Builder", "Catalyst", "Analyst"];
+
+type Tab = "overview" | "owners" | "operators" | "drift" | "rag";
 
 function StatCard({ label, value, color, glow }: {
   label: string;
@@ -104,6 +139,27 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
+  const [ragStats, setRagStats] = useState<RagStats | null>(null);
+  const [ragEntries, setRagEntries] = useState<RagEntry[]>([]);
+  const [ragPipeline, setRagPipeline] = useState<PipelineConfig | null>(null);
+  const [ragSubTab, setRagSubTab] = useState<"builder" | "archetype" | "collective">("builder");
+  const [ragArchetypeFilter, setRagArchetypeFilter] = useState<string>("");
+  const [ragForm, setRagForm] = useState({ title: "", content: "", archetype: "", tags: "" });
+  const [ragSaving, setRagSaving] = useState(false);
+  const [ragRunning, setRagRunning] = useState(false);
+  const [ragRunResult, setRagRunResult] = useState<{ extracted: number; candidatesScanned: number } | null>(null);
+
+  const loadRag = useCallback(async () => {
+    const [s, entries, pipeline] = await Promise.all([
+      apiFetch<RagStats>("/admin/rag/stats"),
+      apiFetch<RagEntry[]>("/admin/rag/entries"),
+      apiFetch<PipelineConfig>("/admin/rag/pipeline"),
+    ]);
+    setRagStats(s);
+    setRagEntries(entries);
+    setRagPipeline(pipeline);
+  }, []);
+
   useEffect(() => {
     if (!token) return;
     if (!owner?.isSovereignAdmin) {
@@ -123,12 +179,13 @@ export default function AdminPage() {
         setOwners(o);
         setOperators(ops);
         setDriftAlerts(drift);
+        await loadRag();
       } finally {
         setLoading(false);
       }
     }
     load();
-  }, [token, owner, setLocation]);
+  }, [token, owner, setLocation, loadRag]);
 
   async function toggleAdmin(id: string) {
     setTogglingId(id);
@@ -142,6 +199,55 @@ export default function AdminPage() {
       );
     } finally {
       setTogglingId(null);
+    }
+  }
+
+  async function saveRagEntry() {
+    if (!ragForm.title.trim() || !ragForm.content.trim()) return;
+    setRagSaving(true);
+    try {
+      await apiFetch("/admin/rag/entries", {
+        method: "POST",
+        body: JSON.stringify({
+          layer: ragSubTab,
+          archetype: ragSubTab === "archetype" ? ragForm.archetype : undefined,
+          title: ragForm.title.trim(),
+          content: ragForm.content.trim(),
+          tags: ragForm.tags ? ragForm.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
+        }),
+      });
+      setRagForm({ title: "", content: "", archetype: "", tags: "" });
+      await loadRag();
+    } finally {
+      setRagSaving(false);
+    }
+  }
+
+  async function toggleRagEntry(id: string, isActive: boolean) {
+    await apiFetch(`/admin/rag/entries/${id}`, { method: "PUT", body: JSON.stringify({ isActive: !isActive }) });
+    setRagEntries((prev) => prev.map((e) => e.id === id ? { ...e, isActive: !isActive } : e));
+    setRagStats((prev) => prev ? { ...prev, totalActive: prev.totalActive + (isActive ? -1 : 1) } : prev);
+  }
+
+  async function deleteRagEntry(id: string) {
+    await apiFetch(`/admin/rag/entries/${id}`, { method: "DELETE" });
+    await loadRag();
+  }
+
+  async function savePipelineConfig(updates: Partial<PipelineConfig>) {
+    const updated = await apiFetch<PipelineConfig>("/admin/rag/pipeline", { method: "PUT", body: JSON.stringify(updates) });
+    setRagPipeline(updated);
+  }
+
+  async function runPipeline() {
+    setRagRunning(true);
+    setRagRunResult(null);
+    try {
+      const result = await apiFetch<{ extracted: number; candidatesScanned: number }>("/admin/rag/pipeline/run", { method: "POST" });
+      setRagRunResult(result);
+      await loadRag();
+    } finally {
+      setRagRunning(false);
     }
   }
 
@@ -160,6 +266,7 @@ export default function AdminPage() {
     { id: "owners", label: "Owners", count: owners.length },
     { id: "operators", label: "Operators", count: operators.length },
     { id: "drift", label: "Drift Alerts", count: driftAlerts.length },
+    { id: "rag", label: "Intelligence", count: ragStats?.totalActive },
   ];
 
   return (
@@ -487,6 +594,321 @@ export default function AdminPage() {
                   </div>
                 </div>
               ))
+            )}
+          </div>
+        )}
+        {/* RAG Intelligence tab */}
+        {tab === "rag" && (
+          <div className="space-y-6">
+            {/* Stats row */}
+            {ragStats && (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="glass-panel p-6">
+                  <div className="font-headline text-3xl font-bold text-primary mb-1">{ragStats.builderCount}</div>
+                  <div className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Builder DNA</div>
+                </div>
+                <div className="glass-panel p-6">
+                  <div className="font-headline text-3xl font-bold text-secondary mb-1">{ragStats.archetypeCount}</div>
+                  <div className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Archetype DNA</div>
+                </div>
+                <div className="glass-panel p-6">
+                  <div className="font-headline text-3xl font-bold text-primary mb-1">{ragStats.collectiveCount}</div>
+                  <div className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Collective</div>
+                </div>
+                <div className="glass-panel p-6">
+                  <div className="font-headline text-3xl font-bold text-secondary mb-1">{ragStats.totalExtracted}</div>
+                  <div className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Total Extracted</div>
+                </div>
+              </div>
+            )}
+
+            {/* Sub-tabs */}
+            <div className="flex gap-1">
+              {(["builder", "archetype", "collective"] as const).map((sub) => (
+                <button
+                  key={sub}
+                  onClick={() => { setRagSubTab(sub); setRagForm({ title: "", content: "", archetype: "", tags: "" }); }}
+                  className={`px-5 py-2 font-label text-[10px] uppercase tracking-widest transition-all ${
+                    ragSubTab === sub
+                      ? "bg-primary-container text-on-primary-container shadow-[inset_0_1px_0_rgba(205,150,255,0.20)]"
+                      : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                  }`}
+                >
+                  {sub === "builder" ? "Builder DNA" : sub === "archetype" ? "Archetype DNA" : "Collective Pipeline"}
+                </button>
+              ))}
+            </div>
+
+            {/* Builder DNA */}
+            {ragSubTab === "builder" && (
+              <div className="space-y-4">
+                <div className="glass-panel p-6 space-y-4">
+                  <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Add Builder DNA Entry</h3>
+                  <input
+                    placeholder="Title — e.g. Gmail Permission Constraints"
+                    value={ragForm.title}
+                    onChange={(e) => setRagForm((f) => ({ ...f, title: e.target.value }))}
+                    className="w-full bg-surface-container/50 border border-border/40 rounded-lg px-4 py-2.5 text-sm font-sans text-foreground focus:outline-none focus:border-primary/50"
+                  />
+                  <textarea
+                    placeholder="Knowledge content — what every operator should inherently know..."
+                    value={ragForm.content}
+                    onChange={(e) => setRagForm((f) => ({ ...f, content: e.target.value }))}
+                    rows={4}
+                    className="w-full bg-surface-container/50 border border-border/40 rounded-lg px-4 py-2.5 text-sm font-sans text-foreground focus:outline-none focus:border-primary/50 resize-none"
+                  />
+                  <div className="flex items-center gap-3">
+                    <input
+                      placeholder="Tags (comma-separated)"
+                      value={ragForm.tags}
+                      onChange={(e) => setRagForm((f) => ({ ...f, tags: e.target.value }))}
+                      className="flex-1 bg-surface-container/50 border border-border/40 rounded-lg px-4 py-2.5 text-sm font-sans text-foreground focus:outline-none focus:border-primary/50"
+                    />
+                    <button
+                      onClick={saveRagEntry}
+                      disabled={ragSaving || !ragForm.title.trim() || !ragForm.content.trim()}
+                      className="px-6 py-2.5 bg-primary text-primary-foreground font-label text-[10px] uppercase tracking-widest rounded-lg hover:opacity-90 disabled:opacity-40 transition-opacity"
+                    >
+                      {ragSaving ? "Embedding…" : "Add Entry"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="glass-panel overflow-hidden">
+                  <div className="px-6 py-4 border-b border-border/30">
+                    <span className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                      {ragEntries.filter((e) => e.layer === "builder").length} Builder Entries
+                    </span>
+                  </div>
+                  {ragEntries.filter((e) => e.layer === "builder").map((entry) => (
+                    <div key={entry.id} className={`px-6 py-4 border-b border-border/20 flex items-start justify-between gap-4 ${!entry.isActive ? "opacity-40" : ""}`}>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-sans text-sm text-on-surface">{entry.title}</span>
+                          {entry.hasEmbedding && <span className="font-label text-[9px] uppercase tracking-widest text-secondary">Embedded</span>}
+                        </div>
+                        <p className="text-xs text-muted-foreground font-sans line-clamp-2">{entry.content}</p>
+                        {entry.tags.length > 0 && (
+                          <div className="flex gap-1 mt-2 flex-wrap">
+                            {entry.tags.map((t) => (
+                              <span key={t} className="font-label text-[9px] uppercase tracking-widest text-primary/60 border border-primary/20 rounded px-1.5 py-0.5">{t}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <button onClick={() => toggleRagEntry(entry.id, entry.isActive)} className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">
+                          {entry.isActive ? "Deactivate" : "Activate"}
+                        </button>
+                        <button onClick={() => deleteRagEntry(entry.id)} className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-destructive transition-colors">
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {ragEntries.filter((e) => e.layer === "builder").length === 0 && (
+                    <div className="px-6 py-12 text-center text-muted-foreground text-sm">No builder DNA entries yet. Add platform knowledge above.</div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Archetype DNA */}
+            {ragSubTab === "archetype" && (
+              <div className="space-y-4">
+                <div className="glass-panel p-6 space-y-4">
+                  <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Add Archetype DNA Entry</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      placeholder="Title"
+                      value={ragForm.title}
+                      onChange={(e) => setRagForm((f) => ({ ...f, title: e.target.value }))}
+                      className="w-full bg-surface-container/50 border border-border/40 rounded-lg px-4 py-2.5 text-sm font-sans text-foreground focus:outline-none focus:border-primary/50"
+                    />
+                    <select
+                      value={ragForm.archetype}
+                      onChange={(e) => setRagForm((f) => ({ ...f, archetype: e.target.value }))}
+                      className="w-full bg-surface-container/50 border border-border/40 rounded-lg px-4 py-2.5 text-sm font-sans text-foreground focus:outline-none focus:border-primary/50"
+                    >
+                      <option value="">Select Archetype</option>
+                      {ARCHETYPES.map((a) => <option key={a} value={a}>{a}</option>)}
+                    </select>
+                  </div>
+                  <textarea
+                    placeholder="Domain knowledge this archetype inherently knows..."
+                    value={ragForm.content}
+                    onChange={(e) => setRagForm((f) => ({ ...f, content: e.target.value }))}
+                    rows={4}
+                    className="w-full bg-surface-container/50 border border-border/40 rounded-lg px-4 py-2.5 text-sm font-sans text-foreground focus:outline-none focus:border-primary/50 resize-none"
+                  />
+                  <div className="flex items-center gap-3">
+                    <input
+                      placeholder="Tags (comma-separated)"
+                      value={ragForm.tags}
+                      onChange={(e) => setRagForm((f) => ({ ...f, tags: e.target.value }))}
+                      className="flex-1 bg-surface-container/50 border border-border/40 rounded-lg px-4 py-2.5 text-sm font-sans text-foreground focus:outline-none focus:border-primary/50"
+                    />
+                    <button
+                      onClick={saveRagEntry}
+                      disabled={ragSaving || !ragForm.title.trim() || !ragForm.content.trim() || !ragForm.archetype}
+                      className="px-6 py-2.5 bg-primary text-primary-foreground font-label text-[10px] uppercase tracking-widest rounded-lg hover:opacity-90 disabled:opacity-40 transition-opacity"
+                    >
+                      {ragSaving ? "Embedding…" : "Add Entry"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Archetype filter */}
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    onClick={() => setRagArchetypeFilter("")}
+                    className={`px-4 py-1.5 font-label text-[10px] uppercase tracking-widest rounded-full border transition-all ${!ragArchetypeFilter ? "border-primary text-primary" : "border-border/40 text-muted-foreground hover:border-primary/50"}`}
+                  >
+                    All
+                  </button>
+                  {ARCHETYPES.map((a) => (
+                    <button
+                      key={a}
+                      onClick={() => setRagArchetypeFilter(a === ragArchetypeFilter ? "" : a)}
+                      className={`px-4 py-1.5 font-label text-[10px] uppercase tracking-widest rounded-full border transition-all ${ragArchetypeFilter === a ? "border-primary text-primary" : "border-border/40 text-muted-foreground hover:border-primary/50"}`}
+                    >
+                      {a}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="glass-panel overflow-hidden">
+                  {ragEntries
+                    .filter((e) => e.layer === "archetype" && (!ragArchetypeFilter || e.archetype === ragArchetypeFilter))
+                    .map((entry) => (
+                      <div key={entry.id} className={`px-6 py-4 border-b border-border/20 flex items-start justify-between gap-4 ${!entry.isActive ? "opacity-40" : ""}`}>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-label text-[9px] uppercase tracking-widest text-secondary">{entry.archetype}</span>
+                            <span className="font-sans text-sm text-on-surface">{entry.title}</span>
+                            {entry.hasEmbedding && <span className="font-label text-[9px] uppercase tracking-widest text-primary/60">Embedded</span>}
+                          </div>
+                          <p className="text-xs text-muted-foreground font-sans line-clamp-2">{entry.content}</p>
+                        </div>
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                          <button onClick={() => toggleRagEntry(entry.id, entry.isActive)} className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">
+                            {entry.isActive ? "Deactivate" : "Activate"}
+                          </button>
+                          <button onClick={() => deleteRagEntry(entry.id)} className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-destructive transition-colors">
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  {ragEntries.filter((e) => e.layer === "archetype" && (!ragArchetypeFilter || e.archetype === ragArchetypeFilter)).length === 0 && (
+                    <div className="px-6 py-12 text-center text-muted-foreground text-sm">
+                      {ragArchetypeFilter ? `No DNA entries for ${ragArchetypeFilter} yet.` : "No archetype DNA entries yet."}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Collective Pipeline */}
+            {ragSubTab === "collective" && ragPipeline && (
+              <div className="space-y-4">
+                {/* Config panel */}
+                <div className="glass-panel p-6 space-y-6">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Pipeline Configuration</h3>
+                    <div className="flex items-center gap-3">
+                      <span className={`font-label text-[10px] uppercase tracking-widest ${ragPipeline.enabled ? "text-secondary" : "text-muted-foreground"}`}>
+                        {ragPipeline.enabled ? "Active" : "Paused"}
+                      </span>
+                      <button
+                        onClick={() => savePipelineConfig({ enabled: !ragPipeline.enabled })}
+                        className={`w-10 h-5 rounded-full transition-colors relative ${ragPipeline.enabled ? "bg-secondary" : "bg-surface-container-high"}`}
+                      >
+                        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${ragPipeline.enabled ? "left-5" : "left-0.5"}`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="font-label text-[10px] uppercase tracking-widest text-muted-foreground">
+                        Min Confidence Score — {ragPipeline.minConfidenceScore}%
+                      </label>
+                      <input
+                        type="range" min={50} max={100} value={ragPipeline.minConfidenceScore}
+                        onChange={(e) => setRagPipeline((p) => p ? { ...p, minConfidenceScore: Number(e.target.value) } : p)}
+                        onMouseUp={() => savePipelineConfig({ minConfidenceScore: ragPipeline.minConfidenceScore })}
+                        className="w-full accent-primary"
+                      />
+                      <p className="text-xs text-muted-foreground font-sans">Minimum confidence required before operator learning is considered for collective extraction.</p>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="font-label text-[10px] uppercase tracking-widest text-muted-foreground">
+                        Dedup Threshold — {ragPipeline.deduplicationThreshold}%
+                      </label>
+                      <input
+                        type="range" min={50} max={99} value={ragPipeline.deduplicationThreshold}
+                        onChange={(e) => setRagPipeline((p) => p ? { ...p, deduplicationThreshold: Number(e.target.value) } : p)}
+                        onMouseUp={() => savePipelineConfig({ deduplicationThreshold: ragPipeline.deduplicationThreshold })}
+                        className="w-full accent-primary"
+                      />
+                      <p className="text-xs text-muted-foreground font-sans">Semantic similarity threshold above which an incoming entry is considered a duplicate and skipped.</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Run panel */}
+                <div className="glass-panel p-6 flex items-center justify-between gap-8">
+                  <div>
+                    <div className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-3">Manual Pipeline Run</div>
+                    <div className="flex gap-8 text-sm font-sans text-on-surface-variant">
+                      <span>Last run: <span className="text-on-surface">{ragPipeline.lastRunAt ? new Date(ragPipeline.lastRunAt).toLocaleString() : "Never"}</span></span>
+                      <span>Last extracted: <span className="text-secondary">{ragPipeline.lastRunCount}</span></span>
+                      <span>Total extracted: <span className="text-primary">{ragPipeline.totalExtracted}</span></span>
+                    </div>
+                    {ragRunResult && (
+                      <div className="mt-3 font-mono text-xs text-secondary">
+                        Run complete — {ragRunResult.extracted} new entries extracted from {ragRunResult.candidatesScanned} candidates scanned
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={runPipeline}
+                    disabled={ragRunning}
+                    className="px-8 py-3 bg-primary/10 border border-primary/30 text-primary font-label text-[10px] uppercase tracking-widest rounded-lg hover:bg-primary/20 disabled:opacity-40 transition-all whitespace-nowrap"
+                  >
+                    {ragRunning ? "Running…" : "Run Now"}
+                  </button>
+                </div>
+
+                {/* Collective entries */}
+                <div className="glass-panel overflow-hidden">
+                  <div className="px-6 py-4 border-b border-border/30">
+                    <span className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                      {ragEntries.filter((e) => e.layer === "collective").length} Collective Entries
+                    </span>
+                  </div>
+                  {ragEntries.filter((e) => e.layer === "collective").map((entry) => (
+                    <div key={entry.id} className={`px-6 py-4 border-b border-border/20 flex items-start justify-between gap-4 ${!entry.isActive ? "opacity-40" : ""}`}>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-sans text-sm text-on-surface mb-1">{entry.title}</div>
+                        <p className="text-xs text-muted-foreground font-sans line-clamp-2">{entry.content}</p>
+                      </div>
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <button onClick={() => toggleRagEntry(entry.id, entry.isActive)} className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">
+                          {entry.isActive ? "Deactivate" : "Activate"}
+                        </button>
+                        <button onClick={() => deleteRagEntry(entry.id)} className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-destructive transition-colors">
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {ragEntries.filter((e) => e.layer === "collective").length === 0 && (
+                    <div className="px-6 py-12 text-center text-muted-foreground text-sm">No collective entries yet. Run the pipeline to extract generalizable knowledge from operator learning.</div>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         )}

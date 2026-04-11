@@ -9,7 +9,7 @@ export interface VectorHit {
   chunkIndex: number | null;
   distance: number;
   similarity: number;
-  kbSource: 'owner' | 'operator';
+  kbSource: 'owner' | 'operator' | 'dna';
   confidenceScore?: number;
   verificationStatus?: string;
 }
@@ -103,18 +103,63 @@ export async function searchOperatorKb(
   }));
 }
 
+export async function searchDnaKb(
+  archetypes: string[],
+  embedding: number[],
+  limit: number = 4,
+): Promise<VectorHit[]> {
+  const vecStr = `[${embedding.join(',')}]`;
+
+  const archetypePlaceholders = archetypes.map((_, i) => `$${i + 3}`).join(', ');
+  const archetypeClause = archetypes.length > 0
+    ? `AND (layer = 'builder' OR layer = 'collective' OR (layer = 'archetype' AND archetype IN (${archetypePlaceholders})))`
+    : `AND (layer = 'builder' OR layer = 'collective')`;
+
+  const result = await pool.query<{
+    id: string;
+    content: string;
+    layer: string;
+    distance: number;
+  }>(
+    `SELECT id, content, layer,
+            (embedding <=> $1::vector) AS distance
+     FROM rag_dna
+     WHERE is_active = true
+       AND embedding IS NOT NULL
+       AND (embedding <=> $1::vector) < $2
+       ${archetypeClause}
+     ORDER BY distance ASC
+     LIMIT ${limit}`,
+    [vecStr, 0.88, ...archetypes],
+  );
+
+  return result.rows.map((r) => ({
+    id: r.id,
+    content: r.content,
+    sourceUrl: null,
+    sourceName: null,
+    sourceType: `dna:${r.layer}`,
+    chunkIndex: null,
+    distance: Number(r.distance),
+    similarity: 1 - Number(r.distance),
+    kbSource: 'dna' as const,
+  }));
+}
+
 export async function searchBothKbs(
   operatorId: string,
   embedding: number[],
   topN: number = KB_TOP_N_CHUNKS,
   minConfidence: number = KB_RETRIEVAL_MIN_CONFIDENCE,
+  archetypes: string[] = [],
 ): Promise<VectorHit[]> {
-  const [ownerHits, operatorHits] = await Promise.all([
+  const [ownerHits, operatorHits, dnaHits] = await Promise.all([
     searchOwnerKb(operatorId, embedding, topN),
     searchOperatorKb(operatorId, embedding, topN, minConfidence),
+    searchDnaKb(archetypes, embedding, 4),
   ]);
 
-  const merged = [...ownerHits, ...operatorHits];
+  const merged = [...ownerHits, ...operatorHits, ...dnaHits];
   merged.sort((a, b) => a.distance - b.distance);
   return merged.slice(0, topN);
 }
