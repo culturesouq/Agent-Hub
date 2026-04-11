@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 
 export const CHAT_MODEL = 'anthropic/claude-sonnet-4-5';
+export const KB_MODEL = 'anthropic/claude-haiku-4-5';
 export const AUTO_MODEL = 'opsoul/auto';
 
 export const MODEL_OPTIONS = [

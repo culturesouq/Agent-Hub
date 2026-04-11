@@ -147,7 +147,13 @@ export default function AdminPage() {
   const [ragForm, setRagForm] = useState({ title: "", content: "", archetype: "", tags: "" });
   const [ragSaving, setRagSaving] = useState(false);
   const [ragRunning, setRagRunning] = useState(false);
-  const [ragRunResult, setRagRunResult] = useState<{ extracted: number; candidatesScanned: number } | null>(null);
+  const [ragRunResult, setRagRunResult] = useState<{
+    extracted: number;
+    candidatesScanned: number;
+    filteredByScreener: number;
+    filteredByDedup: number;
+    screenerRejections: { content: string; reason: string }[];
+  } | null>(null);
 
   const loadRag = useCallback(async () => {
     const [s, entries, pipeline] = await Promise.all([
@@ -812,6 +818,29 @@ export default function AdminPage() {
             {/* Collective Pipeline */}
             {ragSubTab === "collective" && ragPipeline && (
               <div className="space-y-4">
+                {/* Eligibility guidance */}
+                <div className="glass-panel p-5 border border-primary/10 space-y-3">
+                  <div className="font-label text-[10px] uppercase tracking-[0.2em] text-primary/70">What belongs in the collective pipeline</div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <div className="font-label text-[9px] uppercase tracking-widest text-secondary mb-2">✓ Eligible</div>
+                      {["Factual domain knowledge (research, how-to, technical facts)", "Verified information applicable across operators", "Insights, patterns, or methods any operator could use", "Structured knowledge: definitions, frameworks, processes"].map((item) => (
+                        <div key={item} className="text-xs text-muted-foreground font-sans flex gap-2">
+                          <span className="text-secondary shrink-0">—</span>{item}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="font-label text-[9px] uppercase tracking-widest text-destructive/70 mb-2">✗ Blocked by screener</div>
+                      {["User preference notes (\"User likes X\", \"User prefers Y\")", "Conversational observations (\"User asked about Z\")", "Operator diary — notes about one user's behavior", "Personal context that only applies to one session"].map((item) => (
+                        <div key={item} className="text-xs text-muted-foreground font-sans flex gap-2">
+                          <span className="text-destructive/50 shrink-0">—</span>{item}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
                 {/* Config panel */}
                 <div className="glass-panel p-6 space-y-6">
                   <div className="flex items-center justify-between">
@@ -867,8 +896,25 @@ export default function AdminPage() {
                       <span>Total extracted: <span className="text-primary">{ragPipeline.totalExtracted}</span></span>
                     </div>
                     {ragRunResult && (
-                      <div className="mt-3 font-mono text-xs text-secondary">
-                        Run complete — {ragRunResult.extracted} new entries extracted from {ragRunResult.candidatesScanned} candidates scanned
+                      <div className="mt-3 space-y-1.5">
+                        <div className="font-mono text-xs text-secondary">
+                          Run complete — {ragRunResult.extracted} extracted · {ragRunResult.filteredByScreener} blocked by screener · {ragRunResult.filteredByDedup} deduped · {ragRunResult.candidatesScanned} scanned
+                        </div>
+                        {ragRunResult.screenerRejections.length > 0 && (
+                          <details className="mt-1">
+                            <summary className="font-label text-[9px] uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+                              {ragRunResult.screenerRejections.length} diary/context entries blocked — expand to review
+                            </summary>
+                            <div className="mt-2 space-y-1 pl-2 border-l border-destructive/30">
+                              {ragRunResult.screenerRejections.map((r, i) => (
+                                <div key={i} className="text-xs font-sans text-muted-foreground">
+                                  <span className="text-destructive/70 font-mono mr-2">[{r.reason}]</span>
+                                  {r.content}…
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                        )}
                       </div>
                     )}
                   </div>

@@ -4,7 +4,43 @@ import { eq, and, sql, desc, isNull, or } from 'drizzle-orm';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireAdmin } from '../middleware/requireAdmin.js';
 import { embed } from '@workspace/opsoul-utils/ai';
+import { chatCompletion, KB_MODEL } from '../utils/openrouter.js';
 import { validateEntry, runDiscoverySweep } from '../utils/vaelEngine.js';
+
+// ── Pipeline content screener ────────────────────────────────────────────────
+
+const SCREENER_SYSTEM = `You are a collective DNA screener for an AI operator platform. You decide whether a KB entry contains knowledge that generalizes beyond one user and belongs in the shared DNA corpus.
+
+ELIGIBLE (return {"eligible":true}):
+- Factual domain knowledge (research findings, how-to guides, technical facts)
+- Verified information with broad applicability across operators
+- Insights, patterns, or methods that any operator could use
+- Structured knowledge: definitions, frameworks, processes
+
+NOT ELIGIBLE (return {"eligible":false, "reason":"<short label>"}):
+- User preference notes ("User likes X", "User prefers Y format")
+- Conversational observations ("User asked about X", "User expressed interest in Y")
+- Operator diary entries — notes about a specific user's behavior or context
+- Personal context that only applies to one person or session
+- Vague summaries with no actionable knowledge content
+
+Return only valid JSON. No preamble.`;
+
+async function screenForCollective(content: string): Promise<{ eligible: boolean; reason?: string }> {
+  try {
+    const result = await chatCompletion(
+      [
+        { role: 'system', content: SCREENER_SYSTEM },
+        { role: 'user', content: `Screen this KB entry:\n\n"""\n${content.slice(0, 800)}\n"""` },
+      ],
+      { model: KB_MODEL },
+    );
+    const parsed = JSON.parse(result.content.trim());
+    return { eligible: !!parsed.eligible, reason: parsed.reason };
+  } catch {
+    return { eligible: true };
+  }
+}
 
 const router = Router();
 router.use(requireAuth);
@@ -246,10 +282,24 @@ router.post('/pipeline/run', async (_req: Request, res: Response): Promise<void>
     .limit(200);
 
   let extracted = 0;
+  let filteredByScreener = 0;
+  let filteredByDedup = 0;
   const threshold = (config.deduplicationThreshold ?? 92) / 100;
+  const screenerRejections: { content: string; reason: string }[] = [];
 
   for (const candidate of candidates) {
     const hash = candidate.sourceHash;
+
+    // ── LLM content screener — block diary/context entries ──────────────────
+    const screen = await screenForCollective(candidate.content);
+    if (!screen.eligible) {
+      filteredByScreener++;
+      screenerRejections.push({
+        content: candidate.content.slice(0, 120),
+        reason: screen.reason ?? 'diary or user-context entry',
+      });
+      continue;
+    }
 
     // skip if we already have an entry with the same hash
     const [existing] = await db.select({ id: ragDnaTable.id })
@@ -260,7 +310,7 @@ router.post('/pipeline/run', async (_req: Request, res: Response): Promise<void>
       ))
       .limit(1);
 
-    if (existing) continue;
+    if (existing) { filteredByDedup++; continue; }
 
     // check semantic dedup against existing collective entries
     let embedding: number[] | undefined;
@@ -279,7 +329,10 @@ router.post('/pipeline/run', async (_req: Request, res: Response): Promise<void>
       [vecStr],
     );
 
-    if (nearDup.rows.length > 0 && (1 - nearDup.rows[0].distance) >= threshold) continue;
+    if (nearDup.rows.length > 0 && (1 - nearDup.rows[0].distance) >= threshold) {
+      filteredByDedup++;
+      continue;
+    }
 
     await db.insert(ragDnaTable).values({
       layer: 'collective',
@@ -303,7 +356,13 @@ router.post('/pipeline/run', async (_req: Request, res: Response): Promise<void>
     })
     .where(eq(ragPipelineConfigTable.id, config.id));
 
-  res.json({ extracted, candidatesScanned: candidates.length });
+  res.json({
+    extracted,
+    candidatesScanned: candidates.length,
+    filteredByScreener,
+    filteredByDedup,
+    screenerRejections: screenerRejections.slice(0, 10),
+  });
 });
 
 // ── Vael — Validate entry ─────────────────────────────────────────────────
