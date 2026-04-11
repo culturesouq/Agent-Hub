@@ -39,6 +39,7 @@ import { startGrowCron } from './cron/growCron.js';
 import { startMemoryCron } from './cron/memoryCron.js';
 import { startDriftCron } from './cron/driftCron.js';
 import { startKeepAliveCron } from './cron/keepAliveCron.js';
+import { startVaelCron } from './cron/vaelCron.js';
 import { runInitSeed } from './utils/initSeed.js';
 import { backfillIntegrationSkills } from './utils/autoInstallIntegrationSkills.js';
 
@@ -163,6 +164,7 @@ async function start(): Promise<void> {
   startMemoryCron();
   startDriftCron();
   startKeepAliveCron();
+  startVaelCron();
 }
 
 start().catch((err) => {

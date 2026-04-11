@@ -13,6 +13,7 @@ import { chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import { buildSystemPrompt } from '../utils/systemPrompt.js';
 import type { ActiveSkill } from '../utils/systemPrompt.js';
 import { validateEntry, runDiscoverySweep } from '../utils/vaelEngine.js';
+import { runVaelFullSweep, runVaelValidationOnly } from '../cron/vaelCron.js';
 import { randomUUID } from 'crypto';
 
 const router = Router();
@@ -274,6 +275,26 @@ router.post('/discover', async (req: Request, res: Response): Promise<void> => {
   } catch (e) {
     res.status(500).json({ error: 'Discovery sweep failed', detail: (e as Error).message });
   }
+});
+
+// ── POST /api/vael/sweep ─────────────────────────────────────────────────────
+// Manually trigger a full sweep (validate + discover + seed) without waiting for cron
+
+router.post('/sweep', async (_req: Request, res: Response): Promise<void> => {
+  res.json({ ok: true, message: 'Full sweep started — check server logs for progress' });
+  runVaelFullSweep().catch((err) => {
+    console.error('[VAEL] Manual full sweep error:', err);
+  });
+});
+
+// ── POST /api/vael/sweep/validate ────────────────────────────────────────────
+// Manually trigger validation-only cycle
+
+router.post('/sweep/validate', async (_req: Request, res: Response): Promise<void> => {
+  res.json({ ok: true, message: 'Validation cycle started — check server logs for progress' });
+  runVaelValidationOnly().catch((err) => {
+    console.error('[VAEL] Manual validation error:', err);
+  });
 });
 
 export default router;
