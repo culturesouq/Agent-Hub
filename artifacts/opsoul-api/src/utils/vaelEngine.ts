@@ -175,11 +175,14 @@ export async function runDiscoverySweep(focus?: string): Promise<DiscoveryResult
   const existingIndex = await getExistingTitlesContext();
 
   const searchQueries = focus
-    ? [`OpSoul ${focus} latest update`, `OpSoul ${focus} features 2026`]
+    ? [
+        `AI operator ${focus} best practices 2025`,
+        `how AI assistants handle ${focus} user requests`,
+      ]
     : [
-        'OpSoul platform features integrations 2026',
-        'OpSoul AI operator capabilities update',
-        'OpSoul API changes deployment',
+        'AI assistant operator best practices handling user requests 2025',
+        'how conversational AI agents handle ambiguous or sensitive requests',
+        'AI operator memory context management patterns',
       ];
 
   const searchResults: string[] = [];
