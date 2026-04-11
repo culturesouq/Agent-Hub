@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { db, pool, ragDnaTable, ragPipelineConfigTable, operatorKbTable } from '@workspace/db';
-import { eq, and, sql, desc, isNull, or } from 'drizzle-orm';
+import { eq, and, sql, desc, isNull, or, notInArray } from 'drizzle-orm';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireAdmin } from '../middleware/requireAdmin.js';
 import { embed } from '@workspace/opsoul-utils/ai';
@@ -10,6 +10,13 @@ import { validateEntry, runDiscoverySweep } from '../utils/vaelEngine.js';
 // ── Pipeline content screener ────────────────────────────────────────────────
 
 const VALID_ARCHETYPES_LIST = ['Advisor', 'Analyst', 'Executor', 'Catalyst', 'Expert', 'Mentor', 'Connector', 'Creator', 'Guardian'];
+
+// ── Operators permanently excluded from collective pipeline extraction ─────────
+// These operators absorb knowledge from all layers but never contribute to
+// the collective corpus — their learning stays private to them.
+const PIPELINE_EXCLUDED_OPERATORS = [
+  'a826164f-3111-4cc9-8f3c-856ecc589d77', // Vael — internal validator/discoverer
+];
 
 const SCREENER_SYSTEM = `You are a collective DNA screener for an AI operator platform. Your job is to:
 1. Decide if a KB entry belongs in the shared DNA corpus
@@ -345,6 +352,7 @@ router.post('/pipeline/run', async (_req: Request, res: Response): Promise<void>
       sql`confidence_score >= ${config.minConfidenceScore ?? 70}`,
       eq(operatorKbTable.verificationStatus, 'verified'),
       eq(operatorKbTable.privacyCleared, true),
+      notInArray(operatorKbTable.operatorId, PIPELINE_EXCLUDED_OPERATORS),
     ))
     .limit(200);
 
