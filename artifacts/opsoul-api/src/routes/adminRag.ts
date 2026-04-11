@@ -46,7 +46,7 @@ router.get('/stats', async (_req: Request, res: Response): Promise<void> => {
 // ── DNA Entries ────────────────────────────────────────────────────────────
 
 router.get('/entries', async (req: Request, res: Response): Promise<void> => {
-  const { layer, archetype, active } = req.query as Record<string, string>;
+  const { layer, archetype, active, status } = req.query as Record<string, string>;
 
   const conditions = [];
   if (layer && VALID_LAYERS.includes(layer as typeof VALID_LAYERS[number])) {
@@ -57,6 +57,9 @@ router.get('/entries', async (req: Request, res: Response): Promise<void> => {
   }
   if (active === 'true') conditions.push(eq(ragDnaTable.isActive, true));
   if (active === 'false') conditions.push(eq(ragDnaTable.isActive, false));
+  if (status && ['current', 'upgraded', 'deprecated', 'draft'].includes(status)) {
+    conditions.push(eq(ragDnaTable.knowledgeStatus, status as 'current' | 'upgraded' | 'deprecated' | 'draft'));
+  }
 
   const entries = await db
     .select({
@@ -66,6 +69,9 @@ router.get('/entries', async (req: Request, res: Response): Promise<void> => {
       title: ragDnaTable.title,
       content: ragDnaTable.content,
       tags: ragDnaTable.tags,
+      sourceName: ragDnaTable.sourceName,
+      confidence: ragDnaTable.confidence,
+      knowledgeStatus: ragDnaTable.knowledgeStatus,
       isActive: ragDnaTable.isActive,
       hasEmbedding: sql<boolean>`(embedding IS NOT NULL)`,
       createdAt: ragDnaTable.createdAt,
@@ -79,7 +85,7 @@ router.get('/entries', async (req: Request, res: Response): Promise<void> => {
 });
 
 router.post('/entries', async (req: Request, res: Response): Promise<void> => {
-  const { layer, archetype, title, content, tags, sourceName, confidence } = req.body as {
+  const { layer, archetype, title, content, tags, sourceName, confidence, knowledgeStatus } = req.body as {
     layer: string;
     archetype?: string;
     title: string;
@@ -87,6 +93,7 @@ router.post('/entries', async (req: Request, res: Response): Promise<void> => {
     tags?: string[];
     sourceName?: string;
     confidence?: number;
+    knowledgeStatus?: 'current' | 'upgraded' | 'deprecated' | 'draft';
   };
 
   if (!layer || !title || !content) {
@@ -122,6 +129,7 @@ router.post('/entries', async (req: Request, res: Response): Promise<void> => {
     tags: tags ?? [],
     sourceName: sourceName ?? null,
     confidence: confidence ?? 0.8,
+    knowledgeStatus: knowledgeStatus ?? 'current',
     isActive: true,
   }).returning();
 
@@ -130,7 +138,7 @@ router.post('/entries', async (req: Request, res: Response): Promise<void> => {
 
 router.put('/entries/:id', async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params;
-  const { title, content, tags, isActive, archetype, sourceName, confidence } = req.body as {
+  const { title, content, tags, isActive, archetype, sourceName, confidence, knowledgeStatus } = req.body as {
     title?: string;
     content?: string;
     tags?: string[];
@@ -138,6 +146,7 @@ router.put('/entries/:id', async (req: Request, res: Response): Promise<void> =>
     archetype?: string;
     sourceName?: string;
     confidence?: number;
+    knowledgeStatus?: 'current' | 'upgraded' | 'deprecated' | 'draft';
   };
 
   const [existing] = await db.select().from(ragDnaTable).where(eq(ragDnaTable.id, id));
@@ -153,6 +162,7 @@ router.put('/entries/:id', async (req: Request, res: Response): Promise<void> =>
   if (archetype !== undefined) updates.archetype = archetype;
   if (sourceName !== undefined) updates.sourceName = sourceName;
   if (confidence !== undefined) updates.confidence = confidence;
+  if (knowledgeStatus !== undefined) updates.knowledgeStatus = knowledgeStatus;
 
   if (content !== undefined && content !== existing.content) {
     updates.content = content;

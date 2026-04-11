@@ -121,13 +121,15 @@ export async function searchDnaKb(
     layer: string;
     source_name: string | null;
     confidence: number | null;
+    knowledge_status: string;
     distance: number;
   }>(
-    `SELECT id, content, layer, source_name, confidence,
+    `SELECT id, content, layer, source_name, confidence, knowledge_status,
             (embedding <=> $1::vector) AS distance
      FROM rag_dna
      WHERE is_active = true
        AND embedding IS NOT NULL
+       AND knowledge_status IN ('current', 'upgraded')
        AND (embedding <=> $1::vector) < $2
        ${archetypeClause}
      ORDER BY distance ASC

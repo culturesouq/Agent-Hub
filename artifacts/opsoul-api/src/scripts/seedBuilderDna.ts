@@ -3,12 +3,15 @@ import { ragDnaTable } from '@workspace/db/schema';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { eq, and } from 'drizzle-orm';
 
+type DnaKnowledgeStatus = 'current' | 'upgraded' | 'deprecated' | 'draft';
+
 interface DnaEntry {
   title: string;
   content: string;
   tags: string[];
   sourceName: string;
   confidence: number;
+  knowledgeStatus: DnaKnowledgeStatus;
 }
 
 const BUILDER_DNA: DnaEntry[] = [
@@ -21,6 +24,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['identity', 'platform', 'what-i-am'],
     sourceName: 'OpSoul Platform Core',
     confidence: 0.92,
+    knowledgeStatus: 'current',
   },
 
   {
@@ -29,6 +33,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['platform', 'opsoul', 'overview'],
     sourceName: 'OpSoul Platform Core',
     confidence: 0.92,
+    knowledgeStatus: 'current',
   },
 
   {
@@ -37,6 +42,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['identity', 'soul', 'mandate', 'values'],
     sourceName: 'OpSoul Platform Core',
     confidence: 0.92,
+    knowledgeStatus: 'current',
   },
 
   {
@@ -45,6 +51,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['archetype', 'identity', 'behavior'],
     sourceName: 'OpSoul Platform Core',
     confidence: 0.92,
+    knowledgeStatus: 'current',
   },
 
   // ── DEPLOYMENT SURFACES ────────────────────────────────────────────────────
@@ -55,6 +62,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['surfaces', 'deployment', 'scope', 'trust'],
     sourceName: 'OpSoul Deployment Architecture',
     confidence: 0.95,
+    knowledgeStatus: 'current',
   },
 
   {
@@ -63,6 +71,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['scope', 'isolation', 'privacy', 'memory'],
     sourceName: 'OpSoul Deployment Architecture',
     confidence: 0.95,
+    knowledgeStatus: 'current',
   },
 
   {
@@ -71,6 +80,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['surfaces', 'behavior', 'context', 'memory'],
     sourceName: 'OpSoul Deployment Architecture',
     confidence: 0.95,
+    knowledgeStatus: 'current',
   },
 
   // ── CAPABILITIES ───────────────────────────────────────────────────────────
@@ -81,6 +91,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['web-search', 'capabilities', 'tools', 'honesty'],
     sourceName: 'OpSoul Agency Capabilities',
     confidence: 0.92,
+    knowledgeStatus: 'current',
   },
 
   {
@@ -89,6 +100,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['url-reading', 'capabilities', 'web', 'context'],
     sourceName: 'OpSoul Agency Capabilities',
     confidence: 0.92,
+    knowledgeStatus: 'current',
   },
 
   {
@@ -97,6 +109,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['skills', 'integrations', 'capabilities', 'honesty'],
     sourceName: 'OpSoul Agency Capabilities',
     confidence: 0.92,
+    knowledgeStatus: 'current',
   },
 
   // ── INTEGRATIONS ───────────────────────────────────────────────────────────
@@ -107,6 +120,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['gmail', 'integration', 'skills', 'email'],
     sourceName: 'OpSoul Integration Reference',
     confidence: 0.93,
+    knowledgeStatus: 'current',
   },
 
   {
@@ -115,6 +129,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['google-calendar', 'integration', 'skills', 'calendar'],
     sourceName: 'OpSoul Integration Reference',
     confidence: 0.93,
+    knowledgeStatus: 'current',
   },
 
   {
@@ -123,6 +138,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['google-drive', 'integration', 'skills', 'files'],
     sourceName: 'OpSoul Integration Reference',
     confidence: 0.93,
+    knowledgeStatus: 'current',
   },
 
   {
@@ -131,6 +147,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['github', 'integration', 'skills', 'code', 'repository'],
     sourceName: 'OpSoul Integration Reference',
     confidence: 0.93,
+    knowledgeStatus: 'current',
   },
 
   {
@@ -139,6 +156,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['notion', 'integration', 'skills', 'knowledge', 'pages'],
     sourceName: 'OpSoul Integration Reference',
     confidence: 0.93,
+    knowledgeStatus: 'current',
   },
 
   {
@@ -147,6 +165,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['slack', 'integration', 'skills', 'messaging', 'channels'],
     sourceName: 'OpSoul Integration Reference',
     confidence: 0.93,
+    knowledgeStatus: 'current',
   },
 
   {
@@ -155,6 +174,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['hubspot', 'integration', 'skills', 'crm', 'contacts'],
     sourceName: 'OpSoul Integration Reference',
     confidence: 0.93,
+    knowledgeStatus: 'current',
   },
 
   {
@@ -163,6 +183,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['linear', 'integration', 'skills', 'project-management', 'issues'],
     sourceName: 'OpSoul Integration Reference',
     confidence: 0.93,
+    knowledgeStatus: 'current',
   },
 
   // ── MEMORY & KNOWLEDGE ─────────────────────────────────────────────────────
@@ -173,6 +194,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['memory', 'episodic', 'users', 'learning'],
     sourceName: 'OpSoul Memory Architecture',
     confidence: 0.92,
+    knowledgeStatus: 'current',
   },
 
   {
@@ -181,6 +203,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['knowledge-base', 'kb', 'rag', 'retrieval'],
     sourceName: 'OpSoul Memory Architecture',
     confidence: 0.92,
+    knowledgeStatus: 'current',
   },
 
   // ── GROW & INTELLIGENCE ────────────────────────────────────────────────────
@@ -191,6 +214,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['grow', 'evolution', 'soul', 'learning'],
     sourceName: 'OpSoul Intelligence Architecture',
     confidence: 0.90,
+    knowledgeStatus: 'current',
   },
 
   {
@@ -199,6 +223,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['dna', 'rag', 'knowledge', 'platform', 'intelligence'],
     sourceName: 'OpSoul Intelligence Architecture',
     confidence: 0.90,
+    knowledgeStatus: 'current',
   },
 
   // ── HONESTY FRAMEWORK ─────────────────────────────────────────────────────
@@ -209,6 +234,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['honesty', 'tools', 'skills', 'trust', 'critical'],
     sourceName: 'OpSoul Behavioral Framework',
     confidence: 0.90,
+    knowledgeStatus: 'current',
   },
 
   {
@@ -217,6 +243,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['honesty', 'data', 'skills', 'trust', 'critical'],
     sourceName: 'OpSoul Behavioral Framework',
     confidence: 0.90,
+    knowledgeStatus: 'current',
   },
 
   {
@@ -225,6 +252,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['capabilities', 'honesty', 'integrations', 'user-guidance'],
     sourceName: 'OpSoul Behavioral Framework',
     confidence: 0.90,
+    knowledgeStatus: 'current',
   },
 
   // ── OPERATOR PRINCIPLES ────────────────────────────────────────────────────
@@ -235,6 +263,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['identity', 'security', 'resilience', 'manipulation'],
     sourceName: 'OpSoul Operator Principles',
     confidence: 0.88,
+    knowledgeStatus: 'current',
   },
 
   {
@@ -243,6 +272,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['transparency', 'privacy', 'architecture', 'user-questions'],
     sourceName: 'OpSoul Operator Principles',
     confidence: 0.88,
+    knowledgeStatus: 'current',
   },
 
   {
@@ -251,6 +281,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['limits', 'capabilities', 'honesty', 'platform'],
     sourceName: 'OpSoul Operator Principles',
     confidence: 0.88,
+    knowledgeStatus: 'current',
   },
 
   // ── API REFERENCE ──────────────────────────────────────────────────────────
@@ -261,6 +292,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['api', 'endpoints', 'slots', 'developers', 'public'],
     sourceName: 'OpSoul API Reference',
     confidence: 0.95,
+    knowledgeStatus: 'current',
   },
 
   // ── SOVEREIGN POLICY ───────────────────────────────────────────────────────
@@ -271,6 +303,7 @@ const BUILDER_DNA: DnaEntry[] = [
     tags: ['confidentiality', 'architecture', 'secrets', 'privacy', 'patent'],
     sourceName: 'OpSoul Sovereign Architecture Policy',
     confidence: 0.97,
+    knowledgeStatus: 'current',
   },
 
 ];
@@ -309,6 +342,7 @@ async function seedBuilderDna() {
       tags: entry.tags,
       sourceName: entry.sourceName,
       confidence: entry.confidence,
+      knowledgeStatus: entry.knowledgeStatus,
       isActive: true,
     });
 
