@@ -206,7 +206,7 @@ router.post('/entries', async (req: Request, res: Response): Promise<void> => {
     tags: tags ?? [],
     sourceName: sourceName ?? null,
     confidence: confidence ?? 0.8,
-    knowledgeStatus: knowledgeStatus ?? 'current',
+    knowledgeStatus: knowledgeStatus ?? 'draft',
     isActive: true,
   }).returning();
 
@@ -420,6 +420,7 @@ router.post('/pipeline/run', async (_req: Request, res: Response): Promise<void>
       archetypeScope: screen.archetypeScope ?? [],
       domainTags: screen.domainTags ?? [],
       isActive: true,
+      knowledgeStatus: 'draft',
     });
 
     extracted++;

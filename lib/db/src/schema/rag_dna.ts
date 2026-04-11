@@ -17,7 +17,7 @@ export const ragDnaTable = pgTable('rag_dna', {
   sourceName: text('source_name'),
   sourceHash: text('source_hash'),
   confidence: real('confidence').default(0.8),
-  knowledgeStatus: text('knowledge_status').$type<DnaKnowledgeStatus>().default('current').notNull(),
+  knowledgeStatus: text('knowledge_status').$type<DnaKnowledgeStatus>().default('draft').notNull(),
   // ── Collective DNA scoping ────────────────────────────────────────────────
   // dnaScope: 'general' = inject to archetypes in archetypeScope (empty = all)
   //           'specialty' = inject only when operator domainTags overlap
