@@ -221,7 +221,7 @@ For each finding, propose an action. Return JSON with this shape:
     {
       "action": "new_entry" | "flag_upgraded" | "flag_deprecated",
       "title": "<proposed title or affected title>",
-      "content": "<full entry content — only for new_entry>",
+      "content": "<entry content — only for new_entry — max 400 chars, concise>",
       "affected_entry_title": "<existing title — only for flag_upgraded / flag_deprecated>",
       "reason": "<why this action is needed>",
       "suggested_source_name": "<source label>",
