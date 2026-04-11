@@ -4,6 +4,7 @@ import { eq, and, sql, desc, isNull, or } from 'drizzle-orm';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireAdmin } from '../middleware/requireAdmin.js';
 import { embed } from '@workspace/opsoul-utils/ai';
+import { validateEntry, runDiscoverySweep } from '../utils/vaelEngine.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -303,6 +304,45 @@ router.post('/pipeline/run', async (_req: Request, res: Response): Promise<void>
     .where(eq(ragPipelineConfigTable.id, config.id));
 
   res.json({ extracted, candidatesScanned: candidates.length });
+});
+
+// ── Vael — Validate entry ─────────────────────────────────────────────────
+
+router.post('/vael/validate', async (req: Request, res: Response): Promise<void> => {
+  const { title, content, layer, archetype, tags, sourceName, confidence } = req.body as {
+    title: string;
+    content: string;
+    layer: string;
+    archetype?: string;
+    tags?: string[];
+    sourceName?: string;
+    confidence?: number;
+  };
+
+  if (!title || !content || !layer) {
+    res.status(400).json({ error: 'title, content, and layer are required' });
+    return;
+  }
+
+  try {
+    const result = await validateEntry({ title, content, layer, archetype, tags: tags ?? [], sourceName, confidence });
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: 'Vael validation failed', detail: (e as Error).message });
+  }
+});
+
+// ── Vael — Discovery sweep ────────────────────────────────────────────────
+
+router.post('/vael/discover', async (req: Request, res: Response): Promise<void> => {
+  const { focus } = req.body as { focus?: string };
+
+  try {
+    const result = await runDiscoverySweep(focus);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: 'Vael discovery sweep failed', detail: (e as Error).message });
+  }
 });
 
 export default router;
