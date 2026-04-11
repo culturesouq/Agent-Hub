@@ -473,6 +473,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     }
     if (msg.content?.startsWith('[Tool:')) continue;
     if (msg.isInternal) continue;
+    if (msg.role === 'assistant' && !msg.content?.trim()) continue;
     const day = format(new Date(msg.createdAt), "yyyy-MM-dd");
     if (day !== lastDay) {
       items.push({

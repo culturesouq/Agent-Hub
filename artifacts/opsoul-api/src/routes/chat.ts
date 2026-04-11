@@ -25,7 +25,7 @@ import type { MemoryHit } from '../utils/memoryEngine.js';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import { decryptToken } from '@workspace/opsoul-utils/crypto';
-import type { ChatMessage, ToolDefinition, AssistantToolCall } from '../utils/openrouter.js';
+import type { ChatMessage, ToolDefinition } from '../utils/openrouter.js';
 import type { Layer2Soul } from '../validation/operator.js';
 import { resolveScope } from '../utils/scopeResolver.js';
 import { scrapeUrl } from '../utils/urlScraper.js';
@@ -765,15 +765,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           if (capResult.success) {
             await persistWebSearchResult(operator.id, operator.ownerId, conv.id, searchQuery, capResult, operator.mandate ?? '');
             capabilityFired = true;
-            const assistantToolCallMsg: AssistantToolCall = {
-              id: operatorToolCall.id,
-              type: 'function',
-              function: { name: 'web_search', arguments: operatorToolCall.args },
-            };
             const toolResultMessages: ChatMessage[] = [
               ...messages,
-              { role: 'assistant', content: '', tool_calls: [assistantToolCallMsg] },
-              { role: 'tool', content: capResult.output, tool_call_id: operatorToolCall.id },
+              { role: 'system', content: `[Web Search: ${searchQuery}]\n${capResult.output}` },
             ];
             let secondContent = '';
             let secondTokens = 0;
@@ -898,15 +892,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           if (capResult.success) {
             await persistWebSearchResult(operator.id, operator.ownerId, conv.id, searchQuery, capResult, operator.mandate ?? '');
             capabilityFired = true;
-            const assistantToolCallMsg: AssistantToolCall = {
-              id: result.toolCall.id,
-              type: 'function',
-              function: { name: 'web_search', arguments: result.toolCall.args },
-            };
             const toolResultMessages: ChatMessage[] = [
               ...messages,
-              { role: 'assistant', content: '', tool_calls: [assistantToolCallMsg] },
-              { role: 'tool', content: capResult.output, tool_call_id: result.toolCall.id },
+              { role: 'system', content: `[Web Search: ${searchQuery}]\n${capResult.output}` },
             ];
             const secondResult = await chatCompletion(toolResultMessages, chatOpts);
             finalContent = secondResult.content;
