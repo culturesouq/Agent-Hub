@@ -90,7 +90,7 @@ function CodeBlock({ code, onCopy }: { code: string; onCopy: () => void }) {
   );
 }
 
-const PUBLIC_ENDPOINT = "https://api.opsoul.io/v1/chat";
+const PUBLIC_ENDPOINT = "https://opsoul.io/v1/chat";
 
 const PUBLIC_ENDPOINT_BLOCK = `POST ${PUBLIC_ENDPOINT}
 

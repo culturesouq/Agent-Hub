@@ -7,7 +7,7 @@ import {
   AlertTriangle, RefreshCw, Circle,
 } from "lucide-react";
 
-const API_ENDPOINT = "https://api.opsoul.io/v1/chat";
+const API_ENDPOINT = "https://opsoul.io/v1/chat";
 
 const ENDPOINT_BLOCK = `POST ${API_ENDPOINT}
 
