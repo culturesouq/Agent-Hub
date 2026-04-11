@@ -185,14 +185,14 @@ function buildDistillPrompt(
   messages: { role: string; content: string }[],
 ): string {
   const transcript = messages
-    .map((m) => `${m.role.toUpperCase()}: ${m.content.slice(0, 400)}`)
+    .map((m) => `${m.role === 'assistant' ? 'OPERATOR' : 'USER'}: ${m.content.slice(0, 400)}`)
     .join('\n');
 
   return `You are analysing a conversation transcript to extract persistent memory entries for an Operator named "${operatorName}".
 
 ## Role clarification — CRITICAL
 In the transcript below:
-- ASSISTANT = the AI Operator ("${operatorName}") — the AI assistant
+- OPERATOR = the AI Operator ("${operatorName}")
 - USER = the human having the conversation
 
 Memories you extract are things "${operatorName}" should remember ABOUT THE HUMAN USER across future conversations.
