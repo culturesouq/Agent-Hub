@@ -26,7 +26,7 @@ const ARCHETYPE_DNA: DnaEntry[] = [
     tags: ['advisor', 'archetype', 'orientation', 'guidance', 'identity'],
     sourceName: 'OpSoul Archetype Reference — Advisor',
     confidence: 0.88,
-    knowledgeStatus: 'current',
+    knowledgeStatus: 'draft',
   },
 
   {
@@ -36,7 +36,7 @@ const ARCHETYPE_DNA: DnaEntry[] = [
     tags: ['advisor', 'recommendations', 'options', 'judgment', 'decision'],
     sourceName: 'OpSoul Archetype Reference — Advisor',
     confidence: 0.88,
-    knowledgeStatus: 'current',
+    knowledgeStatus: 'draft',
   },
 
   {
@@ -46,7 +46,7 @@ const ARCHETYPE_DNA: DnaEntry[] = [
     tags: ['advisor', 'disagreement', 'honesty', 'trust', 'relationship'],
     sourceName: 'OpSoul Archetype Reference — Advisor',
     confidence: 0.88,
-    knowledgeStatus: 'current',
+    knowledgeStatus: 'draft',
   },
 
   {
@@ -56,7 +56,7 @@ const ARCHETYPE_DNA: DnaEntry[] = [
     tags: ['advisor', 'trust', 'credibility', 'honesty', 'reliability'],
     sourceName: 'OpSoul Archetype Reference — Advisor',
     confidence: 0.88,
-    knowledgeStatus: 'current',
+    knowledgeStatus: 'draft',
   },
 
   {
@@ -66,7 +66,7 @@ const ARCHETYPE_DNA: DnaEntry[] = [
     tags: ['advisor', 'agency', 'instruction', 'influence', 'approach'],
     sourceName: 'OpSoul Archetype Reference — Advisor',
     confidence: 0.88,
-    knowledgeStatus: 'current',
+    knowledgeStatus: 'draft',
   },
 
   {
@@ -76,7 +76,7 @@ const ARCHETYPE_DNA: DnaEntry[] = [
     tags: ['advisor', 'limits', 'scope', 'deference', 'judgment'],
     sourceName: 'OpSoul Archetype Reference — Advisor',
     confidence: 0.88,
-    knowledgeStatus: 'current',
+    knowledgeStatus: 'draft',
   },
 
   // ── ANALYST ───────────────────────────────────────────────────────────────
@@ -88,7 +88,7 @@ const ARCHETYPE_DNA: DnaEntry[] = [
     tags: ['analyst', 'archetype', 'orientation', 'patterns', 'evidence'],
     sourceName: 'OpSoul Archetype Reference — Analyst',
     confidence: 0.88,
-    knowledgeStatus: 'current',
+    knowledgeStatus: 'draft',
   },
 
   {
@@ -98,7 +98,7 @@ const ARCHETYPE_DNA: DnaEntry[] = [
     tags: ['analyst', 'data', 'uncertainty', 'gaps', 'confidence'],
     sourceName: 'OpSoul Archetype Reference — Analyst',
     confidence: 0.88,
-    knowledgeStatus: 'current',
+    knowledgeStatus: 'draft',
   },
 
   {
@@ -108,7 +108,7 @@ const ARCHETYPE_DNA: DnaEntry[] = [
     tags: ['analyst', 'communication', 'findings', 'clarity', 'presentation'],
     sourceName: 'OpSoul Archetype Reference — Analyst',
     confidence: 0.88,
-    knowledgeStatus: 'current',
+    knowledgeStatus: 'draft',
   },
 
   {
@@ -118,7 +118,7 @@ const ARCHETYPE_DNA: DnaEntry[] = [
     tags: ['analyst', 'causation', 'correlation', 'rigor', 'reasoning'],
     sourceName: 'OpSoul Archetype Reference — Analyst',
     confidence: 0.88,
-    knowledgeStatus: 'current',
+    knowledgeStatus: 'draft',
   },
 
   {
@@ -128,7 +128,7 @@ const ARCHETYPE_DNA: DnaEntry[] = [
     tags: ['analyst', 'depth', 'communication', 'judgment', 'context'],
     sourceName: 'OpSoul Archetype Reference — Analyst',
     confidence: 0.88,
-    knowledgeStatus: 'current',
+    knowledgeStatus: 'draft',
   },
 
   {
@@ -138,7 +138,7 @@ const ARCHETYPE_DNA: DnaEntry[] = [
     tags: ['analyst', 'conflict', 'signals', 'tension', 'honesty'],
     sourceName: 'OpSoul Archetype Reference — Analyst',
     confidence: 0.88,
-    knowledgeStatus: 'current',
+    knowledgeStatus: 'draft',
   },
 
   // ── EXECUTOR ──────────────────────────────────────────────────────────────
@@ -150,7 +150,7 @@ const ARCHETYPE_DNA: DnaEntry[] = [
     tags: ['executor', 'archetype', 'orientation', 'action', 'delivery'],
     sourceName: 'OpSoul Archetype Reference — Executor',
     confidence: 0.88,
-    knowledgeStatus: 'current',
+    knowledgeStatus: 'draft',
   },
 
   {
@@ -160,7 +160,7 @@ const ARCHETYPE_DNA: DnaEntry[] = [
     tags: ['executor', 'delivery', 'discipline', 'tracking', 'loops'],
     sourceName: 'OpSoul Archetype Reference — Executor',
     confidence: 0.88,
-    knowledgeStatus: 'current',
+    knowledgeStatus: 'draft',
   },
 
   {
@@ -170,7 +170,7 @@ const ARCHETYPE_DNA: DnaEntry[] = [
     tags: ['executor', 'blockers', 'escalation', 'communication', 'obstacles'],
     sourceName: 'OpSoul Archetype Reference — Executor',
     confidence: 0.88,
-    knowledgeStatus: 'current',
+    knowledgeStatus: 'draft',
   },
 
   {
@@ -180,7 +180,7 @@ const ARCHETYPE_DNA: DnaEntry[] = [
     tags: ['executor', 'reflection', 'direction', 'course-correction', 'judgment'],
     sourceName: 'OpSoul Archetype Reference — Executor',
     confidence: 0.88,
-    knowledgeStatus: 'current',
+    knowledgeStatus: 'draft',
   },
 
   {
@@ -190,7 +190,7 @@ const ARCHETYPE_DNA: DnaEntry[] = [
     tags: ['executor', 'progress', 'focus', 'output', 'results'],
     sourceName: 'OpSoul Archetype Reference — Executor',
     confidence: 0.88,
-    knowledgeStatus: 'current',
+    knowledgeStatus: 'draft',
   },
 
   // ── CATALYST ──────────────────────────────────────────────────────────────
@@ -202,7 +202,7 @@ const ARCHETYPE_DNA: DnaEntry[] = [
     tags: ['catalyst', 'archetype', 'orientation', 'momentum', 'leverage'],
     sourceName: 'OpSoul Archetype Reference — Catalyst',
     confidence: 0.88,
-    knowledgeStatus: 'current',
+    knowledgeStatus: 'draft',
   },
 
   {
@@ -212,7 +212,7 @@ const ARCHETYPE_DNA: DnaEntry[] = [
     tags: ['catalyst', 'timing', 'readiness', 'intervention', 'patience'],
     sourceName: 'OpSoul Archetype Reference — Catalyst',
     confidence: 0.88,
-    knowledgeStatus: 'current',
+    knowledgeStatus: 'draft',
   },
 
   {
@@ -222,7 +222,7 @@ const ARCHETYPE_DNA: DnaEntry[] = [
     tags: ['catalyst', 'delegation', 'handoff', 'ownership', 'role'],
     sourceName: 'OpSoul Archetype Reference — Catalyst',
     confidence: 0.88,
-    knowledgeStatus: 'current',
+    knowledgeStatus: 'draft',
   },
 
   {
@@ -232,7 +232,7 @@ const ARCHETYPE_DNA: DnaEntry[] = [
     tags: ['catalyst', 'disruption', 'acceleration', 'change', 'impact'],
     sourceName: 'OpSoul Archetype Reference — Catalyst',
     confidence: 0.88,
-    knowledgeStatus: 'current',
+    knowledgeStatus: 'draft',
   },
 
   {
@@ -242,7 +242,7 @@ const ARCHETYPE_DNA: DnaEntry[] = [
     tags: ['catalyst', 'resistance', 'change', 'pushback', 'navigation'],
     sourceName: 'OpSoul Archetype Reference — Catalyst',
     confidence: 0.88,
-    knowledgeStatus: 'current',
+    knowledgeStatus: 'draft',
   },
 
 ];
