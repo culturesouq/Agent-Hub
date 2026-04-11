@@ -203,9 +203,23 @@ export default function TasksSection({ operatorId }: { operatorId: string }) {
                 <p className="font-mono text-xs text-muted-foreground line-clamp-2">
                   {task.description}
                 </p>
-                <p className="font-mono text-[10px] text-muted-foreground/50">
-                  Created {format(new Date(task.createdAt!), "MMM d, yyyy")}
-                </p>
+                {task.lastRunAt ? (
+                  <div className="space-y-0.5">
+                    <p className="font-mono text-[10px] text-primary/70">
+                      Last run {format(new Date(task.lastRunAt), "MMM d, yyyy 'at' HH:mm")}
+                      {task.lastRunDurationSec ? ` · ${task.lastRunDurationSec.toFixed(0)}s` : ""}
+                    </p>
+                    {task.lastRunSummary && (
+                      <p className="font-mono text-[10px] text-muted-foreground/70 line-clamp-1">
+                        {task.lastRunSummary}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="font-mono text-[10px] text-muted-foreground/50">
+                    Not yet run
+                  </p>
+                )}
               </div>
 
               <div className="flex items-center gap-2 shrink-0">

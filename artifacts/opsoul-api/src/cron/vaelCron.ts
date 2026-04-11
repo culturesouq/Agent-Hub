@@ -1,10 +1,35 @@
 import { db } from '@workspace/db';
-import { ragDnaTable } from '@workspace/db/schema';
+import { ragDnaTable, tasksTable } from '@workspace/db/schema';
 import { eq, and, inArray, sql } from 'drizzle-orm';
 import { validateEntry, runDiscoverySweep, type DiscoveryProposal } from '../utils/vaelEngine.js';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { chatCompletion, KB_MODEL } from '../utils/openrouter.js';
 import { randomUUID } from 'crypto';
+
+const VAEL_OPERATOR_ID = 'a826164f-3111-4cc9-8f3c-856ecc589d77';
+
+async function recordVaelRun(taskType: 'full_sweep' | 'validation', summary: string, durationSec: number): Promise<void> {
+  try {
+    const rows = await db.select().from(tasksTable).where(
+      and(eq(tasksTable.operatorId, VAEL_OPERATOR_ID))
+    );
+    const task = rows.find(r => (r.payload as any)?.vaelTaskType === taskType);
+    if (!task) return;
+    const currentPayload = (task.payload as any) ?? {};
+    await db.update(tasksTable).set({
+      summary,
+      completedAt: new Date(),
+      payload: {
+        ...currentPayload,
+        lastRunAt: new Date().toISOString(),
+        lastRunSummary: summary,
+        lastRunDurationSec: durationSec,
+      },
+    }).where(eq(tasksTable.id, task.id));
+  } catch (err) {
+    console.error('[VAEL] Failed to record task run:', (err as Error).message);
+  }
+}
 
 // ── Budget timer ──────────────────────────────────────────────────────────────
 // Vael races the clock — she does as much as she can before the budget runs out.
@@ -326,6 +351,7 @@ export async function runVaelFullSweep(): Promise<void> {
     state.lastRunAt          = new Date().toISOString();
     state.lastRunDurationSec = parseFloat(timer.elapsedSec());
     state.lastRunSummary     = summary;
+    await recordVaelRun('full_sweep', summary, parseFloat(timer.elapsedSec()));
   } finally {
     state.isRunning = false;
   }
@@ -351,6 +377,7 @@ export async function runVaelValidationOnly(): Promise<void> {
     state.lastRunAt          = new Date().toISOString();
     state.lastRunDurationSec = parseFloat(timer.elapsedSec());
     state.lastRunSummary     = summary;
+    await recordVaelRun('validation', summary, parseFloat(timer.elapsedSec()));
   } finally {
     state.isRunning = false;
   }

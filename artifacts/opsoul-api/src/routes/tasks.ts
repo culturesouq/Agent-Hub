@@ -61,6 +61,9 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     customSchedule: (r.payload as any)?.customSchedule,
     status: r.status ?? 'active',
     createdAt: r.createdAt,
+    lastRunAt: (r.payload as any)?.lastRunAt ?? null,
+    lastRunSummary: (r.payload as any)?.lastRunSummary ?? null,
+    lastRunDurationSec: (r.payload as any)?.lastRunDurationSec ?? null,
   }));
 
   res.json({ tasks });

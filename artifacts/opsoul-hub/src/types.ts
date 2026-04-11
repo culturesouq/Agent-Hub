@@ -158,4 +158,7 @@ export interface Task {
   customSchedule?: string;
   status: string;
   createdAt: string;
+  lastRunAt?: string;
+  lastRunSummary?: string;
+  lastRunDurationSec?: number;
 }
