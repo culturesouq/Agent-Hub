@@ -209,6 +209,10 @@ export default function AdminPage() {
     load();
   }, [token, owner, setLocation, loadRag]);
 
+  useEffect(() => {
+    if (tab === "vael") loadVaelSchedule();
+  }, [tab]);
+
   async function toggleAdmin(id: string) {
     setTogglingId(id);
     try {
@@ -315,10 +319,6 @@ export default function AdminPage() {
     { id: "rag", label: "Intelligence", count: ragStats?.totalActive },
     { id: "vael", label: "Vael" },
   ];
-
-  useEffect(() => {
-    if (tab === "vael") loadVaelSchedule();
-  }, [tab]);
 
   return (
     <div className="min-h-screen bg-background text-foreground relative overflow-hidden">
