@@ -116,6 +116,8 @@ interface ApiSlot {
   revokedAt: string | null;
 }
 
+const CRUD_ENDPOINT = "https://opsoul.io/v1/action";
+
 const API_SLOT_META = {
   guest: {
     label: "Guest Chat",
@@ -128,6 +130,12 @@ const API_SLOT_META = {
     icon: User,
     color: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
     description: "Signed-in users — persistent memory per userId",
+  },
+  crud: {
+    label: "Backend Action",
+    icon: Zap,
+    color: "bg-violet-500/15 text-violet-400 border-violet-500/30",
+    description: "Stateless backend actions — POST /v1/action only",
   },
 } as const;
 
@@ -163,6 +171,7 @@ function PublicEndpointBlock() {
 
 function KeyRevealCard({ slot, onDone }: { slot: ApiSlot & { apiKey: string }; onDone: () => void }) {
   const [copied, setCopied] = useState(false);
+  const endpoint = slot.surfaceType === "crud" ? CRUD_ENDPOINT : PUBLIC_ENDPOINT;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="bg-card border border-amber-500/40 rounded-xl p-6 max-w-lg w-full mx-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
@@ -189,7 +198,10 @@ function KeyRevealCard({ slot, onDone }: { slot: ApiSlot & { apiKey: string }; o
         <div className="bg-muted/10 border border-border/30 rounded-lg p-3 mb-5 font-mono text-[11px] text-muted-foreground space-y-1">
           <p className="text-foreground/60 font-semibold text-xs">Use it like this:</p>
           <p><span className="text-slate-400">Authorization:</span>{" "}<span className="text-amber-300/80">Bearer {slot.apiKey.slice(0, 24)}…</span></p>
-          <p><span className="text-slate-400">Endpoint:</span>{" "}<span className="text-blue-400/80">POST {PUBLIC_ENDPOINT}</span></p>
+          <p><span className="text-slate-400">Endpoint:</span>{" "}<span className="text-blue-400/80">POST {endpoint}</span></p>
+          {slot.surfaceType === "crud" && (
+            <p className="text-violet-400/70 mt-1">Backend actions only — no conversation stored</p>
+          )}
         </div>
         <Button className="w-full font-mono text-sm" onClick={onDone}>I've copied it — Done</Button>
       </div>
@@ -450,7 +462,7 @@ export default function SettingsSection({ operator, section }: { operator: Opera
   const [showKeyForm, setShowKeyForm] = useState(false);
   const [revealSlot, setRevealSlot] = useState<(ApiSlot & { apiKey: string }) | null>(null);
   const [revokeConfirm, setRevokeConfirm] = useState<string | null>(null);
-  const [keyForm, setKeyForm] = useState({ name: "", surfaceType: "guest" as "guest" | "authenticated" });
+  const [keyForm, setKeyForm] = useState({ name: "", surfaceType: "guest" as "guest" | "authenticated" | "crud" });
 
   const copy = (text: string, field: string, label = "Copied") => {
     if (navigator.clipboard) {
@@ -577,7 +589,7 @@ print(response.json()["content"])`;
   });
 
   const chatSlots = (slotsData?.slots ?? []).filter(
-    (s) => s.surfaceType === "guest" || s.surfaceType === "authenticated",
+    (s) => s.surfaceType === "guest" || s.surfaceType === "authenticated" || s.surfaceType === "crud",
   );
 
   const createSlot = useMutation({
@@ -821,8 +833,8 @@ print(response.json()["content"])`;
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-mono text-muted-foreground">Surface Type</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {(["guest", "authenticated"] as const).map((type) => {
+                    <div className="grid grid-cols-1 gap-2">
+                      {(["guest", "authenticated", "crud"] as const).map((type) => {
                         const meta = API_SLOT_META[type];
                         const Icon = meta.icon;
                         return (

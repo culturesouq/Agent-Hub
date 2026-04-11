@@ -102,8 +102,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   const trigger = await detectSkillTrigger(actionText, allSkills, operator.name);
   if (trigger) {
     try {
-      const skillResult = await executeSkill(trigger, slot.operatorId, slot.ownerId, actionText);
-      res.json({ result: skillResult, skill: trigger.name });
+      trigger.operatorId = slot.operatorId;
+      const skillModel = operator.defaultModel && operator.defaultModel !== 'opsoul/auto'
+        ? operator.defaultModel
+        : 'anthropic/claude-haiku-4-5';
+      const skillResult = await executeSkill(trigger, skillModel);
+      res.json({ result: skillResult.output, skill: trigger.skillName });
       return;
     } catch { /* fall through to LLM */ }
   }

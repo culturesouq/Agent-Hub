@@ -4,9 +4,10 @@
 
 OpSoul is an AI operator platform featuring a 5-layer identity architecture, dual knowledge bases, and a GROW self-evolution system. It includes multi-tenant JWT authentication and pgvector semantic search for enhanced AI capabilities. The platform aims to provide a robust framework for managing and evolving AI agents, offering advanced features for identity management, self-improvement, and integration with external services. The business vision is to empower users with highly capable and adaptable AI operators, enhancing productivity and enabling complex AI-driven workflows.
 
-## User Preferences
+## Engineering Notebook
 
-I want iterative development and detailed explanations. Ask before making major changes.
+Living decision log, architecture notes, and bug history: `.local/notebook.md`
+Always update it when something meaningful is built, changed, or decided.
 
 ## System Architecture
 
@@ -54,7 +55,7 @@ The system uses PostgreSQL with Drizzle ORM, managing 23 tables. Key tables incl
 
 ## External Dependencies
 
-- **OpenRouter:** For AI model access (Llama 3.3 70B for chat, Claude Sonnet 4-5 for GROW evaluation).
+- **OpenRouter:** For AI model access (Claude Sonnet 4-5 for chat/GROW, Claude Haiku 4-5 for memory/skills/KB, Gemini Flash 2.0 for multimodal). Llama 3.3 70B is permanently banned from all code paths.
 - **OpenAI:** For `text-embedding-3-small` embeddings.
 - **PostgreSQL:** The primary database.
 - **SendGrid:** For email services (e.g., forgot password, welcome emails).

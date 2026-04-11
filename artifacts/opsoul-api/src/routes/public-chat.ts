@@ -309,6 +309,16 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         .set({ messageCount: sql`message_count + 2`, lastMessageAt: new Date() })
         .where(eq(conversationsTable.id, conv.id));
 
+      if (slot.surfaceType === 'authenticated') {
+        distillMemoriesFromConversations(
+          slot.operatorId,
+          slot.ownerId,
+          operator.name,
+          scope.scopeId,
+          scope.scopeTrust,
+        ).catch(() => {});
+      }
+
       res.write(`data: ${JSON.stringify({ done: true, conversationId: conv.id, scopeId: scope.scopeId })}\n\n`);
       res.end();
     } catch {
