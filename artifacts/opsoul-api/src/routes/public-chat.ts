@@ -321,17 +321,32 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
       res.write(`data: ${JSON.stringify({ done: true, conversationId: conv.id, scopeId: scope.scopeId })}\n\n`);
       res.end();
-    } catch {
-      res.write(`data: ${JSON.stringify({ error: 'Stream failed' })}\n\n`);
+    } catch (streamErr: unknown) {
+      const streamStatus = (streamErr as { status?: number })?.status;
+      const streamMsg = streamStatus === 402
+        ? 'AI service temporarily unavailable. Please try again shortly.'
+        : 'Stream failed. Please try again.';
+      res.write(`data: ${JSON.stringify({ error: streamMsg })}\n\n`);
       res.end();
     }
 
   // ── SYNC PATH ──────────────────────────────────────────────────────────────
   } else {
-    const result = await chatCompletion(
-      [{ role: 'system', content: systemPrompt }, ...messages],
-      model,
-    );
+    let result;
+    try {
+      result = await chatCompletion(
+        [{ role: 'system', content: systemPrompt }, ...messages],
+        model,
+      );
+    } catch (llmErr: unknown) {
+      const status = (llmErr as { status?: number })?.status;
+      if (status === 402) {
+        res.status(503).json({ error: 'AI service temporarily unavailable. Please try again shortly.' });
+      } else {
+        res.status(502).json({ error: 'AI service error. Please try again.' });
+      }
+      return;
+    }
 
     let finalContent = result.content;
 
