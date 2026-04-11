@@ -82,6 +82,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
       and(
         eq(conversationsTable.operatorId, op.id),
         eq(conversationsTable.ownerId, req.owner!.ownerId),
+        eq(conversationsTable.scopeType, 'owner'),
       ),
     )
     .orderBy(sql`${conversationsTable.lastMessageAt} DESC NULLS LAST`);
