@@ -8,7 +8,7 @@ import {
   User, Zap, Archive, Network,
   CheckSquare, FileText, Settings2, Key, Code2, AlertTriangle,
   Radio, MessageCircle, Send, Star, ChevronRight, Bell,
-  Shield, Menu, X, Cpu, ShieldAlert, Globe,
+  Shield, ShieldCheck, Menu, X, Cpu, ShieldAlert, Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -162,11 +162,12 @@ const NAV_MAIN: NavItem[] = [
   {
     kind: "group", id: "settings", label: "Settings", icon: Settings2, depth: 0,
     children: [
-      { kind: "leaf", id: "settings.model",    label: "Model & AI",   icon: Cpu,           depth: 1 },
-      { kind: "leaf", id: "settings.secrets",  label: "Keys & Secrets", icon: Key,         depth: 1 },
-      { kind: "leaf", id: "settings.api",      label: "API Access",   icon: Code2,         depth: 1 },
-      { kind: "leaf", id: "settings.behavior", label: "Behavior",     icon: Shield,        depth: 1 },
-      { kind: "leaf", id: "settings.danger",   label: "Danger Zone",  icon: AlertTriangle, depth: 1 },
+      { kind: "leaf", id: "settings.model",     label: "Model & AI",      icon: Cpu,          depth: 1 },
+      { kind: "leaf", id: "settings.secrets",  label: "Keys & Secrets",  icon: Key,          depth: 1 },
+      { kind: "leaf", id: "settings.api",      label: "API Access",      icon: Code2,        depth: 1 },
+      { kind: "leaf", id: "settings.behavior", label: "Behavior",        icon: Shield,       depth: 1 },
+      { kind: "leaf", id: "settings.evolution",label: "Evolution Lock",  icon: ShieldCheck,  depth: 1 },
+      { kind: "leaf", id: "settings.danger",   label: "Danger Zone",     icon: AlertTriangle,depth: 1 },
     ],
   },
 ];
@@ -183,7 +184,7 @@ const NAV_BOTTOM: NavItem[] = [
 ];
 
 const BRAIN_LEAVES    = ["soul", "skills", "memory", "capability-requests", "grow"];
-const SETTINGS_LEAVES = ["settings.model", "settings.secrets", "settings.api", "settings.behavior", "settings.danger"];
+const SETTINGS_LEAVES = ["settings.model", "settings.secrets", "settings.api", "settings.behavior", "settings.evolution", "settings.danger"];
 const CHANNELS_LEAVES = ["channels.whatsapp", "channels.telegram"];
 
 export default function OperatorDetail({ id }: { id: string }) {
@@ -304,6 +305,7 @@ export default function OperatorDetail({ id }: { id: string }) {
       case "settings.secrets":   return <SettingsSection operator={operator} section="secrets" />;
       case "settings.api":       return <SettingsSection operator={operator} section="api" />;
       case "settings.behavior":  return <SettingsSection operator={operator} section="safemode" />;
+      case "settings.evolution": return <SettingsSection operator={operator} section="evolution" />;
       case "settings.danger":    return <SettingsSection operator={operator} section="danger" />;
       case "channels.telegram":  return <TelegramChannelSection operatorId={operator.id} />;
       case "channels.whatsapp":  return <WhatsAppChannelSection operatorId={operator.id} />;
