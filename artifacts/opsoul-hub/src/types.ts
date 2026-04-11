@@ -63,6 +63,7 @@ export interface Message {
   content: string;
   createdAt: string;
   tokenCount: number;
+  isInternal?: boolean;
 }
 
 export interface Conversation {

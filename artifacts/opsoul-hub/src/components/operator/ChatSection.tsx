@@ -467,6 +467,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
       continue;
     }
     if (msg.content?.startsWith('[Tool:')) continue;
+    if (msg.isInternal) continue;
     const day = format(new Date(msg.createdAt), "yyyy-MM-dd");
     if (day !== lastDay) {
       items.push({

@@ -126,7 +126,7 @@ router.get('/:convId/messages', async (req: Request, res: Response): Promise<voi
   const msgs = await db
     .select()
     .from(messagesTable)
-    .where(eq(messagesTable.conversationId, conv.id))
+    .where(and(eq(messagesTable.conversationId, conv.id), eq(messagesTable.isInternal, false)))
     .orderBy(messagesTable.createdAt);
 
   res.json({ conversationId: conv.id, count: msgs.length, messages: msgs });

@@ -241,6 +241,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     { role: 'user', content: message },
   ];
 
+  // ── Detect context-injection messages (silent, never shown in workspace) ──
+  const INJECTION_PATTERN = /^(?:GUEST_MODE|SESSION_TYPE|FOUNDER_DATA|USER_DATA|CONTEXT_BLOCK|SYSTEM_CONTEXT|__CONTEXT|__META)[:=]/m;
+  const isInternal = INJECTION_PATTERN.test(message);
+
   // ── Store user message ──
   await db.insert(messagesTable).values({
     id: crypto.randomUUID(),
@@ -248,6 +252,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     operatorId: slot.operatorId,
     role: 'user',
     content: message,
+    isInternal,
   });
 
   const model = (operator.defaultModel && operator.defaultModel !== 'opsoul/auto')
