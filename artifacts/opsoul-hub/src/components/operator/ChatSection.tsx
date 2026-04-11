@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { Conversation, Message } from "@/types";
 import { Button } from "@/components/ui/button";
-import { Send, MessageSquare, Paperclip, X, Mic, ChevronDown, Search, Zap, Download } from "lucide-react";
+import { Send, MessageSquare, Paperclip, X, Mic, ChevronDown, Search, Zap, Download, Link } from "lucide-react";
 import { format } from "date-fns";
 
 type Attachment = {
@@ -17,7 +17,7 @@ type Attachment = {
 type RenderedItem =
   | { kind: "msg"; msg: Message }
   | { kind: "separator"; label: string; key: string }
-  | { kind: "tool"; skillName: string; output: string; key: string; toolType?: 'skill' | 'search' };
+  | { kind: "tool"; skillName: string; output: string; key: string; toolType?: 'skill' | 'search' | 'url' };
 
 // Inline token parser — handles **bold**, *italic*, `code`
 function parseInline(text: string): React.ReactNode[] {
@@ -103,10 +103,14 @@ function MarkdownMessage({ content }: { content: string }) {
   return <div className="space-y-0 text-sm">{nodes}</div>;
 }
 
-function ToolOutputBlock({ skillName, output, toolType }: { skillName: string; output: string; toolType?: 'skill' | 'search' }) {
+function ToolOutputBlock({ skillName, output, toolType }: { skillName: string; output: string; toolType?: 'skill' | 'search' | 'url' }) {
   const [open, setOpen] = useState(false);
-  const isSearch = toolType === 'search';
-  const label = isSearch ? `Searched: ${skillName}` : `Ran: ${skillName}`;
+  const icon = toolType === 'search' ? <Search className="w-3 h-3" />
+    : toolType === 'url' ? <Link className="w-3 h-3" />
+    : <Zap className="w-3 h-3" />;
+  const label = toolType === 'search' ? `Searched: ${skillName}`
+    : toolType === 'url' ? `Read: ${skillName}`
+    : `Ran: ${skillName}`;
   return (
     <div className="flex justify-start my-1">
       <div className="max-w-[85%]">
@@ -114,7 +118,7 @@ function ToolOutputBlock({ skillName, output, toolType }: { skillName: string; o
           onClick={() => setOpen(o => !o)}
           className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-primary/20 bg-primary/5 text-primary/60 hover:bg-primary/10 hover:text-primary transition-colors text-[11px] font-mono"
         >
-          {isSearch ? <Search className="w-3 h-3" /> : <Zap className="w-3 h-3" />}
+          {icon}
           <span>{label}</span>
           <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
         </button>
@@ -136,6 +140,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   const [lastStreamSnapshot, setLastStreamSnapshot] = useState("");
   const [isAgencyProcessing, setIsAgencyProcessing] = useState(false);
   const [searchingQuery, setSearchingQuery] = useState<string | null>(null);
+  const [readingUrl, setReadingUrl] = useState<string | null>(null);
   const [runningTool, setRunningTool] = useState<string | null>(null);
   const [ranSkill, setRanSkill] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -397,8 +402,15 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                   setIsAgencyProcessing(false);
                   setSearchingQuery(null);
                   setRunningTool(null);
+                } else if (data.reading) {
+                  setReadingUrl(data.reading);
+                  setSearchingQuery(null);
+                  setRunningTool(null);
+                  setIsAgencyProcessing(false);
+                  firstDelta = true;
                 } else if (data.searching) {
                   setSearchingQuery(data.searching);
+                  setReadingUrl(null);
                   setRunningTool(null);
                   setIsAgencyProcessing(false);
                   firstDelta = true;
@@ -412,6 +424,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                   if (firstDelta) {
                     setIsAgencyProcessing(false);
                     setSearchingQuery(null);
+                    setReadingUrl(null);
                     setRunningTool(null);
                     firstDelta = false;
                   }
@@ -423,6 +436,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                 } else if (data.done) {
                   setIsAgencyProcessing(false);
                   setSearchingQuery(null);
+                  setReadingUrl(null);
                   setRunningTool(null);
                   setStreamingMsg("");
                   queryClient.invalidateQueries({
@@ -447,6 +461,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
       setLastStreamSnapshot("");
       setIsAgencyProcessing(false);
       setSearchingQuery(null);
+      setReadingUrl(null);
       setRunningTool(null);
       setRanSkill(null);
     }
@@ -467,6 +482,13 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
       const searchMatch = content.match(/^\[Web Search\]\s*(.+?)\n([\s\S]*)$/);
       if (searchMatch) {
         items.push({ kind: "tool", skillName: searchMatch[1].trim(), output: searchMatch[2].trim(), key: msg.id, toolType: 'search' });
+        continue;
+      }
+      const urlMatch = content.match(/^\[URL Content\]\s*(.+?)\n([\s\S]*)$/);
+      if (urlMatch) {
+        let displayName = urlMatch[1].trim();
+        try { displayName = new URL(displayName).hostname; } catch { /* use full url */ }
+        items.push({ kind: "tool", skillName: displayName, output: urlMatch[2].trim(), key: msg.id, toolType: 'url' });
         continue;
       }
       continue;
@@ -577,16 +599,16 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
             )}
 
             {/* Unified live status pill */}
-            {(searchingQuery || runningTool) && (
+            {(readingUrl || searchingQuery || runningTool) && (
               <div className="flex justify-start">
                 <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-primary/20 bg-primary/5 text-primary/60 text-[11px] font-mono">
-                  {searchingQuery ? `🔍 Searching…` : `⚡ Running ${runningTool}…`}
+                  {readingUrl ? `📄 Reading…` : searchingQuery ? `🔍 Searching…` : `⚡ Running ${runningTool}…`}
                 </span>
               </div>
             )}
 
             {/* Waiting for first token — bouncing dots */}
-            {isAgencyProcessing && !streamingMsg && !searchingQuery && !runningTool && (
+            {isAgencyProcessing && !streamingMsg && !searchingQuery && !readingUrl && !runningTool && (
               <div className="flex justify-start">
                 <div className="flex items-center gap-1 px-3 py-2.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:0ms]" />

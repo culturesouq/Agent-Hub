@@ -257,8 +257,39 @@ function buildAgencySkills(
   return list;
 }
 
-// Persists web search results to the conversation log, Learned KB, and memory.
-// Fire-and-forget for KB/memory — called the same way from both paths.
+// Extract up to 2 unique URLs from a message string
+function extractUrls(text: string): string[] {
+  const urlRegex = /https?:\/\/[^\s<>"{}|\\^`[\]]+/gi;
+  const matches = text.match(urlRegex) ?? [];
+  return [...new Set(matches)].slice(0, 2);
+}
+
+async function persistUrlScrapedResult(
+  operatorId: string,
+  ownerId: string,
+  convId: string,
+  url: string,
+  content: string,
+): Promise<void> {
+  let domain = url;
+  try { domain = new URL(url).hostname; } catch { /* use full url */ }
+  await db.insert(messagesTable).values({
+    id:             crypto.randomUUID(),
+    operatorId,
+    conversationId: convId,
+    role:           'system',
+    content:        `[URL Content] ${url}\n${content}`,
+  });
+  storeMemory(
+    operatorId,
+    ownerId,
+    `Operator read URL "${domain}". Summary: ${content.slice(0, 400)}`,
+    'fact',
+    'ai_distilled',
+    0.6,
+  ).catch(() => {});
+}
+
 async function persistWebSearchResult(
   operatorId: string,
   ownerId: string,
@@ -697,6 +728,16 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     });
 
     try {
+      // URL auto-reading — scrape URLs mentioned in the message and inject content before responding
+      for (const url of extractUrls(message)) {
+        res.write(`data: ${JSON.stringify({ reading: url })}\n\n`);
+        const scraped = await scrapeUrl(url).catch(() => null);
+        if (scraped && scraped.length > 200) {
+          messages.push({ role: 'system', content: `[URL Content: ${url}]\n${scraped}` });
+          await persistUrlScrapedResult(operator.id, operator.ownerId, conv.id, url, scraped);
+        }
+      }
+
       const streamOpts = { ...chatOpts, tools: webSearchTool ? [webSearchTool] : undefined };
       let operatorToolCall: { id: string; name: string; args: string } | undefined;
 
@@ -853,6 +894,15 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   } else {
     try {
+      // URL auto-reading — scrape URLs mentioned in the message and inject content before responding
+      for (const url of extractUrls(message)) {
+        const scraped = await scrapeUrl(url).catch(() => null);
+        if (scraped && scraped.length > 200) {
+          messages.push({ role: 'system', content: `[URL Content: ${url}]\n${scraped}` });
+          await persistUrlScrapedResult(operator.id, operator.ownerId, conv.id, url, scraped);
+        }
+      }
+
       const syncOpts = { ...chatOpts, tools: webSearchTool ? [webSearchTool] : undefined };
       const result = await chatCompletion(messages, syncOpts);
 
