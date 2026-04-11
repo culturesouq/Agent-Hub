@@ -81,7 +81,17 @@ interface PipelineConfig {
 
 const ARCHETYPES = ["Advisor", "Executor", "Expert", "Connector", "Creator", "Guardian", "Builder", "Catalyst", "Analyst"];
 
-type Tab = "overview" | "owners" | "operators" | "drift" | "rag";
+type Tab = "overview" | "owners" | "operators" | "drift" | "rag" | "vael";
+
+interface VaelScheduleState {
+  isRunning: boolean;
+  lastRunType: "full" | "validate" | null;
+  lastRunAt: string | null;
+  lastRunDurationSec: number | null;
+  lastRunSummary: string | null;
+  sweepSchedule: string;
+  validateSchedule: string;
+}
 
 function StatCard({ label, value, color, glow }: {
   label: string;
@@ -157,6 +167,9 @@ export default function AdminPage() {
     filteredByDedup: number;
     screenerRejections: { content: string; reason: string }[];
   } | null>(null);
+
+  const [vaelSchedule, setVaelSchedule] = useState<VaelScheduleState | null>(null);
+  const [vaelSweeping, setVaelSweeping] = useState(false);
 
   const loadRag = useCallback(async () => {
     const [s, entries, pipeline] = await Promise.all([
@@ -265,6 +278,25 @@ export default function AdminPage() {
     }
   }
 
+  async function loadVaelSchedule() {
+    const s = await apiFetch<VaelScheduleState>("/vael/schedule");
+    setVaelSchedule(s);
+  }
+
+  async function triggerVaelSweep(type: "full" | "validate") {
+    setVaelSweeping(true);
+    await apiFetch(`/vael/sweep${type === "validate" ? "/validate" : ""}`, { method: "POST" });
+    // poll for completion
+    const poll = setInterval(async () => {
+      const s = await apiFetch<VaelScheduleState>("/vael/schedule");
+      setVaelSchedule(s);
+      if (!s.isRunning) {
+        clearInterval(poll);
+        setVaelSweeping(false);
+      }
+    }, 4000);
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -281,7 +313,12 @@ export default function AdminPage() {
     { id: "operators", label: "Operators", count: operators.length },
     { id: "drift", label: "Drift Alerts", count: driftAlerts.length },
     { id: "rag", label: "Intelligence", count: ragStats?.totalActive },
+    { id: "vael", label: "Vael" },
   ];
+
+  useEffect(() => {
+    if (tab === "vael") loadVaelSchedule();
+  }, [tab]);
 
   return (
     <div className="min-h-screen bg-background text-foreground relative overflow-hidden">
@@ -1018,6 +1055,113 @@ export default function AdminPage() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Vael Workspace ─────────────────────────────────────────────── */}
+        {tab === "vael" && (
+          <div className="p-8 space-y-6 max-w-3xl mx-auto">
+            <div>
+              <h2 className="font-headline text-2xl font-bold text-primary mb-1">Vael Workspace</h2>
+              <p className="text-sm text-muted-foreground font-sans">Autonomous validation, discovery, and seeding — scheduled tasks and manual controls.</p>
+            </div>
+
+            {/* Scheduled tasks */}
+            <div className="glass-panel overflow-hidden">
+              <div className="px-6 py-4 border-b border-border/30">
+                <span className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Scheduled Tasks</span>
+              </div>
+
+              {/* Full sweep */}
+              <div className="px-6 py-5 border-b border-border/20">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-sans text-sm font-medium text-on-surface">Full Sweep</span>
+                      <span className="font-label text-[9px] uppercase tracking-widest px-2 py-0.5 rounded-sm bg-primary/10 text-primary/70 border border-primary/20">
+                        {vaelSchedule?.sweepSchedule ?? "0 1,13 * * *"}
+                      </span>
+                      <span className="font-label text-[9px] text-muted-foreground/60">1 AM + 1 PM UTC daily</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground font-sans">Validate draft DNA entries → discover knowledge gaps → self-validate proposals → seed approved entries with embeddings. Budget: 4.5 min.</p>
+                  </div>
+                  <button
+                    onClick={() => triggerVaelSweep("full")}
+                    disabled={vaelSweeping || vaelSchedule?.isRunning}
+                    className="font-label text-[9px] uppercase tracking-widest px-3 py-1.5 rounded-sm border border-primary/40 text-primary hover:bg-primary/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                  >
+                    {vaelSweeping || vaelSchedule?.isRunning ? "Running…" : "Run Now"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Validate only */}
+              <div className="px-6 py-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-sans text-sm font-medium text-on-surface">Validation Cycle</span>
+                      <span className="font-label text-[9px] uppercase tracking-widest px-2 py-0.5 rounded-sm bg-primary/10 text-primary/70 border border-primary/20">
+                        {vaelSchedule?.validateSchedule ?? "0 */6 * * *"}
+                      </span>
+                      <span className="font-label text-[9px] text-muted-foreground/60">every 6 hours</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground font-sans">Review draft DNA entries only. Approve, revise, or reject. Budget: 55 sec.</p>
+                  </div>
+                  <button
+                    onClick={() => triggerVaelSweep("validate")}
+                    disabled={vaelSweeping || vaelSchedule?.isRunning}
+                    className="font-label text-[9px] uppercase tracking-widest px-3 py-1.5 rounded-sm border border-border/40 text-muted-foreground hover:text-primary hover:border-primary/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                  >
+                    {vaelSweeping || vaelSchedule?.isRunning ? "Running…" : "Run Now"}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Last run summary */}
+            <div className="glass-panel overflow-hidden">
+              <div className="px-6 py-4 border-b border-border/30 flex items-center justify-between">
+                <span className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Last Run</span>
+                <button onClick={loadVaelSchedule} className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">Refresh</button>
+              </div>
+              <div className="px-6 py-5">
+                {!vaelSchedule && (
+                  <p className="text-xs text-muted-foreground font-sans italic">Loading…</p>
+                )}
+                {vaelSchedule && !vaelSchedule.lastRunAt && (
+                  <p className="text-xs text-muted-foreground font-sans italic">No runs since last server restart. Trigger manually or wait for the cron schedule.</p>
+                )}
+                {vaelSchedule?.lastRunAt && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <span className={`font-label text-[9px] uppercase tracking-widest px-2 py-0.5 rounded-sm border ${vaelSchedule.lastRunType === "full" ? "border-primary/40 text-primary/70 bg-primary/5" : "border-border/40 text-muted-foreground bg-surface/30"}`}>
+                        {vaelSchedule.lastRunType === "full" ? "Full Sweep" : "Validate Only"}
+                      </span>
+                      <span className="font-label text-[9px] text-muted-foreground/70">
+                        {new Date(vaelSchedule.lastRunAt).toLocaleString()} · {vaelSchedule.lastRunDurationSec}s
+                      </span>
+                    </div>
+                    {vaelSchedule.lastRunSummary && (
+                      <p className="text-xs font-sans text-on-surface/80 font-mono bg-surface/30 rounded px-3 py-2 border border-border/20">
+                        {vaelSchedule.lastRunSummary}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* How it works */}
+            <div className="glass-panel px-6 py-5 space-y-2">
+              <div className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-3">How It Works</div>
+              <div className="space-y-2 text-xs font-sans text-muted-foreground">
+                <p>• <span className="text-on-surface/80">Full sweep</span> — validates drafts first, then runs a discovery sweep across the platform, self-validates each proposal, and seeds anything that passes into the collective DNA layer with proper scope classification.</p>
+                <p>• <span className="text-on-surface/80">Validation cycle</span> — reviews draft entries in the DNA corpus. Approved entries go to "current". Revised entries are corrected and re-embedded. Rejected entries are deprecated.</p>
+                <p>• <span className="text-on-surface/80">Budget timer</span> — Vael races the clock. She stops cleanly before the budget runs out, logs what she completed, and picks up where she left off on the next cycle.</p>
+                <p>• <span className="text-on-surface/80">Pipeline exclusion</span> — Vael learns from all operators and all DNA layers, but never contributes to the collective pipeline. Her knowledge stays private to her.</p>
+              </div>
+            </div>
           </div>
         )}
       </main>

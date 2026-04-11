@@ -269,36 +269,91 @@ async function runDiscoveryPhase(timer: BudgetTimer): Promise<{
   return stats;
 }
 
+// ── Run state (in-memory, resets on restart) ──────────────────────────────────
+
+export interface VaelRunState {
+  isRunning: boolean;
+  lastRunType: 'full' | 'validate' | null;
+  lastRunAt: string | null;
+  lastRunDurationSec: number | null;
+  lastRunSummary: string | null;
+  sweepSchedule: string;
+  validateSchedule: string;
+}
+
+const state: VaelRunState = {
+  isRunning: false,
+  lastRunType: null,
+  lastRunAt: null,
+  lastRunDurationSec: null,
+  lastRunSummary: null,
+  sweepSchedule: process.env.VAEL_SWEEP_SCHEDULE    ?? '0 1,13 * * *',
+  validateSchedule: process.env.VAEL_VALIDATE_SCHEDULE ?? '0 */6 * * *',
+};
+
+export function getVaelRunState(): VaelRunState {
+  return { ...state };
+}
+
 // ── Full sweep ────────────────────────────────────────────────────────────────
 
 export async function runVaelFullSweep(): Promise<void> {
+  if (state.isRunning) {
+    console.log('[VAEL] Sweep already in progress — skipping');
+    return;
+  }
+  state.isRunning = true;
   const timer = new BudgetTimer(FULL_BUDGET_MS);
   console.log('[VAEL] Full sweep starting:', new Date().toISOString());
 
-  const validation = await runValidationPhase(timer);
+  try {
+    const validation = await runValidationPhase(timer);
 
-  let discovery = { proposed: 0, seeded: 0, flagged: 0 };
-  if (timer.hasTime(60_000)) {
-    discovery = await runDiscoveryPhase(timer);
-  } else {
-    console.log('[VAEL] Budget too low after validation — skipping discovery');
+    let discovery = { proposed: 0, seeded: 0, flagged: 0 };
+    if (timer.hasTime(60_000)) {
+      discovery = await runDiscoveryPhase(timer);
+    } else {
+      console.log('[VAEL] Budget too low after validation — skipping discovery');
+    }
+
+    const summary =
+      `validated=${validation.validated} approved=${validation.approved} revised=${validation.revised} rejected=${validation.rejected} | ` +
+      `proposed=${discovery.proposed} seeded=${discovery.seeded} flagged=${discovery.flagged}`;
+
+    console.log(`[VAEL] Full sweep done in ${timer.elapsedSec()}s — ${summary}`);
+
+    state.lastRunType        = 'full';
+    state.lastRunAt          = new Date().toISOString();
+    state.lastRunDurationSec = parseFloat(timer.elapsedSec());
+    state.lastRunSummary     = summary;
+  } finally {
+    state.isRunning = false;
   }
-
-  console.log(
-    `[VAEL] Full sweep done in ${timer.elapsedSec()}s — ` +
-    `validated=${validation.validated} approved=${validation.approved} revised=${validation.revised} rejected=${validation.rejected} | ` +
-    `proposed=${discovery.proposed} seeded=${discovery.seeded} flagged=${discovery.flagged}`,
-  );
 }
 
 export async function runVaelValidationOnly(): Promise<void> {
+  if (state.isRunning) {
+    console.log('[VAEL] Sweep already in progress — skipping');
+    return;
+  }
+  state.isRunning = true;
   const timer = new BudgetTimer(FAST_BUDGET_MS);
   console.log('[VAEL] Validation-only cycle starting:', new Date().toISOString());
-  const validation = await runValidationPhase(timer);
-  console.log(
-    `[VAEL] Validation done in ${timer.elapsedSec()}s — ` +
-    `validated=${validation.validated} approved=${validation.approved} revised=${validation.revised} rejected=${validation.rejected}`,
-  );
+
+  try {
+    const validation = await runValidationPhase(timer);
+    const summary =
+      `validated=${validation.validated} approved=${validation.approved} revised=${validation.revised} rejected=${validation.rejected}`;
+
+    console.log(`[VAEL] Validation done in ${timer.elapsedSec()}s — ${summary}`);
+
+    state.lastRunType        = 'validate';
+    state.lastRunAt          = new Date().toISOString();
+    state.lastRunDurationSec = parseFloat(timer.elapsedSec());
+    state.lastRunSummary     = summary;
+  } finally {
+    state.isRunning = false;
+  }
 }
 
 // ── Cron registration ─────────────────────────────────────────────────────────

@@ -13,7 +13,7 @@ import { chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import { buildSystemPrompt } from '../utils/systemPrompt.js';
 import type { ActiveSkill } from '../utils/systemPrompt.js';
 import { validateEntry, runDiscoverySweep } from '../utils/vaelEngine.js';
-import { runVaelFullSweep, runVaelValidationOnly } from '../cron/vaelCron.js';
+import { runVaelFullSweep, runVaelValidationOnly, getVaelRunState } from '../cron/vaelCron.js';
 import { randomUUID } from 'crypto';
 
 const router = Router();
@@ -275,6 +275,12 @@ router.post('/discover', async (req: Request, res: Response): Promise<void> => {
   } catch (e) {
     res.status(500).json({ error: 'Discovery sweep failed', detail: (e as Error).message });
   }
+});
+
+// ── GET /api/vael/schedule ───────────────────────────────────────────────────
+
+router.get('/schedule', (_req: Request, res: Response): void => {
+  res.json(getVaelRunState());
 });
 
 // ── POST /api/vael/sweep ─────────────────────────────────────────────────────

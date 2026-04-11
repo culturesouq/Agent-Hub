@@ -4,6 +4,16 @@ import { eq, and } from 'drizzle-orm';
 import { chatCompletion, CHAT_MODEL } from './openrouter.js';
 import { webSearch } from './webSearch.js';
 
+// Strip markdown code fences and extract the first JSON object/array
+function extractJson(raw: string): string {
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenced) return fenced[1].trim();
+  const start = raw.indexOf('{');
+  const end   = raw.lastIndexOf('}');
+  if (start !== -1 && end !== -1) return raw.slice(start, end + 1);
+  return raw.trim();
+}
+
 const VAEL_SYSTEM = `You are Vael, the platform intelligence guardian for OpSoul. Your job is to validate, maintain, and evolve the DNA knowledge base — the shared intelligence layer that every OpSoul operator inherits.
 
 You have two modes:
@@ -147,7 +157,7 @@ Return only valid JSON. No preamble.`;
   );
 
   try {
-    const parsed = JSON.parse(result.content.trim());
+    const parsed = JSON.parse(extractJson(result.content));
     return parsed as ValidationResult;
   } catch {
     return {
@@ -234,13 +244,13 @@ Return only valid JSON. No preamble.`;
   );
 
   try {
-    const parsed = JSON.parse(result.content.trim());
+    const parsed = JSON.parse(extractJson(result.content));
     parsed.search_queries_used = searchQueries;
     return parsed as DiscoveryResult;
   } catch {
     return {
       proposals: [],
-      summary: 'Discovery sweep completed but output could not be parsed — review raw output manually.',
+      summary: `Parse failed — raw: ${result.content.slice(0, 200)}`,
       search_queries_used: searchQueries,
     };
   }
