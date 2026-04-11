@@ -137,6 +137,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   const [isAgencyProcessing, setIsAgencyProcessing] = useState(false);
   const [searchingQuery, setSearchingQuery] = useState<string | null>(null);
   const [runningTool, setRunningTool] = useState<string | null>(null);
+  const [ranSkill, setRanSkill] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -403,6 +404,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                   firstDelta = true;
                 } else if (data.running) {
                   setRunningTool(data.running);
+                  setRanSkill(data.running);
                   setSearchingQuery(null);
                   setIsAgencyProcessing(false);
                   firstDelta = true;
@@ -427,6 +429,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                     queryKey: ["operators", operatorId, "conversations", activeConvId, "messages"],
                   });
                   setTimeout(() => {
+                    setRanSkill(null);
                     setLastStreamSnapshot("");
                     scrollToBottom(true);
                   }, 120);
@@ -445,6 +448,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
       setIsAgencyProcessing(false);
       setSearchingQuery(null);
       setRunningTool(null);
+      setRanSkill(null);
     }
   };
 
@@ -552,6 +556,15 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
             )}
 
             {/* Streaming or fallback — no flash between stream end and history load */}
+            {ranSkill && (showingStream || showingFallback) && (
+              <div className="flex justify-start my-1">
+                <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-primary/30 bg-primary/8 text-primary/70 text-[11px] font-mono">
+                  <Zap className="w-3 h-3" />
+                  Ran: {ranSkill}
+                </span>
+              </div>
+            )}
+
             {(showingStream || showingFallback) && (
               <div className="flex justify-start">
                 <div className="max-w-[85%] rounded-2xl rounded-tl-none px-4 py-3 text-sm leading-relaxed bg-card border border-border/50 text-foreground">
