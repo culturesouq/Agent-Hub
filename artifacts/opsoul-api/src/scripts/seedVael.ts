@@ -64,10 +64,11 @@ async function seedVael() {
     return;
   }
 
+  const OWNER_EMAIL = process.env.OWNER_EMAIL ?? 'mohamedhajeri887@gmail.com';
   const [owner] = await db
     .select({ id: ownersTable.id })
     .from(ownersTable)
-    .where(eq(ownersTable.isSovereignAdmin, true))
+    .where(eq(ownersTable.email, OWNER_EMAIL))
     .limit(1);
 
   if (!owner) {
