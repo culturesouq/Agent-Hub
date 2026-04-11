@@ -542,7 +542,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     try {
       const queryEmbedding = await embed(message);
       const [kbHits, memHits] = await Promise.all([
-        searchBothKbs(operator.id, queryEmbedding, kbTopN, kbMinConfidence, operator.archetype ?? []),
+        searchBothKbs(operator.id, queryEmbedding, kbTopN, kbMinConfidence, operator.archetype ?? [], operator.domainTags ?? []),
         searchMemory(operator.id, queryEmbedding),
       ]);
       kbContext = buildRagContext(kbHits);

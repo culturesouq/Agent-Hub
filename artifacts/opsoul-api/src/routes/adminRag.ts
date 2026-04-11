@@ -9,24 +9,46 @@ import { validateEntry, runDiscoverySweep } from '../utils/vaelEngine.js';
 
 // ── Pipeline content screener ────────────────────────────────────────────────
 
-const SCREENER_SYSTEM = `You are a collective DNA screener for an AI operator platform. You decide whether a KB entry contains knowledge that generalizes beyond one user and belongs in the shared DNA corpus.
+const VALID_ARCHETYPES_LIST = ['Advisor', 'Analyst', 'Executor', 'Catalyst', 'Expert', 'Mentor', 'Connector', 'Creator', 'Guardian'];
 
-ELIGIBLE (return {"eligible":true}):
+const SCREENER_SYSTEM = `You are a collective DNA screener for an AI operator platform. Your job is to:
+1. Decide if a KB entry belongs in the shared DNA corpus
+2. If eligible, classify its scope and tagging
+
+ELIGIBLE KNOWLEDGE:
 - Factual domain knowledge (research findings, how-to guides, technical facts)
-- Verified information with broad applicability across operators
-- Insights, patterns, or methods that any operator could use
+- Verified information with broad applicability
+- Insights, patterns, or methods that are genuinely reusable
 - Structured knowledge: definitions, frameworks, processes
 
-NOT ELIGIBLE (return {"eligible":false, "reason":"<short label>"}):
-- User preference notes ("User likes X", "User prefers Y format")
-- Conversational observations ("User asked about X", "User expressed interest in Y")
-- Operator diary entries — notes about a specific user's behavior or context
-- Personal context that only applies to one person or session
-- Vague summaries with no actionable knowledge content
+NOT ELIGIBLE:
+- User preference notes ("User likes X", "User prefers Y")
+- Conversational observations ("User asked about Z")
+- Operator diary — notes about a specific user's behavior
+- Personal context that only applies to one session
 
-Return only valid JSON. No preamble.`;
+For eligible entries, classify scope:
+- "general": Knowledge about how to think, communicate, or operate that fits a specific operator archetype. Set archetype_scope to the archetypes this applies to from: [Advisor, Analyst, Executor, Catalyst, Expert, Mentor, Connector, Creator, Guardian]. Leave empty [] if truly universal.
+- "specialty": Domain-specific knowledge (agriculture, finance, legal, medical, engineering, hr, sales, marketing, operations, education, technology, etc.). Set domain_tags accordingly.
 
-async function screenForCollective(content: string): Promise<{ eligible: boolean; reason?: string }> {
+Return only valid JSON. No preamble.
+
+Schema:
+{
+  "eligible": true | false,
+  "reason": "<only if not eligible — short label>",
+  "dna_scope": "general" | "specialty",
+  "archetype_scope": ["Analyst", "Expert"],
+  "domain_tags": ["agriculture", "farming"]
+}`;
+
+async function screenForCollective(content: string): Promise<{
+  eligible: boolean;
+  reason?: string;
+  dnaScope?: 'general' | 'specialty';
+  archetypeScope?: string[];
+  domainTags?: string[];
+}> {
   try {
     const result = await chatCompletion(
       [
@@ -36,9 +58,17 @@ async function screenForCollective(content: string): Promise<{ eligible: boolean
       { model: KB_MODEL },
     );
     const parsed = JSON.parse(result.content.trim());
-    return { eligible: !!parsed.eligible, reason: parsed.reason };
+    return {
+      eligible: !!parsed.eligible,
+      reason: parsed.reason,
+      dnaScope: parsed.dna_scope ?? 'general',
+      archetypeScope: Array.isArray(parsed.archetype_scope)
+        ? parsed.archetype_scope.filter((a: string) => VALID_ARCHETYPES_LIST.includes(a))
+        : [],
+      domainTags: Array.isArray(parsed.domain_tags) ? parsed.domain_tags : [],
+    };
   } catch {
-    return { eligible: true };
+    return { eligible: true, dnaScope: 'general', archetypeScope: [], domainTags: [] };
   }
 }
 
@@ -111,6 +141,9 @@ router.get('/entries', async (req: Request, res: Response): Promise<void> => {
       knowledgeStatus: ragDnaTable.knowledgeStatus,
       isActive: ragDnaTable.isActive,
       hasEmbedding: sql<boolean>`(embedding IS NOT NULL)`,
+      dnaScope: ragDnaTable.dnaScope,
+      archetypeScope: ragDnaTable.archetypeScope,
+      domainTags: ragDnaTable.domainTags,
       createdAt: ragDnaTable.createdAt,
       updatedAt: ragDnaTable.updatedAt,
     })
@@ -175,7 +208,7 @@ router.post('/entries', async (req: Request, res: Response): Promise<void> => {
 
 router.put('/entries/:id', async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params;
-  const { title, content, tags, isActive, archetype, sourceName, confidence, knowledgeStatus } = req.body as {
+  const { title, content, tags, isActive, archetype, sourceName, confidence, knowledgeStatus, dnaScope, archetypeScope, domainTags } = req.body as {
     title?: string;
     content?: string;
     tags?: string[];
@@ -184,6 +217,9 @@ router.put('/entries/:id', async (req: Request, res: Response): Promise<void> =>
     sourceName?: string;
     confidence?: number;
     knowledgeStatus?: 'current' | 'upgraded' | 'deprecated' | 'draft';
+    dnaScope?: 'general' | 'specialty';
+    archetypeScope?: string[];
+    domainTags?: string[];
   };
 
   const [existing] = await db.select().from(ragDnaTable).where(eq(ragDnaTable.id, id));
@@ -200,6 +236,9 @@ router.put('/entries/:id', async (req: Request, res: Response): Promise<void> =>
   if (sourceName !== undefined) updates.sourceName = sourceName;
   if (confidence !== undefined) updates.confidence = confidence;
   if (knowledgeStatus !== undefined) updates.knowledgeStatus = knowledgeStatus;
+  if (dnaScope !== undefined) updates.dnaScope = dnaScope;
+  if (archetypeScope !== undefined) updates.archetypeScope = archetypeScope;
+  if (domainTags !== undefined) updates.domainTags = domainTags;
 
   if (content !== undefined && content !== existing.content) {
     updates.content = content;
@@ -211,6 +250,34 @@ router.put('/entries/:id', async (req: Request, res: Response): Promise<void> =>
   }
 
   const [updated] = await db.update(ragDnaTable).set(updates).where(eq(ragDnaTable.id, id)).returning();
+  res.json(updated);
+});
+
+router.patch('/entries/:id/scope', async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const { dnaScope, archetypeScope, domainTags } = req.body as {
+    dnaScope?: 'general' | 'specialty';
+    archetypeScope?: string[];
+    domainTags?: string[];
+  };
+
+  const [existing] = await db.select({ id: ragDnaTable.id }).from(ragDnaTable).where(eq(ragDnaTable.id, id));
+  if (!existing) {
+    res.status(404).json({ error: 'Entry not found' });
+    return;
+  }
+
+  const updates: Partial<typeof ragDnaTable.$inferInsert> = { updatedAt: new Date() };
+  if (dnaScope !== undefined) updates.dnaScope = dnaScope;
+  if (archetypeScope !== undefined) updates.archetypeScope = archetypeScope;
+  if (domainTags !== undefined) updates.domainTags = domainTags;
+
+  const [updated] = await db.update(ragDnaTable).set(updates).where(eq(ragDnaTable.id, id)).returning({
+    id: ragDnaTable.id,
+    dnaScope: ragDnaTable.dnaScope,
+    archetypeScope: ragDnaTable.archetypeScope,
+    domainTags: ragDnaTable.domainTags,
+  });
   res.json(updated);
 });
 
@@ -341,6 +408,9 @@ router.post('/pipeline/run', async (_req: Request, res: Response): Promise<void>
       embedding,
       tags: candidate.intakeTags ?? [],
       sourceHash: hash,
+      dnaScope: screen.dnaScope ?? 'general',
+      archetypeScope: screen.archetypeScope ?? [],
+      domainTags: screen.domainTags ?? [],
       isActive: true,
     });
 

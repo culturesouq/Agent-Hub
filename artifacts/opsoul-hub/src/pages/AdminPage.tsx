@@ -52,6 +52,9 @@ interface RagEntry {
   tags: string[];
   isActive: boolean;
   hasEmbedding: boolean;
+  dnaScope: "general" | "specialty" | null;
+  archetypeScope: string[] | null;
+  domainTags: string[] | null;
   createdAt: string;
 }
 
@@ -238,6 +241,11 @@ export default function AdminPage() {
   async function deleteRagEntry(id: string) {
     await apiFetch(`/admin/rag/entries/${id}`, { method: "DELETE" });
     await loadRag();
+  }
+
+  async function patchEntryScope(id: string, patch: { dnaScope?: "general" | "specialty"; archetypeScope?: string[]; domainTags?: string[] }) {
+    const updated = await apiFetch<RagEntry>(`/admin/rag/entries/${id}/scope`, { method: "PATCH", body: JSON.stringify(patch) });
+    setRagEntries((prev) => prev.map((e) => e.id === id ? { ...e, ...updated } : e));
   }
 
   async function savePipelineConfig(updates: Partial<PipelineConfig>) {
@@ -935,18 +943,72 @@ export default function AdminPage() {
                     </span>
                   </div>
                   {ragEntries.filter((e) => e.layer === "collective").map((entry) => (
-                    <div key={entry.id} className={`px-6 py-4 border-b border-border/20 flex items-start justify-between gap-4 ${!entry.isActive ? "opacity-40" : ""}`}>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-sans text-sm text-on-surface mb-1">{entry.title}</div>
-                        <p className="text-xs text-muted-foreground font-sans line-clamp-2">{entry.content}</p>
+                    <div key={entry.id} className={`px-6 py-4 border-b border-border/20 ${!entry.isActive ? "opacity-40" : ""}`}>
+                      <div className="flex items-start justify-between gap-4 mb-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-sans text-sm text-on-surface mb-1">{entry.title}</div>
+                          <p className="text-xs text-muted-foreground font-sans line-clamp-2">{entry.content}</p>
+                        </div>
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                          <button onClick={() => toggleRagEntry(entry.id, entry.isActive)} className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">
+                            {entry.isActive ? "Deactivate" : "Activate"}
+                          </button>
+                          <button onClick={() => deleteRagEntry(entry.id)} className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-destructive transition-colors">
+                            Remove
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3 flex-shrink-0">
-                        <button onClick={() => toggleRagEntry(entry.id, entry.isActive)} className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">
-                          {entry.isActive ? "Deactivate" : "Activate"}
+                      {/* Scope + Tags row */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        {/* dna_scope toggle */}
+                        <button
+                          onClick={() => patchEntryScope(entry.id, { dnaScope: entry.dnaScope === "specialty" ? "general" : "specialty" })}
+                          className={`font-label text-[9px] uppercase tracking-widest px-2 py-0.5 rounded-sm border transition-colors ${
+                            entry.dnaScope === "specialty"
+                              ? "border-amber-500/50 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
+                              : "border-primary/30 text-primary/70 bg-primary/5 hover:bg-primary/10"
+                          }`}
+                        >
+                          {entry.dnaScope === "specialty" ? "specialty" : "general"}
                         </button>
-                        <button onClick={() => deleteRagEntry(entry.id)} className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-destructive transition-colors">
-                          Remove
-                        </button>
+
+                        {/* archetype scope chips (general only) */}
+                        {(entry.dnaScope !== "specialty") && (
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {(entry.archetypeScope ?? []).length === 0 && (
+                              <span className="font-label text-[9px] text-muted-foreground/60 italic">universal</span>
+                            )}
+                            {(entry.archetypeScope ?? []).map((a) => (
+                              <span
+                                key={a}
+                                onClick={() => patchEntryScope(entry.id, { archetypeScope: (entry.archetypeScope ?? []).filter((x) => x !== a) })}
+                                className="font-label text-[9px] px-1.5 py-0.5 rounded-sm bg-primary/10 text-primary/80 border border-primary/20 cursor-pointer hover:bg-destructive/10 hover:text-destructive/80 hover:border-destructive/30 transition-colors"
+                                title="Click to remove"
+                              >
+                                {a}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* domain tags chips (specialty) */}
+                        {entry.dnaScope === "specialty" && (
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {(entry.domainTags ?? []).map((t) => (
+                              <span
+                                key={t}
+                                onClick={() => patchEntryScope(entry.id, { domainTags: (entry.domainTags ?? []).filter((x) => x !== t) })}
+                                className="font-label text-[9px] px-1.5 py-0.5 rounded-sm bg-amber-500/10 text-amber-400 border border-amber-500/20 cursor-pointer hover:bg-destructive/10 hover:text-destructive/80 hover:border-destructive/30 transition-colors"
+                                title="Click to remove"
+                              >
+                                {t}
+                              </span>
+                            ))}
+                            {(entry.domainTags ?? []).length === 0 && (
+                              <span className="font-label text-[9px] text-muted-foreground/60 italic">no domain tags</span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}

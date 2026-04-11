@@ -7,6 +7,7 @@ export const operatorsTable = pgTable('operators', {
   name: text('name').notNull(),
   archetype: text('archetype').array().notNull(),
   mandate: text('mandate').notNull(),
+  domainTags: text('domain_tags').array().default([]).notNull(),
   coreValues: text('core_values').array(),
   ethicalBoundaries: text('ethical_boundaries').array(),
   rawIdentity: text('raw_identity'),
