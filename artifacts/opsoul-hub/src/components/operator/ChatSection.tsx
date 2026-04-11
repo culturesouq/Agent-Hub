@@ -416,7 +416,6 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                   currentStream += data.delta;
                   setStreamingMsg(currentStream);
                   setLastStreamSnapshot(currentStream);
-                  scrollToBottom(true);
                 } else if (data.processing) {
                   setIsAgencyProcessing(true);
                 } else if (data.done) {
@@ -444,6 +443,8 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
       setStreamingMsg("");
       setLastStreamSnapshot("");
       setIsAgencyProcessing(false);
+      setSearchingQuery(null);
+      setRunningTool(null);
     }
   };
 
@@ -562,7 +563,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
             )}
 
             {/* Unified live status pill */}
-            {!showingStream && (searchingQuery || runningTool) && (
+            {(searchingQuery || runningTool) && (
               <div className="flex justify-start">
                 <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-primary/20 bg-primary/5 text-primary/60 text-[11px] font-mono">
                   {searchingQuery ? `🔍 Searching…` : `⚡ Running ${runningTool}…`}
