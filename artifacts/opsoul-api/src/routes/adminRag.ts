@@ -79,12 +79,14 @@ router.get('/entries', async (req: Request, res: Response): Promise<void> => {
 });
 
 router.post('/entries', async (req: Request, res: Response): Promise<void> => {
-  const { layer, archetype, title, content, tags } = req.body as {
+  const { layer, archetype, title, content, tags, sourceName, confidence } = req.body as {
     layer: string;
     archetype?: string;
     title: string;
     content: string;
     tags?: string[];
+    sourceName?: string;
+    confidence?: number;
   };
 
   if (!layer || !title || !content) {
@@ -118,6 +120,8 @@ router.post('/entries', async (req: Request, res: Response): Promise<void> => {
     content,
     embedding: embedding ?? null,
     tags: tags ?? [],
+    sourceName: sourceName ?? null,
+    confidence: confidence ?? 0.8,
     isActive: true,
   }).returning();
 
@@ -126,12 +130,14 @@ router.post('/entries', async (req: Request, res: Response): Promise<void> => {
 
 router.put('/entries/:id', async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params;
-  const { title, content, tags, isActive, archetype } = req.body as {
+  const { title, content, tags, isActive, archetype, sourceName, confidence } = req.body as {
     title?: string;
     content?: string;
     tags?: string[];
     isActive?: boolean;
     archetype?: string;
+    sourceName?: string;
+    confidence?: number;
   };
 
   const [existing] = await db.select().from(ragDnaTable).where(eq(ragDnaTable.id, id));
@@ -145,6 +151,8 @@ router.put('/entries/:id', async (req: Request, res: Response): Promise<void> =>
   if (tags !== undefined) updates.tags = tags;
   if (isActive !== undefined) updates.isActive = isActive;
   if (archetype !== undefined) updates.archetype = archetype;
+  if (sourceName !== undefined) updates.sourceName = sourceName;
+  if (confidence !== undefined) updates.confidence = confidence;
 
   if (content !== undefined && content !== existing.content) {
     updates.content = content;

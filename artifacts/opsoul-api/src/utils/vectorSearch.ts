@@ -119,9 +119,11 @@ export async function searchDnaKb(
     id: string;
     content: string;
     layer: string;
+    source_name: string | null;
+    confidence: number | null;
     distance: number;
   }>(
-    `SELECT id, content, layer,
+    `SELECT id, content, layer, source_name, confidence,
             (embedding <=> $1::vector) AS distance
      FROM rag_dna
      WHERE is_active = true
@@ -137,7 +139,7 @@ export async function searchDnaKb(
     id: r.id,
     content: r.content,
     sourceUrl: null,
-    sourceName: null,
+    sourceName: r.source_name ?? `dna:${r.layer}`,
     sourceType: `dna:${r.layer}`,
     chunkIndex: null,
     distance: Number(r.distance),
