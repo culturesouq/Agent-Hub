@@ -765,6 +765,24 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       }
     : null;
 
+  // write_file tool — always offered; operator creates/updates files in their workspace
+  const writeFileTool: ToolDefinition = {
+    type: 'function',
+    function: {
+      name: 'write_file',
+      description: 'Create or update a file in your workspace. Use when creating a document, report, notes, or to-do list would genuinely help the owner. Owner sees and downloads files from the Files tab.',
+      parameters: {
+        type: 'object',
+        properties: {
+          filename: { type: 'string', description: 'Filename including extension (e.g. "report.md", "todo.txt")' },
+          content: { type: 'string', description: 'Full file content. Well-formatted and ready to use.' },
+          action: { type: 'string', enum: ['create', 'update'], description: 'Whether to create a new file or update an existing one.' },
+        },
+        required: ['filename', 'content', 'action'],
+      },
+    },
+  };
+
   // Agency skills — built once, shared by both paths
   const agencySkills = buildAgencySkills(skills, archetypeDefaultSkills, installedNames, operator);
 
@@ -844,6 +862,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         const iterTools: ToolDefinition[] = [];
         if (webSearchTool && webSearchCount < MAX_SEARCHES) iterTools.push(webSearchTool);
         if (kbSeedTool) iterTools.push(kbSeedTool);
+        iterTools.push(writeFileTool);
         const iterOpts = {
           ...chatOpts,
           tools: iterTools.length > 0 ? iterTools : undefined,
@@ -949,6 +968,47 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           }
 
           // Missing required args — treat as final response
+          finalContent = iterContent;
+          break;
+        }
+
+        // ── WRITE FILE TOOL CALL ───────────────────────────────────────────
+        if (iterToolCall?.name === 'write_file') {
+          let fileArgs: { filename?: string; content?: string; action?: string } = {};
+          try { fileArgs = JSON.parse(iterToolCall.args); } catch { /* skip */ }
+
+          if (fileArgs.filename && fileArgs.content) {
+            console.log(`[agency] loop iter ${iter} — write_file: "${fileArgs.filename}"`);
+            res.write(`data: ${JSON.stringify({ writing: fileArgs.filename })}\n\n`);
+
+            const existing = await db.select({ id: operatorFilesTable.id })
+              .from(operatorFilesTable)
+              .where(and(eq(operatorFilesTable.operatorId, operator.id), eq(operatorFilesTable.filename, fileArgs.filename)))
+              .limit(1);
+
+            let fileId: string;
+            if (existing.length > 0 && fileArgs.action !== 'create') {
+              fileId = existing[0].id;
+              await db.update(operatorFilesTable).set({ content: fileArgs.content, updatedAt: new Date() }).where(eq(operatorFilesTable.id, fileId));
+            } else {
+              fileId = crypto.randomUUID();
+              await db.insert(operatorFilesTable).values({ id: fileId, operatorId: operator.id, ownerId: operator.ownerId, filename: fileArgs.filename, content: fileArgs.content });
+            }
+
+            res.write(`data: ${JSON.stringify({ file_created: { id: fileId, filename: fileArgs.filename } })}\n\n`);
+            const toolResultText = `File "${fileArgs.filename}" ${existing.length > 0 && fileArgs.action !== 'create' ? 'updated' : 'created'}. Owner can see and download it from the Files tab.`;
+
+            loopMessages.push(
+              {
+                role: 'assistant',
+                content: iterContent || '',
+                tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'write_file', arguments: iterToolCall.args } }],
+              },
+              { role: 'tool', content: toolResultText, tool_call_id: iterToolCall.id },
+            );
+            continue;
+          }
+
           finalContent = iterContent;
           break;
         }
@@ -1069,6 +1129,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       const syncTools: ToolDefinition[] = [];
       if (webSearchTool) syncTools.push(webSearchTool);
       if (kbSeedTool) syncTools.push(kbSeedTool);
+      syncTools.push(writeFileTool);
       const syncOpts = { ...chatOpts, tools: syncTools.length > 0 ? syncTools : undefined };
       const result = await chatCompletion(messages, syncOpts);
 
@@ -1137,6 +1198,39 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             { role: 'system', content: `[KB Seed Result]\n${toolResultText}` },
           ];
           const secondResult = await chatCompletion(seedMessages, chatOpts);
+          finalContent = secondResult.content;
+          finalPromptTokens = secondResult.promptTokens;
+          finalCompletionTokens = secondResult.completionTokens;
+        }
+      }
+
+      // Write file — operator called write_file tool (sync path)
+      if (!capabilityFired && result.toolCall && result.toolCall.name === 'write_file') {
+        let fileArgs: { filename?: string; content?: string; action?: string } = {};
+        try { fileArgs = JSON.parse(result.toolCall.args); } catch { /* skip */ }
+        if (fileArgs.filename && fileArgs.content) {
+          console.log(`[agency] write_file (sync): "${fileArgs.filename}"`);
+          const existing = await db.select({ id: operatorFilesTable.id })
+            .from(operatorFilesTable)
+            .where(and(eq(operatorFilesTable.operatorId, operator.id), eq(operatorFilesTable.filename, fileArgs.filename)))
+            .limit(1);
+
+          let fileId: string;
+          if (existing.length > 0 && fileArgs.action !== 'create') {
+            fileId = existing[0].id;
+            await db.update(operatorFilesTable).set({ content: fileArgs.content, updatedAt: new Date() }).where(eq(operatorFilesTable.id, fileId));
+          } else {
+            fileId = crypto.randomUUID();
+            await db.insert(operatorFilesTable).values({ id: fileId, operatorId: operator.id, ownerId: operator.ownerId, filename: fileArgs.filename, content: fileArgs.content });
+          }
+
+          capabilityFired = true;
+          const toolResultText = `File "${fileArgs.filename}" ${existing.length > 0 && fileArgs.action !== 'create' ? 'updated' : 'created'}. Owner can see it in the Files tab.`;
+          const fileMessages: ChatMessage[] = [
+            ...messages,
+            { role: 'system', content: `[File Created]\n${toolResultText}` },
+          ];
+          const secondResult = await chatCompletion(fileMessages, chatOpts);
           finalContent = secondResult.content;
           finalPromptTokens = secondResult.promptTokens;
           finalCompletionTokens = secondResult.completionTokens;

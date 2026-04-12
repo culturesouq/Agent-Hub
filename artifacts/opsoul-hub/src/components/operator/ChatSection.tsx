@@ -144,6 +144,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   const [readingUrl, setReadingUrl] = useState<string | null>(null);
   const [runningTool, setRunningTool] = useState<string | null>(null);
   const [ranSkill, setRanSkill] = useState<string | null>(null);
+  const [writingFile, setWritingFile] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -443,8 +444,18 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                   setRanSkill(data.running);
                   setSearchingQuery(null);
                   setSeedingSource(null);
+                  setWritingFile(null);
                   setIsAgencyProcessing(false);
                   firstDelta = true;
+                } else if (data.writing) {
+                  setWritingFile(data.writing);
+                  setSearchingQuery(null);
+                  setSeedingSource(null);
+                  setRunningTool(null);
+                  setIsAgencyProcessing(false);
+                  firstDelta = true;
+                } else if (data.file_created) {
+                  queryClient.invalidateQueries({ queryKey: ['operator-files', operator.id] });
                 } else if (data.delta) {
                   if (firstDelta) {
                     setIsAgencyProcessing(false);
@@ -452,6 +463,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                     setSeedingSource(null);
                     setReadingUrl(null);
                     setRunningTool(null);
+                    setWritingFile(null);
                     firstDelta = false;
                   }
                   currentStream += data.delta;
@@ -465,6 +477,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                   setSeedingSource(null);
                   setReadingUrl(null);
                   setRunningTool(null);
+                  setWritingFile(null);
                   setStreamingMsg("");
                   queryClient.invalidateQueries({
                     queryKey: ["operators", operatorId, "conversations", activeConvId, "messages"],
@@ -627,16 +640,16 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
             )}
 
             {/* Unified live status pill */}
-            {(readingUrl || searchingQuery || seedingSource || runningTool) && (
+            {(readingUrl || searchingQuery || seedingSource || runningTool || writingFile) && (
               <div className="flex justify-start">
                 <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-primary/20 bg-primary/5 text-primary/60 text-[11px] font-mono">
-                  {readingUrl ? `📄 Reading…` : searchingQuery ? `🔍 Searching…` : seedingSource ? `🧬 Seeding…` : `⚡ Running ${runningTool}…`}
+                  {readingUrl ? `📄 Reading…` : searchingQuery ? `🔍 Searching…` : seedingSource ? `🧬 Seeding…` : writingFile ? `📝 Writing ${writingFile}…` : `⚡ Running ${runningTool}…`}
                 </span>
               </div>
             )}
 
             {/* Waiting for first token — bouncing dots */}
-            {isAgencyProcessing && !streamingMsg && !searchingQuery && !seedingSource && !readingUrl && !runningTool && (
+            {isAgencyProcessing && !streamingMsg && !searchingQuery && !seedingSource && !readingUrl && !runningTool && !writingFile && (
               <div className="flex justify-start">
                 <div className="flex items-center gap-1 px-3 py-2.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:0ms]" />

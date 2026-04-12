@@ -67,12 +67,25 @@ export default defineConfig({
       deny: ["**/.*"],
     },
     proxy: {
+      "/api/v3": {
+        target: "http://localhost:3002",
+        changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (_proxyReq, req, res) => {
+            if ((req as any).headers?.accept?.includes('text/event-stream')) {
+              (res.socket as any)?.setNoDelay?.(true);
+            }
+          });
+          proxy.on('proxyRes', (proxyRes, _req, res) => {
+            if (proxyRes.headers['content-type']?.includes('text/event-stream')) {
+              (res.socket as any)?.setNoDelay?.(true);
+            }
+          });
+        },
+      },
       "/api": {
         target: "http://localhost:3001",
         changeOrigin: true,
-        // For SSE: disable socket buffering so tokens reach the browser word-by-word.
-        // Without this, http-proxy accumulates chunks before forwarding — the whole
-        // response lands at once instead of streaming visibly.
         configure: (proxy) => {
           proxy.on('proxyReq', (_proxyReq, req, res) => {
             if ((req as any).headers?.accept?.includes('text/event-stream')) {
