@@ -201,6 +201,12 @@ function extractNarratedSearchQuery(content: string, userMessageFallback: string
   // "Searching now: X" or "Searching for: X" or "Searching: X"
   const explicit = content.match(/Searching(?:\s+now)?(?:\s+for)?:\s*(.+?)(?:\n|$)/i);
   if (explicit) return explicit[1].trim().slice(0, 200);
+  // "Moving to topic X — Y patterns." — extract the topic description after the dash
+  const movingTo = content.match(/Moving to topic [a-z\s]+[—\-–]+\s*(.+?)(?:\.|$)/im);
+  if (movingTo) return movingTo[1].trim().slice(0, 200);
+  // "Now searching X" or "Now looking at X"
+  const nowSearching = content.match(/Now (?:searching|looking at|researching)\s+(.+?)(?:\.|$)/im);
+  if (nowSearching) return nowSearching[1].trim().slice(0, 200);
   // "Searching now." or "Searching now\n" with no query — use the user's message
   if (/\bSearching\s+now\.?\s*$/im.test(content)) return userMessageFallback.slice(0, 200);
   return null;
@@ -860,12 +866,13 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           break;
         }
 
-        // ── NARRATION FALLBACK (first iter only) ───────────────────────────
+        // ── NARRATION FALLBACK (any iteration) ────────────────────────────
         // Operator described a search in text but didn't call the tool — honour it.
-        if (iter === 0 && !iterToolCall && webSearchTool && webSearchCount === 0) {
+        // Runs on every iteration so multi-step narrated sweeps don't drop early.
+        if (!iterToolCall && webSearchTool && webSearchCount < MAX_SEARCHES) {
           const narratedQuery = extractNarratedSearchQuery(iterContent, message);
           if (narratedQuery) {
-            console.log(`[agency] narration fallback — firing real search: "${narratedQuery}"`);
+            console.log(`[agency] narration fallback iter ${iter} — firing real search: "${narratedQuery}"`);
             res.write(`data: ${JSON.stringify({ searching: narratedQuery })}\n\n`);
             const capResult = await executeWebSearch(narratedQuery);
             if (capResult.success) {
