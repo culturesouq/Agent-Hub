@@ -6,13 +6,15 @@ import {
   conversationsTable,
   operatorsTable,
 } from '@workspace/db-v2';
-import { eq, and, isNull, desc } from 'drizzle-orm';
+import { eq, and, isNull, isNotNull, desc } from 'drizzle-orm';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { chatCompletion } from './openrouter.js';
 
 export const MEMORY_TOP_N = 8;
 export const MEMORY_MIN_SIMILARITY = 0.55;
 export const MEMORY_MIN_WEIGHT = 0.1;
+export const MEMORY_DECAY_RATE_PER_DAY = 0.05;
+export const MEMORY_ARCHIVE_THRESHOLD = 0.05;
 
 const DISTILL_MODEL = 'anthropic/claude-haiku-4-5';
 const DISTILL_MESSAGE_LIMIT = 20;
@@ -195,4 +197,47 @@ Example: [{"content":"Owner prefers concise responses under 3 sentences","memory
       // distillation failed — skip silently
     }
   }
+}
+
+export async function decayMemoriesForOperator(operatorId?: string): Promise<{
+  decayed: number;
+  archived: number;
+}> {
+  const baseConditions = [
+    isNotNull(operatorMemoryTable.decayStartedAt),
+    isNull(operatorMemoryTable.archivedAt),
+  ];
+
+  const memories = operatorId
+    ? await db
+        .select()
+        .from(operatorMemoryTable)
+        .where(and(eq(operatorMemoryTable.operatorId, operatorId), ...baseConditions))
+    : await db
+        .select()
+        .from(operatorMemoryTable)
+        .where(and(...baseConditions));
+
+  if (memories.length === 0) return { decayed: 0, archived: 0 };
+
+  let decayed = 0;
+  let archived = 0;
+
+  for (const memory of memories) {
+    const currentWeight = memory.weight ?? 1.0;
+    const newWeight = Math.max(0, currentWeight - MEMORY_DECAY_RATE_PER_DAY);
+    const shouldArchive = newWeight <= MEMORY_ARCHIVE_THRESHOLD;
+
+    await db.update(operatorMemoryTable)
+      .set({
+        weight: newWeight,
+        archivedAt: shouldArchive ? new Date() : undefined,
+      })
+      .where(eq(operatorMemoryTable.id, memory.id));
+
+    decayed++;
+    if (shouldArchive) archived++;
+  }
+
+  return { decayed, archived };
 }

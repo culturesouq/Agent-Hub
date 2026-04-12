@@ -20,6 +20,12 @@ import platformSkillsRouter from './routes/platform-skills.js';
 import capabilityRequestsRouter from './routes/capability-requests.js';
 import publicChatRouter from './routes/publicChat.js';
 import adminRouter from './routes/admin.js';
+import uploadRouter from './routes/upload.js';
+import transcribeRouter from './routes/transcribe.js';
+import vaelRouter from './routes/vael.js';
+import publicCrudRouter from './routes/publicCrud.js';
+import adminRagRouter from './routes/adminRag.js';
+import contactRouter from './routes/contact.js';
 
 import { pool } from '@workspace/db-v2';
 import { runGrowCron } from './cron/growCron.js';
@@ -68,8 +74,14 @@ app.use('/api/v3/operators/:operatorId/capability-requests', capabilityRequestsR
 // ── Platform-level ────────────────────────────────────────────────────────────
 
 app.use('/api/v3/platform-skills', platformSkillsRouter);
+app.use('/api/v3/admin/rag', adminRagRouter);
 app.use('/api/v3/admin', adminRouter);
+app.use('/api/v3/upload', uploadRouter);
+app.use('/api/v3/transcribe', transcribeRouter);
+app.use('/api/v3/vael', vaelRouter);
+app.use('/api/v3/contact', contactRouter);
 app.use('/v3/chat', publicChatRouter);
+app.use('/v3/action', publicCrudRouter);
 
 // ── Cron jobs ─────────────────────────────────────────────────────────────────
 
