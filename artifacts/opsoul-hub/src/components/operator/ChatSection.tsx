@@ -385,9 +385,22 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
       if (reader) {
         let currentStream = "";
         let firstDelta = true;
+
+        // Safety timeout — if no meaningful event arrives for 90s, unlock the UI.
+        // The keepalive pings from the backend (": keepalive") reset this timer continuously.
+        let idleTimer: ReturnType<typeof setTimeout> | null = null;
+        const resetIdle = () => {
+          if (idleTimer) clearTimeout(idleTimer);
+          idleTimer = setTimeout(() => {
+            reader.cancel().catch(() => {});
+          }, 90_000);
+        };
+        resetIdle();
+
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) { if (idleTimer) clearTimeout(idleTimer); break; }
+          resetIdle();
 
           const chunk = decoder.decode(value, { stream: true });
           const lines = chunk.split("\n").filter(Boolean);

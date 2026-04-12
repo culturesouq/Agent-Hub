@@ -745,7 +745,15 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     let promptTokens = 0;
     let messageSaved = false;
 
+    // Keepalive: ping every 15s so the reverse proxy never idles out a long run
+    const keepalive = setInterval(() => {
+      try { res.write(': keepalive\n\n'); } catch { /* connection already gone */ }
+    }, 15_000);
+
+    const cleanupKeepalive = () => clearInterval(keepalive);
+
     req.on('close', async () => {
+      cleanupKeepalive();
       if (!messageSaved && fullContent.length > 20) {
         try {
           await db.insert(messagesTable).values({
@@ -912,6 +920,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         .set({ messageCount: (conv.messageCount ?? 0) + 2, lastMessageAt: new Date() })
         .where(eq(conversationsTable.id, conv.id));
 
+      cleanupKeepalive();
       res.write(`data: ${JSON.stringify({
         done: true,
         messageId: asstMsgId,
@@ -925,6 +934,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       runPostResponseTasks(operator, conv, finalContent, isBirthMode);
 
     } catch (err) {
+      cleanupKeepalive();
       res.write(`data: ${JSON.stringify({ error: (err as Error).message })}\n\n`);
       res.end();
     }
