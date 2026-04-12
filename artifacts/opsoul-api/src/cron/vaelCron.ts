@@ -6,6 +6,8 @@ import { fetchSource } from '../utils/ragSourceFetcher.js';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { chatCompletion, KB_MODEL } from '../utils/openrouter.js';
 import { randomUUID } from 'crypto';
+import fs from 'fs/promises';
+import path from 'path';
 
 const VAEL_OPERATOR_ID = 'a826164f-3111-4cc9-8f3c-856ecc589d77';
 
@@ -409,6 +411,103 @@ async function runSourceGuidedPhase(timer: BudgetTimer): Promise<{
   return stats;
 }
 
+// ── Knowledge Inbox ───────────────────────────────────────────────────────────
+// Vael reads every file dropped into knowledge_inbox/, decides what is worth
+// learning, validates each candidate, and seeds what passes. No admin gate.
+
+const INBOX_DIR = path.resolve(process.cwd(), 'knowledge_inbox');
+const PROCESSED_DIR = path.join(INBOX_DIR, 'processed');
+
+async function processKnowledgeInbox(timer: BudgetTimer): Promise<{ filesRead: number; candidatesExtracted: number; seeded: number }> {
+  const stats = { filesRead: 0, candidatesExtracted: 0, seeded: 0 };
+
+  let files: string[];
+  try {
+    await fs.mkdir(PROCESSED_DIR, { recursive: true });
+    files = (await fs.readdir(INBOX_DIR)).filter(f => /\.(md|txt)$/i.test(f));
+  } catch {
+    return stats;
+  }
+
+  if (files.length === 0) return stats;
+  console.log(`[VAEL] Inbox: ${files.length} file(s) to read`);
+
+  for (const file of files) {
+    if (!timer.hasTime(30_000)) break;
+
+    const filePath = path.join(INBOX_DIR, file);
+    let raw: string;
+    try {
+      raw = await fs.readFile(filePath, 'utf-8');
+    } catch {
+      continue;
+    }
+
+    const content = raw.slice(0, 8_000);
+    stats.filesRead++;
+
+    let candidates: Awaited<ReturnType<typeof extractEntriesFromSource>>;
+    try {
+      candidates = await extractEntriesFromSource(content, file.replace(/\.(md|txt)$/i, ''));
+    } catch {
+      candidates = [];
+    }
+
+    stats.candidatesExtracted += candidates.length;
+
+    for (const candidate of candidates) {
+      if (!timer.hasTime(10_000)) break;
+      try {
+        const validation = await validateEntry({
+          title: candidate.title,
+          content: candidate.content,
+          tags: candidate.suggested_tags ?? [],
+          layer: 'collective',
+          confidence: candidate.suggested_confidence ?? 0.7,
+        });
+
+        if (validation.verdict !== 'approve' && validation.verdict !== 'revise') continue;
+
+        const finalContent = validation.verdict === 'revise' && validation.revised_content
+          ? validation.revised_content
+          : candidate.content;
+
+        const embedding = await embed(finalContent).catch(() => null);
+
+        await db.insert(ragDnaTable).values({
+          id: randomUUID(),
+          layer: 'collective',
+          title: candidate.title,
+          content: finalContent,
+          embedding: embedding ?? null,
+          tags: candidate.suggested_tags ?? [],
+          sourceName: `inbox:${file}`,
+          confidence: validation.confidence_suggested ?? candidate.suggested_confidence ?? 0.75,
+          knowledgeStatus: 'current',
+          dnaScope: 'general',
+          archetypeScope: [],
+          domainTags: candidate.suggested_tags ?? [],
+          isActive: true,
+        }).onConflictDoNothing();
+
+        stats.seeded++;
+        console.log(`[VAEL] ✓ Inbox seeded: "${candidate.title}"`);
+      } catch (err) {
+        console.error(`[VAEL] Inbox candidate error: "${candidate.title}":`, (err as Error).message);
+      }
+    }
+
+    // Move file to processed/
+    try {
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      await fs.rename(filePath, path.join(PROCESSED_DIR, `${stamp}_${file}`));
+    } catch { /* best effort */ }
+  }
+
+  console.log(`[VAEL] Inbox done — read=${stats.filesRead} candidates=${stats.candidatesExtracted} seeded=${stats.seeded}`);
+  return stats;
+}
+
 // ── Run state (in-memory, resets on restart) ──────────────────────────────────
 
 export interface VaelRunState {
@@ -463,10 +562,17 @@ export async function runVaelFullSweep(): Promise<void> {
       console.log('[VAEL] Budget too low after discovery — skipping source-guided phase');
     }
 
+    let inbox = { filesRead: 0, candidatesExtracted: 0, seeded: 0 };
+    if (timer.hasTime(40_000)) {
+      inbox = await processKnowledgeInbox(timer);
+    } else {
+      console.log('[VAEL] Budget too low — skipping inbox');
+    }
+
     const summary =
       `validated=${validation.validated} approved=${validation.approved} revised=${validation.revised} rejected=${validation.rejected} | ` +
       `proposed=${discovery.proposed} seeded=${discovery.seeded} flagged=${discovery.flagged} | ` +
-      `sources=${sources.sourcesVisited} candidates=${sources.candidatesExtracted} source_seeded=${sources.seeded}`;
+      `inbox_files=${inbox.filesRead} inbox_seeded=${inbox.seeded}`;
 
     console.log(`[VAEL] Full sweep done in ${timer.elapsedSec()}s — ${summary}`);
 
