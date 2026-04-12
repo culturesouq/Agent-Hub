@@ -124,7 +124,40 @@ router.get('/:secretId/reveal', async (req: Request, res: Response): Promise<voi
 
   if (!secret) { res.status(404).json({ error: 'Secret not found' }); return; }
 
-  res.json({ value: decryptToken(secret.valueEncrypted) });
+  res.json({ id: secret.id, key: secret.key, value: decryptToken(secret.valueEncrypted) });
+});
+
+router.patch('/:secretId', async (req: Request, res: Response): Promise<void> => {
+  const operatorId = await resolveOperator(req, res);
+  if (!operatorId) return;
+
+  const { value } = req.body as { value?: string };
+  if (!value || typeof value !== 'string' || value.trim() === '') {
+    res.status(400).json({ error: 'value (non-empty string) is required' });
+    return;
+  }
+
+  const [existing] = await db
+    .select({ id: operatorSecretsTable.id })
+    .from(operatorSecretsTable)
+    .where(
+      and(
+        eq(operatorSecretsTable.id, req.params.secretId),
+        eq(operatorSecretsTable.operatorId, operatorId),
+        eq(operatorSecretsTable.ownerId, req.owner!.ownerId),
+      ),
+    );
+
+  if (!existing) { res.status(404).json({ error: 'Secret not found' }); return; }
+
+  const [updated] = await db
+    .update(operatorSecretsTable)
+    .set({ valueEncrypted: encryptToken(value) })
+    .where(eq(operatorSecretsTable.id, existing.id))
+    .returning({ id: operatorSecretsTable.id, key: operatorSecretsTable.key, createdAt: operatorSecretsTable.createdAt });
+
+  triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});
+  res.json(updated);
 });
 
 router.delete('/:secretId', async (req: Request, res: Response): Promise<void> => {

@@ -45,7 +45,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     .where(eq(capabilityRequestsTable.operatorId, operatorId))
     .orderBy(desc(capabilityRequestsTable.createdAt));
 
-  res.json(rows);
+  res.json({ operatorId, count: rows.length, requests: rows });
 });
 
 router.post('/', async (req: Request, res: Response): Promise<void> => {

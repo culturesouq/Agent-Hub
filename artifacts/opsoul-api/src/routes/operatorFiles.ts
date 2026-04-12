@@ -44,6 +44,22 @@ router.post('/', async (req, res) => {
   }
 });
 
+router.get('/:fileId', async (req, res) => {
+  const { fileId } = req.params;
+  const id = (req.params as { id: string }).id;
+  const ownerId = req.owner!.ownerId;
+  try {
+    const [file] = await db
+      .select()
+      .from(operatorFilesTable)
+      .where(and(eq(operatorFilesTable.id, fileId), eq(operatorFilesTable.operatorId, id), eq(operatorFilesTable.ownerId, ownerId)));
+    if (!file) { res.status(404).json({ error: 'File not found' }); return; }
+    res.json(file);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch file' });
+  }
+});
+
 router.patch('/:fileId', async (req, res) => {
   const { fileId } = req.params;
   const ownerId = req.owner!.ownerId;

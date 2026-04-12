@@ -444,6 +444,22 @@ router.post('/pipeline/run', async (_req: Request, res: Response): Promise<void>
   });
 });
 
+// ── Screener — test a content string against the collective screener ───────
+
+router.post('/screen', async (req: Request, res: Response): Promise<void> => {
+  const { content } = req.body as { content?: string };
+  if (!content?.trim()) {
+    res.status(400).json({ error: 'content is required' });
+    return;
+  }
+  try {
+    const result = await screenForCollective(content);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: 'Screening failed', detail: (e as Error).message });
+  }
+});
+
 // ── Vael — Validate entry ─────────────────────────────────────────────────
 
 router.post('/vael/validate', async (req: Request, res: Response): Promise<void> => {
