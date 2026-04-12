@@ -789,99 +789,110 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         }
       }
 
-      const streamOpts = { ...chatOpts, tools: webSearchTool ? [webSearchTool] : undefined };
-      let operatorToolCall: { id: string; name: string; args: string } | undefined;
+      // ── AGENT LOOP ────────────────────────────────────────────────────────
+      // Each iteration: stream LLM → if tool call, execute and loop back.
+      // Up to MAX_ITER tool calls per turn. Only the last clean (no-tool) response
+      // is saved to DB. All tokens stream live to the browser throughout.
+      const MAX_ITER = 8;
+      const MAX_SEARCHES = 5;
+      const loopMessages: ChatMessage[] = [...messages];
+      let finalContent = '';
+      let finalTokens = 0;
+      let webSearchCount = 0;
 
-      for await (const chunk of streamChat(messages, streamOpts)) {
-        if (chunk.delta) {
-          fullContent += chunk.delta;
-          res.write(`data: ${JSON.stringify({ delta: chunk.delta })}\n\n`);
-        }
-        if (chunk.toolCall) {
-          operatorToolCall = chunk.toolCall;
-        }
-        if (chunk.done && chunk.usage) {
-          promptTokens = chunk.usage.promptTokens;
-          completionTokens = chunk.usage.completionTokens;
-        }
-      }
+      for (let iter = 0; iter < MAX_ITER; iter++) {
+        let iterContent = '';
+        let iterToolCall: { id: string; name: string; args: string } | undefined;
 
-      // Signal to the frontend that streaming is done but processing continues
-      res.write(`data: ${JSON.stringify({ processing: true })}\n\n`);
+        const iterOpts = {
+          ...chatOpts,
+          tools: (webSearchTool && webSearchCount < MAX_SEARCHES) ? [webSearchTool] : undefined,
+        };
 
-      let finalContent = fullContent;
-      let finalTokens = completionTokens;
-      let capabilityFired = false;
-
-      // Narration fallback — operator said "Searching now: X" in text but didn't call the tool.
-      // We honour the operator's intent: fire the real search and replace the narration with real results.
-      if (!operatorToolCall && webSearchTool) {
-        const narratedQuery = extractNarratedSearchQuery(fullContent, message);
-        if (narratedQuery) {
-          console.log(`[agency] narration fallback — firing real search: "${narratedQuery}"`);
-          res.write(`data: ${JSON.stringify({ searching: narratedQuery })}\n\n`);
-          const capResult = await executeWebSearch(narratedQuery);
-          if (capResult.success) {
-            await persistWebSearchResult(operator.id, operator.ownerId, conv.id, narratedQuery, capResult, operator.mandate ?? '');
-            capabilityFired = true;
-            const searchMessages: ChatMessage[] = [
-              ...messages,
-              { role: 'system', content: `[Web Search: ${narratedQuery}]\n${capResult.output}` },
-            ];
-            let secondContent = '';
-            let secondTokens = 0;
-            for await (const chunk of streamChat(searchMessages, chatOpts)) {
-              if (chunk.delta) {
-                secondContent += chunk.delta;
-                res.write(`data: ${JSON.stringify({ delta: chunk.delta })}\n\n`);
-              }
-              if (chunk.done && chunk.usage) {
-                promptTokens = chunk.usage.promptTokens;
-                secondTokens = chunk.usage.completionTokens;
-              }
-            }
-            finalContent = secondContent;
-            finalTokens = secondTokens;
+        for await (const chunk of streamChat(loopMessages, iterOpts)) {
+          if (chunk.delta) {
+            iterContent += chunk.delta;
+            fullContent += chunk.delta;
+            res.write(`data: ${JSON.stringify({ delta: chunk.delta })}\n\n`);
+          }
+          if (chunk.toolCall) {
+            iterToolCall = chunk.toolCall;
+          }
+          if (chunk.done && chunk.usage) {
+            promptTokens += chunk.usage.promptTokens;
+            completionTokens += chunk.usage.completionTokens;
           }
         }
-      }
 
-      // Web search — operator actually called the tool via function calling
-      if (operatorToolCall && operatorToolCall.name === 'web_search') {
-        let searchQuery = '';
-        try { searchQuery = JSON.parse(operatorToolCall.args).query ?? ''; } catch { /* skip */ }
-        if (searchQuery) {
-          console.log(`[agency] operator-initiated web search: "${searchQuery}"`);
-          res.write(`data: ${JSON.stringify({ searching: searchQuery })}\n\n`);
-          const capResult = await executeWebSearch(searchQuery);
-          if (capResult.success) {
-            await persistWebSearchResult(operator.id, operator.ownerId, conv.id, searchQuery, capResult, operator.mandate ?? '');
-            capabilityFired = true;
-            const toolResultMessages: ChatMessage[] = [
-              ...messages,
-              { role: 'system', content: `[Web Search: ${searchQuery}]\n${capResult.output}` },
-            ];
-            let secondContent = '';
-            let secondTokens = 0;
-            for await (const chunk of streamChat(toolResultMessages, chatOpts)) {
-              if (chunk.delta) {
-                secondContent += chunk.delta;
-                res.write(`data: ${JSON.stringify({ delta: chunk.delta })}\n\n`);
-              }
-              if (chunk.done && chunk.usage) {
-                promptTokens = chunk.usage.promptTokens;
-                secondTokens = chunk.usage.completionTokens;
-              }
+        // ── WEB SEARCH TOOL CALL ───────────────────────────────────────────
+        if (iterToolCall?.name === 'web_search') {
+          let searchQuery = '';
+          try { searchQuery = JSON.parse(iterToolCall.args).query ?? ''; } catch { /* skip */ }
+
+          if (searchQuery) {
+            console.log(`[agency] loop iter ${iter} — web search: "${searchQuery}"`);
+            res.write(`data: ${JSON.stringify({ searching: searchQuery })}\n\n`);
+            const capResult = await executeWebSearch(searchQuery);
+
+            if (capResult.success) {
+              await persistWebSearchResult(operator.id, operator.ownerId, conv.id, searchQuery, capResult, operator.mandate ?? '');
+              webSearchCount++;
+
+              // Inject the assistant turn + tool result so the model has full context
+              loopMessages.push(
+                {
+                  role: 'assistant',
+                  content: iterContent || '',
+                  tool_calls: [{
+                    id: iterToolCall.id,
+                    type: 'function',
+                    function: { name: 'web_search', arguments: iterToolCall.args },
+                  }],
+                },
+                { role: 'tool', content: capResult.output, tool_call_id: iterToolCall.id },
+              );
+              continue; // loop: LLM sees the result and decides what to do next
             }
-            finalContent = secondContent;
-            finalTokens = secondTokens;
+          }
+
+          // Search failed or empty query — what we have is the final response
+          finalContent = iterContent;
+          break;
+        }
+
+        // ── NARRATION FALLBACK (first iter only) ───────────────────────────
+        // Operator described a search in text but didn't call the tool — honour it.
+        if (iter === 0 && !iterToolCall && webSearchTool && webSearchCount === 0) {
+          const narratedQuery = extractNarratedSearchQuery(iterContent, message);
+          if (narratedQuery) {
+            console.log(`[agency] narration fallback — firing real search: "${narratedQuery}"`);
+            res.write(`data: ${JSON.stringify({ searching: narratedQuery })}\n\n`);
+            const capResult = await executeWebSearch(narratedQuery);
+            if (capResult.success) {
+              await persistWebSearchResult(operator.id, operator.ownerId, conv.id, narratedQuery, capResult, operator.mandate ?? '');
+              webSearchCount++;
+              loopMessages.push(
+                { role: 'assistant', content: iterContent },
+                { role: 'system', content: `[Web Search: ${narratedQuery}]\n${capResult.output}` },
+              );
+              continue;
+            }
           }
         }
+
+        // ── NO TOOL CALL — clean final response ────────────────────────────
+        finalContent = iterContent;
+        break;
       }
 
-      // Skill trigger — only if no web search already fired
+      // Hit max iterations without a clean final — use everything streamed
+      if (!finalContent) finalContent = fullContent;
+      finalTokens = completionTokens;
+
+      // ── SKILL TRIGGER (post-loop, only if no web searches ran) ────────────
+      let capabilityFired = webSearchCount > 0;
       if (!capabilityFired) {
-        const skillTrigger = await detectSkillTrigger(message, agencySkills, fullContent);
+        const skillTrigger = await detectSkillTrigger(message, agencySkills, finalContent);
         if (skillTrigger) {
           skillTrigger.operatorId = operator.id;
           console.log(`[agency] skill triggered: ${skillTrigger.name}`);
@@ -889,24 +900,29 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           const skillResult = await executeSkill(skillTrigger, chatModel);
           if (skillResult.success) {
             await persistSkillResult(operator.id, operator.ownerId, conv.id, skillTrigger, skillResult);
-            const secondMessages = buildSkillSecondPassMessages(messages, fullContent, skillResult.output);
-            let secondContent = '';
-            let secondTokens = 0;
-            for await (const chunk of streamChat(secondMessages, chatOpts)) {
+            const skillMessages = buildSkillSecondPassMessages(messages, finalContent, skillResult.output);
+            let skillContent = '';
+            let skillTokens = 0;
+            for await (const chunk of streamChat(skillMessages, chatOpts)) {
               if (chunk.delta) {
-                secondContent += chunk.delta;
+                skillContent += chunk.delta;
                 res.write(`data: ${JSON.stringify({ delta: chunk.delta })}\n\n`);
               }
               if (chunk.done && chunk.usage) {
-                promptTokens = chunk.usage.promptTokens;
-                secondTokens = chunk.usage.completionTokens;
+                promptTokens += chunk.usage.promptTokens;
+                skillTokens = chunk.usage.completionTokens;
               }
             }
-            finalContent = secondContent;
-            finalTokens = secondTokens;
+            if (skillContent) {
+              finalContent = skillContent;
+              finalTokens = skillTokens;
+            }
           }
         }
       }
+
+      // Signal to frontend that response is complete, DB write happening
+      res.write(`data: ${JSON.stringify({ processing: true })}\n\n`);
 
       // Save assistant message and update conversation
       messageSaved = true;
