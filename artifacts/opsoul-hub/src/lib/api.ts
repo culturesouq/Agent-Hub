@@ -8,7 +8,7 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
     headers.set('Content-Type', 'application/json');
   }
 
-  const response = await fetch(`/api/v3${endpoint}`, {
+  const response = await fetch(`/api${endpoint}`, {
     ...options,
     headers,
   });
