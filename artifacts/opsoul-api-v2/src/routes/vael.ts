@@ -9,9 +9,18 @@ router.get('/status', requireAuth, requireAdmin, (_req: Request, res: Response):
   res.json(getVaelRunState());
 });
 
+router.get('/schedule', requireAuth, requireAdmin, (_req: Request, res: Response): void => {
+  res.json(getVaelRunState());
+});
+
 router.post('/sweep', requireAuth, requireAdmin, async (_req: Request, res: Response): Promise<void> => {
   res.json({ ok: true, message: 'Full sweep triggered — running in background' });
   runVaelFullSweep().catch((err: Error) => console.error('[VAEL] sweep error:', err.message));
+});
+
+router.post('/sweep/validate', requireAuth, requireAdmin, async (_req: Request, res: Response): Promise<void> => {
+  res.json({ ok: true, message: 'Validation-only cycle triggered — running in background' });
+  runVaelValidationOnly().catch((err: Error) => console.error('[VAEL] validation error:', err.message));
 });
 
 router.post('/validate-cycle', requireAuth, requireAdmin, async (_req: Request, res: Response): Promise<void> => {

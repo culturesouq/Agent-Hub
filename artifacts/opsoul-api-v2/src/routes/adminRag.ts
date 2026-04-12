@@ -312,4 +312,37 @@ router.post('/screen', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
+// ── Pipeline config (stub — rag_pipeline_config table not in v2 schema yet) ──
+
+const DEFAULT_PIPELINE = {
+  id: 'v3-default',
+  enabled: true,
+  minConfidenceScore: 70,
+  deduplicationThreshold: 92,
+  updatedAt: new Date().toISOString(),
+};
+
+router.get('/pipeline', (_req: Request, res: Response): void => {
+  res.json(DEFAULT_PIPELINE);
+});
+
+router.put('/pipeline', (req: Request, res: Response): void => {
+  const { enabled, minConfidenceScore, deduplicationThreshold } = req.body as {
+    enabled?: boolean;
+    minConfidenceScore?: number;
+    deduplicationThreshold?: number;
+  };
+  res.json({
+    ...DEFAULT_PIPELINE,
+    ...(enabled !== undefined ? { enabled } : {}),
+    ...(minConfidenceScore !== undefined ? { minConfidenceScore: Math.max(0, Math.min(100, minConfidenceScore)) } : {}),
+    ...(deduplicationThreshold !== undefined ? { deduplicationThreshold: Math.max(50, Math.min(100, deduplicationThreshold)) } : {}),
+    updatedAt: new Date().toISOString(),
+  });
+});
+
+router.post('/pipeline/run', async (_req: Request, res: Response): Promise<void> => {
+  res.json({ extracted: 0, candidatesScanned: 0, message: 'Pipeline run is pending full v3 migration of rag_pipeline_config table' });
+});
+
 export default router;
