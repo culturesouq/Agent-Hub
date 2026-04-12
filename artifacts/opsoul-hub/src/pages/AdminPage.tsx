@@ -171,6 +171,21 @@ export default function AdminPage() {
   const [vaelSchedule, setVaelSchedule] = useState<VaelScheduleState | null>(null);
   const [vaelSweeping, setVaelSweeping] = useState(false);
 
+  // Vael direct channel
+  interface VaelMsg { role: "user" | "assistant"; content: string }
+  const [vaelMessages, setVaelMessages] = useState<VaelMsg[]>([]);
+  const [vaelInput, setVaelInput] = useState("");
+  const [vaelChatting, setVaelChatting] = useState(false);
+
+  // Vael focused discovery
+  const [vaelFocus, setVaelFocus] = useState("");
+  const [vaelDiscovering, setVaelDiscovering] = useState(false);
+  const [vaelDiscoveryResult, setVaelDiscoveryResult] = useState<{
+    proposals: { action: string; title: string; content?: string; reason: string; suggested_confidence: number; suggested_tags: string[] }[];
+    summary: string;
+    search_queries_used: string[];
+  } | null>(null);
+
   const loadRag = useCallback(async () => {
     const [s, entries, pipeline] = await Promise.all([
       apiFetch<RagStats>("/admin/rag/stats"),
@@ -290,7 +305,6 @@ export default function AdminPage() {
   async function triggerVaelSweep(type: "full" | "validate") {
     setVaelSweeping(true);
     await apiFetch(`/vael/sweep${type === "validate" ? "/validate" : ""}`, { method: "POST" });
-    // poll for completion
     const poll = setInterval(async () => {
       const s = await apiFetch<VaelScheduleState>("/vael/schedule");
       setVaelSchedule(s);
@@ -299,6 +313,41 @@ export default function AdminPage() {
         setVaelSweeping(false);
       }
     }, 4000);
+  }
+
+  async function sendVaelChat() {
+    const msg = vaelInput.trim();
+    if (!msg || vaelChatting) return;
+    setVaelMessages(prev => [...prev, { role: "user", content: msg }]);
+    setVaelInput("");
+    setVaelChatting(true);
+    try {
+      const res = await apiFetch<{ reply: string }>("/vael/chat", {
+        method: "POST",
+        body: JSON.stringify({ message: msg }),
+      });
+      setVaelMessages(prev => [...prev, { role: "assistant", content: res.reply }]);
+    } catch {
+      setVaelMessages(prev => [...prev, { role: "assistant", content: "⚠ Vael did not respond. Check server logs." }]);
+    } finally {
+      setVaelChatting(false);
+    }
+  }
+
+  async function runFocusedDiscovery() {
+    setVaelDiscovering(true);
+    setVaelDiscoveryResult(null);
+    try {
+      const result = await apiFetch<typeof vaelDiscoveryResult>("/vael/discover", {
+        method: "POST",
+        body: JSON.stringify({ focus: vaelFocus.trim() || undefined }),
+      });
+      setVaelDiscoveryResult(result);
+    } catch {
+      setVaelDiscoveryResult(null);
+    } finally {
+      setVaelDiscovering(false);
+    }
   }
 
   if (loading) {
@@ -1150,6 +1199,128 @@ export default function AdminPage() {
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Direct Channel */}
+            <div className="glass-panel overflow-hidden">
+              <div className="px-6 py-4 border-b border-border/30 flex items-center justify-between">
+                <div>
+                  <span className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Direct Channel</span>
+                  <p className="font-sans text-xs text-muted-foreground/70 mt-0.5">Talk to Vael directly. She has full context of the platform.</p>
+                </div>
+                {vaelMessages.length > 0 && (
+                  <button onClick={() => setVaelMessages([])} className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-destructive transition-colors">Clear</button>
+                )}
+              </div>
+              {vaelMessages.length > 0 && (
+                <div className="px-6 py-4 space-y-3 max-h-80 overflow-y-auto">
+                  {vaelMessages.map((m, i) => (
+                    <div key={i} className={`flex gap-3 ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                      {m.role === "assistant" && (
+                        <div className="w-5 h-5 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <span className="font-label text-[8px] text-primary">V</span>
+                        </div>
+                      )}
+                      <div className={`max-w-[80%] px-3 py-2 rounded text-xs font-sans leading-relaxed ${
+                        m.role === "user"
+                          ? "bg-primary/10 border border-primary/20 text-on-surface"
+                          : "bg-surface/40 border border-border/20 text-on-surface/90"
+                      }`}>
+                        {m.content}
+                      </div>
+                    </div>
+                  ))}
+                  {vaelChatting && (
+                    <div className="flex gap-3 justify-start">
+                      <div className="w-5 h-5 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <span className="font-label text-[8px] text-primary">V</span>
+                      </div>
+                      <div className="px-3 py-2 rounded text-xs font-sans text-muted-foreground bg-surface/40 border border-border/20 animate-pulse">
+                        thinking…
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="px-6 py-4 flex gap-3">
+                <input
+                  value={vaelInput}
+                  onChange={e => setVaelInput(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendVaelChat()}
+                  placeholder="Ask Vael anything about the platform…"
+                  disabled={vaelChatting}
+                  className="flex-1 bg-surface/30 border border-border/30 rounded px-3 py-2 text-xs font-sans text-on-surface placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/40 disabled:opacity-50"
+                />
+                <button
+                  onClick={sendVaelChat}
+                  disabled={vaelChatting || !vaelInput.trim()}
+                  className="font-label text-[9px] uppercase tracking-widest px-4 py-2 rounded border border-primary/40 text-primary hover:bg-primary/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                >
+                  {vaelChatting ? "…" : "Send"}
+                </button>
+              </div>
+            </div>
+
+            {/* Focused Discovery */}
+            <div className="glass-panel overflow-hidden">
+              <div className="px-6 py-4 border-b border-border/30">
+                <span className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Focused Discovery</span>
+                <p className="font-sans text-xs text-muted-foreground/70 mt-0.5">Run a targeted search. Leave blank for a full platform sweep.</p>
+              </div>
+              <div className="px-6 py-4 flex gap-3">
+                <input
+                  value={vaelFocus}
+                  onChange={e => setVaelFocus(e.target.value)}
+                  placeholder="e.g. memory management, emotional intelligence, operator drift…"
+                  disabled={vaelDiscovering}
+                  className="flex-1 bg-surface/30 border border-border/30 rounded px-3 py-2 text-xs font-sans text-on-surface placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/40 disabled:opacity-50"
+                />
+                <button
+                  onClick={runFocusedDiscovery}
+                  disabled={vaelDiscovering}
+                  className="font-label text-[9px] uppercase tracking-widest px-4 py-2 rounded border border-secondary/40 text-secondary hover:bg-secondary/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                >
+                  {vaelDiscovering ? "Searching…" : "Discover"}
+                </button>
+              </div>
+              {vaelDiscoveryResult && (
+                <div className="px-6 pb-5 space-y-4">
+                  <p className="text-xs font-sans text-on-surface/80 bg-surface/30 border border-border/20 rounded px-3 py-2">
+                    {vaelDiscoveryResult.summary}
+                  </p>
+                  {vaelDiscoveryResult.search_queries_used.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {vaelDiscoveryResult.search_queries_used.map((q, i) => (
+                        <span key={i} className="font-label text-[9px] px-2 py-0.5 rounded-sm bg-surface/30 border border-border/20 text-muted-foreground">
+                          {q}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {vaelDiscoveryResult.proposals.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">{vaelDiscoveryResult.proposals.length} Proposals</div>
+                      {vaelDiscoveryResult.proposals.map((p, i) => (
+                        <div key={i} className="border border-border/20 rounded px-4 py-3 bg-surface/20 space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`font-label text-[8px] uppercase tracking-widest px-2 py-0.5 rounded-sm border ${
+                              p.action === "new_entry" ? "border-secondary/40 text-secondary/80 bg-secondary/5" :
+                              p.action === "flag_upgraded" ? "border-primary/40 text-primary/70 bg-primary/5" :
+                              "border-amber-400/40 text-amber-400/80 bg-amber-400/5"
+                            }`}>
+                              {p.action === "new_entry" ? "New Entry" : p.action === "flag_upgraded" ? "Upgrade" : "Deprecate"}
+                            </span>
+                            <span className="text-xs font-sans font-medium text-on-surface">{p.title}</span>
+                            <span className="font-mono text-[9px] text-muted-foreground/60 ml-auto">{(p.suggested_confidence * 100).toFixed(0)}%</span>
+                          </div>
+                          {p.content && <p className="text-xs font-sans text-muted-foreground leading-relaxed">{p.content}</p>}
+                          <p className="text-[10px] font-sans text-muted-foreground/60 italic">{p.reason}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* How it works */}
