@@ -51,42 +51,8 @@ async function issueSession(res: Response, owner: { id: string; email: string; n
   return accessToken;
 }
 
-router.post('/register', async (req: Request, res: Response): Promise<void> => {
-  const { email, password, name } = req.body as { email: string; password: string; name?: string };
-
-  if (!email || !password) {
-    res.status(400).json({ error: 'email and password are required' });
-    return;
-  }
-  if (password.length < 12) {
-    res.status(400).json({ error: 'password must be at least 12 characters' });
-    return;
-  }
-
-  const [existing] = await db.select().from(ownersTable).where(eq(ownersTable.email, email.toLowerCase()));
-  if (existing) {
-    res.status(409).json({ error: 'email already registered' });
-    return;
-  }
-
-  const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-  const id = crypto.randomUUID();
-
-  const [owner] = await db.insert(ownersTable).values({
-    id,
-    email: email.toLowerCase(),
-    passwordHash,
-    name: name ?? null,
-  }).returning();
-
-  const accessToken = await issueSession(res, owner);
-  void sendEmail(owner.email, 'Welcome to OpSoul', welcomeEmail(owner.name ?? ''));
-  if (owner.email === OWNER_EMAIL) void seedOwnerOperators(owner.id);
-
-  res.status(201).json({
-    accessToken,
-    owner: { id: owner.id, email: owner.email, name: owner.name, isSovereignAdmin: owner.isSovereignAdmin ?? false },
-  });
+router.post('/register', (_req: Request, res: Response): void => {
+  res.status(403).json({ error: 'Registration is closed.' });
 });
 
 router.post('/login', async (req: Request, res: Response): Promise<void> => {
@@ -331,17 +297,8 @@ router.get('/google/callback', async (req: Request, res: Response): Promise<void
           .where(eq(ownersTable.id, byEmail.id))
           .returning();
       } else {
-        [owner] = await db
-          .insert(ownersTable)
-          .values({
-            id: crypto.randomUUID(),
-            email: gUser.email.toLowerCase(),
-            name: gUser.name ?? null,
-            googleId: gUser.sub,
-            passwordHash: null,
-          })
-          .returning();
-        void sendEmail(owner.email, 'Welcome to OpSoul', welcomeEmail(owner.name ?? ''));
+        res.redirect(`${baseUrl}/login?error=registration_closed`);
+        return;
       }
     }
 

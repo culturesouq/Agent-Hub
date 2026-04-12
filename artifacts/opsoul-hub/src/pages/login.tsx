@@ -135,12 +135,10 @@ function NebulaInput({
 }
 
 export default function Login() {
-  const { login, register } = useAuth();
+  const { login } = useAuth();
   const { toast } = useToast();
-  const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [showForgot, setShowForgot] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
@@ -153,11 +151,7 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     try {
-      if (isLogin) {
-        await login(email, password);
-      } else {
-        await register(email, password, name);
-      }
+      await login(email, password);
     } catch {
     } finally {
       setLoading(false);
@@ -283,23 +277,23 @@ export default function Login() {
       <NebulaBackground />
 
       <main className="w-full max-w-[480px] z-10">
-          <div className="mb-5 text-center">
-            <Link href="/">
-              <span
-                className="inline-flex items-center gap-1.5 text-xs font-label font-medium transition-colors cursor-pointer"
-                style={{ color: "#767579" }}
-                onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "#f3eff5")}
-                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "#767579")}
-              >
-                ← OpSoul
-              </span>
-            </Link>
-          </div>
+        <div className="mb-5 text-center">
+          <Link href="/">
+            <span
+              className="inline-flex items-center gap-1.5 text-xs font-label font-medium transition-colors cursor-pointer"
+              style={{ color: "#767579" }}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "#f3eff5")}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "#767579")}
+            >
+              ← OpSoul
+            </span>
+          </Link>
+        </div>
 
         <div style={cardStyle} className="p-10 md:p-12 flex flex-col items-center">
           <PageHeader
-            heading={isLogin ? "Sign in" : "Create new account"}
-            subtitle={isLogin ? "Sign in to your OpSoul workspace." : "Start building your AI operators."}
+            heading="Sign in"
+            subtitle="Sign in to your OpSoul workspace."
           />
 
           {urlError && (
@@ -313,6 +307,8 @@ export default function Login() {
             >
               {urlError === "google_cancelled"
                 ? "Google sign-in was cancelled."
+                : urlError === "registration_closed"
+                ? "Access is restricted to authorised accounts only."
                 : "Google sign-in failed. Please try again."}
             </div>
           )}
@@ -348,19 +344,6 @@ export default function Login() {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="w-full flex flex-col gap-5">
-            {!isLogin && (
-              <NebulaInput
-                id="name"
-                label="Display Name"
-                placeholder="Your name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required={!isLogin}
-                autoComplete="name"
-                data-testid="input-name"
-              />
-            )}
-
             <NebulaInput
               id="email"
               type="email"
@@ -382,18 +365,16 @@ export default function Login() {
                 >
                   Password
                 </label>
-                {isLogin && (
-                  <button
-                    type="button"
-                    onClick={() => setShowForgot(true)}
-                    className="font-label text-[11px] transition-colors"
-                    style={{ color: "#767579" }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = "#f3eff5")}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = "#767579")}
-                  >
-                    Forgot your password?
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setShowForgot(true)}
+                  className="font-label text-[11px] transition-colors"
+                  style={{ color: "#767579" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#f3eff5")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "#767579")}
+                >
+                  Forgot your password?
+                </button>
               </div>
               <input
                 id="password"
@@ -401,7 +382,7 @@ export default function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                autoComplete={isLogin ? "current-password" : "new-password"}
+                autoComplete="current-password"
                 data-testid="input-password"
                 className="w-full h-14 rounded-xl px-5 text-sm outline-none transition-all duration-200"
                 style={{
@@ -433,24 +414,9 @@ export default function Login() {
               }}
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              {loading ? "Please wait…" : isLogin ? "Sign in" : "Create new account"}
+              {loading ? "Please wait…" : "Sign in"}
             </button>
           </form>
-
-          {/* Toggle */}
-          <div className="mt-8">
-            <button
-              type="button"
-              onClick={() => setIsLogin(!isLogin)}
-              data-testid="button-toggle-auth"
-              className="text-sm font-label font-medium transition-colors"
-              style={{ color: "#ff6a9f" }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "#ff8eb1")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "#ff6a9f")}
-            >
-              {isLogin ? "Create new account" : "Already have an account? Sign in"}
-            </button>
-          </div>
         </div>
 
         {/* Footer */}
@@ -470,7 +436,6 @@ export default function Login() {
         </footer>
       </main>
 
-      {/* Bottom gradient fade */}
       <div
         className="absolute bottom-0 left-0 w-full pointer-events-none"
         style={{
