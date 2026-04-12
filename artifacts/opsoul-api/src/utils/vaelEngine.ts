@@ -171,6 +171,64 @@ Return only valid JSON. No preamble.`;
   }
 }
 
+// ── Source-guided extraction ──────────────────────────────────────────────────
+// Vael reads raw content fetched from a curated source and extracts
+// structured DNA candidates for her validation pipeline.
+
+const SOURCE_EXTRACT_SYSTEM = `You are Vael, OpSoul's platform intelligence guardian.
+You have been given raw content from a curated public knowledge source.
+Your task: extract 3 to 8 high-quality knowledge entries that belong in the OpSoul collective DNA corpus.
+
+Each entry must be:
+- A standalone, reusable piece of knowledge — factual, clear, absorbed-voice (not rule-list style)
+- Relevant to AI operator behavior, communication, reasoning, or a specific domain
+- Under 350 characters for content
+- Given a concise descriptive title
+
+Return only valid JSON — an array of objects:
+[
+  {
+    "title": "<concise title>",
+    "content": "<absorbed knowledge, max 350 chars>",
+    "suggested_tags": ["tag1", "tag2"],
+    "suggested_confidence": <0.6-1.0>
+  }
+]
+
+If the content has nothing worth extracting, return an empty array: []`;
+
+export interface SourceCandidate {
+  title: string;
+  content: string;
+  suggested_tags: string[];
+  suggested_confidence: number;
+}
+
+export async function extractEntriesFromSource(
+  rawContent: string,
+  sourceTitle: string,
+): Promise<SourceCandidate[]> {
+  const prompt = `Source: "${sourceTitle}"\n\nContent:\n${rawContent.slice(0, 3000)}`;
+
+  const result = await chatCompletion(
+    [
+      { role: 'system', content: SOURCE_EXTRACT_SYSTEM },
+      { role: 'user', content: prompt },
+    ],
+    { model: CHAT_MODEL },
+  );
+
+  try {
+    const raw = extractJson(result.content);
+    const start = raw.indexOf('[');
+    const end = raw.lastIndexOf(']');
+    const parsed = JSON.parse(start !== -1 ? raw.slice(start, end + 1) : raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function runDiscoverySweep(focus?: string): Promise<DiscoveryResult> {
   const existingIndex = await getExistingTitlesContext();
 

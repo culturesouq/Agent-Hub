@@ -152,10 +152,25 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
+  interface RagSource {
+    id: string;
+    name: string;
+    sourceType: "huggingface" | "github_file" | "github_repo" | "raw_url";
+    url: string;
+    notes: string | null;
+    isActive: boolean;
+    lastFetchAt: string | null;
+    lastFetchCount: number;
+    createdAt: string;
+  }
+
   const [ragStats, setRagStats] = useState<RagStats | null>(null);
   const [ragEntries, setRagEntries] = useState<RagEntry[]>([]);
   const [ragPipeline, setRagPipeline] = useState<PipelineConfig | null>(null);
   const [ragSubTab, setRagSubTab] = useState<"builder" | "archetype" | "collective">("builder");
+  const [ragSources, setRagSources] = useState<RagSource[]>([]);
+  const [sourceForm, setSourceForm] = useState({ name: "", sourceType: "huggingface" as RagSource["sourceType"], url: "", notes: "" });
+  const [sourceSaving, setSourceSaving] = useState(false);
   const [ragArchetypeFilter, setRagArchetypeFilter] = useState<string>("");
   const [ragForm, setRagForm] = useState({ title: "", content: "", archetype: "", tags: "" });
   const [ragSaving, setRagSaving] = useState(false);
@@ -187,14 +202,16 @@ export default function AdminPage() {
   } | null>(null);
 
   const loadRag = useCallback(async () => {
-    const [s, entries, pipeline] = await Promise.all([
+    const [s, entries, pipeline, sources] = await Promise.all([
       apiFetch<RagStats>("/admin/rag/stats"),
       apiFetch<RagEntry[]>("/admin/rag/entries"),
       apiFetch<PipelineConfig>("/admin/rag/pipeline"),
+      apiFetch<RagSource[]>("/admin/rag/sources"),
     ]);
     setRagStats(s);
     setRagEntries(entries);
     setRagPipeline(pipeline);
+    setRagSources(sources);
   }, []);
 
   useEffect(() => {
@@ -313,6 +330,39 @@ export default function AdminPage() {
         setVaelSweeping(false);
       }
     }, 4000);
+  }
+
+  async function createSource() {
+    if (!sourceForm.name.trim() || !sourceForm.url.trim()) return;
+    setSourceSaving(true);
+    try {
+      const created = await apiFetch<RagSource>("/admin/rag/sources", {
+        method: "POST",
+        body: JSON.stringify({
+          name: sourceForm.name.trim(),
+          sourceType: sourceForm.sourceType,
+          url: sourceForm.url.trim(),
+          notes: sourceForm.notes.trim() || undefined,
+        }),
+      });
+      setRagSources(prev => [...prev, created]);
+      setSourceForm({ name: "", sourceType: "huggingface", url: "", notes: "" });
+    } finally {
+      setSourceSaving(false);
+    }
+  }
+
+  async function toggleSource(id: string, isActive: boolean) {
+    const updated = await apiFetch<RagSource>(`/admin/rag/sources/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ isActive }),
+    });
+    setRagSources(prev => prev.map(s => s.id === id ? updated : s));
+  }
+
+  async function deleteSource(id: string) {
+    await apiFetch(`/admin/rag/sources/${id}`, { method: "DELETE" });
+    setRagSources(prev => prev.filter(s => s.id !== id));
   }
 
   async function sendVaelChat() {
@@ -1104,6 +1154,109 @@ export default function AdminPage() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Source Registry (inside Intelligence tab) ────────────────── */}
+        {tab === "rag" && (
+          <div className="space-y-4">
+            <div className="glass-panel overflow-hidden">
+              <div className="px-6 py-4 border-b border-border/30">
+                <span className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Vael Source Registry</span>
+                <p className="font-sans text-xs text-muted-foreground/70 mt-0.5">Curated public KBs Vael visits on each sweep — HuggingFace datasets, GitHub files, raw URLs. She extracts candidates and validates every one before seeding.</p>
+              </div>
+
+              {/* Add source form */}
+              <div className="px-6 py-5 border-b border-border/20 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <input
+                    value={sourceForm.name}
+                    onChange={e => setSourceForm(f => ({ ...f, name: e.target.value }))}
+                    placeholder="Source name"
+                    className="bg-surface/30 border border-border/30 rounded px-3 py-2 text-xs font-sans text-on-surface placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/40"
+                  />
+                  <select
+                    value={sourceForm.sourceType}
+                    onChange={e => setSourceForm(f => ({ ...f, sourceType: e.target.value as any }))}
+                    className="bg-surface/30 border border-border/30 rounded px-3 py-2 text-xs font-sans text-on-surface focus:outline-none focus:border-primary/40"
+                  >
+                    <option value="huggingface">HuggingFace Dataset</option>
+                    <option value="github_file">GitHub File</option>
+                    <option value="github_repo">GitHub Repo</option>
+                    <option value="raw_url">Raw URL</option>
+                  </select>
+                </div>
+                <input
+                  value={sourceForm.url}
+                  onChange={e => setSourceForm(f => ({ ...f, url: e.target.value }))}
+                  placeholder="URL — e.g. https://huggingface.co/datasets/owner/name or https://github.com/owner/repo/blob/main/file.md"
+                  className="w-full bg-surface/30 border border-border/30 rounded px-3 py-2 text-xs font-sans text-on-surface placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/40"
+                />
+                <div className="flex gap-3">
+                  <input
+                    value={sourceForm.notes}
+                    onChange={e => setSourceForm(f => ({ ...f, notes: e.target.value }))}
+                    placeholder="Notes (optional) — e.g. focus area, why it was added"
+                    className="flex-1 bg-surface/30 border border-border/30 rounded px-3 py-2 text-xs font-sans text-on-surface placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/40"
+                  />
+                  <button
+                    onClick={createSource}
+                    disabled={sourceSaving || !sourceForm.name.trim() || !sourceForm.url.trim()}
+                    className="font-label text-[9px] uppercase tracking-widest px-4 py-2 rounded border border-primary/40 text-primary hover:bg-primary/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                  >
+                    {sourceSaving ? "Adding…" : "Add Source"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Source list */}
+              {ragSources.length === 0 ? (
+                <div className="px-6 py-8 text-center text-muted-foreground text-xs font-sans italic">
+                  No sources yet. Add HuggingFace datasets or GitHub files for Vael to visit.
+                </div>
+              ) : (
+                <div className="divide-y divide-border/10">
+                  {ragSources.map(source => (
+                    <div key={source.id} className={`px-6 py-4 flex items-start gap-4 ${!source.isActive ? "opacity-50" : ""}`}>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-sans text-sm font-medium text-on-surface truncate">{source.name}</span>
+                          <span className="font-label text-[8px] uppercase tracking-widest px-1.5 py-0.5 rounded-sm border border-border/30 text-muted-foreground flex-shrink-0">
+                            {source.sourceType === "huggingface" ? "HF" : source.sourceType === "github_file" ? "GH File" : source.sourceType === "github_repo" ? "GH Repo" : "URL"}
+                          </span>
+                          {source.isActive && <span className="w-1.5 h-1.5 rounded-full bg-secondary flex-shrink-0" />}
+                        </div>
+                        <p className="text-[10px] font-mono text-muted-foreground/60 truncate">{source.url}</p>
+                        {source.notes && <p className="text-[10px] font-sans text-muted-foreground/70 mt-0.5 italic">{source.notes}</p>}
+                        {source.lastFetchAt && (
+                          <p className="text-[9px] font-sans text-muted-foreground/50 mt-1">
+                            Last fetched {new Date(source.lastFetchAt).toLocaleDateString()} · {source.lastFetchCount} entries seeded
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                          onClick={() => toggleSource(source.id, !source.isActive)}
+                          className={`font-label text-[9px] uppercase tracking-widest px-2 py-1 rounded border transition-colors ${
+                            source.isActive
+                              ? "border-secondary/40 text-secondary hover:bg-secondary/10"
+                              : "border-border/40 text-muted-foreground hover:text-primary hover:border-primary/40"
+                          }`}
+                        >
+                          {source.isActive ? "Pause" : "Activate"}
+                        </button>
+                        <button
+                          onClick={() => deleteSource(source.id)}
+                          className="font-label text-[9px] uppercase tracking-widest px-2 py-1 rounded border border-border/30 text-muted-foreground hover:border-destructive/40 hover:text-destructive transition-colors"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 

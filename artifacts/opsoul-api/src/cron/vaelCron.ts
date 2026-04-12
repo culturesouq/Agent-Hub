@@ -1,7 +1,8 @@
 import { db } from '@workspace/db';
-import { ragDnaTable, tasksTable } from '@workspace/db/schema';
+import { ragDnaTable, ragSourcesTable, tasksTable } from '@workspace/db/schema';
 import { eq, and, inArray, sql } from 'drizzle-orm';
-import { validateEntry, runDiscoverySweep, type DiscoveryProposal } from '../utils/vaelEngine.js';
+import { validateEntry, runDiscoverySweep, extractEntriesFromSource, type DiscoveryProposal } from '../utils/vaelEngine.js';
+import { fetchSource } from '../utils/ragSourceFetcher.js';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { chatCompletion, KB_MODEL } from '../utils/openrouter.js';
 import { randomUUID } from 'crypto';
@@ -294,6 +295,120 @@ async function runDiscoveryPhase(timer: BudgetTimer): Promise<{
   return stats;
 }
 
+// ── Phase 3: Source-guided discovery ──────────────────────────────────────────
+// Vael visits active curated sources (HuggingFace, GitHub, etc.),
+// extracts knowledge candidates, validates them, and seeds what passes.
+
+async function runSourceGuidedPhase(timer: BudgetTimer): Promise<{
+  sourcesVisited: number; candidatesExtracted: number; seeded: number;
+}> {
+  const stats = { sourcesVisited: 0, candidatesExtracted: 0, seeded: 0 };
+
+  const sources = await db
+    .select()
+    .from(ragSourcesTable)
+    .where(eq(ragSourcesTable.isActive, true));
+
+  if (sources.length === 0) return stats;
+
+  console.log(`[VAEL] Source-guided phase — ${sources.length} active source(s)`);
+
+  for (const source of sources) {
+    if (!timer.hasTime(45_000)) {
+      console.log('[VAEL] Budget low — stopping source-guided phase early');
+      break;
+    }
+
+    console.log(`[VAEL] Fetching source: "${source.name}" (${source.sourceType})`);
+    let chunks;
+    try {
+      chunks = await fetchSource(source.sourceType as any, source.url);
+    } catch (err) {
+      console.error(`[VAEL] Source fetch failed for "${source.name}":`, (err as Error).message);
+      continue;
+    }
+
+    // Combine chunks into batches for Vael to extract from
+    const batched = chunks.slice(0, 8).map(c => `## ${c.title}\n${c.rawContent}`).join('\n\n---\n\n');
+    let candidates;
+    try {
+      candidates = await extractEntriesFromSource(batched, source.name);
+    } catch (err) {
+      console.error(`[VAEL] Extraction failed for "${source.name}":`, (err as Error).message);
+      continue;
+    }
+
+    stats.sourcesVisited++;
+    stats.candidatesExtracted += candidates.length;
+    console.log(`[VAEL] "${source.name}" — ${candidates.length} candidate(s) extracted`);
+
+    for (const candidate of candidates) {
+      if (!timer.hasTime(25_000)) break;
+
+      try {
+        const validation = await validateEntry({
+          title: candidate.title,
+          content: candidate.content,
+          layer: 'collective',
+          tags: candidate.suggested_tags ?? [],
+          sourceName: source.name,
+          confidence: candidate.suggested_confidence,
+        });
+
+        if (validation.verdict === 'reject') {
+          console.log(`[VAEL] Source candidate rejected: "${candidate.title}"`);
+          continue;
+        }
+
+        const finalContent = (validation.verdict === 'revise' && validation.revised_content)
+          ? validation.revised_content
+          : candidate.content;
+
+        const hash = Buffer.from(finalContent.slice(0, 200)).toString('base64').slice(0, 64);
+        const [existing] = await db
+          .select({ id: ragDnaTable.id })
+          .from(ragDnaTable)
+          .where(eq(ragDnaTable.sourceHash, hash))
+          .limit(1);
+
+        if (existing) continue;
+
+        const embedding = await embed(finalContent).catch(() => undefined);
+
+        await db.insert(ragDnaTable).values({
+          id: randomUUID(),
+          layer: 'collective',
+          title: candidate.title,
+          content: finalContent,
+          embedding: embedding ?? null,
+          tags: candidate.suggested_tags ?? [],
+          sourceName: source.name,
+          sourceHash: hash,
+          confidence: validation.confidence_suggested ?? candidate.suggested_confidence,
+          knowledgeStatus: 'current',
+          dnaScope: 'general',
+          archetypeScope: [],
+          domainTags: candidate.suggested_tags ?? [],
+          isActive: true,
+        });
+
+        stats.seeded++;
+        console.log(`[VAEL] ✓ Seeded from source: "${candidate.title}"`);
+      } catch (err) {
+        console.error(`[VAEL] Source candidate error: "${candidate.title}":`, (err as Error).message);
+      }
+    }
+
+    // Record last fetch on source
+    await db
+      .update(ragSourcesTable)
+      .set({ lastFetchAt: new Date(), lastFetchCount: stats.seeded })
+      .where(eq(ragSourcesTable.id, source.id));
+  }
+
+  return stats;
+}
+
 // ── Run state (in-memory, resets on restart) ──────────────────────────────────
 
 export interface VaelRunState {
@@ -341,9 +456,17 @@ export async function runVaelFullSweep(): Promise<void> {
       console.log('[VAEL] Budget too low after validation — skipping discovery');
     }
 
+    let sources = { sourcesVisited: 0, candidatesExtracted: 0, seeded: 0 };
+    if (timer.hasTime(50_000)) {
+      sources = await runSourceGuidedPhase(timer);
+    } else {
+      console.log('[VAEL] Budget too low after discovery — skipping source-guided phase');
+    }
+
     const summary =
       `validated=${validation.validated} approved=${validation.approved} revised=${validation.revised} rejected=${validation.rejected} | ` +
-      `proposed=${discovery.proposed} seeded=${discovery.seeded} flagged=${discovery.flagged}`;
+      `proposed=${discovery.proposed} seeded=${discovery.seeded} flagged=${discovery.flagged} | ` +
+      `sources=${sources.sourcesVisited} candidates=${sources.candidatesExtracted} source_seeded=${sources.seeded}`;
 
     console.log(`[VAEL] Full sweep done in ${timer.elapsedSec()}s — ${summary}`);
 

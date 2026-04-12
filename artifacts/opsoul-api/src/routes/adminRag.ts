@@ -1,6 +1,8 @@
 import { Router, type Request, type Response } from 'express';
-import { db, pool, ragDnaTable, ragPipelineConfigTable, operatorKbTable } from '@workspace/db';
+import { db, pool, ragDnaTable, ragPipelineConfigTable, operatorKbTable, ragSourcesTable } from '@workspace/db';
+import type { RagSourceType } from '@workspace/db';
 import { eq, and, sql, desc, isNull, or, notInArray } from 'drizzle-orm';
+import { randomUUID } from 'crypto';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireAdmin } from '../middleware/requireAdmin.js';
 import { embed } from '@workspace/opsoul-utils/ai';
@@ -497,6 +499,71 @@ router.post('/vael/discover', async (req: Request, res: Response): Promise<void>
   } catch (e) {
     res.status(500).json({ error: 'Vael discovery sweep failed', detail: (e as Error).message });
   }
+});
+
+// ── Source Registry — CRUD ─────────────────────────────────────────────────
+
+router.get('/sources', async (_req: Request, res: Response): Promise<void> => {
+  const sources = await db
+    .select()
+    .from(ragSourcesTable)
+    .orderBy(ragSourcesTable.createdAt);
+  res.json(sources);
+});
+
+router.post('/sources', async (req: Request, res: Response): Promise<void> => {
+  const { name, sourceType, url, notes } = req.body as {
+    name?: string; sourceType?: string; url?: string; notes?: string;
+  };
+
+  const validTypes: RagSourceType[] = ['huggingface', 'github_file', 'github_repo', 'raw_url'];
+  if (!name?.trim() || !url?.trim() || !sourceType || !validTypes.includes(sourceType as RagSourceType)) {
+    res.status(400).json({ error: 'name, url, and a valid sourceType are required' });
+    return;
+  }
+
+  const [created] = await db.insert(ragSourcesTable).values({
+    id: randomUUID(),
+    name: name.trim(),
+    sourceType: sourceType as RagSourceType,
+    url: url.trim(),
+    notes: notes?.trim() ?? null,
+  }).returning();
+
+  res.status(201).json(created);
+});
+
+router.patch('/sources/:sourceId', async (req: Request, res: Response): Promise<void> => {
+  const { sourceId } = req.params;
+  const { name, url, notes, isActive } = req.body as {
+    name?: string; url?: string; notes?: string; isActive?: boolean;
+  };
+
+  const updates: Partial<typeof ragSourcesTable.$inferInsert> = {};
+  if (name !== undefined) updates.name = name.trim();
+  if (url !== undefined) updates.url = url.trim();
+  if (notes !== undefined) updates.notes = notes.trim() || null;
+  if (isActive !== undefined) updates.isActive = isActive;
+
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: 'Nothing to update' });
+    return;
+  }
+
+  const [updated] = await db
+    .update(ragSourcesTable)
+    .set(updates)
+    .where(eq(ragSourcesTable.id, sourceId))
+    .returning();
+
+  if (!updated) { res.status(404).json({ error: 'Source not found' }); return; }
+  res.json(updated);
+});
+
+router.delete('/sources/:sourceId', async (req: Request, res: Response): Promise<void> => {
+  const { sourceId } = req.params;
+  await db.delete(ragSourcesTable).where(eq(ragSourcesTable.id, sourceId));
+  res.json({ ok: true, deleted: sourceId });
 });
 
 export default router;
