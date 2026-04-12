@@ -7,6 +7,7 @@ export const platformSkillsTable = v3Schema.table('platform_skills', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   description: text('description').notNull(),
+  triggerDescription: text('trigger_description'),
   instructions: text('instructions').notNull(),
   outputFormat: text('output_format'),
   archetype: text('archetype').default('All'),

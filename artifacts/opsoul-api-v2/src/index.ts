@@ -12,6 +12,7 @@ import memoryRouter from './routes/memory.js';
 import growRouter from './routes/grow.js';
 import skillsRouter from './routes/skills.js';
 import integrationsRouter from './routes/integrations.js';
+import googleIntegrationRouter from './routes/google-integration.js';
 import filesRouter from './routes/files.js';
 import tasksRouter from './routes/tasks.js';
 import slotsRouter from './routes/slots.js';
@@ -31,6 +32,8 @@ import { pool } from '@workspace/db-v2';
 import { runGrowCron } from './cron/growCron.js';
 import { runVaelCron } from './cron/vaelCron.js';
 import { runMemoryDecayCron } from './cron/memoryCron.js';
+import { startDriftCron } from './cron/driftCron.js';
+import { backfillIntegrationSkills } from './utils/autoInstallIntegrationSkills.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3002', 10);
@@ -80,6 +83,7 @@ app.use('/api/v3/upload', uploadRouter);
 app.use('/api/v3/transcribe', transcribeRouter);
 app.use('/api/v3/vael', vaelRouter);
 app.use('/api/v3/contact', contactRouter);
+app.use('/api/v3/integrations/google', googleIntegrationRouter);
 app.use('/v3/chat', publicChatRouter);
 app.use('/v3/action', publicCrudRouter);
 
@@ -108,8 +112,14 @@ cron.schedule('*/4 * * * *', () => {
   pool.query('SELECT 1').catch(() => {});
 });
 
+// Soul drift — every 90 days at 03:00 UTC on the 1st
+startDriftCron();
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[opsoul-v3] API running on port ${PORT} → opsoul_v3 schema`);
+  backfillIntegrationSkills().catch((err: Error) =>
+    console.warn('[startup] backfillIntegrationSkills failed:', err.message),
+  );
 });
 
 export default app;
