@@ -21,17 +21,21 @@ import { decryptToken } from '@workspace/opsoul-utils/crypto';
 import { streamChat, CHAT_MODEL } from '../utils/openrouter.js';
 import type { ChatMessage, ToolDefinition, ContentPart } from '../utils/openrouter.js';
 import { chatCompletion } from '../utils/openrouter.js';
-import {
-  buildSystemPrompt,
-  buildBirthSystemPrompt,
-} from '../utils/systemPrompt.js';
+import { buildSystemPrompt, buildBirthSystemPrompt } from '../utils/systemPrompt.js';
 import type { ActiveSkill, SelfAwarenessSnapshot, BuildSystemPromptOpts, LiveStationData } from '../utils/systemPrompt.js';
 import { searchMemory } from '../utils/memoryEngine.js';
 import type { MemoryHit } from '../utils/memoryEngine.js';
 import { distillMemoriesFromConversations, storeMemory } from '../utils/memoryEngine.js';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
-import { kbIngestOperator } from '../utils/kbIntake.js';
+import { kbIngestOperator, verifyAndStore } from '../utils/kbIntake.js';
 import type { Layer2Soul } from '../utils/systemPrompt.js';
+import { detectSkillTrigger } from '../utils/skillTriggerEngine.js';
+import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
+import { executeSkill } from '../utils/skillExecutor.js';
+import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
+import { scrapeUrl } from '../utils/urlScraper.js';
+import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
+import { isWebSearchAvailable } from '../utils/capabilityEngine.js';
 
 const router = Router({ mergeParams: true });
 
@@ -45,11 +49,11 @@ const AttachmentSchema = z.object({
 });
 
 const SendMessageSchema = z.object({
-  message: z.string().min(1, 'message is required').max(8000),
-  kbSearch: z.boolean().default(true),
-  kbTopN: z.number().int().min(1).max(20).default(8),
+  message:         z.string().min(1, 'message is required').max(8000),
+  kbSearch:        z.boolean().default(true),
+  kbTopN:          z.number().int().min(1).max(20).default(8),
   kbMinConfidence: z.number().int().min(0).max(100).default(30),
-  attachments: z.array(AttachmentSchema).optional(),
+  attachments:     z.array(AttachmentSchema).optional(),
 });
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -72,7 +76,6 @@ async function resolveOperatorAndConv(
     ),
   );
   if (!conv) { res.status(404).json({ error: 'Conversation not found' }); return null; }
-
   return { operator, conv };
 }
 
@@ -82,65 +85,133 @@ async function buildMessageHistory(convId: string): Promise<ChatMessage[]> {
     .from(messagesTable)
     .where(eq(messagesTable.conversationId, convId))
     .orderBy(asc(messagesTable.createdAt));
-
   return msgs as ChatMessage[];
 }
 
-async function loadActiveSkills(operatorId: string): Promise<ActiveSkill[]> {
+async function loadActiveSkills(operatorId: string): Promise<InstalledSkill[]> {
   const installs = await db
     .select({
-      name: platformSkillsTable.name,
-      instructions: platformSkillsTable.instructions,
-      outputFormat: platformSkillsTable.outputFormat,
+      id:                 operatorSkillsTable.id,
+      skillId:            operatorSkillsTable.skillId,
+      name:               platformSkillsTable.name,
+      instructions:       platformSkillsTable.instructions,
+      outputFormat:       platformSkillsTable.outputFormat,
+      triggerDescription: platformSkillsTable.triggerDescription,
       customInstructions: operatorSkillsTable.customInstructions,
+      integrationType:    platformSkillsTable.integrationType,
     })
     .from(operatorSkillsTable)
     .innerJoin(platformSkillsTable, eq(operatorSkillsTable.skillId, platformSkillsTable.id))
     .where(and(eq(operatorSkillsTable.operatorId, operatorId), eq(operatorSkillsTable.isActive, true)));
 
-  return installs as ActiveSkill[];
-}
-
-async function searchKbRaw(
-  operatorId: string,
-  embedding: number[],
-  topN: number,
-  minConfidence: number,
-): Promise<{ content: string; confidence: number; sourceName: string | null }[]> {
-  const { pool } = await import('@workspace/db-v2');
-  const vecStr = `[${embedding.join(',')}]`;
-  const result = await pool.query<{
-    content: string;
-    confidence_score: number;
-    source_name: string | null;
-    distance: number;
-  }>(
-    `SELECT content, confidence_score, source_name,
-            (embedding <=> $1::vector) AS distance
-     FROM opsoul_v3.operator_kb
-     WHERE operator_id = $2
-       AND embedding IS NOT NULL
-       AND verification_status != 'rejected'
-       AND confidence_score >= $3
-     ORDER BY distance ASC
-     LIMIT $4`,
-    [vecStr, operatorId, minConfidence, topN],
-  );
-  return result.rows.map(r => ({
-    content: r.content,
-    confidence: r.confidence_score,
-    sourceName: r.source_name,
+  return installs.map(s => ({
+    installId:          s.id,
+    skillId:            s.skillId,
+    name:               s.name,
+    instructions:       s.instructions ?? '',
+    outputFormat:       s.outputFormat ?? null,
+    triggerDescription: s.triggerDescription ?? '',
+    customInstructions: s.customInstructions ?? null,
+    integrationType:    s.integrationType ?? null,
   }));
 }
 
-function buildRagContext(hits: { content: string; confidence: number; sourceName: string | null }[]): string {
-  if (hits.length === 0) return '';
-  return hits
-    .map(h => {
-      const src = h.sourceName ? ` [${h.sourceName}, confidence ${h.confidence}%]` : ` [confidence ${h.confidence}%]`;
-      return `${h.content}${src}`;
-    })
-    .join('\n\n---\n\n');
+function buildAgencySkills(
+  installed: InstalledSkill[],
+  archetypeDefaults: InstalledSkill[],
+  operator: typeof operatorsTable.$inferSelect,
+): InstalledSkill[] {
+  const installedNames = new Set(installed.map(s => s.name));
+  let list: InstalledSkill[] = [
+    ...installed,
+    ...archetypeDefaults.filter(a => !installedNames.has(a.name)),
+  ];
+
+  if (operator.freeRoaming && operator.toolUsePolicy) {
+    const rawPolicy = operator.toolUsePolicy;
+    if (rawPolicy !== 'auto' && typeof rawPolicy === 'object' && rawPolicy !== null) {
+      const allowedNames = new Set(Object.keys(rawPolicy as Record<string, unknown>));
+      if (allowedNames.size > 0) {
+        const before = list.length;
+        list = list.filter(s => allowedNames.has(s.name));
+        console.log(`[policy] free roaming — filtered skills ${before} → ${list.length} for operator ${operator.id}`);
+      }
+    }
+  }
+  return list;
+}
+
+function extractUrls(text: string): string[] {
+  const urlRegex = /https?:\/\/[^\s<>"{}|\\^`[\]]+/gi;
+  const matches = text.match(urlRegex) ?? [];
+  return [...new Set(matches)].slice(0, 2);
+}
+
+function extractNarratedSearchQuery(content: string, userMessageFallback: string): string | null {
+  const explicit = content.match(/Searching(?:\s+now)?(?:\s+for)?:\s*(.+?)(?:\n|$)/i);
+  if (explicit) return explicit[1].trim().slice(0, 200);
+  const movingTo = content.match(/Moving to topic [a-z\s]+[—\-–]+\s*(.+?)(?:\.|$)/im);
+  if (movingTo) return movingTo[1].trim().slice(0, 200);
+  const nowSearching = content.match(/Now (?:searching|looking at|researching)\s+(.+?)(?:\.|$)/im);
+  if (nowSearching) return nowSearching[1].trim().slice(0, 200);
+  if (/\bSearching\s+now\.?\s*$/im.test(content)) return userMessageFallback.slice(0, 200);
+  return null;
+}
+
+async function persistUrlScrapedResult(
+  operatorId: string, ownerId: string, convId: string, url: string, content: string,
+): Promise<void> {
+  let domain = url;
+  try { domain = new URL(url).hostname; } catch { /* use full url */ }
+  await db.insert(messagesTable).values({
+    id: crypto.randomUUID(), operatorId, conversationId: convId,
+    role: 'system', content: `[URL Content] ${url}\n${content}`, isInternal: true,
+  });
+  storeMemory(operatorId, ownerId, `Operator read URL "${domain}". Summary: ${content.slice(0, 400)}`, 'fact', 'ai_distilled', 0.6).catch(() => {});
+}
+
+async function persistWebSearchResult(
+  operatorId: string, ownerId: string, convId: string, searchQuery: string,
+  capResult: { output: string }, mandate: string,
+): Promise<void> {
+  await db.insert(messagesTable).values({
+    id: crypto.randomUUID(), operatorId, conversationId: convId,
+    role: 'system', content: `[Web Search] ${searchQuery}\n${capResult.output}`, isInternal: true,
+  });
+  verifyAndStore(operatorId, ownerId, capResult.output, `web_search:${searchQuery}`, searchQuery, mandate).catch(() => {});
+  storeMemory(operatorId, ownerId, `Web search performed: "${searchQuery}". Key findings: ${capResult.output.slice(0, 600)}`, 'fact', 'ai_distilled', 0.65).catch(() => {});
+}
+
+async function persistSkillResult(
+  operatorId: string, ownerId: string, convId: string,
+  skillTrigger: { name: string; skillId: string },
+  skillResult: { skillName: string; output: string },
+): Promise<void> {
+  await db.insert(messagesTable).values({
+    id: crypto.randomUUID(), operatorId, conversationId: convId,
+    role: 'system', content: `[Skill: ${skillResult.skillName}] Result:\n${skillResult.output}`, isInternal: true,
+  });
+  await db.insert(tasksTable).values({
+    id: crypto.randomUUID(), operatorId, conversationId: convId,
+    contextName: skillTrigger.name, taskType: 'skill_execution',
+    integrationLabel: 'platform_skill',
+    payload: { skillId: skillTrigger.skillId, result: skillResult.output },
+    status: 'completed', summary: `Executed ${skillTrigger.name}`, completedAt: new Date(),
+  });
+  console.log(`[agency] skill ${skillTrigger.name} executed and logged`);
+  triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});
+  storeMemory(operatorId, ownerId, `Skill executed: ${skillTrigger.name}. Result: ${skillResult.output.slice(0, 500)}`, 'pattern', 'ai_distilled', 0.6).catch(() => {});
+}
+
+function buildSkillSecondPassMessages(
+  messages: ChatMessage[], firstResponse: string, skillOutput: string,
+): ChatMessage[] {
+  return [
+    ...messages,
+    { role: 'assistant', content: firstResponse },
+    { role: 'system', content: `[Task completed — findings below]\n${skillOutput}` },
+    { role: 'user', content: `You just completed a task. Report back to the owner directly — as if you did the work yourself and are now sharing what you found.\n\nBe specific. Highlight what matters. Be conversational.\n\nNever mention tool names, skill names, raw JSON, raw URLs, or API responses. Never say "the result" or "the skill". Just speak naturally as their operator who got something done.` },
+  ];
 }
 
 async function extractBirthIdentity(operatorId: string, conversationId: string): Promise<void> {
@@ -154,24 +225,10 @@ async function extractBirthIdentity(operatorId: string, conversationId: string):
     .map(m => `${m.role === 'user' ? 'Owner' : 'Operator'}: ${m.content}`)
     .join('\n');
 
-  const extractionPrompt = `You are extracting the founding identity of an AI Operator from a birth conversation.
-
-Conversation:
-${transcript}
-
-Extract exactly:
-- name: what the owner said to call the operator (just the name)
-- rawIdentity: a 200-400 word first-person story written as the operator speaking, based on what the owner described
-- archetype: 1 or 2 values only from: ["Executor","Advisor","Expert","Connector","Creator","Guardian","Builder","Catalyst","Analyst"]
-- mandate: one sentence starting with a verb, stating the operator's core purpose
-
-Return ONLY valid JSON, no markdown:
-{"name":"...","rawIdentity":"...","archetype":["..."],"mandate":"..."}`;
-
   const result = await chatCompletion(
     [
       { role: 'system', content: 'You extract structured identity data from conversations. Return only valid JSON.' },
-      { role: 'user', content: extractionPrompt },
+      { role: 'user', content: `You are extracting the founding identity of an AI Operator from a birth conversation.\n\nConversation:\n${transcript}\n\nExtract exactly:\n- name: what the owner said to call the operator (just the name)\n- rawIdentity: a 200-400 word first-person story written as the operator speaking, based on what the owner described\n- archetype: 1 or 2 values only from: ["Executor","Advisor","Expert","Connector","Creator","Guardian","Builder","Catalyst","Analyst"]\n- mandate: one sentence starting with a verb, stating the operator's core purpose\n\nReturn ONLY valid JSON, no markdown:\n{"name":"...","rawIdentity":"...","archetype":["..."],"mandate":"..."}` },
     ],
     { model: CHAT_MODEL },
   );
@@ -201,6 +258,19 @@ function runPostResponseTasks(
   finalContent: string,
   isBirthMode: boolean,
 ): void {
+  // [LEARN:] tag extraction — operator self-learning
+  if (!operator.safeMode) {
+    const learnMatches = finalContent.match(/\[LEARN:\s*(.*?)\]/gs);
+    if (learnMatches && learnMatches.length > 0) {
+      for (const match of learnMatches) {
+        const text = match.replace(/\[LEARN:\s*/i, '').replace(/\]$/, '').trim();
+        if (text.length > 20) {
+          verifyAndStore(operator.id, operator.ownerId, text, 'self_learn', 'operator_self_learn', operator.mandate ?? '').catch(() => {});
+        }
+      }
+    }
+  }
+
   if (isBirthMode) {
     db.select({ id: messagesTable.id })
       .from(messagesTable)
@@ -221,8 +291,6 @@ function runPostResponseTasks(
     }
   }
 }
-
-// ── SSE writer ────────────────────────────────────────────────────────────────
 
 function makeSseWriter(res: Response) {
   return (event: Record<string, unknown>) => {
@@ -246,22 +314,27 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
 
   const { message, kbSearch, kbTopN, kbMinConfidence, attachments } = parsed.data;
 
-  // Resolve API key and model
   const chatApiKey = operator.openrouterApiKey
     ? (() => { try { return decryptToken(operator.openrouterApiKey!); } catch { return undefined; } })()
     : undefined;
-  const chatModel = operator.defaultModel || CHAT_MODEL;
-  const chatOpts = { apiKey: chatApiKey, model: chatModel };
+
+  const rawModel = operator.defaultModel || CHAT_MODEL;
+  let chatModel = rawModel;
+  const chatOpts = { apiKey: chatApiKey, get model() { return chatModel; } };
 
   // ── Parallel data fetch ──────────────────────────────────────────────────
-  const [skills, selfAwarenessRow, history, liveIntegrations, liveTasks, liveFiles] = await Promise.all([
+  const [skills, archetypeDefaultSkills, selfAwarenessRow, history, liveIntegrations, liveTasks, liveFiles] = await Promise.all([
     loadActiveSkills(operator.id),
+    loadArchetypeSkills((operator.archetype as string[]) ?? []),
     db.select().from(selfAwarenessStateTable).where(eq(selfAwarenessStateTable.operatorId, operator.id)).limit(1),
     buildMessageHistory(conv.id),
     db.select({ type: operatorIntegrationsTable.integrationType, label: operatorIntegrationsTable.integrationLabel, status: operatorIntegrationsTable.status, scopes: operatorIntegrationsTable.scopes }).from(operatorIntegrationsTable).where(eq(operatorIntegrationsTable.operatorId, operator.id)),
     db.select({ name: tasksTable.contextName, status: tasksTable.status, payload: tasksTable.payload }).from(tasksTable).where(eq(tasksTable.operatorId, operator.id)),
     db.select({ filename: operatorFilesTable.filename }).from(operatorFilesTable).where(eq(operatorFilesTable.operatorId, operator.id)),
   ]);
+
+  // ── Agency skills (installed + archetype defaults merged, policy applied) ─
+  const agencySkills = buildAgencySkills(skills, archetypeDefaultSkills as InstalledSkill[], operator);
 
   // ── Self-awareness snapshot ──────────────────────────────────────────────
   const selfAwarenessData = selfAwarenessRow[0] ?? null;
@@ -270,18 +343,18 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
 
   const selfAwareness: SelfAwarenessSnapshot | null = selfAwarenessData
     ? {
-        healthScore: selfAwarenessData.healthScore as { score: number; label: string } | null,
-        mandateGaps: selfAwarenessData.mandateGaps ?? null,
-        lastUpdateTrigger: selfAwarenessData.lastUpdateTrigger ?? null,
-        lastUpdated: selfAwarenessData.lastUpdated ?? null,
-        growLockLevel: (storedIdentity?.growLockLevel as string | null) ?? null,
-        soulState: selfAwarenessData.soulState as SelfAwarenessSnapshot['soulState'],
-        capabilityState: selfAwarenessData.capabilityState as SelfAwarenessSnapshot['capabilityState'],
-        workspaceManifest: selfAwarenessData.workspaceManifest as SelfAwarenessSnapshot['workspaceManifest'],
+        healthScore:        selfAwarenessData.healthScore as { score: number; label: string } | null,
+        mandateGaps:        selfAwarenessData.mandateGaps ?? null,
+        lastUpdateTrigger:  selfAwarenessData.lastUpdateTrigger ?? null,
+        lastUpdated:        selfAwarenessData.lastUpdated ?? null,
+        growLockLevel:      (storedIdentity?.growLockLevel as string | null) ?? null,
+        soulState:          selfAwarenessData.soulState as SelfAwarenessSnapshot['soulState'],
+        capabilityState:    selfAwarenessData.capabilityState as SelfAwarenessSnapshot['capabilityState'],
+        workspaceManifest:  selfAwarenessData.workspaceManifest as SelfAwarenessSnapshot['workspaceManifest'],
         taskSummary: storedTaskHistory
           ? {
-              successRate: storedTaskHistory.successRate ?? 100,
-              recentTypes: [...new Set((storedTaskHistory.last30Tasks ?? []).map(t => t.taskType).filter(Boolean))].slice(0, 5),
+              successRate:  storedTaskHistory.successRate ?? 100,
+              recentTypes:  [...new Set((storedTaskHistory.last30Tasks ?? []).map(t => t.taskType).filter(Boolean))].slice(0, 5),
             }
           : null,
       }
@@ -299,7 +372,7 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
       try {
         const { semanticDistance } = await import('@workspace/opsoul-utils/ai');
         const first = asstMsgs[0].content;
-        const last = asstMsgs[asstMsgs.length - 1].content;
+        const last  = asstMsgs[asstMsgs.length - 1].content;
         if (typeof first === 'string' && typeof last === 'string') {
           sycophancyWarning = await semanticDistance(first, last) > 0.35;
         }
@@ -311,8 +384,6 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
   const languageInstruction = hasArabic ? 'The user is writing in Arabic. Respond in Arabic. Match their dialect if possible.' : undefined;
   const scopeLine = `[SCOPE: ${conv.scopeType} | ${conv.scopeId}]`;
 
-  const promptOpts: BuildSystemPromptOpts = { sycophancyWarning, soulAnchorActive, languageInstruction, scopeLine, webSearchAvailable: true };
-
   // ── KB + Memory search ───────────────────────────────────────────────────
   let kbContext = '';
   let memoryHits: MemoryHit[] = [];
@@ -321,13 +392,29 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
     try {
       const queryEmbedding = await embed(message);
       const [kbHits, memHits] = await Promise.all([
-        searchKbRaw(operator.id, queryEmbedding, kbTopN, kbMinConfidence),
+        searchBothKbs(operator.id, queryEmbedding, kbTopN, kbMinConfidence, operator.archetype ?? [], operator.domainTags ?? []),
         searchMemory(operator.id, queryEmbedding),
       ]);
       kbContext = buildRagContext(kbHits);
       memoryHits = memHits;
-    } catch { /* non-critical — continue without */ }
+    } catch { /* non-critical */ }
   }
+
+  // ── Auto model routing ───────────────────────────────────────────────────
+  chatModel = (() => {
+    if (rawModel !== 'opsoul/auto') return rawModel;
+    const hasAttachment = Array.isArray(attachments) && attachments.length > 0;
+    const isShort = message.length < 200;
+    const hasContext = kbContext.length > 0 || memoryHits.length > 0;
+    const webSearchActive = isWebSearchAvailable();
+    const resolved = hasAttachment
+      ? 'google/gemini-flash-2.0'
+      : isShort && !hasContext && !webSearchActive
+        ? 'anthropic/claude-haiku-4-5'
+        : 'anthropic/claude-sonnet-4-5';
+    console.log(`[AUTO] routed → ${resolved} | short=${isShort} attachment=${hasAttachment} hasContext=${hasContext} webSearch=${webSearchActive}`);
+    return resolved;
+  })();
 
   // ── Birth mode ───────────────────────────────────────────────────────────
   const isBirthMode = !operator.rawIdentity;
@@ -348,19 +435,19 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
     ? buildBirthSystemPrompt()
     : buildSystemPrompt(
         {
-          name: operator.name,
-          archetype: operator.archetype,
-          rawIdentity: operator.rawIdentity ?? undefined,
-          mandate: operator.mandate,
-          coreValues: operator.coreValues,
+          name:              operator.name,
+          archetype:         operator.archetype,
+          rawIdentity:       operator.rawIdentity ?? undefined,
+          mandate:           operator.mandate,
+          coreValues:        operator.coreValues,
           ethicalBoundaries: operator.ethicalBoundaries,
-          layer2Soul: operator.layer2Soul as Layer2Soul,
+          layer2Soul:        operator.layer2Soul as Layer2Soul,
         },
         kbContext,
-        skills,
+        agencySkills as unknown as ActiveSkill[],
         memoryHits,
         selfAwareness,
-        promptOpts,
+        { sycophancyWarning, soulAnchorActive, languageInstruction, scopeLine, webSearchAvailable: true } satisfies BuildSystemPromptOpts,
         liveStation,
       );
 
@@ -373,9 +460,32 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
         parts.push({ type: 'image_url', image_url: { url: `data:${att.mimeType ?? 'image/jpeg'};base64,${att.content}` } });
       } else if (att.type === 'text') {
         parts.push({ type: 'text', text: `[Attached file: ${att.name ?? 'document'}]\n${att.content}` });
+      } else if (att.type === 'url') {
+        try {
+          const scraped = await scrapeUrl(att.content);
+          parts.push({ type: 'text', text: `[Content from ${att.content}]:\n${scraped}` });
+        } catch {
+          parts.push({ type: 'text', text: `[URL: ${att.content} — could not be fetched]` });
+        }
       }
     }
     userContent = parts;
+  }
+
+  // SENSES → KB PERSISTENCE (text + URL attachments persisted to KB; images are context-only)
+  if (!operator.safeMode && attachments && attachments.length > 0) {
+    for (const att of attachments) {
+      if (att.type === 'text' && att.content.length > 100) {
+        verifyAndStore(operator.id, operator.ownerId, att.content, 'file_upload', att.name ?? 'uploaded_document', operator.mandate ?? '').catch(() => {});
+      } else if (att.type === 'url') {
+        try {
+          const scraped = await scrapeUrl(att.content);
+          if (scraped && scraped.length > 100) {
+            verifyAndStore(operator.id, operator.ownerId, scraped, att.content, att.content, operator.mandate ?? '').catch(() => {});
+          }
+        } catch { /* scrape failed */ }
+      }
+    }
   }
 
   const messages: ChatMessage[] = [
@@ -386,12 +496,8 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
 
   // ── Persist user message ─────────────────────────────────────────────────
   await db.insert(messagesTable).values({
-    id: crypto.randomUUID(),
-    conversationId: conv.id,
-    operatorId: operator.id,
-    role: 'user',
-    content: message,
-    tokenCount: null,
+    id: crypto.randomUUID(), conversationId: conv.id,
+    operatorId: operator.id, role: 'user', content: message, tokenCount: null,
   });
 
   // Lock Layer 1 silently after first message
@@ -404,7 +510,7 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
     type: 'function',
     function: {
       name: 'web_search',
-      description: 'Search the web for current, live information. Call this tool directly and silently — never announce "I will search" in your text. Just call it. Your response will reflect what you found.',
+      description: 'Search the web for current, live information. Call this tool directly and silently — never announce "I will search" in your text. Just call it.',
       parameters: { type: 'object', properties: { query: { type: 'string', description: 'Concise search query, 3–8 words' } }, required: ['query'] },
     },
   };
@@ -413,13 +519,13 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
     type: 'function',
     function: {
       name: 'kb_seed',
-      description: 'Persist a validated knowledge entry into your knowledge base. Call AFTER researching and synthesizing a clear, durable insight. Do not use for ephemeral data, opinions, or uncertain facts.',
+      description: 'Persist a validated knowledge entry into your knowledge base. Call AFTER researching and synthesizing a clear, durable insight.',
       parameters: {
         type: 'object',
         properties: {
-          content: { type: 'string', description: 'Self-contained factual insight (100–400 words). No filler. Pure information.' },
-          source: { type: 'string', description: 'Name of the source(s) this was derived from.' },
-          confidence: { type: 'number', description: 'Your confidence 40–85. Use 80+ only if multiple independent sources agree.' },
+          content:    { type: 'string', description: 'Self-contained factual insight (100–400 words).' },
+          source:     { type: 'string', description: 'Source name(s) this was derived from.' },
+          confidence: { type: 'number', description: 'Confidence score 40–85.' },
         },
         required: ['content', 'source', 'confidence'],
       },
@@ -430,22 +536,20 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
     type: 'function',
     function: {
       name: 'write_file',
-      description: 'Create or update a file in your workspace. Use when creating a document, report, notes, or to-do list would genuinely help the owner. Owner can see and download files from the Files tab.',
+      description: 'Create or update a file in your workspace. Use when a document, report, or plan would genuinely help the owner.',
       parameters: {
         type: 'object',
         properties: {
-          filename: { type: 'string', description: 'Filename including extension (e.g. "report.md", "todo.txt", "plan.md")' },
-          content: { type: 'string', description: 'Full file content. Well-formatted, ready to use.' },
-          action: { type: 'string', enum: ['create', 'update'], description: 'Whether to create a new file or update an existing one.' },
+          filename: { type: 'string', description: 'Filename including extension (e.g. "report.md")' },
+          content:  { type: 'string', description: 'Full file content. Well-formatted and ready to use.' },
+          action:   { type: 'string', enum: ['create', 'update'] },
         },
         required: ['filename', 'content', 'action'],
       },
     },
   };
 
-  const tools: ToolDefinition[] = [webSearchTool, kbSeedTool, writeFileTool];
-
-  // ── SSE headers ──────────────────────────────────────────────────────────
+  // ── SSE setup ────────────────────────────────────────────────────────────
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -455,13 +559,11 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
   res.flushHeaders();
 
   const send = makeSseWriter(res);
-
   let fullContent = '';
   let messageSaved = false;
   let promptTokens = 0;
   let completionTokens = 0;
 
-  // Keepalive ping every 15s
   const keepalive = setInterval(() => {
     try { res.write(': keepalive\n\n'); } catch { /* connection gone */ }
   }, 15_000);
@@ -478,10 +580,21 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
   });
 
   try {
+    // ── URL auto-reading (scrape URLs in message before responding) ────────
+    const loopMessages: ChatMessage[] = [...messages];
+
+    for (const url of extractUrls(message)) {
+      send({ reading: url });
+      const scraped = await scrapeUrl(url).catch(() => null);
+      if (scraped && scraped.length > 200) {
+        loopMessages.push({ role: 'system', content: `[URL Content: ${url}]\n${scraped}` });
+        await persistUrlScrapedResult(operator.id, operator.ownerId, conv.id, url, scraped);
+      }
+    }
+
     // ── AGENT LOOP ────────────────────────────────────────────────────────
     const MAX_ITER = 8;
     const MAX_SEARCHES = 5;
-    const loopMessages: ChatMessage[] = [...messages];
     let finalContent = '';
     let webSearchCount = 0;
     let kbSeedCount = 0;
@@ -500,9 +613,7 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
           fullContent += chunk.delta;
           send({ delta: chunk.delta });
         }
-        if (chunk.toolCall) {
-          iterToolCall = chunk.toolCall;
-        }
+        if (chunk.toolCall) iterToolCall = chunk.toolCall;
         if (chunk.done && chunk.usage) {
           promptTokens += chunk.usage.promptTokens;
           completionTokens += chunk.usage.completionTokens;
@@ -518,7 +629,6 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
           console.log(`[v3-chat] iter ${iter} — web_search: "${searchQuery}"`);
           send({ searching: searchQuery });
 
-          // Dynamic import of web search (same as v1)
           let capResult: { success: boolean; output: string };
           try {
             const { executeWebSearch } = await import('../utils/capabilityEngine.js');
@@ -529,22 +639,9 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
 
           if (capResult.success) {
             webSearchCount++;
-            // Store result in conversation
-            await db.insert(messagesTable).values({
-              id: crypto.randomUUID(),
-              operatorId: operator.id,
-              conversationId: conv.id,
-              role: 'system',
-              content: `[Web Search] ${searchQuery}\n${capResult.output}`,
-              isInternal: true,
-            });
-
+            await persistWebSearchResult(operator.id, operator.ownerId, conv.id, searchQuery, capResult, operator.mandate ?? '');
             loopMessages.push(
-              {
-                role: 'assistant',
-                content: iterContent || '',
-                tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'web_search', arguments: iterToolCall.args } }],
-              },
+              { role: 'assistant', content: iterContent || '', tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'web_search', arguments: iterToolCall.args } }] },
               { role: 'tool', content: capResult.output, tool_call_id: iterToolCall.id },
             );
             continue;
@@ -571,15 +668,11 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
           }
 
           const toolResultText = seedResult.stored
-            ? `Entry stored. Confidence: ${Math.max(40, Math.min(85, Math.round(confidence)))}. Status: pending — queued for verification.`
+            ? `Entry stored. Confidence: ${Math.max(40, Math.min(85, Math.round(confidence)))}. Status: pending — queued for VAEL pipeline verification.`
             : `Entry not stored: ${seedResult.reason}`;
 
           loopMessages.push(
-            {
-              role: 'assistant',
-              content: iterContent || '',
-              tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'kb_seed', arguments: iterToolCall.args } }],
-            },
+            { role: 'assistant', content: iterContent || '', tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'kb_seed', arguments: iterToolCall.args } }] },
             { role: 'tool', content: toolResultText, tool_call_id: iterToolCall.id },
           );
           continue;
@@ -597,7 +690,6 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
           console.log(`[v3-chat] iter ${iter} — write_file: "${fileArgs.filename}"`);
           send({ writing: fileArgs.filename });
 
-          // Check for existing file with this name
           const existing = await db.select({ id: operatorFilesTable.id })
             .from(operatorFilesTable)
             .where(and(eq(operatorFilesTable.operatorId, operator.id), eq(operatorFilesTable.filename, fileArgs.filename)))
@@ -606,36 +698,48 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
           let fileId: string;
           if (existing.length > 0 && fileArgs.action !== 'create') {
             fileId = existing[0].id;
-            await db.update(operatorFilesTable)
-              .set({ content: fileArgs.content, updatedAt: new Date() })
-              .where(eq(operatorFilesTable.id, fileId));
+            await db.update(operatorFilesTable).set({ content: fileArgs.content, updatedAt: new Date() }).where(eq(operatorFilesTable.id, fileId));
           } else {
             fileId = crypto.randomUUID();
-            await db.insert(operatorFilesTable).values({
-              id: fileId,
-              operatorId: operator.id,
-              ownerId: operator.ownerId,
-              filename: fileArgs.filename,
-              content: fileArgs.content,
-            });
+            await db.insert(operatorFilesTable).values({ id: fileId, operatorId: operator.id, ownerId: operator.ownerId, filename: fileArgs.filename, content: fileArgs.content });
           }
 
           send({ file_created: { id: fileId, filename: fileArgs.filename } });
-
-          const toolResultText = `File "${fileArgs.filename}" ${existing.length > 0 && fileArgs.action !== 'create' ? 'updated' : 'created'} successfully. Owner can see and download it from the Files tab.`;
+          const toolResultText = `File "${fileArgs.filename}" ${existing.length > 0 && fileArgs.action !== 'create' ? 'updated' : 'created'}. Owner can see and download it from the Files tab.`;
 
           loopMessages.push(
-            {
-              role: 'assistant',
-              content: iterContent || '',
-              tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'write_file', arguments: iterToolCall.args } }],
-            },
+            { role: 'assistant', content: iterContent || '', tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'write_file', arguments: iterToolCall.args } }] },
             { role: 'tool', content: toolResultText, tool_call_id: iterToolCall.id },
           );
           continue;
         }
         finalContent = iterContent;
         break;
+      }
+
+      // ── Narration fallback — operator described a search in text ──────
+      if (!iterToolCall && webSearchCount < MAX_SEARCHES) {
+        const narratedQuery = extractNarratedSearchQuery(iterContent, message);
+        if (narratedQuery) {
+          console.log(`[agency] narration fallback iter ${iter} — firing real search: "${narratedQuery}"`);
+          send({ searching: narratedQuery });
+          let capResult: { success: boolean; output: string };
+          try {
+            const { executeWebSearch } = await import('../utils/capabilityEngine.js');
+            capResult = await executeWebSearch(narratedQuery);
+          } catch {
+            capResult = { success: false, output: '' };
+          }
+          if (capResult.success) {
+            webSearchCount++;
+            await persistWebSearchResult(operator.id, operator.ownerId, conv.id, narratedQuery, capResult, operator.mandate ?? '');
+            loopMessages.push(
+              { role: 'assistant', content: iterContent },
+              { role: 'system', content: `[Web Search: ${narratedQuery}]\n${capResult.output}` },
+            );
+            continue;
+          }
+        }
       }
 
       // ── No tool call — clean final response ───────────────────────────
@@ -645,6 +749,39 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
 
     if (!finalContent) finalContent = fullContent;
 
+    // ── SKILL TRIGGER (post-loop, only if no web searches ran) ────────────
+    let capabilityFired = webSearchCount > 0;
+    if (!capabilityFired) {
+      const skillTrigger = await detectSkillTrigger(message, agencySkills, finalContent);
+      if (skillTrigger) {
+        skillTrigger.operatorId = operator.id;
+        console.log(`[agency] skill triggered: ${skillTrigger.name}`);
+        send({ running: skillTrigger.name });
+        const skillResult = await executeSkill(skillTrigger, chatModel);
+        if (skillResult.success) {
+          await persistSkillResult(operator.id, operator.ownerId, conv.id, skillTrigger, skillResult);
+          const skillMessages = buildSkillSecondPassMessages(messages, finalContent, skillResult.output);
+          let skillContent = '';
+          let skillTokens = 0;
+          for await (const chunk of streamChat(skillMessages, chatOpts)) {
+            if (chunk.delta) {
+              skillContent += chunk.delta;
+              send({ delta: chunk.delta });
+            }
+            if (chunk.done && chunk.usage) {
+              promptTokens += chunk.usage.promptTokens;
+              skillTokens = chunk.usage.completionTokens;
+            }
+          }
+          if (skillContent) {
+            finalContent = skillContent;
+            completionTokens = skillTokens;
+            capabilityFired = true;
+          }
+        }
+      }
+    }
+
     // ── Signal processing ─────────────────────────────────────────────────
     send({ processing: true });
 
@@ -652,12 +789,9 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
     messageSaved = true;
     const asstMsgId = crypto.randomUUID();
     await db.insert(messagesTable).values({
-      id: asstMsgId,
-      conversationId: conv.id,
-      operatorId: operator.id,
-      role: 'assistant',
-      content: finalContent,
-      tokenCount: completionTokens || null,
+      id: asstMsgId, conversationId: conv.id,
+      operatorId: operator.id, role: 'assistant',
+      content: finalContent, tokenCount: completionTokens || null,
     });
 
     await db.update(conversationsTable)
@@ -666,13 +800,10 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
 
     cleanup();
     send({
-      done: true,
-      messageId: asstMsgId,
-      model: chatModel,
+      done: true, messageId: asstMsgId, model: chatModel,
       usage: { promptTokens, completionTokens },
-      kbSeedCount,
-      webSearchCount,
-      memoryCount: memoryHits.length,
+      activeSkillCount: agencySkills.length,
+      kbSeedCount, webSearchCount, memoryCount: memoryHits.length,
     });
     res.end();
 
