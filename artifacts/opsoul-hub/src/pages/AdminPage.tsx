@@ -206,6 +206,9 @@ export default function AdminPage() {
   const [inboxProcessed, setInboxProcessed] = useState<string[]>([]);
   const [inboxForm, setInboxForm] = useState({ title: "", content: "" });
   const [inboxSaving, setInboxSaving] = useState(false);
+  const [inboxUploading, setInboxUploading] = useState(false);
+  const [inboxUploadResult, setInboxUploadResult] = useState<{ added: number; results: { filename: string; ok: boolean; reason?: string }[] } | null>(null);
+  const [inboxDragging, setInboxDragging] = useState(false);
 
   const loadRag = useCallback(async () => {
     const [s, entries, pipeline, sources] = await Promise.all([
@@ -362,6 +365,28 @@ export default function AdminPage() {
   async function deleteFromInbox(filename: string) {
     await apiFetch(`/admin/rag/inbox/${encodeURIComponent(filename)}`, { method: "DELETE" });
     setInboxPending(prev => prev.filter(f => f !== filename));
+  }
+
+  async function uploadFilesToInbox(fileList: FileList | File[]) {
+    const files = Array.from(fileList).filter(f => f.size > 0);
+    if (files.length === 0) return;
+    setInboxUploading(true);
+    setInboxUploadResult(null);
+    try {
+      const form = new FormData();
+      files.forEach(f => form.append("files", f));
+      const token = localStorage.getItem("opsoul_token");
+      const res = await fetch("/api/admin/rag/inbox/upload", {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      });
+      const data = await res.json();
+      setInboxUploadResult(data);
+      await loadInbox();
+    } finally {
+      setInboxUploading(false);
+    }
   }
 
   async function createSource() {
@@ -1335,6 +1360,59 @@ export default function AdminPage() {
                     {inboxSaving ? "Sending…" : "Send to Vael"}
                   </button>
                 </div>
+              </div>
+
+              {/* Upload zone */}
+              <div className="px-6 py-5 border-b border-border/20 space-y-3">
+                <p className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">Or upload files & folders</p>
+                <div
+                  onDragOver={e => { e.preventDefault(); setInboxDragging(true); }}
+                  onDragLeave={() => setInboxDragging(false)}
+                  onDrop={e => { e.preventDefault(); setInboxDragging(false); uploadFilesToInbox(e.dataTransfer.files); }}
+                  className={`border-2 border-dashed rounded-lg px-6 py-8 text-center transition-colors ${inboxDragging ? "border-secondary/60 bg-secondary/5" : "border-border/30 hover:border-border/50"}`}
+                >
+                  <p className="font-sans text-sm text-muted-foreground mb-1">
+                    {inboxUploading ? "Uploading…" : "Drop files or folders here"}
+                  </p>
+                  <p className="font-sans text-[10px] text-muted-foreground/50 mb-4">PDF, Word, Markdown, TXT, HTML, JSON, CSV and more</p>
+                  <div className="flex items-center justify-center gap-3">
+                    <label className="cursor-pointer font-label text-[9px] uppercase tracking-widest px-4 py-2 rounded border border-primary/40 text-primary hover:bg-primary/10 transition-colors">
+                      Choose Files
+                      <input
+                        type="file"
+                        multiple
+                        accept=".pdf,.doc,.docx,.txt,.md,.markdown,.html,.htm,.json,.csv,.yaml,.yml,.rst,.xml,.log"
+                        className="hidden"
+                        onChange={e => e.target.files && uploadFilesToInbox(e.target.files)}
+                      />
+                    </label>
+                    <label className="cursor-pointer font-label text-[9px] uppercase tracking-widest px-4 py-2 rounded border border-border/40 text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors">
+                      Choose Folder
+                      <input
+                        type="file"
+                        {...({ webkitdirectory: "true", directory: "true" } as any)}
+                        multiple
+                        className="hidden"
+                        onChange={e => e.target.files && uploadFilesToInbox(e.target.files)}
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                {inboxUploadResult && (
+                  <div className={`px-4 py-3 rounded border text-xs font-sans ${inboxUploadResult.added > 0 ? "border-secondary/30 bg-secondary/5 text-secondary" : "border-destructive/30 bg-destructive/5 text-destructive"}`}>
+                    {inboxUploadResult.added > 0
+                      ? `${inboxUploadResult.added} file${inboxUploadResult.added !== 1 ? "s" : ""} sent to Vael's inbox`
+                      : "No files could be processed"}
+                    {inboxUploadResult.results.filter(r => !r.ok).length > 0 && (
+                      <ul className="mt-1 text-[10px] text-muted-foreground/70 space-y-0.5">
+                        {inboxUploadResult.results.filter(r => !r.ok).map(r => (
+                          <li key={r.filename}>{r.filename}: {r.reason}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Pending files */}

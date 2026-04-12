@@ -11,9 +11,36 @@ import { embed } from '@workspace/opsoul-utils/ai';
 import { chatCompletion, KB_MODEL } from '../utils/openrouter.js';
 
 import { validateEntry, runDiscoverySweep } from '../utils/vaelEngine.js';
+import multer from 'multer';
 
 const INBOX_DIR     = path.resolve(process.cwd(), 'knowledge_inbox');
 const PROCESSED_DIR = path.join(INBOX_DIR, 'processed');
+
+const TEXT_EXTS = new Set(['.txt','.md','.markdown','.csv','.json','.log','.yaml','.yml','.toml','.ini','.html','.htm','.xml','.rst']);
+
+function extOf(name: string) { return ('.' + name.split('.').pop()!.toLowerCase()); }
+
+async function extractTextFromBuffer(buffer: Buffer, mimetype: string, filename: string): Promise<string | null> {
+  const ext = extOf(filename);
+  if (TEXT_EXTS.has(ext) || mimetype.startsWith('text/')) return buffer.toString('utf-8');
+  if (mimetype === 'application/pdf' || ext === '.pdf') {
+    const pdfParse = (await import('pdf-parse')).default;
+    const data = await pdfParse(buffer);
+    return data.text;
+  }
+  if (mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || ext === '.docx') {
+    const mammoth = await import('mammoth');
+    const result = await mammoth.extractRawText({ buffer });
+    return result.value;
+  }
+  if (mimetype === 'application/msword' || ext === '.doc') return null;
+  return buffer.toString('utf-8');
+}
+
+const inboxUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 },
+});
 
 // ── Pipeline content screener ────────────────────────────────────────────────
 
@@ -623,6 +650,36 @@ router.delete('/inbox/:filename', async (req: Request, res: Response): Promise<v
   } catch {
     res.status(404).json({ error: 'File not found' });
   }
+});
+
+router.post('/inbox/upload', inboxUpload.array('files', 50), async (req: Request, res: Response): Promise<void> => {
+  const files = (req.files ?? []) as Express.Multer.File[];
+  if (files.length === 0) { res.status(400).json({ error: 'No files received' }); return; }
+
+  await fs.mkdir(INBOX_DIR, { recursive: true });
+
+  const results: { filename: string; ok: boolean; reason?: string }[] = [];
+
+  for (const file of files) {
+    const originalName = file.originalname || 'upload';
+    try {
+      const text = await extractTextFromBuffer(file.buffer, file.mimetype, originalName);
+      if (!text?.trim()) {
+        results.push({ filename: originalName, ok: false, reason: 'Could not extract text' });
+        continue;
+      }
+      const safe = originalName.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_\- ]/g, '_').slice(0, 60);
+      const filename = `${safe}.md`;
+      const filePath = path.join(INBOX_DIR, filename);
+      await fs.writeFile(filePath, `# ${safe}\n\n${text.trim()}`, 'utf-8');
+      results.push({ filename, ok: true });
+    } catch (err) {
+      results.push({ filename: originalName, ok: false, reason: (err as Error).message });
+    }
+  }
+
+  const added = results.filter(r => r.ok).length;
+  res.status(added > 0 ? 201 : 400).json({ added, results });
 });
 
 export default router;
