@@ -9,7 +9,7 @@ const router = Router({ mergeParams: true });
 
 router.get('/', async (req, res) => {
   const id = (req.params as { id: string }).id;
-  const ownerId = (req as any).ownerId;
+  const ownerId = req.owner!.ownerId;
   try {
     const files = await db
       .select()
@@ -24,7 +24,7 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   const id = (req.params as { id: string }).id;
-  const ownerId = (req as any).ownerId;
+  const ownerId = req.owner!.ownerId;
   const { filename, content = '' } = req.body;
   if (!filename) { res.status(400).json({ error: 'filename required' }); return; }
   try {
@@ -46,7 +46,7 @@ router.post('/', async (req, res) => {
 
 router.patch('/:fileId', async (req, res) => {
   const { fileId } = req.params;
-  const ownerId = (req as any).ownerId;
+  const ownerId = req.owner!.ownerId;
   const { filename, content } = req.body;
   try {
     const [file] = await db
@@ -64,7 +64,7 @@ router.patch('/:fileId', async (req, res) => {
 
 router.delete('/:fileId', async (req, res) => {
   const { fileId } = req.params;
-  const ownerId = (req as any).ownerId;
+  const ownerId = req.owner!.ownerId;
   try {
     await db
       .delete(operatorFilesTable)

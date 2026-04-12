@@ -10,6 +10,8 @@ import {
   platformSkillsTable,
   selfAwarenessStateTable,
   tasksTable,
+  operatorIntegrationsTable,
+  operatorFilesTable,
 } from '@workspace/db';
 import { detectSkillTrigger } from '../utils/skillTriggerEngine.js';
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
@@ -19,7 +21,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { lockLayer1IfUnlocked } from '../utils/lockLayer1.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { buildSystemPrompt, buildBirthSystemPrompt } from '../utils/systemPrompt.js';
-import type { ActiveSkill, SelfAwarenessSnapshot, BuildSystemPromptOpts } from '../utils/systemPrompt.js';
+import type { ActiveSkill, SelfAwarenessSnapshot, BuildSystemPromptOpts, LiveStationData } from '../utils/systemPrompt.js';
 import { searchMemory, buildMemoryContext, distillMemoriesFromConversations, storeMemory } from '../utils/memoryEngine.js';
 import type { MemoryHit } from '../utils/memoryEngine.js';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
@@ -455,11 +457,25 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   let chatModel = rawModel;
   const chatOpts = { apiKey: chatApiKey, get model() { return chatModel; } };
 
-  const [skills, archetypeDefaultSkills, selfAwarenessRow, history] = await Promise.all([
+  const [skills, archetypeDefaultSkills, selfAwarenessRow, history, liveIntegrations, liveTasks, liveFiles] = await Promise.all([
     loadActiveSkills(operator.id),
     loadArchetypeSkills((operator.archetype as string[]) ?? []),
     db.select().from(selfAwarenessStateTable).where(eq(selfAwarenessStateTable.operatorId, operator.id)).limit(1),
     buildMessageHistory(conv.id),
+    db.select({
+      type: operatorIntegrationsTable.integrationType,
+      label: operatorIntegrationsTable.integrationLabel,
+      status: operatorIntegrationsTable.status,
+      scopes: operatorIntegrationsTable.scopes,
+    }).from(operatorIntegrationsTable).where(eq(operatorIntegrationsTable.operatorId, operator.id)),
+    db.select({
+      name: tasksTable.contextName,
+      status: tasksTable.status,
+      payload: tasksTable.payload,
+    }).from(tasksTable).where(eq(tasksTable.operatorId, operator.id)),
+    db.select({ filename: operatorFilesTable.filename })
+      .from(operatorFilesTable)
+      .where(eq(operatorFilesTable.operatorId, operator.id)),
   ]);
 
   const selfAwarenessData = selfAwarenessRow[0] ?? null;
@@ -573,6 +589,28 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // BIRTH MODE — operator has no identity yet; use birth system prompt instead of Layer 1
   const isBirthMode = !operator.rawIdentity;
 
+  // Build live station data — fetched fresh every turn so the operator always knows their real state
+  const liveStation: LiveStationData = {
+    integrations: liveIntegrations.map(i => ({
+      type: i.type ?? '',
+      label: i.label ?? '',
+      status: i.status ?? 'unknown',
+      scopes: i.scopes ?? null,
+    })),
+    tasks: liveTasks.map(t => {
+      const p = (t.payload ?? {}) as Record<string, unknown>;
+      return {
+        name: t.name ?? 'Unnamed task',
+        status: t.status ?? 'active',
+        payload: p,
+        lastRunAt: (p.lastRunAt as string | null) ?? null,
+        lastRunSummary: (p.lastRunSummary as string | null) ?? null,
+      };
+    }),
+    fileCount: liveFiles.length,
+    fileNames: liveFiles.map(f => f.filename),
+  };
+
   const systemPrompt = isBirthMode
     ? buildBirthSystemPrompt()
     : buildSystemPrompt(
@@ -590,6 +628,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         memoryHits,
         selfAwareness,
         promptOpts,
+        liveStation,
       );
 
   // Build user content — plain string or multimodal array when attachments present

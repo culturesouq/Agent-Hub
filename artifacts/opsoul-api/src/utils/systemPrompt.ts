@@ -304,6 +304,13 @@ const LAYER_4_OPERATIONAL_RULES = `## Layer 4 — Operational Rules (Hardcoded)
 - Match response length to message length — a short question gets 1-2 sentences maximum.
 - Speak in natural flowing sentences like a human conversation, not a report.`;
 
+export interface LiveStationData {
+  integrations: { type: string; label: string; status: string; scopes?: string[] | null }[];
+  tasks: { name: string; status: string; lastRunAt?: string | null; lastRunSummary?: string | null; payload?: Record<string, unknown> | null }[];
+  fileCount: number;
+  fileNames?: string[];
+}
+
 export interface BuildSystemPromptOpts {
   sycophancyWarning?: boolean;
   soulAnchorActive?: boolean;
@@ -337,6 +344,7 @@ export function buildSystemPrompt(
   memories?: MemoryHit[],
   selfAwareness?: SelfAwarenessSnapshot | null,
   opts?: BuildSystemPromptOpts,
+  liveStation?: LiveStationData,
 ): string {
   const soul = operator.layer2Soul;
   const parts: string[] = [];
@@ -500,41 +508,6 @@ export function buildSystemPrompt(
         }
       }
 
-      const connectedIntegrations = (cap.integrations ?? []).filter(
-        (i) => i.status === 'connected' || i.status === 'active',
-      );
-
-      if (connectedIntegrations.length > 0) {
-        parts.push('');
-        parts.push(`I have live access to ${connectedIntegrations.length} external ${connectedIntegrations.length === 1 ? 'system' : 'systems'} right now:`);
-        const known = connectedIntegrations.filter((i) => INTEGRATION_CAPABILITIES[(i.type ?? '').toLowerCase()]);
-        const external = connectedIntegrations.filter((i) => !INTEGRATION_CAPABILITIES[(i.type ?? '').toLowerCase()]);
-        for (const intg of known) {
-          const caps = INTEGRATION_CAPABILITIES[(intg.type ?? '').toLowerCase()];
-          parts.push(`- ${intg.label} — I can ${caps.read} and ${caps.write}`);
-        }
-        for (const intg of external) {
-          const scopeList = intg.scopes && intg.scopes.length > 0
-            ? intg.scopes.join(', ')
-            : 'available — my owner defines what I can do here';
-          parts.push(`- ${intg.label} — permitted scope: ${scopeList}`);
-        }
-      } else {
-        parts.push(`No external systems are connected right now. I work from my knowledge base, memory, installed skills, and background research — that is my full workspace for this conversation. If the conversation reveals a clear moment where a live connection would make a real difference — checking emails, pulling from a repo, reading a calendar, querying a system — I mention it naturally and briefly. I say what I could do with that connection and how to set it up (connect via API key or OAuth in the Connections section). I do not suggest this unprompted or repeatedly. Only when it is genuinely useful in the moment.`);
-      }
-    }
-
-    if (wm?.fileCount != null && wm.fileCount > 0 && wm.fileNames && wm.fileNames.length > 0) {
-      parts.push('');
-      parts.push(`I also have a personal file workspace with ${wm.fileCount} ${wm.fileCount === 1 ? 'file' : 'files'}. When I reference or think through something, I can draw from these:`);
-      wm.fileNames.forEach(name => parts.push(`- ${name}`));
-    }
-
-    if (selfAwareness.taskSummary) {
-      const { successRate, recentTypes } = selfAwareness.taskSummary;
-      const typesStr = recentTypes.length > 0 ? ` Things I've been asked to track: ${recentTypes.slice(0, 3).join(', ')}.` : '';
-      parts.push('');
-      parts.push(`If something in this conversation needs a follow-up — a check-in, a recurring action, a delayed task — I can set that up and make sure it actually happens. Success rate so far: ${successRate}%.${typesStr}`);
     }
 
     if (gaps && gaps.length > 0) {
@@ -558,6 +531,67 @@ export function buildSystemPrompt(
     if (h) {
       parts.push('');
       parts.push(`My current overall state: ${h.label}.`);
+    }
+
+    parts.push('');
+  }
+
+  // --- STATION TOOLKIT — always rendered regardless of selfAwareness state ---
+  // Every operator, on every turn, knows their complete station.
+  if (liveStation) {
+    parts.push('## My Station — Full Toolkit');
+
+    // Integrations: connected + available
+    const connectedIntegrations = liveStation.integrations.filter(
+      i => i.status === 'connected' || i.status === 'active'
+    );
+    const connectedTypes = new Set(connectedIntegrations.map(i => i.type.toLowerCase()));
+    const availableIntegrations = Object.entries(INTEGRATION_CAPABILITIES).filter(
+      ([type]) => !connectedTypes.has(type)
+    );
+
+    parts.push('**Connections:**');
+    if (connectedIntegrations.length > 0) {
+      for (const intg of connectedIntegrations) {
+        const caps = INTEGRATION_CAPABILITIES[intg.type.toLowerCase()];
+        if (caps) {
+          parts.push(`- ${intg.label} [CONNECTED] — I can ${caps.read} and ${caps.write}`);
+        } else {
+          const scopeStr = intg.scopes && intg.scopes.length > 0 ? intg.scopes.join(', ') : 'owner-defined scope';
+          parts.push(`- ${intg.label} [CONNECTED] — scope: ${scopeStr}`);
+        }
+      }
+    }
+    if (availableIntegrations.length > 0) {
+      for (const [, caps] of availableIntegrations) {
+        parts.push(`- ${caps.what} [NOT CONNECTED] — can ${caps.read} and ${caps.write} once owner connects via Connections tab`);
+      }
+    }
+    if (connectedIntegrations.length === 0) {
+      parts.push('None connected yet. I mention a connection only when it would genuinely help — once, not repeatedly.');
+    }
+
+    // Files
+    parts.push('');
+    if (liveStation.fileCount > 0) {
+      parts.push(`**Files:** ${liveStation.fileCount} file${liveStation.fileCount === 1 ? '' : 's'} in my workspace: ${(liveStation.fileNames ?? []).join(', ')}. I can add, update, or remove files — owner can review and download them.`);
+    } else {
+      parts.push('**Files:** Empty workspace. I can write notes, to-do lists, reports, and documents here — owner reviews and downloads them. I use this proactively.');
+    }
+
+    // Tasks / automations
+    parts.push('');
+    if (liveStation.tasks.length > 0) {
+      parts.push(`**Automations (${liveStation.tasks.length}):**`);
+      for (const task of liveStation.tasks) {
+        const p = task.payload as Record<string, unknown> | null | undefined;
+        const schedule = p?.schedule as string | undefined;
+        const lastRunStr = task.lastRunAt ? `last run ${new Date(task.lastRunAt).toLocaleDateString()}` : 'not yet run';
+        const summaryStr = task.lastRunSummary ? ` · ${task.lastRunSummary}` : '';
+        parts.push(`- ${task.name} [${task.status.toUpperCase()}]${schedule ? ` · ${schedule}` : ''} · ${lastRunStr}${summaryStr}`);
+      }
+    } else {
+      parts.push('**Automations:** None yet. I can set up scheduled tasks, recurring reports, timed follow-ups on request.');
     }
 
     parts.push('');
