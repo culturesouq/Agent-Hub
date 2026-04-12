@@ -15,6 +15,9 @@ import integrationsRouter from './routes/integrations.js';
 import filesRouter from './routes/files.js';
 import tasksRouter from './routes/tasks.js';
 import slotsRouter from './routes/slots.js';
+import secretsRouter from './routes/secrets.js';
+import platformSkillsRouter from './routes/platform-skills.js';
+import capabilityRequestsRouter from './routes/capability-requests.js';
 import publicChatRouter from './routes/publicChat.js';
 import adminRouter from './routes/admin.js';
 
@@ -33,12 +36,22 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(cookieParser());
 
+// ── Health ────────────────────────────────────────────────────────────────────
+
 app.get('/api/v3/health', (_, res) => {
   res.json({ status: 'ok', version: 'v3', schema: 'opsoul_v3', ts: new Date().toISOString() });
 });
 
+// ── Auth ──────────────────────────────────────────────────────────────────────
+
 app.use('/api/v3/auth', authRouter);
+
+// ── Operators (root) ──────────────────────────────────────────────────────────
+
 app.use('/api/v3/operators', operatorsRouter);
+
+// ── Nested under /operators/:operatorId ──────────────────────────────────────
+
 app.use('/api/v3/operators/:operatorId/conversations', conversationsRouter);
 app.use('/api/v3/operators/:operatorId/conversations/:convId/messages', chatRouter);
 app.use('/api/v3/operators/:operatorId', kbRouter);
@@ -49,10 +62,17 @@ app.use('/api/v3/operators/:operatorId/integrations', integrationsRouter);
 app.use('/api/v3/operators/:operatorId/files', filesRouter);
 app.use('/api/v3/operators/:operatorId/tasks', tasksRouter);
 app.use('/api/v3/operators/:operatorId/slots', slotsRouter);
+app.use('/api/v3/operators/:operatorId/secrets', secretsRouter);
+app.use('/api/v3/operators/:operatorId/capability-requests', capabilityRequestsRouter);
+
+// ── Platform-level ────────────────────────────────────────────────────────────
+
+app.use('/api/v3/platform-skills', platformSkillsRouter);
 app.use('/api/v3/admin', adminRouter);
 app.use('/v3/chat', publicChatRouter);
 
 // ── Cron jobs ─────────────────────────────────────────────────────────────────
+
 // GROW — daily at 02:00 UTC
 cron.schedule('0 2 * * *', () => {
   console.log('[cron] GROW daily evaluation starting');

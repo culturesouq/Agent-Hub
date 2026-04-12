@@ -18,4 +18,6 @@ export * from './operator_deployment_slots';
 export * from './sessions';
 export * from './ops_logs';
 export * from './capability_requests';
+export * from './operator_secrets';
+export * from './password_resets';
 export * from './types';
