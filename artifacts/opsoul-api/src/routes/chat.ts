@@ -738,6 +738,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
+    res.setHeader('Transfer-Encoding', 'chunked');
+    // Disable TCP Nagle algorithm — every write() flushes to the wire immediately
+    // instead of waiting to batch small packets. Critical for token-by-token streaming.
+    (res.socket as any)?.setNoDelay?.(true);
     res.flushHeaders();
 
     let fullContent = '';
