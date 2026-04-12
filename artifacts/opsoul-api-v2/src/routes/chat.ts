@@ -277,10 +277,10 @@ function runPostResponseTasks(
       .where(and(eq(messagesTable.conversationId, conv.id), eq(messagesTable.role, 'user')))
       .then(userMessages => {
         if (userMessages.length >= 2) {
-          extractBirthIdentity(operator.id, conv.id).catch(() => {});
+          extractBirthIdentity(operator.id, conv.id).catch((err) => console.error('[BIRTH EXTRACT ERROR]', (err as Error).message ?? err));
         }
       })
-      .catch(() => {});
+      .catch((err) => console.error('[BIRTH QUERY ERROR]', (err as Error).message ?? err));
   }
 
   if (!operator.safeMode) {

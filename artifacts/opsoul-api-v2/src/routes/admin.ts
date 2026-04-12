@@ -35,7 +35,16 @@ router.get('/owners', requireAuth, requireAdmin, async (_req: Request, res: Resp
     isSovereignAdmin: ownersTable.isSovereignAdmin,
     createdAt: ownersTable.createdAt,
   }).from(ownersTable);
-  res.json(owners);
+
+  // attach operatorCount per owner
+  const opCounts = await db
+    .select({ ownerId: operatorsTable.ownerId, cnt: sql<number>`count(*)::int` })
+    .from(operatorsTable)
+    .groupBy(operatorsTable.ownerId);
+
+  const countMap = Object.fromEntries(opCounts.map((r) => [r.ownerId, r.cnt]));
+
+  res.json(owners.map((o) => ({ ...o, operatorCount: countMap[o.id] ?? 0 })));
 });
 
 router.get('/operators', requireAuth, requireAdmin, async (_req: Request, res: Response): Promise<void> => {
@@ -43,11 +52,30 @@ router.get('/operators', requireAuth, requireAdmin, async (_req: Request, res: R
     id: operatorsTable.id,
     name: operatorsTable.name,
     ownerId: operatorsTable.ownerId,
-    mandate: operatorsTable.mandate,
+    archetype: operatorsTable.archetype,
+    safeMode: operatorsTable.safeMode,
     growLockLevel: operatorsTable.growLockLevel,
     createdAt: operatorsTable.createdAt,
   }).from(operatorsTable);
-  res.json(operators);
+
+  // attach ownerEmail and messageCount
+  const [ownerRows, msgCounts] = await Promise.all([
+    db.select({ id: ownersTable.id, email: ownersTable.email }).from(ownersTable),
+    db
+      .select({ operatorId: messagesTable.operatorId, cnt: sql<number>`count(*)::int` })
+      .from(messagesTable)
+      .groupBy(messagesTable.operatorId),
+  ]);
+
+  const ownerMap = Object.fromEntries(ownerRows.map((o) => [o.id, o.email]));
+  const msgMap = Object.fromEntries(msgCounts.map((r) => [r.operatorId, r.cnt]));
+
+  res.json(operators.map((op) => ({
+    ...op,
+    ownerEmail: ownerMap[op.ownerId] ?? null,
+    messageCount: msgMap[op.id] ?? 0,
+    driftScore: null,
+  })));
 });
 
 router.get('/drift-alerts', requireAuth, requireAdmin, async (_req: Request, res: Response): Promise<void> => {
@@ -66,7 +94,30 @@ router.get('/drift-alerts', requireAuth, requireAdmin, async (_req: Request, res
     .orderBy(desc(opsLogsTable.createdAt))
     .limit(50);
 
-  res.json(alerts);
+  if (alerts.length === 0) { res.json([]); return; }
+
+  // attach operatorName and ownerEmail
+  const opIds = [...new Set(alerts.map((a) => a.operatorId).filter(Boolean))] as string[];
+  const ops = opIds.length > 0
+    ? await db.select({ id: operatorsTable.id, name: operatorsTable.name, ownerId: operatorsTable.ownerId }).from(operatorsTable)
+    : [];
+  const ownerIds = [...new Set(ops.map((o) => o.ownerId))];
+  const owners = ownerIds.length > 0
+    ? await db.select({ id: ownersTable.id, email: ownersTable.email }).from(ownersTable)
+    : [];
+
+  const opMap = Object.fromEntries(ops.map((o) => [o.id, o]));
+  const ownerEmailMap = Object.fromEntries(owners.map((o) => [o.id, o.email]));
+
+  res.json(alerts.map((alert) => {
+    const op = alert.operatorId ? opMap[alert.operatorId] : null;
+    return {
+      ...alert,
+      operatorName: op?.name ?? null,
+      ownerEmail: op ? ownerEmailMap[op.ownerId] ?? null : null,
+      driftScore: null,
+    };
+  }));
 });
 
 router.patch('/owners/:id/toggle-admin', requireAuth, requireAdmin, async (req: Request, res: Response): Promise<void> => {

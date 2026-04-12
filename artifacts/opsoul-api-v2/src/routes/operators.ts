@@ -2,8 +2,9 @@ import { Router, type Request, type Response } from 'express';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { db } from '@workspace/db-v2';
-import { operatorsTable } from '@workspace/db-v2';
+import { operatorsTable, conversationsTable, messagesTable } from '@workspace/db-v2';
 import { eq, and, isNull } from 'drizzle-orm';
+import { resolveScope } from '../utils/scopeResolver.js';
 import { requireAuth } from '../middleware/auth.js';
 import { chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import { recomputeSelfAwareness } from '../utils/selfAwarenessEngine.js';
@@ -50,6 +51,69 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   const operators = await db.select().from(operatorsTable)
     .where(and(eq(operatorsTable.ownerId, req.owner!.ownerId), isNull(operatorsTable.deletedAt)));
   res.json(operators.map(formatOperator));
+});
+
+// ── Blank operator (birth conversation entry point) ───────────────────────────
+
+router.post('/blank', async (req: Request, res: Response): Promise<void> => {
+  const ownerId = req.owner!.ownerId;
+  const operatorId = crypto.randomUUID();
+  const slug = `operator-${Date.now()}`;
+
+  const defaultSoul = {
+    personalityTraits: [],
+    toneProfile: null,
+    communicationStyle: null,
+    quirks: [],
+    valuesManifestation: [],
+    emotionalRange: null,
+    decisionMakingStyle: null,
+    conflictResolution: null,
+    openingMessage: null,
+    backstory: null,
+  };
+
+  const [op] = await db.insert(operatorsTable).values({
+    id: operatorId,
+    ownerId,
+    slug,
+    name: 'New Operator',
+    archetype: ['Connector'],
+    mandate: '',
+    rawIdentity: null,
+    coreValues: [],
+    ethicalBoundaries: [],
+    layer2Soul: defaultSoul,
+    layer2SoulOriginal: defaultSoul,
+    growLockLevel: 'CONTROLLED',
+    safeMode: false,
+    toolUsePolicy: {},
+  }).returning();
+
+  const scope = resolveScope({ operatorId: op.id, source: 'owner', callerId: ownerId });
+  const convId = crypto.randomUUID();
+
+  await db.insert(conversationsTable).values({
+    id: convId,
+    operatorId: op.id,
+    ownerId,
+    contextName: 'Birth',
+    scopeId: scope.scopeId,
+    scopeType: scope.scopeType,
+    messageCount: 1,
+    lastMessageAt: new Date(),
+  });
+
+  await db.insert(messagesTable).values({
+    id: crypto.randomUUID(),
+    conversationId: convId,
+    operatorId: op.id,
+    role: 'assistant',
+    content: 'I am your eternal AI Operator, what would you like to call me?',
+    tokenCount: 15,
+  });
+
+  res.status(201).json({ operatorId: op.id, conversationId: convId });
 });
 
 // ── Bootstrap preview (AI soul gen) ──────────────────────────────────────────
