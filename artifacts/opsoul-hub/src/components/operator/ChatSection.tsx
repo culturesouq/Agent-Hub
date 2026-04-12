@@ -140,6 +140,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   const [lastStreamSnapshot, setLastStreamSnapshot] = useState("");
   const [isAgencyProcessing, setIsAgencyProcessing] = useState(false);
   const [searchingQuery, setSearchingQuery] = useState<string | null>(null);
+  const [seedingSource, setSeedingSource] = useState<string | null>(null);
   const [readingUrl, setReadingUrl] = useState<string | null>(null);
   const [runningTool, setRunningTool] = useState<string | null>(null);
   const [ranSkill, setRanSkill] = useState<string | null>(null);
@@ -414,15 +415,25 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                   setLastStreamSnapshot("");
                   setIsAgencyProcessing(false);
                   setSearchingQuery(null);
+                  setSeedingSource(null);
                   setRunningTool(null);
                 } else if (data.reading) {
                   setReadingUrl(data.reading);
                   setSearchingQuery(null);
+                  setSeedingSource(null);
                   setRunningTool(null);
                   setIsAgencyProcessing(false);
                   firstDelta = true;
                 } else if (data.searching) {
                   setSearchingQuery(data.searching);
+                  setSeedingSource(null);
+                  setReadingUrl(null);
+                  setRunningTool(null);
+                  setIsAgencyProcessing(false);
+                  firstDelta = true;
+                } else if (data.seeding) {
+                  setSeedingSource(data.seeding);
+                  setSearchingQuery(null);
                   setReadingUrl(null);
                   setRunningTool(null);
                   setIsAgencyProcessing(false);
@@ -431,12 +442,14 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                   setRunningTool(data.running);
                   setRanSkill(data.running);
                   setSearchingQuery(null);
+                  setSeedingSource(null);
                   setIsAgencyProcessing(false);
                   firstDelta = true;
                 } else if (data.delta) {
                   if (firstDelta) {
                     setIsAgencyProcessing(false);
                     setSearchingQuery(null);
+                    setSeedingSource(null);
                     setReadingUrl(null);
                     setRunningTool(null);
                     firstDelta = false;
@@ -449,6 +462,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                 } else if (data.done) {
                   setIsAgencyProcessing(false);
                   setSearchingQuery(null);
+                  setSeedingSource(null);
                   setReadingUrl(null);
                   setRunningTool(null);
                   setStreamingMsg("");
@@ -474,6 +488,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
       setLastStreamSnapshot("");
       setIsAgencyProcessing(false);
       setSearchingQuery(null);
+      setSeedingSource(null);
       setReadingUrl(null);
       setRunningTool(null);
       setRanSkill(null);
@@ -612,16 +627,16 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
             )}
 
             {/* Unified live status pill */}
-            {(readingUrl || searchingQuery || runningTool) && (
+            {(readingUrl || searchingQuery || seedingSource || runningTool) && (
               <div className="flex justify-start">
                 <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-primary/20 bg-primary/5 text-primary/60 text-[11px] font-mono">
-                  {readingUrl ? `📄 Reading…` : searchingQuery ? `🔍 Searching…` : `⚡ Running ${runningTool}…`}
+                  {readingUrl ? `📄 Reading…` : searchingQuery ? `🔍 Searching…` : seedingSource ? `🧬 Seeding…` : `⚡ Running ${runningTool}…`}
                 </span>
               </div>
             )}
 
             {/* Waiting for first token — bouncing dots */}
-            {isAgencyProcessing && !streamingMsg && !searchingQuery && !readingUrl && !runningTool && (
+            {isAgencyProcessing && !streamingMsg && !searchingQuery && !seedingSource && !readingUrl && !runningTool && (
               <div className="flex justify-start">
                 <div className="flex items-center gap-1 px-3 py-2.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:0ms]" />

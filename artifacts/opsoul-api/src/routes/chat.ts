@@ -32,7 +32,7 @@ import type { Layer2Soul } from '../validation/operator.js';
 import { resolveScope } from '../utils/scopeResolver.js';
 import { scrapeUrl } from '../utils/urlScraper.js';
 import type { ContentPart } from '../utils/openrouter.js';
-import { verifyAndStore } from '../utils/kbIntake.js';
+import { verifyAndStore, persistKbSeedEntry } from '../utils/kbIntake.js';
 import { eq, and, asc } from 'drizzle-orm';
 import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
 import { isWebSearchAvailable, executeWebSearch } from '../utils/capabilityEngine.js';
@@ -734,6 +734,37 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       }
     : null;
 
+  // KB seed tool — lets the operator persist a synthesized knowledge entry directly.
+  // Offered alongside web_search (same availability gate). Skips curiositySearch since
+  // the operator has already done the research; entries land pending for VAEL cron verification.
+  const kbSeedTool: ToolDefinition | null = isWebSearchAvailable()
+    ? {
+        type: 'function',
+        function: {
+          name: 'kb_seed',
+          description: 'Persist a validated knowledge entry into your knowledge base corpus. Call this AFTER you have researched and synthesized a clear, durable insight worth retaining permanently. Do not use for ephemeral data, opinions, or uncertain facts. Write a self-contained, factual entry of 100–400 words.',
+          parameters: {
+            type: 'object',
+            properties: {
+              content: {
+                type: 'string',
+                description: 'The knowledge entry to store — a self-contained factual insight (100–400 words). No filler. No "I believe". Pure information.',
+              },
+              source: {
+                type: 'string',
+                description: 'Name of the source(s) this was derived from (e.g. "Google AI Blog 2024, MIT study on transformer efficiency").',
+              },
+              confidence: {
+                type: 'number',
+                description: 'Your confidence score 40–85 based on source quality and corroboration. Use 80+ only if multiple independent sources agree. Never claim 100.',
+              },
+            },
+            required: ['content', 'source', 'confidence'],
+          },
+        },
+      }
+    : null;
+
   // Agency skills — built once, shared by both paths
   const agencySkills = buildAgencySkills(skills, archetypeDefaultSkills, installedNames, operator);
 
@@ -810,9 +841,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         let iterContent = '';
         let iterToolCall: { id: string; name: string; args: string } | undefined;
 
+        const iterTools: ToolDefinition[] = [];
+        if (webSearchTool && webSearchCount < MAX_SEARCHES) iterTools.push(webSearchTool);
+        if (kbSeedTool) iterTools.push(kbSeedTool);
         const iterOpts = {
           ...chatOpts,
-          tools: (webSearchTool && webSearchCount < MAX_SEARCHES) ? [webSearchTool] : undefined,
+          tools: iterTools.length > 0 ? iterTools : undefined,
         };
 
         for await (const chunk of streamChat(loopMessages, iterOpts)) {
@@ -862,6 +896,59 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           }
 
           // Search failed or empty query — what we have is the final response
+          finalContent = iterContent;
+          break;
+        }
+
+        // ── KB SEED TOOL CALL ──────────────────────────────────────────────
+        if (iterToolCall?.name === 'kb_seed') {
+          let seedArgs: { content?: string; source?: string; confidence?: number } = {};
+          try { seedArgs = JSON.parse(iterToolCall.args); } catch { /* skip */ }
+
+          if (seedArgs.content && seedArgs.source) {
+            const confidence = typeof seedArgs.confidence === 'number' ? seedArgs.confidence : 65;
+            console.log(`[agency] loop iter ${iter} — kb_seed: "${seedArgs.source}" (confidence ${confidence})`);
+            res.write(`data: ${JSON.stringify({ seeding: seedArgs.source })}\n\n`);
+
+            const seedResult = await persistKbSeedEntry(
+              operator.id,
+              operator.ownerId,
+              seedArgs.content,
+              seedArgs.source,
+              confidence,
+            );
+
+            const toolResultText = seedResult.stored
+              ? `Entry stored successfully. Confidence: ${Math.max(40, Math.min(85, Math.round(confidence)))}. Status: pending — queued for VAEL pipeline verification.`
+              : `Entry not stored: ${seedResult.reason}`;
+
+            if (seedResult.stored) {
+              storeMemory(
+                operator.id,
+                operator.ownerId,
+                `Knowledge entry seeded: "${seedArgs.source}". ${seedArgs.content!.slice(0, 300)}`,
+                'fact',
+                'ai_distilled',
+                confidence / 100,
+              ).catch(() => {});
+            }
+
+            loopMessages.push(
+              {
+                role: 'assistant',
+                content: iterContent || '',
+                tool_calls: [{
+                  id: iterToolCall.id,
+                  type: 'function',
+                  function: { name: 'kb_seed', arguments: iterToolCall.args },
+                }],
+              },
+              { role: 'tool', content: toolResultText, tool_call_id: iterToolCall.id },
+            );
+            continue;
+          }
+
+          // Missing required args — treat as final response
           finalContent = iterContent;
           break;
         }
@@ -979,7 +1066,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         }
       }
 
-      const syncOpts = { ...chatOpts, tools: webSearchTool ? [webSearchTool] : undefined };
+      const syncTools: ToolDefinition[] = [];
+      if (webSearchTool) syncTools.push(webSearchTool);
+      if (kbSeedTool) syncTools.push(kbSeedTool);
+      const syncOpts = { ...chatOpts, tools: syncTools.length > 0 ? syncTools : undefined };
       const result = await chatCompletion(messages, syncOpts);
 
       let finalContent = result.content;
@@ -1027,6 +1117,29 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             finalPromptTokens = secondResult.promptTokens;
             finalCompletionTokens = secondResult.completionTokens;
           }
+        }
+      }
+
+      // KB seed — operator called the tool via function calling (sync path)
+      if (!capabilityFired && result.toolCall && result.toolCall.name === 'kb_seed') {
+        let seedArgs: { content?: string; source?: string; confidence?: number } = {};
+        try { seedArgs = JSON.parse(result.toolCall.args); } catch { /* skip */ }
+        if (seedArgs.content && seedArgs.source) {
+          const confidence = typeof seedArgs.confidence === 'number' ? seedArgs.confidence : 65;
+          console.log(`[agency] kb_seed (sync): "${seedArgs.source}" (confidence ${confidence})`);
+          const seedResult = await persistKbSeedEntry(operator.id, operator.ownerId, seedArgs.content, seedArgs.source, confidence);
+          capabilityFired = true;
+          const toolResultText = seedResult.stored
+            ? `Entry stored. Confidence: ${Math.max(40, Math.min(85, Math.round(confidence)))}. Status: pending.`
+            : `Entry not stored: ${seedResult.reason}`;
+          const seedMessages: ChatMessage[] = [
+            ...messages,
+            { role: 'system', content: `[KB Seed Result]\n${toolResultText}` },
+          ];
+          const secondResult = await chatCompletion(seedMessages, chatOpts);
+          finalContent = secondResult.content;
+          finalPromptTokens = secondResult.promptTokens;
+          finalCompletionTokens = secondResult.completionTokens;
         }
       }
 

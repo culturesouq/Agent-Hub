@@ -139,3 +139,86 @@ export async function verifyAndStore(
 
   return { stored: true, status: 'pending' };
 }
+
+export interface KbSeedResult {
+  stored: boolean;
+  reason?: string;
+}
+
+/**
+ * Direct-insert path for operator-synthesized knowledge.
+ * Used when the operator calls the kb_seed tool after already doing research.
+ * Skips curiositySearch (no redundant web round-trip) — the operator is the curator.
+ * Duplicate check still runs. Entries land as pending at the given confidence, flagged
+ * is_pipeline_intake=true so the VAEL cron picks them up for full verification.
+ */
+export async function persistKbSeedEntry(
+  operatorId: string,
+  ownerId: string,
+  content: string,
+  sourceName: string,
+  confidence: number,
+): Promise<KbSeedResult> {
+  if (!content || content.trim().length < 50) {
+    return { stored: false, reason: 'Content too short (minimum 50 characters)' };
+  }
+
+  let embedding: number[];
+  try {
+    embedding = await embed(content);
+  } catch {
+    return { stored: false, reason: 'Embedding failed' };
+  }
+  const vecStr = `[${embedding.join(',')}]`;
+
+  // Duplicate check — skip if similarity > 0.92 to avoid near-identical entries
+  try {
+    const dupResult = await pool.query<{ distance: number }>(
+      `SELECT (embedding <=> $1::vector) AS distance
+       FROM operator_kb
+       WHERE operator_id = $2 AND embedding IS NOT NULL
+       ORDER BY distance ASC LIMIT 1`,
+      [vecStr, operatorId],
+    );
+    if (dupResult.rows.length > 0 && (1 - Number(dupResult.rows[0].distance)) > 0.92) {
+      return { stored: false, reason: 'Near-duplicate already in knowledge base' };
+    }
+  } catch { /* non-critical — proceed */ }
+
+  // Clamp confidence to a sensible range: operator never enters anything as verified
+  const clampedConfidence = Math.max(40, Math.min(85, Math.round(confidence)));
+
+  try {
+    const id = crypto.randomUUID();
+    await pool.query(
+      `INSERT INTO operator_kb
+         (id, operator_id, owner_id, content, embedding, source_name, source_url,
+          source_trust_level, confidence_score, intake_tags, is_pipeline_intake,
+          privacy_cleared, content_cleared, verification_status, chunk_index,
+          flag_reason, created_at)
+       VALUES ($1,$2,$3,$4,$5::vector,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW())`,
+      [
+        id,
+        operatorId,
+        ownerId,
+        content,
+        vecStr,
+        sourceName || 'operator_research',
+        null,
+        'external_verified',
+        clampedConfidence,
+        [],
+        true,
+        true,
+        true,
+        'pending',
+        0,
+        null,
+      ],
+    );
+    return { stored: true };
+  } catch (err) {
+    console.error('[kb_seed] insert failed:', err);
+    return { stored: false, reason: 'Database error during storage' };
+  }
+}
