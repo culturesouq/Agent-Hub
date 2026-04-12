@@ -201,6 +201,12 @@ export default function AdminPage() {
     search_queries_used: string[];
   } | null>(null);
 
+  // Knowledge Inbox
+  const [inboxPending, setInboxPending] = useState<string[]>([]);
+  const [inboxProcessed, setInboxProcessed] = useState<string[]>([]);
+  const [inboxForm, setInboxForm] = useState({ title: "", content: "" });
+  const [inboxSaving, setInboxSaving] = useState(false);
+
   const loadRag = useCallback(async () => {
     const [s, entries, pipeline, sources] = await Promise.all([
       apiFetch<RagStats>("/admin/rag/stats"),
@@ -242,7 +248,7 @@ export default function AdminPage() {
   }, [token, owner, setLocation, loadRag]);
 
   useEffect(() => {
-    if (tab === "vael") loadVaelSchedule();
+    if (tab === "vael") { loadVaelSchedule(); loadInbox(); }
   }, [tab]);
 
   async function toggleAdmin(id: string) {
@@ -330,6 +336,32 @@ export default function AdminPage() {
         setVaelSweeping(false);
       }
     }, 4000);
+  }
+
+  const loadInbox = useCallback(async () => {
+    const data = await apiFetch<{ pending: string[]; processed: string[] }>("/admin/rag/inbox");
+    setInboxPending(data.pending);
+    setInboxProcessed(data.processed);
+  }, []);
+
+  async function submitToInbox() {
+    if (!inboxForm.title.trim() || !inboxForm.content.trim()) return;
+    setInboxSaving(true);
+    try {
+      await apiFetch("/admin/rag/inbox", {
+        method: "POST",
+        body: JSON.stringify({ title: inboxForm.title.trim(), content: inboxForm.content.trim() }),
+      });
+      setInboxForm({ title: "", content: "" });
+      await loadInbox();
+    } finally {
+      setInboxSaving(false);
+    }
+  }
+
+  async function deleteFromInbox(filename: string) {
+    await apiFetch(`/admin/rag/inbox/${encodeURIComponent(filename)}`, { method: "DELETE" });
+    setInboxPending(prev => prev.filter(f => f !== filename));
   }
 
   async function createSource() {
@@ -1266,6 +1298,90 @@ export default function AdminPage() {
             <div>
               <h2 className="font-headline text-2xl font-bold text-primary mb-1">Vael Workspace</h2>
               <p className="text-sm text-muted-foreground font-sans">Autonomous validation, discovery, and seeding — scheduled tasks and manual controls.</p>
+            </div>
+
+            {/* ── Knowledge Inbox ───────────────────────────────────────── */}
+            <div className="glass-panel overflow-hidden">
+              <div className="px-6 py-4 border-b border-border/30 flex items-center justify-between">
+                <div>
+                  <span className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Knowledge Inbox</span>
+                  <p className="font-sans text-xs text-muted-foreground/70 mt-0.5">Give Vael material to learn from. She reads it herself, decides what's valuable, validates it, and seeds it into her DNA.</p>
+                </div>
+                <button onClick={loadInbox} className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors flex-shrink-0">Refresh</button>
+              </div>
+
+              {/* Submit form */}
+              <div className="px-6 py-5 border-b border-border/20 space-y-3">
+                <input
+                  value={inboxForm.title}
+                  onChange={e => setInboxForm(f => ({ ...f, title: e.target.value }))}
+                  placeholder="Title — e.g. 'How AI operators handle ambiguity'"
+                  className="w-full bg-surface/30 border border-border/30 rounded px-3 py-2 text-xs font-sans text-on-surface placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/40"
+                />
+                <textarea
+                  value={inboxForm.content}
+                  onChange={e => setInboxForm(f => ({ ...f, content: e.target.value }))}
+                  placeholder="Paste any text here — articles, research, documentation, notes. Vael will extract what she considers worth learning."
+                  rows={6}
+                  className="w-full bg-surface/30 border border-border/30 rounded px-3 py-2 text-xs font-sans text-on-surface placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/40 resize-none"
+                />
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-sans text-muted-foreground/60">She'll process it on her next sweep or you can trigger one manually below.</p>
+                  <button
+                    onClick={submitToInbox}
+                    disabled={inboxSaving || !inboxForm.title.trim() || !inboxForm.content.trim()}
+                    className="font-label text-[9px] uppercase tracking-widest px-4 py-2 rounded border border-secondary/40 text-secondary hover:bg-secondary/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                  >
+                    {inboxSaving ? "Sending…" : "Send to Vael"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Pending files */}
+              {inboxPending.length > 0 && (
+                <div className="px-6 py-4 border-b border-border/20">
+                  <p className="font-label text-[9px] uppercase tracking-widest text-muted-foreground mb-3">Waiting for Vael — {inboxPending.length} file{inboxPending.length !== 1 ? "s" : ""}</p>
+                  <div className="space-y-2">
+                    {inboxPending.map(f => (
+                      <div key={f} className="flex items-center justify-between gap-3 py-1.5">
+                        <span className="font-mono text-xs text-on-surface/80 truncate">{f}</span>
+                        <button
+                          onClick={() => deleteFromInbox(f)}
+                          className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-destructive transition-colors flex-shrink-0"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {inboxPending.length === 0 && (
+                <div className="px-6 py-4 border-b border-border/20">
+                  <p className="font-sans text-xs text-muted-foreground/60 italic">Inbox is empty — paste something above for Vael to read.</p>
+                </div>
+              )}
+
+              {/* Processed files */}
+              {inboxProcessed.length > 0 && (
+                <div className="px-6 py-4">
+                  <p className="font-label text-[9px] uppercase tracking-widest text-muted-foreground mb-3">Already read by Vael — last {inboxProcessed.length}</p>
+                  <div className="space-y-1.5">
+                    {inboxProcessed.map(f => {
+                      const clean = f.replace(/^\d{4}-\d{2}-\d{2}T[^_]+_/, '').replace(/\.(md|txt)$/i, '');
+                      const date = f.match(/^(\d{4}-\d{2}-\d{2})/)?.[1] ?? '';
+                      return (
+                        <div key={f} className="flex items-center gap-3">
+                          <span className="w-1.5 h-1.5 rounded-full bg-secondary/50 flex-shrink-0" />
+                          <span className="font-sans text-xs text-muted-foreground/70 truncate">{clean}</span>
+                          {date && <span className="font-label text-[9px] text-muted-foreground/40 flex-shrink-0">{date}</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Scheduled tasks */}

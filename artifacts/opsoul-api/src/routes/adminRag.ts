@@ -3,11 +3,17 @@ import { db, pool, ragDnaTable, ragPipelineConfigTable, operatorKbTable, ragSour
 import type { RagSourceType } from '@workspace/db';
 import { eq, and, sql, desc, isNull, or, notInArray } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
+import fs from 'fs/promises';
+import path from 'path';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireAdmin } from '../middleware/requireAdmin.js';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { chatCompletion, KB_MODEL } from '../utils/openrouter.js';
+
 import { validateEntry, runDiscoverySweep } from '../utils/vaelEngine.js';
+
+const INBOX_DIR     = path.resolve(process.cwd(), 'knowledge_inbox');
+const PROCESSED_DIR = path.join(INBOX_DIR, 'processed');
 
 // ── Pipeline content screener ────────────────────────────────────────────────
 
@@ -564,6 +570,59 @@ router.delete('/sources/:sourceId', async (req: Request, res: Response): Promise
   const { sourceId } = req.params;
   await db.delete(ragSourcesTable).where(eq(ragSourcesTable.id, sourceId));
   res.json({ ok: true, deleted: sourceId });
+});
+
+// ── Knowledge Inbox — browse & submit ─────────────────────────────────────────
+
+router.get('/inbox', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    await fs.mkdir(PROCESSED_DIR, { recursive: true });
+
+    const pending = (await fs.readdir(INBOX_DIR))
+      .filter(f => /\.(md|txt)$/i.test(f));
+
+    const processedAll = (await fs.readdir(PROCESSED_DIR))
+      .filter(f => /\.(md|txt)$/i.test(f))
+      .sort()
+      .reverse()
+      .slice(0, 20);
+
+    res.json({ pending, processed: processedAll });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not read inbox', detail: (e as Error).message });
+  }
+});
+
+router.post('/inbox', async (req: Request, res: Response): Promise<void> => {
+  const { title, content } = req.body as { title?: string; content?: string };
+  if (!title?.trim() || !content?.trim()) {
+    res.status(400).json({ error: 'title and content are required' });
+    return;
+  }
+  try {
+    await fs.mkdir(INBOX_DIR, { recursive: true });
+    const safe = title.trim().replace(/[^a-zA-Z0-9_\- ]/g, '_').slice(0, 60);
+    const filename = `${safe}.md`;
+    const filePath = path.join(INBOX_DIR, filename);
+    await fs.writeFile(filePath, `# ${title.trim()}\n\n${content.trim()}`, 'utf-8');
+    res.status(201).json({ ok: true, filename });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not write to inbox', detail: (e as Error).message });
+  }
+});
+
+router.delete('/inbox/:filename', async (req: Request, res: Response): Promise<void> => {
+  const filename = path.basename(req.params.filename);
+  if (!/\.(md|txt)$/i.test(filename)) {
+    res.status(400).json({ error: 'Invalid filename' });
+    return;
+  }
+  try {
+    await fs.unlink(path.join(INBOX_DIR, filename));
+    res.json({ ok: true, deleted: filename });
+  } catch {
+    res.status(404).json({ error: 'File not found' });
+  }
 });
 
 export default router;
