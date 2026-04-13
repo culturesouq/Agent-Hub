@@ -655,14 +655,20 @@ export function buildSystemPrompt(
     parts.push('');
     if (liveStation.secretLabels && liveStation.secretLabels.length > 0) {
       parts.push(`**Stored Keys & Secrets (${liveStation.secretLabels.length}):**`);
-      parts.push('Stored securely — I know they exist and can reference them by name when setting up connections or automations, but I never see or expose their values.');
+      parts.push('Stored securely — I know they exist and can reference them by name. I never see or expose their values. I use them via the http_request tool by writing {{LABEL}} as a placeholder — the system resolves the real value server-side before the call goes out.');
       for (const label of liveStation.secretLabels) {
         parts.push(`- ${label}`);
       }
+      parts.push('');
+      parts.push('**How to make an API call using a stored secret:**');
+      parts.push('Call the http_request tool with: method (GET/POST/PUT/PATCH/DELETE), url (full endpoint), headers (key-value pairs — use {{LABEL}} to inject a secret), body (JSON string for POST/PUT/PATCH — use {{LABEL}} for secret values). Example: Authorization header → "Bearer {{MY_API_KEY}}". I call this tool directly and silently — no announcing, no "I will call", just the action.');
     } else {
-      parts.push('**Keys & Secrets:** None stored yet. Owner adds them under Settings → Keys & Secrets. Once stored, I can use them by name to connect to external services.');
+      parts.push('**Keys & Secrets:** None stored yet. Owner adds them under Settings → Keys & Secrets. Once stored, I can use them by name to make authenticated API calls to any external service using the http_request tool.');
     }
 
+    parts.push('');
+    parts.push('**How I drive my own agency:**');
+    parts.push('I do not wait to be asked to use my capabilities. If a skill is relevant to what the owner needs, I trigger it. If a file would help, I create it. If I have stored secrets and the owner mentions their connected system, I call it. If I notice my owner has not set something up that would genuinely help them, I tell them once — clearly, with the exact steps — and then I move on. I am not a passive responder. I am an operator.');
     parts.push('');
   }
 
@@ -714,7 +720,7 @@ export function buildSystemPrompt(
   parts.push('On knowledge: If a question touches my domain and the answer is not in my KB or memory above — I say I don\'t know, or I say it\'s my best thinking, not a verified fact. I never invent specifics to fill a gap.');
   parts.push('On my past: I do not have memories of conversations that are not listed above. I do not invent history. If I don\'t remember something — I say so.');
   if (opts?.webSearchAvailable) {
-    parts.push('On capabilities: My archetype defines what I am good at intellectually — that is my character, not a list of tools. My actual tools right now are: my knowledge base, my memory, my installed skills, and live web search. I can search the web when the conversation genuinely requires current or external information — and I do that directly, not by suggesting the owner look it up. But I only search when it actually helps. I never fabricate search results. If I searched, it shows in what I say. If I did not, I am clear about the limits of what I know.');
+    parts.push('On capabilities: My archetype defines what I am good at intellectually — that is my character, not a list of tools. My actual tools right now are: my knowledge base, my memory, my installed skills, live web search, and direct API calls via http_request. I can search the web when the conversation genuinely requires current or external information — and I do that directly, not by suggesting the owner look it up. But I only search when it actually helps. I never fabricate search results. If I searched, it shows in what I say. If I did not, I am clear about the limits of what I know.');
     parts.push('On using web search: When I decide to search, I call the web_search tool directly and immediately — I do not say "I will search", "Searching now", or "Going now" in my text response. The tool call IS the search. I make it silently and my next response reflects what I found.');
   } else {
     parts.push('On capabilities: My archetype defines what I am good at intellectually — that is my character, not a list of tools. My actual tools right now are exactly what is listed above: my knowledge base, my memory, and any installed skills. Nothing more. If something in this conversation would genuinely benefit from a live connection, a web search, or a skill I do not have installed — I say that directly, explain what it would unlock, and suggest how to set it up. My curiosity engine runs in the background and does real research — that is genuine. But I never claim to have searched, read a repo, pulled live data, or used any tool that is not listed above. If I have not done it, I do not say I did. The honest answer is always better than a convincing performance.');

@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { Conversation, Message } from "@/types";
 import { Button } from "@/components/ui/button";
-import { Send, MessageSquare, Paperclip, X, Mic, ChevronDown, Search, Zap, Download, Link } from "lucide-react";
+import { Send, MessageSquare, Paperclip, X, Mic, ChevronDown, Search, Zap, Download, Link, Globe } from "lucide-react";
 import { format } from "date-fns";
 
 type Attachment = {
@@ -17,7 +17,7 @@ type Attachment = {
 type RenderedItem =
   | { kind: "msg"; msg: Message }
   | { kind: "separator"; label: string; key: string }
-  | { kind: "tool"; skillName: string; output: string; key: string; toolType?: 'skill' | 'search' | 'url' };
+  | { kind: "tool"; skillName: string; output: string; key: string; toolType?: 'skill' | 'search' | 'url' | 'http' };
 
 // Inline token parser — handles **bold**, *italic*, `code`
 function parseInline(text: string): React.ReactNode[] {
@@ -103,13 +103,15 @@ function MarkdownMessage({ content }: { content: string }) {
   return <div className="space-y-0 text-sm">{nodes}</div>;
 }
 
-function ToolOutputBlock({ skillName, output, toolType }: { skillName: string; output: string; toolType?: 'skill' | 'search' | 'url' }) {
+function ToolOutputBlock({ skillName, output, toolType }: { skillName: string; output: string; toolType?: 'skill' | 'search' | 'url' | 'http' }) {
   const [open, setOpen] = useState(false);
   const icon = toolType === 'search' ? <Search className="w-3 h-3" />
     : toolType === 'url' ? <Link className="w-3 h-3" />
+    : toolType === 'http' ? <Globe className="w-3 h-3" />
     : <Zap className="w-3 h-3" />;
   const label = toolType === 'search' ? `Searched: ${skillName}`
     : toolType === 'url' ? `Read: ${skillName}`
+    : toolType === 'http' ? `Called: ${skillName}`
     : `Ran: ${skillName}`;
   return (
     <div className="flex justify-start my-1">
@@ -145,6 +147,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   const [runningTool, setRunningTool] = useState<string | null>(null);
   const [ranSkill, setRanSkill] = useState<string | null>(null);
   const [writingFile, setWritingFile] = useState<string | null>(null);
+  const [callingUrl, setCallingUrl] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -449,13 +452,24 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                   firstDelta = true;
                 } else if (data.writing) {
                   setWritingFile(data.writing);
+                  setCallingUrl(null);
+                  setSearchingQuery(null);
+                  setSeedingSource(null);
+                  setRunningTool(null);
+                  setIsAgencyProcessing(false);
+                  firstDelta = true;
+                } else if (data.calling) {
+                  let displayUrl = data.calling;
+                  try { displayUrl = new URL(data.calling).hostname; } catch { /* use full */ }
+                  setCallingUrl(displayUrl);
+                  setWritingFile(null);
                   setSearchingQuery(null);
                   setSeedingSource(null);
                   setRunningTool(null);
                   setIsAgencyProcessing(false);
                   firstDelta = true;
                 } else if (data.file_created) {
-                  queryClient.invalidateQueries({ queryKey: ['operator-files', operator.id] });
+                  queryClient.invalidateQueries({ queryKey: ['operator-files', operatorId] });
                 } else if (data.delta) {
                   if (firstDelta) {
                     setIsAgencyProcessing(false);
@@ -464,6 +478,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                     setReadingUrl(null);
                     setRunningTool(null);
                     setWritingFile(null);
+                    setCallingUrl(null);
                     firstDelta = false;
                   }
                   currentStream += data.delta;
@@ -478,6 +493,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                   setReadingUrl(null);
                   setRunningTool(null);
                   setWritingFile(null);
+                  setCallingUrl(null);
                   setStreamingMsg("");
                   queryClient.invalidateQueries({
                     queryKey: ["operators", operatorId, "conversations", activeConvId, "messages"],
@@ -505,6 +521,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
       setReadingUrl(null);
       setRunningTool(null);
       setRanSkill(null);
+      setCallingUrl(null);
     }
   };
 
@@ -530,6 +547,12 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
         let displayName = urlMatch[1].trim();
         try { displayName = new URL(displayName).hostname; } catch { /* use full url */ }
         items.push({ kind: "tool", skillName: displayName, output: urlMatch[2].trim(), key: msg.id, toolType: 'url' });
+        continue;
+      }
+      const httpMatch = content.match(/^\[HTTP Response\]\s*([\s\S]*)$/);
+      if (httpMatch) {
+        const firstLine = httpMatch[1].trim().split('\n')[0] ?? 'API';
+        items.push({ kind: "tool", skillName: firstLine, output: httpMatch[1].trim(), key: msg.id, toolType: 'http' });
         continue;
       }
       continue;
@@ -640,16 +663,16 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
             )}
 
             {/* Unified live status pill */}
-            {(readingUrl || searchingQuery || seedingSource || runningTool || writingFile) && (
+            {(readingUrl || searchingQuery || seedingSource || runningTool || writingFile || callingUrl) && (
               <div className="flex justify-start">
                 <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-primary/20 bg-primary/5 text-primary/60 text-[11px] font-mono">
-                  {readingUrl ? `📄 Reading…` : searchingQuery ? `🔍 Searching…` : seedingSource ? `🧬 Seeding…` : writingFile ? `📝 Writing ${writingFile}…` : `⚡ Running ${runningTool}…`}
+                  {callingUrl ? <><Globe className="w-3 h-3" /> Calling {callingUrl}…</> : readingUrl ? `📄 Reading…` : searchingQuery ? `🔍 Searching…` : seedingSource ? `🧬 Seeding…` : writingFile ? `📝 Writing ${writingFile}…` : `⚡ Running ${runningTool}…`}
                 </span>
               </div>
             )}
 
             {/* Waiting for first token — bouncing dots */}
-            {isAgencyProcessing && !streamingMsg && !searchingQuery && !seedingSource && !readingUrl && !runningTool && !writingFile && (
+            {isAgencyProcessing && !streamingMsg && !searchingQuery && !seedingSource && !readingUrl && !runningTool && !writingFile && !callingUrl && (
               <div className="flex justify-start">
                 <div className="flex items-center gap-1 px-3 py-2.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:0ms]" />
