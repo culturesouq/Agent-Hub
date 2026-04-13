@@ -833,7 +833,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       fetchOpts.body = resolve(args.body);
     }
 
-    const resp = await fetch(args.url, fetchOpts);
+    const resp = await fetch(resolve(args.url), fetchOpts);
     const text = await resp.text();
     let output: string;
     try { output = JSON.stringify(JSON.parse(text), null, 2); } catch { output = text.slice(0, 3000); }
