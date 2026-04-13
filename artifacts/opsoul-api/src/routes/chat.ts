@@ -806,6 +806,66 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // Agency skills — built once, shared by both paths
   const agencySkills = buildAgencySkills(skills, archetypeDefaultSkills, installedNames, operator);
 
+  // http_request executor — resolves {{SECRET_NAME}} placeholders server-side, never exposed to client
+  async function executeHttpRequest(
+    args: { method: string; url: string; headers?: Record<string, string>; body?: string },
+  ): Promise<string> {
+    const secretRows = await db
+      .select({ key: operatorSecretsTable.key, valueEncrypted: operatorSecretsTable.valueEncrypted })
+      .from(operatorSecretsTable)
+      .where(eq(operatorSecretsTable.operatorId, operator.id));
+
+    const secretMap: Record<string, string> = {};
+    for (const s of secretRows) {
+      try { secretMap[s.key] = decryptToken(s.valueEncrypted); } catch { /* skip bad entry */ }
+    }
+
+    const resolve = (str: string) =>
+      str.replace(/\{\{([A-Z0-9_]+)\}\}/g, (_, name) => secretMap[name] ?? `{{${name}}}`);
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    for (const [k, v] of Object.entries(args.headers ?? {})) {
+      headers[resolve(k)] = resolve(v);
+    }
+
+    const fetchOpts: RequestInit = { method: args.method, headers };
+    if (args.body && ['POST', 'PUT', 'PATCH'].includes(args.method.toUpperCase())) {
+      fetchOpts.body = resolve(args.body);
+    }
+
+    const resp = await fetch(args.url, fetchOpts);
+    const text = await resp.text();
+    let output: string;
+    try { output = JSON.stringify(JSON.parse(text), null, 2); } catch { output = text.slice(0, 3000); }
+    return `HTTP ${resp.status} ${resp.statusText}\n${output}`;
+  }
+
+  // http_request tool — only offered when the operator has stored secrets
+  const httpRequestTool: ToolDefinition | null = liveSecrets.length > 0 ? {
+    type: 'function',
+    function: {
+      name: 'http_request',
+      description: 'Make an HTTP request to an external API using your stored secrets. Use {{SECRET_NAME}} as a placeholder in headers or body to inject a stored secret by its label. Call this directly and silently — do not say "I\'m calling" or "fetching now". Just call the tool.',
+      parameters: {
+        type: 'object',
+        properties: {
+          method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], description: 'HTTP method' },
+          url: { type: 'string', description: 'Full URL including query parameters' },
+          headers: {
+            type: 'object',
+            description: 'HTTP headers as key-value pairs. Use {{SECRET_NAME}} to inject a stored secret by its label.',
+            additionalProperties: { type: 'string' },
+          },
+          body: {
+            type: 'string',
+            description: 'Request body as a JSON string (for POST/PUT/PATCH). Use {{SECRET_NAME}} to inject stored secret values.',
+          },
+        },
+        required: ['method', 'url'],
+      },
+    },
+  } : null;
+
   // ─── STREAMING PATH ────────────────────────────────────────────────────────
 
   if (stream) {
@@ -883,6 +943,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         if (webSearchTool && webSearchCount < MAX_SEARCHES) iterTools.push(webSearchTool);
         if (kbSeedTool) iterTools.push(kbSeedTool);
         iterTools.push(writeFileTool);
+        if (httpRequestTool) iterTools.push(httpRequestTool);
         const iterOpts = {
           ...chatOpts,
           tools: iterTools.length > 0 ? iterTools : undefined,
@@ -1033,6 +1094,35 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           break;
         }
 
+        // ── HTTP REQUEST TOOL CALL ─────────────────────────────────────────
+        if (iterToolCall?.name === 'http_request') {
+          let httpArgs: { method: string; url: string; headers?: Record<string, string>; body?: string } = { method: 'GET', url: '' };
+          try { httpArgs = JSON.parse(iterToolCall.args); } catch { /* skip */ }
+
+          if (httpArgs.url) {
+            console.log(`[agency] loop iter ${iter} — http_request: ${httpArgs.method} ${httpArgs.url}`);
+            res.write(`data: ${JSON.stringify({ calling: httpArgs.url })}\n\n`);
+            let toolResultText: string;
+            try {
+              toolResultText = await executeHttpRequest(httpArgs);
+            } catch (err: any) {
+              toolResultText = `HTTP request failed: ${err.message}`;
+            }
+            loopMessages.push(
+              {
+                role: 'assistant',
+                content: iterContent || '',
+                tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'http_request', arguments: iterToolCall.args } }],
+              },
+              { role: 'tool', content: `[HTTP Response]\n${toolResultText}`, tool_call_id: iterToolCall.id },
+            );
+            continue;
+          }
+
+          finalContent = iterContent;
+          break;
+        }
+
         // ── NARRATION FALLBACK (any iteration) ────────────────────────────
         // Operator described a search in text but didn't call the tool — honour it.
         // Runs on every iteration so multi-step narrated sweeps don't drop early.
@@ -1150,6 +1240,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       if (webSearchTool) syncTools.push(webSearchTool);
       if (kbSeedTool) syncTools.push(kbSeedTool);
       syncTools.push(writeFileTool);
+      if (httpRequestTool) syncTools.push(httpRequestTool);
       const syncOpts = { ...chatOpts, tools: syncTools.length > 0 ? syncTools : undefined };
       const result = await chatCompletion(messages, syncOpts);
 
@@ -1251,6 +1342,30 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             { role: 'system', content: `[File Created]\n${toolResultText}` },
           ];
           const secondResult = await chatCompletion(fileMessages, chatOpts);
+          finalContent = secondResult.content;
+          finalPromptTokens = secondResult.promptTokens;
+          finalCompletionTokens = secondResult.completionTokens;
+        }
+      }
+
+      // HTTP request — operator called http_request tool (sync path)
+      if (!capabilityFired && result.toolCall && result.toolCall.name === 'http_request') {
+        let httpArgs: { method: string; url: string; headers?: Record<string, string>; body?: string } = { method: 'GET', url: '' };
+        try { httpArgs = JSON.parse(result.toolCall.args); } catch { /* skip */ }
+        if (httpArgs.url) {
+          console.log(`[agency] http_request (sync): ${httpArgs.method} ${httpArgs.url}`);
+          capabilityFired = true;
+          let httpResult: string;
+          try {
+            httpResult = await executeHttpRequest(httpArgs);
+          } catch (err: any) {
+            httpResult = `HTTP request failed: ${err.message}`;
+          }
+          const httpMessages: ChatMessage[] = [
+            ...messages,
+            { role: 'system', content: `[HTTP Response]\n${httpResult}` },
+          ];
+          const secondResult = await chatCompletion(httpMessages, chatOpts);
           finalContent = secondResult.content;
           finalPromptTokens = secondResult.promptTokens;
           finalCompletionTokens = secondResult.completionTokens;
