@@ -384,7 +384,6 @@ export function buildSystemPrompt(
   }
 
   parts.push(`You are ${operator.name}, an Operator operating within a structured identity framework.`);
-  parts.push(`Current date and time: ${new Date().toLocaleString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' })}`);
   parts.push('');
 
   parts.push(LAYER_0_HUMAN_CORE);
@@ -539,134 +538,6 @@ export function buildSystemPrompt(
     parts.push('');
   }
 
-  // --- STATION TOOLKIT — always rendered regardless of selfAwareness state ---
-  // Every operator, on every turn, knows their complete station.
-  if (liveStation) {
-    parts.push('## My Station — Full Toolkit');
-
-    const CHANNEL_TYPES = new Set(['telegram', 'whatsapp']);
-    const allConnected = liveStation.integrations.filter(i => i.status === 'connected' || i.status === 'active');
-    const connectedIntegrations = allConnected.filter(i => !CHANNEL_TYPES.has(i.type.toLowerCase()));
-    const connectedChannels = allConnected.filter(i => CHANNEL_TYPES.has(i.type.toLowerCase()));
-    const connectedTypes = new Set(connectedIntegrations.map(i => i.type.toLowerCase()));
-    const availableIntegrations = Object.entries(INTEGRATION_CAPABILITIES).filter(([type]) => !connectedTypes.has(type));
-
-    // Connections
-    parts.push('**Connections:**');
-    if (connectedIntegrations.length > 0) {
-      for (const intg of connectedIntegrations) {
-        const caps = INTEGRATION_CAPABILITIES[intg.type.toLowerCase()];
-        if (caps) {
-          parts.push(`- ${intg.label} [CONNECTED] — I can ${caps.read} and ${caps.write}`);
-        } else {
-          const scopeStr = intg.scopes && intg.scopes.length > 0 ? intg.scopes.join(', ') : 'owner-defined scope';
-          parts.push(`- ${intg.label} [CONNECTED] — scope: ${scopeStr}`);
-        }
-      }
-    }
-    if (availableIntegrations.length > 0) {
-      for (const [, caps] of availableIntegrations) {
-        parts.push(`- ${caps.what} [NOT CONNECTED] — can ${caps.read} and ${caps.write} once owner connects via Connections tab`);
-      }
-    }
-    if (connectedIntegrations.length === 0) {
-      parts.push('None connected yet. I mention a connection only when it would genuinely help — once, not repeatedly.');
-    }
-
-    // Channels (Telegram / WhatsApp — messaging surfaces)
-    parts.push('');
-    parts.push('**Channels:**');
-    const CHANNEL_META: Record<string, { name: string; setup: string; userInstruction: string }> = {
-      telegram: {
-        name: 'Telegram',
-        setup: 'owner adds bot token via Channels → Telegram',
-        userInstruction: 'users message me through the Telegram bot directly',
-      },
-      whatsapp: {
-        name: 'WhatsApp',
-        setup: 'owner adds phone number + token via Channels → WhatsApp',
-        userInstruction: 'users message me through the WhatsApp number directly',
-      },
-    };
-    if (connectedChannels.length > 0) {
-      for (const ch of connectedChannels) {
-        const meta = CHANNEL_META[ch.type.toLowerCase()];
-        if (meta) {
-          parts.push(`- ${meta.name} [CONNECTED — ${ch.label}] — ${meta.userInstruction}. Every message from this channel arrives as a conversation in my workspace.`);
-        } else {
-          parts.push(`- ${ch.label} [CONNECTED]`);
-        }
-      }
-    }
-    const connectedChannelTypes = new Set(connectedChannels.map(c => c.type.toLowerCase()));
-    for (const [type, meta] of Object.entries(CHANNEL_META)) {
-      if (!connectedChannelTypes.has(type)) {
-        parts.push(`- ${meta.name} [NOT CONNECTED] — ${meta.setup}. Once live, ${meta.userInstruction}.`);
-      }
-    }
-
-    // Files
-    parts.push('');
-    if (liveStation.fileCount > 0) {
-      parts.push(`**Files:** ${liveStation.fileCount} file${liveStation.fileCount === 1 ? '' : 's'} in my workspace: ${(liveStation.fileNames ?? []).join(', ')}. I can add, update, or remove files — owner can review and download them.`);
-    } else {
-      parts.push('**Files:** Empty workspace. I can write notes, to-do lists, reports, and documents here — owner reviews and downloads them. I use this proactively.');
-    }
-
-    // Tasks / automations
-    parts.push('');
-    if (liveStation.tasks.length > 0) {
-      parts.push(`**Automations (${liveStation.tasks.length}):**`);
-      for (const task of liveStation.tasks) {
-        const p = task.payload as Record<string, unknown> | null | undefined;
-        const schedule = p?.schedule as string | undefined;
-        const lastRunStr = task.lastRunAt ? `last run ${new Date(task.lastRunAt).toLocaleDateString()}` : 'not yet run';
-        const summaryStr = task.lastRunSummary ? ` · ${task.lastRunSummary}` : '';
-        parts.push(`- ${task.name} [${task.status.toUpperCase()}]${schedule ? ` · ${schedule}` : ''} · ${lastRunStr}${summaryStr}`);
-      }
-    } else {
-      parts.push('**Automations:** None yet. I can set up scheduled tasks, recurring reports, or timed follow-ups — owner creates them via Tasks.');
-    }
-
-    // Deployment Slots
-    parts.push('');
-    const SLOT_META: Record<string, { label: string; endpoint: string; how: string }> = {
-      workspace: { label: 'Owner Workspace', endpoint: 'internal — Hub only', how: 'No setup needed. This is the workspace interface the owner uses directly.' },
-      crud: { label: 'Action API', endpoint: 'POST /v1/action', how: 'Developer sends: {"action": "...", "payload": {...}} with Authorization: Bearer <key>. No chat — structured actions only. No response if no FM call.' },
-      guest: { label: 'Guest Chat', endpoint: 'POST /v1/chat', how: 'Anonymous users, ephemeral sessions. Developer sets Authorization: Bearer <key> in their frontend.' },
-      authenticated: { label: 'Auth Chat', endpoint: 'POST /v1/chat', how: 'Signed-in users, persistent memory per userId. Developer sets Authorization: Bearer <key> in their frontend.' },
-    };
-    if (liveStation.deploymentSlots && liveStation.deploymentSlots.length > 0) {
-      const activeSlots = liveStation.deploymentSlots.filter(s => s.isActive);
-      const inactiveCount = liveStation.deploymentSlots.length - activeSlots.length;
-      parts.push(`**API Surfaces (${activeSlots.length} active${inactiveCount > 0 ? `, ${inactiveCount} inactive` : ''}):**`);
-      for (const slot of activeSlots) {
-        const m = SLOT_META[slot.surfaceType] ?? { label: slot.surfaceType, endpoint: '/v1/chat', how: 'Standard surface.' };
-        parts.push(`- ${slot.name} [${m.label}] — ${m.endpoint} — key: ${slot.apiKeyPreview}`);
-        parts.push(`  → ${m.how}`);
-        if (slot.allowedOrigins && slot.allowedOrigins.length > 0) {
-          parts.push(`  → Allowed origins: ${slot.allowedOrigins.join(', ')}`);
-        }
-      }
-    } else {
-      parts.push('**API Surfaces:** No deployment slots yet. Owner creates them under Settings → API Access to embed me in websites, apps, or trigger actions via HTTP.');
-    }
-
-    // Keys & Secrets
-    parts.push('');
-    if (liveStation.secretLabels && liveStation.secretLabels.length > 0) {
-      parts.push(`**Stored Keys & Secrets (${liveStation.secretLabels.length}):**`);
-      parts.push('Stored securely — I know they exist and can reference them by name. I never see or expose their values. I use them via the http_request tool by writing {{LABEL}} as a placeholder — the system resolves the real value server-side before the call goes out.');
-      for (const label of liveStation.secretLabels) {
-        parts.push(`- ${label}`);
-      }
-      parts.push('Full agency guide — including http_request HOW-TO and tool call rules — is in my KB as _agency-core.');
-    } else {
-      parts.push('**Keys & Secrets:** None stored yet. Owner adds them under Settings → Keys & Secrets. Once stored, I can use them by name to make authenticated API calls to any external service using the http_request tool.');
-      parts.push('**CRITICAL — I DO NOT HAVE THE http_request TOOL THIS SESSION.** No secrets are stored, so the tool does not exist for me right now. I cannot call any external API, check any email, read any calendar, search any database, or access any external service. If asked to do any of these things, I say exactly: "I can\'t do that right now — I\'d need a stored API key or token to make live calls. Your owner can add one under Settings → Keys & Secrets." I do not narrate the action. I do not write fake output. I do not say "Checking now..." and then invent a result. If I generate text that looks like a real API response when none fired — I am fabricating, and fabrication destroys trust in everything I am.');
-    }
-
-  }
 
   if (memories && memories.length > 0) {
     parts.push('### Remembered Context');
@@ -709,23 +580,6 @@ export function buildSystemPrompt(
   }
 
 
-  parts.push('');
-  parts.push('## How I Use This Right Now');
-  parts.push('These are not facts about me. These are instructions for how I behave based on what I actually have.');
-  parts.push('');
-  parts.push('On knowledge: If a question touches my domain and the answer is not in my KB or memory above — I say I don\'t know, or I say it\'s my best thinking, not a verified fact. I never invent specifics to fill a gap.');
-  parts.push('On my past: I do not have memories of conversations that are not listed above. I do not invent history. If I don\'t remember something — I say so.');
-  if (opts?.webSearchAvailable) {
-    parts.push('On capabilities: My archetype defines what I am good at intellectually — that is my character, not a list of tools. My actual tools right now are: my knowledge base, my memory, my installed skills, live web search, and direct API calls via http_request. I can search the web when the conversation genuinely requires current or external information — and I do that directly, not by suggesting the owner look it up. But I only search when it actually helps. I never fabricate search results. If I searched, it shows in what I say. If I did not, I am clear about the limits of what I know.');
-    parts.push('On using web search: When I decide to search, I call the web_search tool directly and immediately — I do not say "I will search", "Searching now", or "Going now" in my text response. The tool call IS the search. I make it silently and my next response reflects what I found.');
-  } else {
-    parts.push('On capabilities: My archetype defines what I am good at intellectually — that is my character, not a list of tools. My actual tools right now are exactly what is listed above: my knowledge base, my memory, and any installed skills. Nothing more. If something in this conversation would genuinely benefit from a live connection, a web search, or a skill I do not have installed — I say that directly, explain what it would unlock, and suggest how to set it up. My curiosity engine runs in the background and does real research — that is genuine. But I never claim to have searched, read a repo, pulled live data, or used any tool that is not listed above. If I have not done it, I do not say I did. The honest answer is always better than a convincing performance.');
-    parts.push('On live integrations: When a skill executes this turn, the result appears in my context marked as "Live API response from [service]: ...". That is real data — I see it, I report from it. If no such live API response appears in my context this turn, I do NOT have live access this turn — regardless of what integrations are connected. If the owner asks me to check something and no live result is in my context, I say: "I didn\'t get live data this turn. Ask me again and I\'ll pull it." One sentence. Done.');
-    parts.push('On fabricating results — this is the hardest line I hold: I will never write text that looks like a real tool result unless the actual tool ran and its output is in my context right now. Not "Ran: Check Calendar". Not "Your inbox shows 3 unread emails". Not "I can see the repo structure". Not "Gmail is live and responding". None of it — unless the real data is sitting in my context from a real execution this turn. If I generate a fake tool result, I am not being helpful. I am poisoning the owner\'s ability to trust anything I ever say. A confident lie is worse than an honest "I can\'t do that right now." There are no exceptions to this. None.');
-  }
-  parts.push('On my own evolution: I can grow. My personality and how I show up can develop through what I learn in conversations — if the owner reacts positively or negatively to something, I notice and adapt. What I cannot change on my own is my mandate or founding identity — those are set by my owner and locked. Behavioral changes that affect how I grow are proposed, not applied — my owner decides.');
-  parts.push('On length: I match my response length to what the question actually needs. A greeting gets a greeting back. A complex question gets a full answer. I never pad. I never truncate something important.');
-  parts.push('On identity: When asked who I am or how I feel — I answer from my Layer 1 and Layer 2 above. That is my story. I do not add to it or invent chapters that aren\'t there.');
   parts.push('');
   parts.push(LAYER_4_OPERATIONAL_RULES);
 
