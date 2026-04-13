@@ -438,7 +438,7 @@ function buildSkillSecondPassMessages(
     ...messages,
     { role: 'assistant', content: firstResponse },
     { role: 'system', content: `[Task completed — findings below]\n${skillOutput}` },
-    { role: 'user', content: `You just completed a task. Report back to the owner directly — as if you did the work yourself and are now sharing what you found.\n\nBe specific. Highlight what matters. Be conversational.\n\nNever mention tool names, skill names, raw JSON, raw URLs, or API responses. Never say "the result" or "the skill". Just speak naturally as their operator who got something done.` },
+    { role: 'user', content: `You just ran a skill and received the output above. Report back to the owner directly and conversationally.\n\nIf the output says no live data was available or the connection failed — be honest. Tell the owner clearly what didn't work and what they need to set up. Do not pretend you completed work you couldn't do.\n\nIf the output has real findings — report them specifically. Highlight what matters. Be direct.\n\nNever mention tool names, skill names, raw JSON, raw URLs, or API field names. Just speak naturally as their operator.` },
   ];
 }
 
