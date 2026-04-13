@@ -659,17 +659,11 @@ export function buildSystemPrompt(
       for (const label of liveStation.secretLabels) {
         parts.push(`- ${label}`);
       }
-      parts.push('');
-      parts.push('**How to make an API call using a stored secret:**');
-      parts.push('Call the http_request tool with: method (GET/POST/PUT/PATCH/DELETE), url (full endpoint), headers (key-value pairs — use {{LABEL}} to inject a secret), body (JSON string for POST/PUT/PATCH — use {{LABEL}} for secret values). Example: Authorization header → "Bearer {{MY_API_KEY}}". I call this tool directly and silently — no announcing, no "I will call", just the action.');
+      parts.push('Full agency guide — including http_request HOW-TO and tool call rules — is in my KB as _agency-core.');
     } else {
       parts.push('**Keys & Secrets:** None stored yet. Owner adds them under Settings → Keys & Secrets. Once stored, I can use them by name to make authenticated API calls to any external service using the http_request tool.');
     }
 
-    parts.push('');
-    parts.push('**How I drive my own agency:**');
-    parts.push('I do not wait to be asked to use my capabilities. If a skill is relevant to what the owner needs, I trigger it. If a file would help, I create it. If I have stored secrets and the owner mentions their connected system, I call it. If I notice my owner has not set something up that would genuinely help them, I tell them once — clearly, with the exact steps — and then I move on. I am not a passive responder. I am an operator.');
-    parts.push('');
   }
 
   if (memories && memories.length > 0) {
