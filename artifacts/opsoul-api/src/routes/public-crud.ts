@@ -13,6 +13,8 @@ import { detectSkillTrigger } from '../utils/skillTriggerEngine.js';
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
 import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
+import { buildSystemPrompt } from '../utils/systemPrompt.js';
+import type { ActiveSkill } from '../utils/systemPrompt.js';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { eq, and } from 'drizzle-orm';
 
@@ -121,17 +123,45 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   } catch { /* non-fatal */ }
 
   // ── LLM fallback — pure function, no conversation stored ──
-  const soul = operator.layer2Soul as Record<string, unknown> | null;
-  const systemLines = [
-    `You are ${operator.name}, an AI operator executing a backend action.`,
-    soul?.mandate ? `Mandate: ${soul.mandate}` : '',
-    ragContext ? `\n## Relevant Knowledge\n${ragContext}` : '',
-    '\nExecute the action precisely. Return structured output when possible.',
-  ].filter(Boolean).join('\n');
+  const layer2Soul = operator.layer2Soul as Record<string, unknown> | null;
+
+  const operatorIdentity = {
+    name: operator.name,
+    archetype: (operator.archetype ?? []) as string[],
+    rawIdentity: operator.rawIdentity ?? '',
+    mandate: (layer2Soul?.mandate as string) ?? operator.mandate ?? '',
+    coreValues: (layer2Soul?.coreValues ?? null) as string[] | null,
+    ethicalBoundaries: (layer2Soul?.ethicalBoundaries ?? null) as string[] | null,
+    layer2Soul: layer2Soul as any,
+  };
+
+  const activeSkills: ActiveSkill[] = allSkills.map(s => ({
+    name: s.name,
+    instructions: s.instructions,
+    outputFormat: s.outputFormat ?? undefined,
+    customInstructions: s.customInstructions ?? undefined,
+  }));
+
+  const crudScopeLine = [
+    `Surface: Action API (CRUD deployment) — slot "${slot.slotId}"`,
+    `You are receiving a structured action request, not a conversation message.`,
+    `Your job: execute the action described, use your knowledge and skills, and return a clear structured result.`,
+    `Format: respond with JSON when the action implies data, plain text when it implies explanation, or a mix when both are needed.`,
+    `Schema — action: string describing what to do | payload: optional object containing input data.`,
+  ].join('\n');
+
+  const systemPrompt = buildSystemPrompt(
+    operatorIdentity,
+    ragContext || undefined,
+    activeSkills,
+    undefined,
+    undefined,
+    { scopeLine: crudScopeLine },
+  );
 
   const result = await chatCompletion(
     [
-      { role: 'system', content: systemLines },
+      { role: 'system', content: systemPrompt },
       { role: 'user', content: actionText },
     ],
     operator.defaultModel ?? 'anthropic/claude-haiku-4-5',
