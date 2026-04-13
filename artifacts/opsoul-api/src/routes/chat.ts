@@ -1168,6 +1168,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           skillTrigger.operatorId = operator.id;
           console.log(`[agency] skill triggered: ${skillTrigger.name}`);
           res.write(`data: ${JSON.stringify({ running: skillTrigger.name })}\n\n`);
+          res.write(`data: ${JSON.stringify({ clear: true })}\n\n`);
           const skillResult = await executeSkill(skillTrigger, chatModel);
           if (skillResult.success) {
             await persistSkillResult(operator.id, operator.ownerId, conv.id, skillTrigger, skillResult);

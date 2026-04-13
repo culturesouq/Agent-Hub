@@ -442,6 +442,10 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                   setRunningTool(null);
                   setIsAgencyProcessing(false);
                   firstDelta = true;
+                } else if (data.clear) {
+                  currentStream = "";
+                  setStreamingMsg("");
+                  setLastStreamSnapshot("");
                 } else if (data.running) {
                   setRunningTool(data.running);
                   setRanSkill(data.running);
