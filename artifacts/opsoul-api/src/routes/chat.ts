@@ -946,6 +946,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
       for (let iter = 0; iter < MAX_ITER; iter++) {
         let iterContent = '';
+        const iterFullStart = fullContent.length; // mark start of this iteration in fullContent
         let iterToolCall: { id: string; name: string; args: string } | undefined;
 
         const iterTools: ToolDefinition[] = [];
@@ -1110,6 +1111,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
           if (httpArgs.url) {
             httpRequestFired = true;
+            // Strip any pre-call narration text from fullContent — text streamed
+            // before a tool fires is noise, not a response (covers consecutive tool calls too)
+            fullContent = fullContent.slice(0, iterFullStart);
             console.log(`[agency] loop iter ${iter} — http_request: ${httpArgs.method} ${httpArgs.url}`);
             res.write(`data: ${JSON.stringify({ calling: httpArgs.url })}\n\n`);
             let toolResultText: string;

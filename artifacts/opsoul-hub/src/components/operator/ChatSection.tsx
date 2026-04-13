@@ -485,6 +485,10 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                 } else if (data.calling) {
                   let displayUrl = data.calling;
                   try { displayUrl = new URL(data.calling).hostname; } catch { /* use full */ }
+                  // Clear any pre-call noise that streamed before the tool fired
+                  currentStream = "";
+                  setStreamingMsg("");
+                  setLastStreamSnapshot("");
                   setCallingUrl(displayUrl);
                   setWritingFile(null);
                   setSearchingQuery(null);
