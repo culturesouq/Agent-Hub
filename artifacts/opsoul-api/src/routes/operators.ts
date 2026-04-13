@@ -119,7 +119,10 @@ Archetype guide:
 
   try {
     const result = await chatCompletion(
-      [{ role: 'user', content: prompt }],
+      [
+        { role: 'system', content: 'You generate structured operator identity data. Return ONLY valid JSON matching the template exactly — no markdown, no explanation, no extra keys.' },
+        { role: 'user', content: prompt },
+      ],
       'anthropic/claude-sonnet-4-5',
     );
 
