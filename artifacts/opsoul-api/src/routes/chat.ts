@@ -934,6 +934,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       let finalContent = '';
       let finalTokens = 0;
       let webSearchCount = 0;
+      let httpRequestFired = false;
 
       for (let iter = 0; iter < MAX_ITER; iter++) {
         let iterContent = '';
@@ -1100,6 +1101,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           try { httpArgs = JSON.parse(iterToolCall.args); } catch { /* skip */ }
 
           if (httpArgs.url) {
+            httpRequestFired = true;
             console.log(`[agency] loop iter ${iter} — http_request: ${httpArgs.method} ${httpArgs.url}`);
             res.write(`data: ${JSON.stringify({ calling: httpArgs.url })}\n\n`);
             let toolResultText: string;
@@ -1160,8 +1162,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       if (!finalContent) finalContent = fullContent;
       finalTokens = completionTokens;
 
-      // ── SKILL TRIGGER (post-loop, only if no web searches ran) ────────────
-      let capabilityFired = webSearchCount > 0;
+      // ── SKILL TRIGGER (post-loop, only if no web search or http_request ran) ─
+      let capabilityFired = webSearchCount > 0 || httpRequestFired;
       if (!capabilityFired) {
         const skillTrigger = await detectSkillTrigger(message, agencySkills, finalContent);
         if (skillTrigger) {
