@@ -153,6 +153,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
+  const [queuedMessage, setQueuedMessage] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -160,6 +161,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const queueRef = useRef<{ message: string; attachments: Attachment[] } | null>(null);
 
   const isStreaming = !!streamingMsg;
   const isBusy = isStreaming || isAgencyProcessing;
@@ -178,6 +180,9 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     setRunningTool(null);
     setWritingFile(null);
     setCallingUrl(null);
+    // also cancel any queued message
+    queueRef.current = null;
+    setQueuedMessage(null);
   };
 
   const scrollToBottom = useCallback((instant = false) => {
@@ -356,14 +361,8 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     }
   };
 
-  const sendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if ((!input.trim() && attachments.length === 0) || !activeConvId) return;
-
-    const msgText = input || (attachments.length > 0 ? `[${attachments.map((a) => a.name).join(", ")}]` : "");
-    const pendingAttachments = [...attachments];
-    setInput("");
-    setAttachments([]);
+  const executeSend = async (msgText: string, pendingAttachments: Attachment[]) => {
+    if (!activeConvId) return;
     setIsAgencyProcessing(true);
     setLastStreamSnapshot("");
 
@@ -552,6 +551,36 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
       abortControllerRef.current = null;
     }
   };
+
+  const sendMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() && attachments.length === 0) return;
+    if (!activeConvId) return;
+
+    const msgText = input || `[${attachments.map((a) => a.name).join(", ")}]`;
+    const pendingAttachments = [...attachments];
+    setInput("");
+    setAttachments([]);
+
+    if (isBusy) {
+      if (queueRef.current) return; // one message in queue is enough
+      queueRef.current = { message: msgText, attachments: pendingAttachments };
+      setQueuedMessage(msgText);
+      return;
+    }
+
+    executeSend(msgText, pendingAttachments);
+  };
+
+  // Auto-fire queued message as soon as operator finishes
+  useEffect(() => {
+    if (isBusy) return;
+    const queued = queueRef.current;
+    if (!queued) return;
+    queueRef.current = null;
+    setQueuedMessage(null);
+    executeSend(queued.message, queued.attachments);
+  }, [isBusy]);
 
   // Build flat list with date separators and tool outputs
   const items: RenderedItem[] = [];
@@ -752,6 +781,22 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
             ))}
           </div>
         )}
+        {queuedMessage !== null && (
+          <div className="flex items-center gap-2 px-1 mb-1">
+            <div className="flex-1 flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 rounded px-2 py-1 border border-border/30">
+              <span className="text-primary font-medium">Queued:</span>
+              <span className="truncate">{queuedMessage}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => { queueRef.current = null; setQueuedMessage(null); }}
+              className="text-muted-foreground hover:text-foreground shrink-0"
+              title="Cancel queued message"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        )}
         <form onSubmit={sendMessage} className="flex gap-2">
           <input
             ref={fileInputRef}
@@ -796,14 +841,14 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                if ((input.trim() || attachments.length > 0) && !isBusy) {
+                if (input.trim() || attachments.length > 0) {
                   sendMessage(e as any);
                 }
               }
             }}
-            placeholder="Type a message… (Shift+Enter for new line)"
+            placeholder={isBusy && !queuedMessage ? "Type to queue next message…" : "Type a message… (Shift+Enter for new line)"}
             rows={1}
-            disabled={isBusy}
+            disabled={false}
             className="flex-1 font-sans bg-background/50 border border-border/50 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/30 resize-none overflow-y-auto leading-relaxed disabled:opacity-50 placeholder:text-muted-foreground"
             style={{ minHeight: "36px", maxHeight: "200px" }}
           />
@@ -813,7 +858,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
               onClick={stopResponse}
               className="shrink-0 w-10 bg-destructive hover:bg-destructive/90 text-destructive-foreground"
               variant="default"
-              title="Stop response"
+              title={queuedMessage ? "Stop response & cancel queue" : "Stop response"}
             >
               <Square className="w-4 h-4 fill-current" />
             </Button>
