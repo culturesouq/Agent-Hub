@@ -13,6 +13,7 @@ import {
 } from '../validation/operator.js';
 import { chatCompletion, MODEL_OPTIONS, CHAT_MODEL } from '../utils/openrouter.js';
 import { recomputeSelfAwareness } from '../utils/selfAwarenessEngine.js';
+import { seedAgencyCore } from '../utils/seedAgencyCore.js';
 import { encryptToken, decryptToken } from '@workspace/opsoul-utils/crypto';
 import { eq, and, isNull } from 'drizzle-orm';
 import { ZodError } from 'zod';
@@ -230,6 +231,8 @@ router.post('/blank', async (req: Request, res: Response): Promise<void> => {
     tokenCount: 15,
   });
 
+  seedAgencyCore(op.id, ownerId).catch((err) => console.error('[agency-core] seed failed:', err));
+
   res.status(201).json({ operatorId: op.id, conversationId: convId });
 });
 
@@ -266,6 +269,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     safeMode: data.safeMode,
     toolUsePolicy: data.toolUsePolicy,
   }).returning();
+
+  seedAgencyCore(op.id, ownerId).catch((err) => console.error('[agency-core] seed failed:', err));
 
   res.status(201).json(serializeOperator(op));
 });

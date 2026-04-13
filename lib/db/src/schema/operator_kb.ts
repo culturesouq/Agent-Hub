@@ -20,5 +20,6 @@ export const operatorKbTable = pgTable('operator_kb', {
   isPipelineIntake: boolean('is_pipeline_intake').default(false),
   privacyCleared: boolean('privacy_cleared').default(false),
   contentCleared: boolean('content_cleared').default(false),
+  isSystem: boolean('is_system').default(false),
   createdAt: timestamp('created_at').defaultNow(),
 });

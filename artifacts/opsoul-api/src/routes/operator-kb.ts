@@ -6,7 +6,7 @@ import { operatorKbTable, operatorsTable } from '@workspace/db';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
-import { eq, and, gte } from 'drizzle-orm';
+import { eq, and, gte, ne } from 'drizzle-orm';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -129,6 +129,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
       and(
         eq(operatorKbTable.operatorId, operatorId),
         eq(operatorKbTable.ownerId, req.owner!.ownerId),
+        ne(operatorKbTable.isSystem, true),
         minConfidence > 0 ? gte(operatorKbTable.confidenceScore, minConfidence) : undefined,
         status ? eq(operatorKbTable.verificationStatus, status) : undefined,
       ),
