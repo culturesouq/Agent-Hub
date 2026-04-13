@@ -161,6 +161,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   const audioChunksRef = useRef<Blob[]>([]);
 
   const isStreaming = !!streamingMsg;
+  const isBusy = isStreaming || isAgencyProcessing;
 
   const scrollToBottom = useCallback((instant = false) => {
     const el = scrollRef.current;
@@ -742,7 +743,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
             size="icon"
             className="shrink-0 w-9 h-9 text-muted-foreground hover:text-primary"
             onClick={() => fileInputRef.current?.click()}
-            disabled={isStreaming || uploading || recording || transcribing}
+            disabled={isBusy || uploading || recording || transcribing}
             title="Attach file"
           >
             <Paperclip className={`w-4 h-4 ${uploading ? "animate-pulse text-primary" : ""}`} />
@@ -760,7 +761,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
             }`}
             onPointerDown={startRecording}
             onPointerUp={stopRecording}
-            disabled={isStreaming || uploading}
+            disabled={isBusy || uploading}
             title={recording ? "Release to transcribe" : transcribing ? "Transcribing…" : "Hold to record"}
           >
             <Mic className={`w-4 h-4 ${transcribing ? "animate-pulse" : ""}`} />
@@ -772,20 +773,20 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                if ((input.trim() || attachments.length > 0) && !isStreaming) {
+                if ((input.trim() || attachments.length > 0) && !isBusy) {
                   sendMessage(e as any);
                 }
               }
             }}
             placeholder="Type a message… (Shift+Enter for new line)"
             rows={1}
-            disabled={isStreaming}
+            disabled={isBusy}
             className="flex-1 font-sans bg-background/50 border border-border/50 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/30 resize-none overflow-y-auto leading-relaxed disabled:opacity-50 placeholder:text-muted-foreground"
             style={{ minHeight: "36px", maxHeight: "200px" }}
           />
           <Button
             type="submit"
-            disabled={(!input.trim() && attachments.length === 0) || isStreaming}
+            disabled={(!input.trim() && attachments.length === 0) || isBusy}
             className="shrink-0 w-10"
             variant="default"
           >
