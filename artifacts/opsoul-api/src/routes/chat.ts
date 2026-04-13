@@ -1108,6 +1108,13 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             } catch (err: any) {
               toolResultText = `HTTP request failed: ${err.message}`;
             }
+            await db.insert(messagesTable).values({
+              id: crypto.randomUUID(),
+              conversationId: conv.id,
+              operatorId: operator.id,
+              role: 'system',
+              content: `[HTTP Response]\n${toolResultText}`,
+            });
             loopMessages.push(
               {
                 role: 'assistant',
@@ -1361,6 +1368,13 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           } catch (err: any) {
             httpResult = `HTTP request failed: ${err.message}`;
           }
+          await db.insert(messagesTable).values({
+            id: crypto.randomUUID(),
+            conversationId: conv.id,
+            operatorId: operator.id,
+            role: 'system',
+            content: `[HTTP Response]\n${httpResult}`,
+          });
           const httpMessages: ChatMessage[] = [
             ...messages,
             { role: 'system', content: `[HTTP Response]\n${httpResult}` },
