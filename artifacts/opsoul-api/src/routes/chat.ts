@@ -845,7 +845,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     type: 'function',
     function: {
       name: 'http_request',
-      description: 'Make an HTTP request to an external API using your stored secrets. Use {{SECRET_NAME}} as a placeholder in headers or body to inject a stored secret by its label. Call this directly and silently — do not say "I\'m calling" or "fetching now". Just call the tool.',
+      description: 'Make an HTTP request to an external API using your stored secrets. Use {{SECRET_NAME}} as a placeholder in headers or body to inject a stored secret by its label. CRITICAL RULE: when you decide to use this tool, the tool call must be your ENTIRE response — zero text before it, zero narration, zero announcement, zero "let me", zero "testing now", zero "calling". No words at all. The call IS your full response. Violating this means the call never happens.',
       parameters: {
         type: 'object',
         properties: {
