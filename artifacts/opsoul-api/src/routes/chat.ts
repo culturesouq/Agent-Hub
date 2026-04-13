@@ -107,7 +107,15 @@ async function buildMessageHistory(convId: string): Promise<ChatMessage[]> {
     .where(eq(messagesTable.conversationId, convId))
     .orderBy(asc(messagesTable.createdAt));
 
-  return msgs as ChatMessage[];
+  return msgs.filter(m => {
+    // Sanitize corrupted assistant messages — "Human:" prefix is never valid
+    // in an assistant turn; it means the model echoed the user during a bug.
+    // Feeding it back would perpetuate the pattern every turn.
+    if (m.role === 'assistant' && typeof m.content === 'string' && m.content.trimStart().startsWith('Human:')) {
+      return false;
+    }
+    return true;
+  }) as ChatMessage[];
 }
 
 async function loadActiveSkills(operatorId: string): Promise<ActiveSkill[]> {
