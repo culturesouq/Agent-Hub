@@ -1,5 +1,7 @@
 import crypto from 'crypto';
-import { pool } from '@workspace/db';
+import { db, pool } from '@workspace/db';
+import { operatorsTable } from '@workspace/db';
+import { isNull } from 'drizzle-orm';
 import { embed } from '@workspace/opsoul-utils/ai';
 
 const AGENCY_CORE_SOURCE = '_agency-core';
@@ -82,4 +84,33 @@ export async function seedAgencyCore(operatorId: string, ownerId: string): Promi
   );
 
   console.log(`[agency-core] seeded for operator ${operatorId}`);
+}
+
+export async function backfillAllAgencyCore(): Promise<void> {
+  const operators = await db
+    .select({ id: operatorsTable.id, ownerId: operatorsTable.ownerId })
+    .from(operatorsTable)
+    .where(isNull(operatorsTable.deletedAt));
+
+  let seeded = 0;
+  for (const op of operators) {
+    try {
+      const { rows: existing } = await pool.query<{ id: string }>(
+        `SELECT id FROM operator_kb WHERE operator_id = $1 AND source_name = $2 LIMIT 1`,
+        [op.id, AGENCY_CORE_SOURCE],
+      );
+      if (existing.length === 0) {
+        await seedAgencyCore(op.id, op.ownerId);
+        seeded++;
+      }
+    } catch (err: any) {
+      console.error(`[agency-core] backfill failed for ${op.id}:`, err.message);
+    }
+  }
+
+  if (seeded > 0) {
+    console.log(`[agency-core] backfill complete — ${seeded} operator(s) seeded`);
+  } else {
+    console.log(`[agency-core] backfill complete — all operators already have agency-core`);
+  }
 }

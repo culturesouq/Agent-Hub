@@ -42,6 +42,7 @@ import { startKeepAliveCron } from './cron/keepAliveCron.js';
 import { startVaelCron } from './cron/vaelCron.js';
 import { runInitSeed } from './utils/initSeed.js';
 import { backfillIntegrationSkills } from './utils/autoInstallIntegrationSkills.js';
+import { backfillAllAgencyCore } from './utils/seedAgencyCore.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
@@ -131,6 +132,13 @@ async function setupDatabase(): Promise<void> {
   } catch (err) {
     console.error('[db] Failed to bootstrap sovereign admin:', (err as Error).message);
   }
+
+  try {
+    await pool.query(`ALTER TABLE operator_kb ADD COLUMN IF NOT EXISTS is_system BOOLEAN DEFAULT FALSE`);
+    console.log('[db] operator_kb.is_system column ensured');
+  } catch (err) {
+    console.error('[db] Failed to ensure is_system column:', (err as Error).message);
+  }
 }
 
 async function start(): Promise<void> {
@@ -159,6 +167,7 @@ async function start(): Promise<void> {
 
   runInitSeed().catch((err) => console.error('[initSeed] failed:', err?.message));
   backfillIntegrationSkills().catch((err) => console.error('[autoInstall] backfill failed:', err?.message));
+  backfillAllAgencyCore().catch((err) => console.error('[agency-core] backfill failed:', err?.message));
 
   startGrowCron();
   startMemoryCron();
