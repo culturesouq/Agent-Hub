@@ -309,6 +309,8 @@ export interface LiveStationData {
   tasks: { name: string; status: string; lastRunAt?: string | null; lastRunSummary?: string | null; payload?: Record<string, unknown> | null }[];
   fileCount: number;
   fileNames?: string[];
+  deploymentSlots?: { name: string; surfaceType: string; apiKeyPreview: string; isActive: boolean; allowedOrigins?: string[] | null }[];
+  secretLabels?: string[];
 }
 
 export interface BuildSystemPromptOpts {
@@ -541,15 +543,14 @@ export function buildSystemPrompt(
   if (liveStation) {
     parts.push('## My Station — Full Toolkit');
 
-    // Integrations: connected + available
-    const connectedIntegrations = liveStation.integrations.filter(
-      i => i.status === 'connected' || i.status === 'active'
-    );
+    const CHANNEL_TYPES = new Set(['telegram', 'whatsapp']);
+    const allConnected = liveStation.integrations.filter(i => i.status === 'connected' || i.status === 'active');
+    const connectedIntegrations = allConnected.filter(i => !CHANNEL_TYPES.has(i.type.toLowerCase()));
+    const connectedChannels = allConnected.filter(i => CHANNEL_TYPES.has(i.type.toLowerCase()));
     const connectedTypes = new Set(connectedIntegrations.map(i => i.type.toLowerCase()));
-    const availableIntegrations = Object.entries(INTEGRATION_CAPABILITIES).filter(
-      ([type]) => !connectedTypes.has(type)
-    );
+    const availableIntegrations = Object.entries(INTEGRATION_CAPABILITIES).filter(([type]) => !connectedTypes.has(type));
 
+    // Connections
     parts.push('**Connections:**');
     if (connectedIntegrations.length > 0) {
       for (const intg of connectedIntegrations) {
@@ -569,6 +570,38 @@ export function buildSystemPrompt(
     }
     if (connectedIntegrations.length === 0) {
       parts.push('None connected yet. I mention a connection only when it would genuinely help — once, not repeatedly.');
+    }
+
+    // Channels (Telegram / WhatsApp — messaging surfaces)
+    parts.push('');
+    parts.push('**Channels:**');
+    const CHANNEL_META: Record<string, { name: string; setup: string; userInstruction: string }> = {
+      telegram: {
+        name: 'Telegram',
+        setup: 'owner adds bot token via Channels → Telegram',
+        userInstruction: 'users message me through the Telegram bot directly',
+      },
+      whatsapp: {
+        name: 'WhatsApp',
+        setup: 'owner adds phone number + token via Channels → WhatsApp',
+        userInstruction: 'users message me through the WhatsApp number directly',
+      },
+    };
+    if (connectedChannels.length > 0) {
+      for (const ch of connectedChannels) {
+        const meta = CHANNEL_META[ch.type.toLowerCase()];
+        if (meta) {
+          parts.push(`- ${meta.name} [CONNECTED — ${ch.label}] — ${meta.userInstruction}. Every message from this channel arrives as a conversation in my workspace.`);
+        } else {
+          parts.push(`- ${ch.label} [CONNECTED]`);
+        }
+      }
+    }
+    const connectedChannelTypes = new Set(connectedChannels.map(c => c.type.toLowerCase()));
+    for (const [type, meta] of Object.entries(CHANNEL_META)) {
+      if (!connectedChannelTypes.has(type)) {
+        parts.push(`- ${meta.name} [NOT CONNECTED] — ${meta.setup}. Once live, ${meta.userInstruction}.`);
+      }
     }
 
     // Files
@@ -591,7 +624,43 @@ export function buildSystemPrompt(
         parts.push(`- ${task.name} [${task.status.toUpperCase()}]${schedule ? ` · ${schedule}` : ''} · ${lastRunStr}${summaryStr}`);
       }
     } else {
-      parts.push('**Automations:** None yet. I can set up scheduled tasks, recurring reports, timed follow-ups on request.');
+      parts.push('**Automations:** None yet. I can set up scheduled tasks, recurring reports, or timed follow-ups — owner creates them via Tasks.');
+    }
+
+    // Deployment Slots
+    parts.push('');
+    const SLOT_META: Record<string, { label: string; endpoint: string; how: string }> = {
+      workspace: { label: 'Owner Workspace', endpoint: 'internal — Hub only', how: 'No setup needed. This is the workspace interface the owner uses directly.' },
+      crud: { label: 'Action API', endpoint: 'POST /v1/action', how: 'Developer sends: {"action": "...", "payload": {...}} with Authorization: Bearer <key>. No chat — structured actions only. No response if no FM call.' },
+      guest: { label: 'Guest Chat', endpoint: 'POST /v1/chat', how: 'Anonymous users, ephemeral sessions. Developer sets Authorization: Bearer <key> in their frontend.' },
+      authenticated: { label: 'Auth Chat', endpoint: 'POST /v1/chat', how: 'Signed-in users, persistent memory per userId. Developer sets Authorization: Bearer <key> in their frontend.' },
+    };
+    if (liveStation.deploymentSlots && liveStation.deploymentSlots.length > 0) {
+      const activeSlots = liveStation.deploymentSlots.filter(s => s.isActive);
+      const inactiveCount = liveStation.deploymentSlots.length - activeSlots.length;
+      parts.push(`**API Surfaces (${activeSlots.length} active${inactiveCount > 0 ? `, ${inactiveCount} inactive` : ''}):**`);
+      for (const slot of activeSlots) {
+        const m = SLOT_META[slot.surfaceType] ?? { label: slot.surfaceType, endpoint: '/v1/chat', how: 'Standard surface.' };
+        parts.push(`- ${slot.name} [${m.label}] — ${m.endpoint} — key: ${slot.apiKeyPreview}`);
+        parts.push(`  → ${m.how}`);
+        if (slot.allowedOrigins && slot.allowedOrigins.length > 0) {
+          parts.push(`  → Allowed origins: ${slot.allowedOrigins.join(', ')}`);
+        }
+      }
+    } else {
+      parts.push('**API Surfaces:** No deployment slots yet. Owner creates them under Settings → API Access to embed me in websites, apps, or trigger actions via HTTP.');
+    }
+
+    // Keys & Secrets
+    parts.push('');
+    if (liveStation.secretLabels && liveStation.secretLabels.length > 0) {
+      parts.push(`**Stored Keys & Secrets (${liveStation.secretLabels.length}):**`);
+      parts.push('Stored securely — I know they exist and can reference them by name when setting up connections or automations, but I never see or expose their values.');
+      for (const label of liveStation.secretLabels) {
+        parts.push(`- ${label}`);
+      }
+    } else {
+      parts.push('**Keys & Secrets:** None stored yet. Owner adds them under Settings → Keys & Secrets. Once stored, I can use them by name to connect to external services.');
     }
 
     parts.push('');

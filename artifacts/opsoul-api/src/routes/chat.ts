@@ -12,6 +12,8 @@ import {
   tasksTable,
   operatorIntegrationsTable,
   operatorFilesTable,
+  operatorDeploymentSlotsTable,
+  operatorSecretsTable,
 } from '@workspace/db';
 import { detectSkillTrigger } from '../utils/skillTriggerEngine.js';
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
@@ -463,7 +465,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   let chatModel = rawModel;
   const chatOpts = { apiKey: chatApiKey, get model() { return chatModel; } };
 
-  const [skills, archetypeDefaultSkills, selfAwarenessRow, history, liveIntegrations, liveTasks, liveFiles] = await Promise.all([
+  const [skills, archetypeDefaultSkills, selfAwarenessRow, history, liveIntegrations, liveTasks, liveFiles, liveSlots, liveSecrets] = await Promise.all([
     loadActiveSkills(operator.id),
     loadArchetypeSkills((operator.archetype as string[]) ?? []),
     db.select().from(selfAwarenessStateTable).where(eq(selfAwarenessStateTable.operatorId, operator.id)).limit(1),
@@ -482,6 +484,16 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     db.select({ filename: operatorFilesTable.filename })
       .from(operatorFilesTable)
       .where(eq(operatorFilesTable.operatorId, operator.id)),
+    db.select({
+      name: operatorDeploymentSlotsTable.name,
+      surfaceType: operatorDeploymentSlotsTable.surfaceType,
+      apiKeyPreview: operatorDeploymentSlotsTable.apiKeyPreview,
+      isActive: operatorDeploymentSlotsTable.isActive,
+      allowedOrigins: operatorDeploymentSlotsTable.allowedOrigins,
+    }).from(operatorDeploymentSlotsTable).where(eq(operatorDeploymentSlotsTable.operatorId, operator.id)),
+    db.select({ key: operatorSecretsTable.key })
+      .from(operatorSecretsTable)
+      .where(eq(operatorSecretsTable.operatorId, operator.id)),
   ]);
 
   const selfAwarenessData = selfAwarenessRow[0] ?? null;
@@ -615,6 +627,14 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     }),
     fileCount: liveFiles.length,
     fileNames: liveFiles.map(f => f.filename),
+    deploymentSlots: liveSlots.map(s => ({
+      name: s.name,
+      surfaceType: s.surfaceType,
+      apiKeyPreview: s.apiKeyPreview,
+      isActive: s.isActive ?? false,
+      allowedOrigins: s.allowedOrigins ?? null,
+    })),
+    secretLabels: liveSecrets.map(s => s.key),
   };
 
   const systemPrompt = isBirthMode

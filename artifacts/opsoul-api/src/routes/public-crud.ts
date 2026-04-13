@@ -5,6 +5,11 @@ import {
   operatorsTable,
   operatorSkillsTable,
   platformSkillsTable,
+  operatorIntegrationsTable,
+  operatorDeploymentSlotsTable,
+  operatorSecretsTable,
+  tasksTable,
+  operatorFilesTable,
 } from '@workspace/db';
 import { requireSlotKey } from '../middleware/requireSlotKey.js';
 import { chatCompletion } from '../utils/openrouter.js';
@@ -14,7 +19,7 @@ import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
 import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { buildSystemPrompt } from '../utils/systemPrompt.js';
-import type { ActiveSkill } from '../utils/systemPrompt.js';
+import type { ActiveSkill, LiveStationData } from '../utils/systemPrompt.js';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { eq, and } from 'drizzle-orm';
 
@@ -122,6 +127,63 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     ragContext = buildRagContext(kbHits);
   } catch { /* non-fatal */ }
 
+  // ── Station data ──
+  const [liveIntegrations, liveTasks, liveFiles, liveSlots, liveSecrets] = await Promise.all([
+    db.select({
+      type: operatorIntegrationsTable.integrationType,
+      label: operatorIntegrationsTable.integrationLabel,
+      status: operatorIntegrationsTable.status,
+      scopes: operatorIntegrationsTable.scopes,
+    }).from(operatorIntegrationsTable).where(eq(operatorIntegrationsTable.operatorId, slot.operatorId)),
+    db.select({
+      name: tasksTable.contextName,
+      status: tasksTable.status,
+      payload: tasksTable.payload,
+    }).from(tasksTable).where(eq(tasksTable.operatorId, slot.operatorId)),
+    db.select({ filename: operatorFilesTable.filename })
+      .from(operatorFilesTable)
+      .where(eq(operatorFilesTable.operatorId, slot.operatorId)),
+    db.select({
+      name: operatorDeploymentSlotsTable.name,
+      surfaceType: operatorDeploymentSlotsTable.surfaceType,
+      apiKeyPreview: operatorDeploymentSlotsTable.apiKeyPreview,
+      isActive: operatorDeploymentSlotsTable.isActive,
+      allowedOrigins: operatorDeploymentSlotsTable.allowedOrigins,
+    }).from(operatorDeploymentSlotsTable).where(eq(operatorDeploymentSlotsTable.operatorId, slot.operatorId)),
+    db.select({ key: operatorSecretsTable.key })
+      .from(operatorSecretsTable)
+      .where(eq(operatorSecretsTable.operatorId, slot.operatorId)),
+  ]);
+
+  const liveStation: LiveStationData = {
+    integrations: liveIntegrations.map(i => ({
+      type: i.type ?? '',
+      label: i.label ?? '',
+      status: i.status ?? 'unknown',
+      scopes: i.scopes ?? null,
+    })),
+    tasks: liveTasks.map(t => {
+      const p = (t.payload ?? {}) as Record<string, unknown>;
+      return {
+        name: t.name ?? 'Unnamed task',
+        status: t.status ?? 'active',
+        payload: p,
+        lastRunAt: (p.lastRunAt as string | null) ?? null,
+        lastRunSummary: (p.lastRunSummary as string | null) ?? null,
+      };
+    }),
+    fileCount: liveFiles.length,
+    fileNames: liveFiles.map(f => f.filename),
+    deploymentSlots: liveSlots.map(s => ({
+      name: s.name,
+      surfaceType: s.surfaceType,
+      apiKeyPreview: s.apiKeyPreview,
+      isActive: s.isActive ?? false,
+      allowedOrigins: s.allowedOrigins ?? null,
+    })),
+    secretLabels: liveSecrets.map(s => s.key),
+  };
+
   // ── LLM fallback — pure function, no conversation stored ──
   const layer2Soul = operator.layer2Soul as Record<string, unknown> | null;
 
@@ -157,6 +219,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     undefined,
     undefined,
     { scopeLine: crudScopeLine },
+    liveStation,
   );
 
   const result = await chatCompletion(
