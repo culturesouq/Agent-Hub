@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { Conversation, Message } from "@/types";
 import { Button } from "@/components/ui/button";
-import { Send, MessageSquare, Paperclip, X, Mic, ChevronDown, Search, Zap, Download, Link, Globe } from "lucide-react";
+import { Send, MessageSquare, Paperclip, X, Mic, ChevronDown, Search, Zap, Download, Link, Globe, Square } from "lucide-react";
 import { format } from "date-fns";
 
 type Attachment = {
@@ -159,9 +159,26 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const isStreaming = !!streamingMsg;
   const isBusy = isStreaming || isAgencyProcessing;
+
+  const stopResponse = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setStreamingMsg("");
+    setLastStreamSnapshot("");
+    setIsAgencyProcessing(false);
+    setSearchingQuery(null);
+    setSeedingSource(null);
+    setReadingUrl(null);
+    setRunningTool(null);
+    setWritingFile(null);
+    setCallingUrl(null);
+  };
 
   const scrollToBottom = useCallback((instant = false) => {
     const el = scrollRef.current;
@@ -367,8 +384,11 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
 
     try {
       const token = localStorage.getItem("opsoul_token");
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
       const response = await fetch(`/api/operators/${operatorId}/conversations/${activeConvId}/messages`, {
         method: "POST",
+        signal: abortController.signal,
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -516,8 +536,9 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
           }
         }
       }
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      // AbortError = owner clicked Stop — silent, just reset UI
+      if (err?.name !== 'AbortError') console.error(err);
       setStreamingMsg("");
       setLastStreamSnapshot("");
       setIsAgencyProcessing(false);
@@ -526,7 +547,9 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
       setReadingUrl(null);
       setRunningTool(null);
       setRanSkill(null);
+      setWritingFile(null);
       setCallingUrl(null);
+      abortControllerRef.current = null;
     }
   };
 
@@ -784,14 +807,26 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
             className="flex-1 font-sans bg-background/50 border border-border/50 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/30 resize-none overflow-y-auto leading-relaxed disabled:opacity-50 placeholder:text-muted-foreground"
             style={{ minHeight: "36px", maxHeight: "200px" }}
           />
-          <Button
-            type="submit"
-            disabled={(!input.trim() && attachments.length === 0) || isBusy}
-            className="shrink-0 w-10"
-            variant="default"
-          >
-            <Send className="w-4 h-4" />
-          </Button>
+          {isBusy ? (
+            <Button
+              type="button"
+              onClick={stopResponse}
+              className="shrink-0 w-10 bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+              variant="default"
+              title="Stop response"
+            >
+              <Square className="w-4 h-4 fill-current" />
+            </Button>
+          ) : (
+            <Button
+              type="submit"
+              disabled={!input.trim() && attachments.length === 0}
+              className="shrink-0 w-10"
+              variant="default"
+            >
+              <Send className="w-4 h-4" />
+            </Button>
+          )}
         </form>
       </div>
     </div>
