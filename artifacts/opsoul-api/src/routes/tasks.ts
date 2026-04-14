@@ -133,17 +133,23 @@ router.patch('/:taskId', async (req: Request, res: Response): Promise<void> => {
   const { name, schedule, prompt, customSchedule, status } = parsed.data;
   const currentPayload = (existing.payload as any) ?? {};
 
+  const newSchedule = schedule ?? existing.taskType;
+  const nextRunAt = schedule && schedule !== existing.taskType
+    ? computeInitialNextRunAt(schedule)
+    : undefined;
+
   const [updated] = await db
     .update(tasksTable)
     .set({
       contextName: name ?? existing.contextName,
-      taskType: schedule ?? existing.taskType,
+      taskType: newSchedule,
       prompt: prompt ?? existing.prompt,
       payload: {
         ...currentPayload,
         customSchedule: customSchedule ?? currentPayload.customSchedule,
       },
       status: status ?? existing.status,
+      ...(nextRunAt !== undefined ? { nextRunAt } : {}),
     })
     .where(eq(tasksTable.id, existing.id))
     .returning();
