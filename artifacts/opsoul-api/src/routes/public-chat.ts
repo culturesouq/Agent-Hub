@@ -211,7 +211,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     const embedding = await embed(message);
     const [hits, kbHits] = await Promise.all([
       searchMemory(slot.operatorId, embedding, 8, 0.55, 0.1, scope.scopeId),
-      searchBothKbs(slot.operatorId, slot.ownerId, embedding, 8, 30),
+      searchBothKbs(slot.operatorId, embedding, 8, 30),
     ]);
     memoryHits = hits;
     ragContext = buildRagContext(kbHits);
@@ -229,7 +229,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       layer2Soul:        operator.layer2Soul as Layer2Soul,
     },
     null,
-    { webSearchAvailable: false },
+    { webSearchAvailable: false, scopeLine: `[SCOPE: ${scope.scopeType} | ${scope.scopeId}]` },
   );
 
   const messages: ChatMessage[] = [

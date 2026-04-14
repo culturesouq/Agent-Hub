@@ -384,7 +384,7 @@ async function persistSkillResult(
 
   console.log(`[agency] skill ${skillTrigger.name} executed and logged`);
 
-  triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});
+  triggerSelfAwareness(operatorId, 'integration_change').catch((err) => console.warn('[selfAwareness] failed:', err?.message));
 
   storeMemory(
     operatorId,
@@ -430,15 +430,15 @@ function runPostResponseTasks(
       .where(and(eq(messagesTable.conversationId, conv.id), eq(messagesTable.role, 'user')))
       .then(userMessages => {
         if (userMessages.length >= 2) {
-          extractBirthIdentity(operator.id, conv.id).catch(() => {});
+          extractBirthIdentity(operator.id, conv.id).catch((err) => console.warn('[runPostResponse] birth-extraction failed:', err?.message));
         }
       })
-      .catch(() => {});
+      .catch((err) => console.warn('[runPostResponse] birth-extraction query failed:', err?.message));
   }
 
   // Self-awareness + periodic memory distillation
   if (!operator.safeMode) {
-    triggerSelfAwareness(operator.id, 'conversation_end').catch(() => {});
+    triggerSelfAwareness(operator.id, 'conversation_end').catch((err) => console.warn('[selfAwareness] failed:', err?.message));
     const shouldDistill = ((conv.messageCount ?? 0) % 10 === 0);
     if (shouldDistill) {
       distillMemoriesFromConversations(operator.id, operator.ownerId, operator.name).catch(() => {});

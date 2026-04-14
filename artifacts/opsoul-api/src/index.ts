@@ -7,6 +7,7 @@ import path from 'path';
 import fs from 'fs';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { pool } from '@workspace/db';
 import { ADMIN_AUDIT_LOG_TRIGGER_SQL } from '@workspace/db';
 import authRouter from './routes/auth.js';
@@ -47,12 +48,62 @@ const PORT = parseInt(process.env.PORT ?? '3001', 10);
 
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
+
+// --- CORS strict allowlist ---
+const allowedOrigins = new Set<string>();
+const configuredOrigins = process.env.ALLOWED_ORIGIN;
+if (configuredOrigins) {
+  configuredOrigins.split(',').map(o => o.trim()).filter(Boolean).forEach(o => allowedOrigins.add(o));
+}
+if (process.env.REPLIT_DEV_DOMAIN) {
+  allowedOrigins.add(`https://${process.env.REPLIT_DEV_DOMAIN}`);
+}
+if (process.env.NODE_ENV !== 'production') {
+  ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:4173'].forEach(o => allowedOrigins.add(o));
+}
+
 app.use(cors({
-  origin: process.env.ALLOWED_ORIGIN ?? true,
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.has(origin)) return callback(null, true);
+    callback(new Error(`CORS: origin '${origin}' not in allowlist`));
+  },
   credentials: true,
 }));
 
-app.use('/api/auth', authRouter);
+// --- Rate limiters ---
+const authLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later' },
+  handler: (req, res, _next, options) => {
+    console.warn(`[rate-limit] auth: ${req.ip} exceeded 10 req/min`);
+    res.status(429).json(options.message);
+  },
+});
+
+const publicLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const auth = req.headers.authorization;
+    if (auth?.startsWith('Bearer ')) return auth.slice(7);
+    return ipKeyGenerator(req.ip ?? '');
+  },
+  message: { error: 'Too many requests, please try again later' },
+  handler: (req, res, _next, options) => {
+    const auth = req.headers.authorization;
+    const key = auth?.startsWith('Bearer ') ? auth.slice(7, 16) + '…' : (req.ip ?? 'unknown');
+    console.warn(`[rate-limit] public: key '${key}' exceeded 30 req/min`);
+    res.status(429).json(options.message);
+  },
+});
+
+app.use('/api/auth', authLimiter, authRouter);
 app.use('/api/operators', operatorsRouter);
 app.use('/api/operators/:operatorId/owner-kb', ownerKbRouter);
 app.use('/api/operators/:operatorId/operator-kb', operatorKbRouter);
@@ -74,8 +125,8 @@ app.use('/api/contact', contactRouter);
 app.use('/api/integrations/google', googleIntegrationRouter);
 app.use('/api/operators/:operatorId/secrets', operatorSecretsRouter);
 app.use('/api/operators/:operatorId/slots', deploymentSlotsRouter);
-app.use('/v1/chat', publicChatRouter);
-app.use('/v1/action', publicCrudRouter);
+app.use('/v1/chat', publicLimiter, publicChatRouter);
+app.use('/v1/action', publicLimiter, publicCrudRouter);
 
 app.get('/api/healthz', (_req, res) => {
   // Fire a non-blocking DB ping to keep the Neon endpoint warm.

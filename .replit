@@ -52,6 +52,7 @@ channel = "stable-25_05"
 [userenv]
 
 [userenv.shared]
+ALLOWED_ORIGIN = "https://opsoul.io"
 
 [userenv.production]
 APP_URL = "https://opsoul.io"
