@@ -44,13 +44,12 @@ const PublicChatSchema = z.object({
 });
 
 function buildSkillSecondPassMessages(
-  systemPrompt: string,
+  _systemPrompt: string,
   messages: ChatMessage[],
   firstResponse: string,
   skillOutput: string,
 ): ChatMessage[] {
   return [
-    { role: 'system', content: systemPrompt },
     ...messages,
     { role: 'assistant', content: firstResponse },
     { role: 'system', content: `[Task completed — findings below]\n${skillOutput}` },

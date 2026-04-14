@@ -567,7 +567,11 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     setAttachments([]);
 
     if (isBusy) {
-      if (queueRef.current) return; // one message in queue is enough
+      if (queueRef.current) {
+        stopResponse();
+        executeSend(msgText, pendingAttachments);
+        return;
+      }
       queueRef.current = { message: msgText, attachments: pendingAttachments };
       setQueuedMessage(msgText);
       return;
