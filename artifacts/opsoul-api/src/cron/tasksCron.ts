@@ -47,13 +47,16 @@ async function runDueTasks(): Promise<void> {
         .where(eq(operatorsTable.id, task.operatorId));
 
       if (!operator) {
-        console.warn(`[TASKS] Operator ${task.operatorId} not found for task ${task.id} — skipping`);
+        console.warn(`[TASKS] Operator ${task.operatorId} not found for task ${task.id} — pausing task`);
+        await db.update(tasksTable).set({ status: 'paused' }).where(eq(tasksTable.id, task.id));
         continue;
       }
 
       const taskPrompt = task.prompt ?? (task.payload as any)?.description ?? '';
       if (!taskPrompt) {
-        console.warn(`[TASKS] Task ${task.id} has no prompt — skipping`);
+        console.warn(`[TASKS] Task ${task.id} has no prompt — advancing schedule to avoid retry spam`);
+        const nextRunAt = computeNextRunAt(task.taskType, now);
+        await db.update(tasksTable).set({ nextRunAt }).where(eq(tasksTable.id, task.id));
         continue;
       }
 

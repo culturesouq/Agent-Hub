@@ -12,11 +12,11 @@
 import { db } from '@workspace/db';
 import { operatorSkillsTable, platformSkillsTable } from '@workspace/db';
 import { eq, and } from 'drizzle-orm';
-import { chatCompletion, type ChatOptions } from './openrouter.js';
+import { chatCompletion, type ChatOptions, type ChatMessage } from './openrouter.js';
 import { detectSkillTrigger, type InstalledSkill } from './skillTriggerEngine.js';
 import { executeSkill } from './skillExecutor.js';
 
-export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
+export type { ChatMessage };
 
 export interface CapabilityLoopResult {
   content: string;
@@ -98,7 +98,7 @@ export async function runCapabilityLoop(
     const trigger = await detectSkillTrigger(userMessage, skills, content);
     if (trigger) {
       console.log(`[capability-loop] skill triggered: ${trigger.name}`);
-      const result = await executeSkill(trigger, modelStr, messages as any);
+      const result = await executeSkill(trigger, modelStr, messages);
       if (result.success) {
         skillFired = true;
         skillName  = trigger.name;
