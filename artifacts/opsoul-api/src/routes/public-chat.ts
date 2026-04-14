@@ -15,16 +15,23 @@ import { searchMemory, distillMemoriesFromConversations } from '../utils/memoryE
 import type { MemoryHit } from '../utils/memoryEngine.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { buildSystemPrompt } from '../utils/systemPrompt.js';
-import type { ActiveSkill } from '../utils/systemPrompt.js';
 import { detectSkillTrigger } from '../utils/skillTriggerEngine.js';
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
 import { executeSkill } from '../utils/skillExecutor.js';
 import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import type { ChatMessage } from '../utils/openrouter.js';
+
 import { embed } from '@workspace/opsoul-utils/ai';
 import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
 import type { Layer2Soul } from '../validation/operator.js';
 import { eq, and, desc, sql } from 'drizzle-orm';
+
+interface ActiveSkill {
+  name: string;
+  instructions: string;
+  customInstructions?: string | null;
+  outputFormat?: string | null;
+}
 
 const router = Router();
 router.use(requireSlotKey);
@@ -229,17 +236,31 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       ethicalBoundaries: operator.ethicalBoundaries as string[],
       layer2Soul:        operator.layer2Soul as Layer2Soul,
     },
-    ragContext,
-    activeSkills,
-    memoryHits,
     null,
     { webSearchAvailable: false },
   );
 
   const messages: ChatMessage[] = [
+    { role: 'system', content: systemPrompt },
     ...history,
-    { role: 'user', content: message },
   ];
+
+  if (ragContext && ragContext.trim()) {
+    messages.push({
+      role: 'user',
+      content: `[CONTEXT]\nKnowledge retrieved for this conversation:\n${ragContext}`,
+    });
+  }
+
+  if (memoryHits && memoryHits.length > 0) {
+    const memLines = (memoryHits as MemoryHit[]).map(m => `[${m.memoryType}] ${m.content}`).join('\n');
+    messages.push({
+      role: 'user',
+      content: `[CONTEXT]\nMemory recalled from past conversations:\n${memLines}`,
+    });
+  }
+
+  messages.push({ role: 'user', content: message });
 
   // ── Detect context-injection messages (silent, never shown in workspace) ──
   const INJECTION_PATTERN = /^(?:GUEST_MODE|SESSION_TYPE|FOUNDER_DATA|USER_DATA|CONTEXT_BLOCK|SYSTEM_CONTEXT|__CONTEXT|__META)[:=]/m;
@@ -269,7 +290,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     let fullContent = '';
 
     try {
-      for await (const chunk of streamChat([{ role: 'system', content: systemPrompt }, ...messages], model)) {
+      for await (const chunk of streamChat(messages, model)) {
         if (chunk.delta) {
           fullContent += chunk.delta;
           res.write(`data: ${JSON.stringify({ delta: chunk.delta })}\n\n`);
@@ -283,7 +304,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       if (trigger) {
         trigger.operatorId = slot.operatorId;
         res.write(`data: ${JSON.stringify({ running: trigger.name })}\n\n`);
-        const skillResult = await executeSkill(trigger, model);
+        const skillResult = await executeSkill(trigger, model, messages);
         if (skillResult.success) {
           const secondMessages = buildSkillSecondPassMessages(systemPrompt, messages, fullContent, skillResult.output);
           let secondContent = '';
@@ -334,10 +355,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   } else {
     let result;
     try {
-      result = await chatCompletion(
-        [{ role: 'system', content: systemPrompt }, ...messages],
-        model,
-      );
+      result = await chatCompletion(messages, model);
     } catch (llmErr: unknown) {
       const status = (llmErr as { status?: number })?.status;
       if (status === 402) {
@@ -355,7 +373,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       const trigger = await detectSkillTrigger(message, allSkills, result.content);
       if (trigger) {
         trigger.operatorId = slot.operatorId;
-        const skillResult = await executeSkill(trigger, model);
+        const skillResult = await executeSkill(trigger, model, messages);
         if (skillResult.success) {
           const secondMessages = buildSkillSecondPassMessages(systemPrompt, messages, result.content, skillResult.output);
           const secondResult = await chatCompletion(secondMessages, model);

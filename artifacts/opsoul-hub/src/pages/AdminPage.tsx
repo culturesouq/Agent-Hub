@@ -81,17 +81,7 @@ interface PipelineConfig {
 
 const ARCHETYPES = ["Advisor", "Executor", "Expert", "Connector", "Creator", "Guardian", "Builder", "Catalyst", "Analyst"];
 
-type Tab = "overview" | "owners" | "operators" | "drift" | "rag" | "vael";
-
-interface VaelScheduleState {
-  isRunning: boolean;
-  lastRunType: "full" | "validate" | null;
-  lastRunAt: string | null;
-  lastRunDurationSec: number | null;
-  lastRunSummary: string | null;
-  sweepSchedule: string;
-  validateSchedule: string;
-}
+type Tab = "overview" | "owners" | "operators" | "drift" | "rag";
 
 function StatCard({ label, value, color, glow }: {
   label: string;
@@ -183,32 +173,6 @@ export default function AdminPage() {
     screenerRejections: { content: string; reason: string }[];
   } | null>(null);
 
-  const [vaelSchedule, setVaelSchedule] = useState<VaelScheduleState | null>(null);
-  const [vaelSweeping, setVaelSweeping] = useState(false);
-
-  // Vael direct channel
-  interface VaelMsg { role: "user" | "assistant"; content: string }
-  const [vaelMessages, setVaelMessages] = useState<VaelMsg[]>([]);
-  const [vaelInput, setVaelInput] = useState("");
-  const [vaelChatting, setVaelChatting] = useState(false);
-
-  // Vael focused discovery
-  const [vaelFocus, setVaelFocus] = useState("");
-  const [vaelDiscovering, setVaelDiscovering] = useState(false);
-  const [vaelDiscoveryResult, setVaelDiscoveryResult] = useState<{
-    proposals: { action: string; title: string; content?: string; reason: string; suggested_confidence: number; suggested_tags: string[] }[];
-    summary: string;
-    search_queries_used: string[];
-  } | null>(null);
-
-  // Knowledge Inbox
-  const [inboxPending, setInboxPending] = useState<string[]>([]);
-  const [inboxProcessed, setInboxProcessed] = useState<string[]>([]);
-  const [inboxForm, setInboxForm] = useState({ title: "", content: "" });
-  const [inboxSaving, setInboxSaving] = useState(false);
-  const [inboxUploading, setInboxUploading] = useState(false);
-  const [inboxUploadResult, setInboxUploadResult] = useState<{ added: number; results: { filename: string; ok: boolean; reason?: string }[] } | null>(null);
-  const [inboxDragging, setInboxDragging] = useState(false);
 
   const loadRag = useCallback(async () => {
     const [s, entries, pipeline, sources] = await Promise.all([
@@ -250,9 +214,6 @@ export default function AdminPage() {
     load();
   }, [token, owner, setLocation, loadRag]);
 
-  useEffect(() => {
-    if (tab === "vael") { loadVaelSchedule(); loadInbox(); }
-  }, [tab]);
 
   async function toggleAdmin(id: string) {
     setTogglingId(id);
@@ -323,72 +284,6 @@ export default function AdminPage() {
     }
   }
 
-  async function loadVaelSchedule() {
-    const s = await apiFetch<VaelScheduleState>("/vael/schedule");
-    setVaelSchedule(s);
-  }
-
-  async function triggerVaelSweep(type: "full" | "validate") {
-    setVaelSweeping(true);
-    await apiFetch(`/vael/sweep${type === "validate" ? "/validate" : ""}`, { method: "POST" });
-    const poll = setInterval(async () => {
-      const s = await apiFetch<VaelScheduleState>("/vael/schedule");
-      setVaelSchedule(s);
-      if (!s.isRunning) {
-        clearInterval(poll);
-        setVaelSweeping(false);
-      }
-    }, 4000);
-  }
-
-  const loadInbox = useCallback(async () => {
-    const data = await apiFetch<{ pending: string[]; processed: string[] }>("/admin/rag/inbox");
-    setInboxPending(data.pending);
-    setInboxProcessed(data.processed);
-  }, []);
-
-  async function submitToInbox() {
-    if (!inboxForm.title.trim() || !inboxForm.content.trim()) return;
-    setInboxSaving(true);
-    try {
-      await apiFetch("/admin/rag/inbox", {
-        method: "POST",
-        body: JSON.stringify({ title: inboxForm.title.trim(), content: inboxForm.content.trim() }),
-      });
-      setInboxForm({ title: "", content: "" });
-      await loadInbox();
-    } finally {
-      setInboxSaving(false);
-    }
-  }
-
-  async function deleteFromInbox(filename: string) {
-    await apiFetch(`/admin/rag/inbox/${encodeURIComponent(filename)}`, { method: "DELETE" });
-    setInboxPending(prev => prev.filter(f => f !== filename));
-  }
-
-  async function uploadFilesToInbox(fileList: FileList | File[]) {
-    const files = Array.from(fileList).filter(f => f.size > 0);
-    if (files.length === 0) return;
-    setInboxUploading(true);
-    setInboxUploadResult(null);
-    try {
-      const form = new FormData();
-      files.forEach(f => form.append("files", f));
-      const token = localStorage.getItem("opsoul_token");
-      const res = await fetch("/api/admin/rag/inbox/upload", {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: form,
-      });
-      const data = await res.json();
-      setInboxUploadResult(data);
-      await loadInbox();
-    } finally {
-      setInboxUploading(false);
-    }
-  }
-
   async function createSource() {
     if (!sourceForm.name.trim() || !sourceForm.url.trim()) return;
     setSourceSaving(true);
@@ -422,40 +317,6 @@ export default function AdminPage() {
     setRagSources(prev => prev.filter(s => s.id !== id));
   }
 
-  async function sendVaelChat() {
-    const msg = vaelInput.trim();
-    if (!msg || vaelChatting) return;
-    setVaelMessages(prev => [...prev, { role: "user", content: msg }]);
-    setVaelInput("");
-    setVaelChatting(true);
-    try {
-      const res = await apiFetch<{ reply: string }>("/vael/chat", {
-        method: "POST",
-        body: JSON.stringify({ message: msg }),
-      });
-      setVaelMessages(prev => [...prev, { role: "assistant", content: res.reply }]);
-    } catch {
-      setVaelMessages(prev => [...prev, { role: "assistant", content: "⚠ Vael did not respond. Check server logs." }]);
-    } finally {
-      setVaelChatting(false);
-    }
-  }
-
-  async function runFocusedDiscovery() {
-    setVaelDiscovering(true);
-    setVaelDiscoveryResult(null);
-    try {
-      const result = await apiFetch<typeof vaelDiscoveryResult>("/vael/discover", {
-        method: "POST",
-        body: JSON.stringify({ focus: vaelFocus.trim() || undefined }),
-      });
-      setVaelDiscoveryResult(result);
-    } catch {
-      setVaelDiscoveryResult(null);
-    } finally {
-      setVaelDiscovering(false);
-    }
-  }
 
   if (loading) {
     return (
@@ -473,7 +334,6 @@ export default function AdminPage() {
     { id: "operators", label: "Operators", count: operators.length },
     { id: "drift", label: "Drift Alerts", count: driftAlerts.length },
     { id: "rag", label: "Intelligence", count: ragStats?.totalActive },
-    { id: "vael", label: "Vael" },
   ];
 
   return (
@@ -1219,8 +1079,8 @@ export default function AdminPage() {
           <div className="space-y-4">
             <div className="glass-panel overflow-hidden">
               <div className="px-6 py-4 border-b border-border/30">
-                <span className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Vael Source Registry</span>
-                <p className="font-sans text-xs text-muted-foreground/70 mt-0.5">Curated public KBs Vael visits on each sweep — HuggingFace datasets, GitHub files, raw URLs. She extracts candidates and validates every one before seeding.</p>
+                <span className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Source Registry</span>
+                <p className="font-sans text-xs text-muted-foreground/70 mt-0.5">Curated public knowledge sources — HuggingFace datasets, GitHub files, raw URLs.</p>
               </div>
 
               {/* Add source form */}
@@ -1269,7 +1129,7 @@ export default function AdminPage() {
               {/* Source list */}
               {ragSources.length === 0 ? (
                 <div className="px-6 py-8 text-center text-muted-foreground text-xs font-sans italic">
-                  No sources yet. Add HuggingFace datasets or GitHub files for Vael to visit.
+                  No sources yet. Add HuggingFace datasets, GitHub files, or raw URLs.
                 </div>
               ) : (
                 <div className="divide-y divide-border/10">
@@ -1317,371 +1177,6 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ── Vael Workspace ─────────────────────────────────────────────── */}
-        {tab === "vael" && (
-          <div className="p-8 space-y-6 max-w-3xl mx-auto">
-            <div>
-              <h2 className="font-headline text-2xl font-bold text-primary mb-1">Vael Workspace</h2>
-              <p className="text-sm text-muted-foreground font-sans">Autonomous validation, discovery, and seeding — scheduled tasks and manual controls.</p>
-            </div>
-
-            {/* ── Knowledge Inbox ───────────────────────────────────────── */}
-            <div className="glass-panel overflow-hidden">
-              <div className="px-6 py-4 border-b border-border/30 flex items-center justify-between">
-                <div>
-                  <span className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Knowledge Inbox</span>
-                  <p className="font-sans text-xs text-muted-foreground/70 mt-0.5">Give Vael material to learn from. She reads it herself, decides what's valuable, validates it, and seeds it into her DNA.</p>
-                </div>
-                <button onClick={loadInbox} className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors flex-shrink-0">Refresh</button>
-              </div>
-
-              {/* Submit form */}
-              <div className="px-6 py-5 border-b border-border/20 space-y-3">
-                <input
-                  value={inboxForm.title}
-                  onChange={e => setInboxForm(f => ({ ...f, title: e.target.value }))}
-                  placeholder="Title — e.g. 'How AI operators handle ambiguity'"
-                  className="w-full bg-surface/30 border border-border/30 rounded px-3 py-2 text-xs font-sans text-on-surface placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/40"
-                />
-                <textarea
-                  value={inboxForm.content}
-                  onChange={e => setInboxForm(f => ({ ...f, content: e.target.value }))}
-                  placeholder="Paste any text here — articles, research, documentation, notes. Vael will extract what she considers worth learning."
-                  rows={6}
-                  className="w-full bg-surface/30 border border-border/30 rounded px-3 py-2 text-xs font-sans text-on-surface placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/40 resize-none"
-                />
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-sans text-muted-foreground/60">She'll process it on her next sweep or you can trigger one manually below.</p>
-                  <button
-                    onClick={submitToInbox}
-                    disabled={inboxSaving || !inboxForm.title.trim() || !inboxForm.content.trim()}
-                    className="font-label text-[9px] uppercase tracking-widest px-4 py-2 rounded border border-secondary/40 text-secondary hover:bg-secondary/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
-                  >
-                    {inboxSaving ? "Sending…" : "Send to Vael"}
-                  </button>
-                </div>
-              </div>
-
-              {/* Upload zone */}
-              <div className="px-6 py-5 border-b border-border/20 space-y-3">
-                <p className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">Or upload files & folders</p>
-                <div
-                  onDragOver={e => { e.preventDefault(); setInboxDragging(true); }}
-                  onDragLeave={() => setInboxDragging(false)}
-                  onDrop={e => { e.preventDefault(); setInboxDragging(false); uploadFilesToInbox(e.dataTransfer.files); }}
-                  className={`border-2 border-dashed rounded-lg px-6 py-8 text-center transition-colors ${inboxDragging ? "border-secondary/60 bg-secondary/5" : "border-border/30 hover:border-border/50"}`}
-                >
-                  <p className="font-sans text-sm text-muted-foreground mb-1">
-                    {inboxUploading ? "Uploading…" : "Drop files or folders here"}
-                  </p>
-                  <p className="font-sans text-[10px] text-muted-foreground/50 mb-4">PDF, Word, Markdown, TXT, HTML, JSON, CSV and more</p>
-                  <div className="flex items-center justify-center gap-3">
-                    <label className="cursor-pointer font-label text-[9px] uppercase tracking-widest px-4 py-2 rounded border border-primary/40 text-primary hover:bg-primary/10 transition-colors">
-                      Choose Files
-                      <input
-                        type="file"
-                        multiple
-                        accept=".pdf,.doc,.docx,.txt,.md,.markdown,.html,.htm,.json,.csv,.yaml,.yml,.rst,.xml,.log"
-                        className="hidden"
-                        onChange={e => e.target.files && uploadFilesToInbox(e.target.files)}
-                      />
-                    </label>
-                    <label className="cursor-pointer font-label text-[9px] uppercase tracking-widest px-4 py-2 rounded border border-border/40 text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors">
-                      Choose Folder
-                      <input
-                        type="file"
-                        {...({ webkitdirectory: "true", directory: "true" } as any)}
-                        multiple
-                        className="hidden"
-                        onChange={e => e.target.files && uploadFilesToInbox(e.target.files)}
-                      />
-                    </label>
-                  </div>
-                </div>
-
-                {inboxUploadResult && (
-                  <div className={`px-4 py-3 rounded border text-xs font-sans ${inboxUploadResult.added > 0 ? "border-secondary/30 bg-secondary/5 text-secondary" : "border-destructive/30 bg-destructive/5 text-destructive"}`}>
-                    {inboxUploadResult.added > 0
-                      ? `${inboxUploadResult.added} file${inboxUploadResult.added !== 1 ? "s" : ""} sent to Vael's inbox`
-                      : "No files could be processed"}
-                    {inboxUploadResult.results.filter(r => !r.ok).length > 0 && (
-                      <ul className="mt-1 text-[10px] text-muted-foreground/70 space-y-0.5">
-                        {inboxUploadResult.results.filter(r => !r.ok).map(r => (
-                          <li key={r.filename}>{r.filename}: {r.reason}</li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Pending files */}
-              {inboxPending.length > 0 && (
-                <div className="px-6 py-4 border-b border-border/20">
-                  <p className="font-label text-[9px] uppercase tracking-widest text-muted-foreground mb-3">Waiting for Vael — {inboxPending.length} file{inboxPending.length !== 1 ? "s" : ""}</p>
-                  <div className="space-y-2">
-                    {inboxPending.map(f => (
-                      <div key={f} className="flex items-center justify-between gap-3 py-1.5">
-                        <span className="font-mono text-xs text-on-surface/80 truncate">{f}</span>
-                        <button
-                          onClick={() => deleteFromInbox(f)}
-                          className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-destructive transition-colors flex-shrink-0"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {inboxPending.length === 0 && (
-                <div className="px-6 py-4 border-b border-border/20">
-                  <p className="font-sans text-xs text-muted-foreground/60 italic">Inbox is empty — paste something above for Vael to read.</p>
-                </div>
-              )}
-
-              {/* Processed files */}
-              {inboxProcessed.length > 0 && (
-                <div className="px-6 py-4">
-                  <p className="font-label text-[9px] uppercase tracking-widest text-muted-foreground mb-3">Already read by Vael — last {inboxProcessed.length}</p>
-                  <div className="space-y-1.5">
-                    {inboxProcessed.map(f => {
-                      const clean = f.replace(/^\d{4}-\d{2}-\d{2}T[^_]+_/, '').replace(/\.(md|txt)$/i, '');
-                      const date = f.match(/^(\d{4}-\d{2}-\d{2})/)?.[1] ?? '';
-                      return (
-                        <div key={f} className="flex items-center gap-3">
-                          <span className="w-1.5 h-1.5 rounded-full bg-secondary/50 flex-shrink-0" />
-                          <span className="font-sans text-xs text-muted-foreground/70 truncate">{clean}</span>
-                          {date && <span className="font-label text-[9px] text-muted-foreground/40 flex-shrink-0">{date}</span>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Scheduled tasks */}
-            <div className="glass-panel overflow-hidden">
-              <div className="px-6 py-4 border-b border-border/30">
-                <span className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Scheduled Tasks</span>
-              </div>
-
-              {/* Full sweep */}
-              <div className="px-6 py-5 border-b border-border/20">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-sans text-sm font-medium text-on-surface">Full Sweep</span>
-                      <span className="font-label text-[9px] uppercase tracking-widest px-2 py-0.5 rounded-sm bg-primary/10 text-primary/70 border border-primary/20">
-                        {vaelSchedule?.sweepSchedule ?? "0 1,13 * * *"}
-                      </span>
-                      <span className="font-label text-[9px] text-muted-foreground/60">1 AM + 1 PM UTC daily</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground font-sans">Validate draft DNA entries → discover knowledge gaps → self-validate proposals → seed approved entries with embeddings. Budget: 4.5 min.</p>
-                  </div>
-                  <button
-                    onClick={() => triggerVaelSweep("full")}
-                    disabled={vaelSweeping || vaelSchedule?.isRunning}
-                    className="font-label text-[9px] uppercase tracking-widest px-3 py-1.5 rounded-sm border border-primary/40 text-primary hover:bg-primary/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
-                  >
-                    {vaelSweeping || vaelSchedule?.isRunning ? "Running…" : "Run Now"}
-                  </button>
-                </div>
-              </div>
-
-              {/* Validate only */}
-              <div className="px-6 py-5">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-sans text-sm font-medium text-on-surface">Validation Cycle</span>
-                      <span className="font-label text-[9px] uppercase tracking-widest px-2 py-0.5 rounded-sm bg-primary/10 text-primary/70 border border-primary/20">
-                        {vaelSchedule?.validateSchedule ?? "0 */6 * * *"}
-                      </span>
-                      <span className="font-label text-[9px] text-muted-foreground/60">every 6 hours</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground font-sans">Review draft DNA entries only. Approve, revise, or reject. Budget: 55 sec.</p>
-                  </div>
-                  <button
-                    onClick={() => triggerVaelSweep("validate")}
-                    disabled={vaelSweeping || vaelSchedule?.isRunning}
-                    className="font-label text-[9px] uppercase tracking-widest px-3 py-1.5 rounded-sm border border-border/40 text-muted-foreground hover:text-primary hover:border-primary/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
-                  >
-                    {vaelSweeping || vaelSchedule?.isRunning ? "Running…" : "Run Now"}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Last run summary */}
-            <div className="glass-panel overflow-hidden">
-              <div className="px-6 py-4 border-b border-border/30 flex items-center justify-between">
-                <span className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Last Run</span>
-                <button onClick={loadVaelSchedule} className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">Refresh</button>
-              </div>
-              <div className="px-6 py-5">
-                {!vaelSchedule && (
-                  <p className="text-xs text-muted-foreground font-sans italic">Loading…</p>
-                )}
-                {vaelSchedule && !vaelSchedule.lastRunAt && (
-                  <p className="text-xs text-muted-foreground font-sans italic">No runs since last server restart. Trigger manually or wait for the cron schedule.</p>
-                )}
-                {vaelSchedule?.lastRunAt && (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-3">
-                      <span className={`font-label text-[9px] uppercase tracking-widest px-2 py-0.5 rounded-sm border ${vaelSchedule.lastRunType === "full" ? "border-primary/40 text-primary/70 bg-primary/5" : "border-border/40 text-muted-foreground bg-surface/30"}`}>
-                        {vaelSchedule.lastRunType === "full" ? "Full Sweep" : "Validate Only"}
-                      </span>
-                      <span className="font-label text-[9px] text-muted-foreground/70">
-                        {new Date(vaelSchedule.lastRunAt).toLocaleString()} · {vaelSchedule.lastRunDurationSec}s
-                      </span>
-                    </div>
-                    {vaelSchedule.lastRunSummary && (
-                      <p className="text-xs font-sans text-on-surface/80 font-mono bg-surface/30 rounded px-3 py-2 border border-border/20">
-                        {vaelSchedule.lastRunSummary}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Direct Channel */}
-            <div className="glass-panel overflow-hidden">
-              <div className="px-6 py-4 border-b border-border/30 flex items-center justify-between">
-                <div>
-                  <span className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Direct Channel</span>
-                  <p className="font-sans text-xs text-muted-foreground/70 mt-0.5">Talk to Vael directly. She has full context of the platform.</p>
-                </div>
-                {vaelMessages.length > 0 && (
-                  <button onClick={() => setVaelMessages([])} className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-destructive transition-colors">Clear</button>
-                )}
-              </div>
-              {vaelMessages.length > 0 && (
-                <div className="px-6 py-4 space-y-3 max-h-80 overflow-y-auto">
-                  {vaelMessages.map((m, i) => (
-                    <div key={i} className={`flex gap-3 ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                      {m.role === "assistant" && (
-                        <div className="w-5 h-5 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center flex-shrink-0 mt-0.5">
-                          <span className="font-label text-[8px] text-primary">V</span>
-                        </div>
-                      )}
-                      <div className={`max-w-[80%] px-3 py-2 rounded text-xs font-sans leading-relaxed ${
-                        m.role === "user"
-                          ? "bg-primary/10 border border-primary/20 text-on-surface"
-                          : "bg-surface/40 border border-border/20 text-on-surface/90"
-                      }`}>
-                        {m.content}
-                      </div>
-                    </div>
-                  ))}
-                  {vaelChatting && (
-                    <div className="flex gap-3 justify-start">
-                      <div className="w-5 h-5 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <span className="font-label text-[8px] text-primary">V</span>
-                      </div>
-                      <div className="px-3 py-2 rounded text-xs font-sans text-muted-foreground bg-surface/40 border border-border/20 animate-pulse">
-                        thinking…
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-              <div className="px-6 py-4 flex gap-3">
-                <input
-                  value={vaelInput}
-                  onChange={e => setVaelInput(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendVaelChat()}
-                  placeholder="Ask Vael anything about the platform…"
-                  disabled={vaelChatting}
-                  className="flex-1 bg-surface/30 border border-border/30 rounded px-3 py-2 text-xs font-sans text-on-surface placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/40 disabled:opacity-50"
-                />
-                <button
-                  onClick={sendVaelChat}
-                  disabled={vaelChatting || !vaelInput.trim()}
-                  className="font-label text-[9px] uppercase tracking-widest px-4 py-2 rounded border border-primary/40 text-primary hover:bg-primary/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
-                >
-                  {vaelChatting ? "…" : "Send"}
-                </button>
-              </div>
-            </div>
-
-            {/* Focused Discovery */}
-            <div className="glass-panel overflow-hidden">
-              <div className="px-6 py-4 border-b border-border/30">
-                <span className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Focused Discovery</span>
-                <p className="font-sans text-xs text-muted-foreground/70 mt-0.5">Run a targeted search. Leave blank for a full platform sweep.</p>
-              </div>
-              <div className="px-6 py-4 flex gap-3">
-                <input
-                  value={vaelFocus}
-                  onChange={e => setVaelFocus(e.target.value)}
-                  placeholder="e.g. memory management, emotional intelligence, operator drift…"
-                  disabled={vaelDiscovering}
-                  className="flex-1 bg-surface/30 border border-border/30 rounded px-3 py-2 text-xs font-sans text-on-surface placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/40 disabled:opacity-50"
-                />
-                <button
-                  onClick={runFocusedDiscovery}
-                  disabled={vaelDiscovering}
-                  className="font-label text-[9px] uppercase tracking-widest px-4 py-2 rounded border border-secondary/40 text-secondary hover:bg-secondary/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
-                >
-                  {vaelDiscovering ? "Searching…" : "Discover"}
-                </button>
-              </div>
-              {vaelDiscoveryResult && (
-                <div className="px-6 pb-5 space-y-4">
-                  <p className="text-xs font-sans text-on-surface/80 bg-surface/30 border border-border/20 rounded px-3 py-2">
-                    {vaelDiscoveryResult.summary}
-                  </p>
-                  {vaelDiscoveryResult.search_queries_used.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {vaelDiscoveryResult.search_queries_used.map((q, i) => (
-                        <span key={i} className="font-label text-[9px] px-2 py-0.5 rounded-sm bg-surface/30 border border-border/20 text-muted-foreground">
-                          {q}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {vaelDiscoveryResult.proposals.length > 0 && (
-                    <div className="space-y-2">
-                      <div className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">{vaelDiscoveryResult.proposals.length} Proposals</div>
-                      {vaelDiscoveryResult.proposals.map((p, i) => (
-                        <div key={i} className="border border-border/20 rounded px-4 py-3 bg-surface/20 space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className={`font-label text-[8px] uppercase tracking-widest px-2 py-0.5 rounded-sm border ${
-                              p.action === "new_entry" ? "border-secondary/40 text-secondary/80 bg-secondary/5" :
-                              p.action === "flag_upgraded" ? "border-primary/40 text-primary/70 bg-primary/5" :
-                              "border-amber-400/40 text-amber-400/80 bg-amber-400/5"
-                            }`}>
-                              {p.action === "new_entry" ? "New Entry" : p.action === "flag_upgraded" ? "Upgrade" : "Deprecate"}
-                            </span>
-                            <span className="text-xs font-sans font-medium text-on-surface">{p.title}</span>
-                            <span className="font-mono text-[9px] text-muted-foreground/60 ml-auto">{(p.suggested_confidence * 100).toFixed(0)}%</span>
-                          </div>
-                          {p.content && <p className="text-xs font-sans text-muted-foreground leading-relaxed">{p.content}</p>}
-                          <p className="text-[10px] font-sans text-muted-foreground/60 italic">{p.reason}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* How it works */}
-            <div className="glass-panel px-6 py-5 space-y-2">
-              <div className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-3">How It Works</div>
-              <div className="space-y-2 text-xs font-sans text-muted-foreground">
-                <p>• <span className="text-on-surface/80">Full sweep</span> — validates drafts first, then runs a discovery sweep across the platform, self-validates each proposal, and seeds anything that passes into the collective DNA layer with proper scope classification.</p>
-                <p>• <span className="text-on-surface/80">Validation cycle</span> — reviews draft entries in the DNA corpus. Approved entries go to "current". Revised entries are corrected and re-embedded. Rejected entries are deprecated.</p>
-                <p>• <span className="text-on-surface/80">Budget timer</span> — Vael races the clock. She stops cleanly before the budget runs out, logs what she completed, and picks up where she left off on the next cycle.</p>
-                <p>• <span className="text-on-surface/80">Pipeline exclusion</span> — Vael learns from all operators and all DNA layers, but never contributes to the collective pipeline. Her knowledge stays private to her.</p>
-              </div>
-            </div>
-          </div>
-        )}
       </main>
     </div>
   );

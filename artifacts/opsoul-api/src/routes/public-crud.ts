@@ -19,9 +19,16 @@ import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
 import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { buildSystemPrompt } from '../utils/systemPrompt.js';
-import type { ActiveSkill, LiveStationData } from '../utils/systemPrompt.js';
+import type { LiveStationData } from '../utils/systemPrompt.js';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { eq, and } from 'drizzle-orm';
+
+interface ActiveSkill {
+  name: string;
+  instructions: string;
+  customInstructions?: string | null;
+  outputFormat?: string | null;
+}
 
 const router = Router();
 router.use(requireSlotKey);
@@ -214,9 +221,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   const systemPrompt = buildSystemPrompt(
     operatorIdentity,
-    ragContext || undefined,
-    activeSkills,
-    undefined,
     undefined,
     { scopeLine: crudScopeLine },
     liveStation,

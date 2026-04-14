@@ -1,7 +1,4 @@
 import type { Layer2Soul } from '../validation/operator.js';
-import type { MemoryHit } from './memoryEngine.js';
-
-export type { MemoryHit };
 
 export interface OperatorIdentity {
   name: string;
@@ -11,13 +8,6 @@ export interface OperatorIdentity {
   coreValues: string[] | null;
   ethicalBoundaries: string[] | null;
   layer2Soul: Layer2Soul;
-}
-
-export interface ActiveSkill {
-  name: string;
-  instructions: string;
-  customInstructions?: string | null;
-  outputFormat?: string | null;
 }
 
 export interface SelfAwarenessSnapshot {
@@ -341,9 +331,6 @@ function buildLayer1Block(operator: OperatorIdentity): string[] {
 
 export function buildSystemPrompt(
   operator: OperatorIdentity,
-  kbContext?: string,
-  skills?: ActiveSkill[],
-  memories?: MemoryHit[],
   selfAwareness?: SelfAwarenessSnapshot | null,
   opts?: BuildSystemPromptOpts,
   liveStation?: LiveStationData,
@@ -536,47 +523,6 @@ export function buildSystemPrompt(
     }
 
     parts.push('');
-  }
-
-
-  if (memories && memories.length > 0) {
-    parts.push('### Remembered Context');
-    parts.push('The following was recalled from long-term memory. Use it to personalise your response and maintain continuity with this user:');
-    parts.push('');
-    memories.forEach((m) => {
-      parts.push(
-        `[${m.memoryType}] (weight: ${m.weight.toFixed(2)}) ${m.content}`,
-      );
-    });
-    parts.push('');
-  }
-
-  if (kbContext && kbContext.trim()) {
-    parts.push('### Knowledge Base Context');
-    parts.push('The following knowledge was retrieved from your knowledge base for this conversation:');
-    parts.push('');
-    parts.push(kbContext);
-  } else {
-  }
-
-  if (skills && skills.length > 0) {
-    const activeSkills = skills.filter((s) => s.instructions?.trim());
-    if (activeSkills.length > 0) {
-      parts.push('');
-      parts.push('### Active Skills');
-      parts.push('The following capabilities are active for this session. Follow these skill instructions when relevant:');
-      for (const skill of activeSkills) {
-        parts.push('');
-        parts.push(`#### ${skill.name}`);
-        parts.push(skill.instructions);
-        if (skill.customInstructions?.trim()) {
-          parts.push(`**Custom override:** ${skill.customInstructions}`);
-        }
-        if (skill.outputFormat?.trim()) {
-          parts.push(`**Output format:** ${skill.outputFormat}`);
-        }
-      }
-    }
   }
 
 

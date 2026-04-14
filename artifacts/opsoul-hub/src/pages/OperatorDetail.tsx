@@ -2,22 +2,18 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiFetch } from "@/lib/api";
-import { Operator, HealthScore, CapabilityRequest } from "@/types";
+import { Operator, HealthScore } from "@/types";
 import {
   ArrowLeft, MessageSquare, Brain, Activity,
   User, Zap, Archive, Network,
   CheckSquare, FileText, Settings2, Key, Code2, AlertTriangle,
-  Radio, MessageCircle, Send, Star, ChevronRight, Bell,
-  Shield, ShieldCheck, Menu, X, Cpu, ShieldAlert, Globe,
+  Radio, MessageCircle, Send, Star, ChevronRight,
+  Shield, ShieldCheck, Menu, X, Cpu, Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 
 import ChatSection from "@/components/operator/ChatSection";
-import CapabilityRequestsSection from "@/components/operator/CapabilityRequestsSection";
 import MemorySection from "@/components/operator/MemorySection";
 import IntegrationsSection from "@/components/operator/IntegrationsSection";
 import SettingsSection from "@/components/operator/SettingsSection";
@@ -152,7 +148,6 @@ const NAV_MAIN: NavItem[] = [
       { kind: "leaf", id: "soul",                 label: "Soul",             icon: User,         depth: 1 },
       { kind: "leaf", id: "skills",               label: "Skills",           icon: Zap,          depth: 1 },
       { kind: "leaf", id: "memory",               label: "Memory",           icon: Archive,      depth: 1 },
-      { kind: "leaf", id: "capability-requests",  label: "Capabilities",     icon: ShieldAlert,  depth: 1 },
       { kind: "leaf", id: "grow",                 label: "Growth",           icon: Activity,     depth: 1 },
     ],
   },
@@ -183,7 +178,7 @@ const NAV_BOTTOM: NavItem[] = [
   { kind: "leaf", id: "feedback", label: "Leave Feedback", icon: Star, depth: 0 },
 ];
 
-const BRAIN_LEAVES    = ["soul", "skills", "memory", "capability-requests", "grow"];
+const BRAIN_LEAVES    = ["soul", "skills", "memory", "grow"];
 const SETTINGS_LEAVES = ["settings.model", "settings.secrets", "settings.api", "settings.behavior", "settings.evolution", "settings.danger"];
 const CHANNELS_LEAVES = ["channels.whatsapp", "channels.telegram"];
 
@@ -192,7 +187,6 @@ export default function OperatorDetail({ id }: { id: string }) {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("chat");
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(["brain"]));
-  const [capDialogOpen, setCapDialogOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const { data: operator, isLoading } = useQuery({
@@ -219,38 +213,6 @@ export default function OperatorDetail({ id }: { id: string }) {
   useEffect(() => {
     if (id) autoRecompute.mutate();
   }, [id]);
-
-  const { data: capabilityRequests = [] } = useQuery({
-    queryKey: ["operators", id, "capability-requests"],
-    queryFn: () => apiFetch<CapabilityRequest[]>(`/operators/${id}/capability-requests`),
-    enabled: !!id,
-    refetchInterval: 30000,
-  });
-
-  const pendingRequests = Array.isArray(capabilityRequests)
-    ? capabilityRequests.filter((r: CapabilityRequest) => !r.ownerResponse)
-    : [];
-
-  const approveRequest = useMutation({
-    mutationFn: (reqId: string) =>
-      apiFetch(`/operators/${id}/capability-requests/${reqId}/respond`, {
-        method: "PATCH",
-        body: JSON.stringify({ ownerResponse: "Approved" }),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["operators", id, "capability-requests"] });
-      toast({ title: "Request approved" });
-    },
-  });
-
-  const dismissRequest = useMutation({
-    mutationFn: (reqId: string) =>
-      apiFetch(`/operators/${id}/capability-requests/${reqId}`, { method: "DELETE" }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["operators", id, "capability-requests"] });
-      toast({ title: "Request dismissed" });
-    },
-  });
 
   useEffect(() => {
     setOpenGroups(prev => {
@@ -307,7 +269,6 @@ export default function OperatorDetail({ id }: { id: string }) {
         );
       case "skills":             return <SkillsSection operatorId={id} archetype={operator?.archetype ?? ['All']} />;
       case "memory":              return <MemorySection operatorId={id} />;
-      case "capability-requests": return <CapabilityRequestsSection operatorId={id} />;
       case "grow":               return <GrowSection operatorId={id} saData={saData} />;
       case "tasks":              return <TasksSection operatorId={id} />;
       case "files":              return <FilesSection operator={operator} />;
@@ -328,15 +289,12 @@ export default function OperatorDetail({ id }: { id: string }) {
   const renderNavItems = (items: NavItem[]) =>
     items.map(item => {
       if (item.kind === "leaf") {
-        const isChatItem = item.id === "chat";
         return (
           <SidebarLeaf
             key={item.id}
             item={item}
             activeTab={activeTab}
             onSelect={handleSelect}
-            badgeCount={isChatItem ? pendingRequests.length : undefined}
-            onBadgeClick={isChatItem ? () => { setMobileNavOpen(false); setCapDialogOpen(true); } : undefined}
           />
         );
       }
@@ -469,54 +427,6 @@ export default function OperatorDetail({ id }: { id: string }) {
         </main>
       </div>
 
-      {/* Capability Requests Dialog */}
-      <Dialog open={capDialogOpen} onOpenChange={setCapDialogOpen}>
-        <DialogContent className="border-amber-500/30 bg-card/95 backdrop-blur max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="font-headline text-base flex items-center gap-2">
-              <Bell className="w-4 h-4 text-amber-500" />
-              Your operator is asking for permission
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 mt-2">
-            {pendingRequests.length === 0 ? (
-              <p className="font-mono text-sm text-muted-foreground text-center py-4">
-                No pending requests.
-              </p>
-            ) : (
-              pendingRequests.map((req: CapabilityRequest) => (
-                <div key={req.id} className="border border-amber-500/30 rounded-lg p-4 space-y-3 bg-amber-500/5">
-                  <div>
-                    <p className="font-mono text-sm font-bold text-foreground">
-                      Wants access to: <span className="text-amber-500">{req.requestedCapability}</span>
-                    </p>
-                    <p className="font-mono text-xs text-muted-foreground mt-1">{req.reason}</p>
-                  </div>
-                  <div className="flex gap-2 pt-1">
-                    <Button
-                      size="sm"
-                      className="font-mono text-xs font-bold h-8 bg-green-600 hover:bg-green-500 text-white"
-                      onClick={() => approveRequest.mutate(req.id)}
-                      disabled={approveRequest.isPending}
-                    >
-                      Approve
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="font-mono text-xs h-8 text-muted-foreground hover:text-destructive"
-                      onClick={() => dismissRequest.mutate(req.id)}
-                      disabled={dismissRequest.isPending}
-                    >
-                      Dismiss
-                    </Button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

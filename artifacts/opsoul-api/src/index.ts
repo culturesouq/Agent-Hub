@@ -21,7 +21,6 @@ import platformSkillsRouter from './routes/platform-skills.js';
 import operatorSkillsRouter from './routes/operator-skills.js';
 import integrationsRouter from './routes/integrations.js';
 import memoryRouter from './routes/memory.js';
-import capabilityRequestsRouter from './routes/capability-requests.js';
 import tasksRouter from './routes/tasks.js';
 import uploadRouter from './routes/upload.js';
 import transcribeRouter from './routes/transcribe.js';
@@ -34,12 +33,10 @@ import operatorSecretsRouter from './routes/operator-secrets.js';
 import deploymentSlotsRouter from './routes/deployment-slots.js';
 import publicChatRouter from './routes/public-chat.js';
 import publicCrudRouter from './routes/public-crud.js';
-import vaelRouter from './routes/vael.js';
 import { startGrowCron } from './cron/growCron.js';
 import { startMemoryCron } from './cron/memoryCron.js';
 import { startDriftCron } from './cron/driftCron.js';
 import { startKeepAliveCron } from './cron/keepAliveCron.js';
-import { startVaelCron } from './cron/vaelCron.js';
 import { runInitSeed } from './utils/initSeed.js';
 import { backfillIntegrationSkills } from './utils/autoInstallIntegrationSkills.js';
 import { backfillAllAgencyCore } from './utils/seedAgencyCore.js';
@@ -65,7 +62,6 @@ app.use('/api/operators/:operatorId/grow', growRouter);
 app.use('/api/operators/:operatorId/skills', operatorSkillsRouter);
 app.use('/api/operators/:operatorId/integrations', integrationsRouter);
 app.use('/api/operators/:operatorId/memory', memoryRouter);
-app.use('/api/operators/:operatorId/capability-requests', capabilityRequestsRouter);
 app.use('/api/operators/:operatorId/tasks', tasksRouter);
 app.use('/api/operators/:operatorId/files', operatorFilesRouter);
 app.use('/api/platform-skills', platformSkillsRouter);
@@ -73,7 +69,6 @@ app.use('/api/upload', uploadRouter);
 app.use('/api/transcribe', transcribeRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/admin/rag', adminRagRouter);
-app.use('/api/vael', vaelRouter);
 app.use('/api/contact', contactRouter);
 app.use('/api/integrations/google', googleIntegrationRouter);
 app.use('/api/operators/:operatorId/secrets', operatorSecretsRouter);
@@ -173,7 +168,6 @@ async function start(): Promise<void> {
   startMemoryCron();
   startDriftCron();
   startKeepAliveCron();
-  startVaelCron();
 }
 
 start().catch((err) => {

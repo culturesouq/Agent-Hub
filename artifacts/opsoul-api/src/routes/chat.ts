@@ -23,7 +23,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { lockLayer1IfUnlocked } from '../utils/lockLayer1.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { buildSystemPrompt, buildBirthSystemPrompt } from '../utils/systemPrompt.js';
-import type { ActiveSkill, SelfAwarenessSnapshot, BuildSystemPromptOpts, LiveStationData } from '../utils/systemPrompt.js';
+import type { SelfAwarenessSnapshot, BuildSystemPromptOpts, LiveStationData } from '../utils/systemPrompt.js';
 import { searchMemory, buildMemoryContext, distillMemoriesFromConversations, storeMemory } from '../utils/memoryEngine.js';
 import type { MemoryHit } from '../utils/memoryEngine.js';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
@@ -38,6 +38,13 @@ import { verifyAndStore, persistKbSeedEntry } from '../utils/kbIntake.js';
 import { eq, and, asc } from 'drizzle-orm';
 import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
 import { isWebSearchAvailable, executeWebSearch } from '../utils/capabilityEngine.js';
+
+interface ActiveSkill {
+  name: string;
+  instructions: string;
+  customInstructions?: string | null;
+  outputFormat?: string | null;
+}
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -657,9 +664,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           ethicalBoundaries: operator.ethicalBoundaries,
           layer2Soul: operator.layer2Soul as Layer2Soul,
         },
-        kbContext,
-        mergedSkills,
-        memoryHits,
         selfAwareness,
         promptOpts,
         liveStation,
@@ -729,8 +733,24 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   const messages: ChatMessage[] = [
     { role: 'system', content: systemPrompt },
     ...history,
-    { role: 'user', content: userContent },
   ];
+
+  if (kbContext && kbContext.trim()) {
+    messages.push({
+      role: 'user',
+      content: `[CONTEXT]\nKnowledge retrieved for this conversation:\n${kbContext}`,
+    });
+  }
+
+  if (memoryHits && memoryHits.length > 0) {
+    const memLines = memoryHits.map((m: MemoryHit) => `[${m.memoryType}] ${m.content}`).join('\n');
+    messages.push({
+      role: 'user',
+      content: `[CONTEXT]\nMemory recalled from past conversations:\n${memLines}`,
+    });
+  }
+
+  messages.push({ role: 'user', content: userContent });
 
   // Save the user message and lock Layer 1 if still unlocked
   await db.insert(messagesTable).values({
@@ -1183,7 +1203,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           console.log(`[agency] skill triggered: ${skillTrigger.name}`);
           res.write(`data: ${JSON.stringify({ running: skillTrigger.name })}\n\n`);
           res.write(`data: ${JSON.stringify({ clear: true })}\n\n`);
-          const skillResult = await executeSkill(skillTrigger, chatModel);
+          const skillResult = await executeSkill(skillTrigger, chatModel, messages);
           if (skillResult.success) {
             await persistSkillResult(operator.id, operator.ownerId, conv.id, skillTrigger, skillResult);
             const skillMessages = buildSkillSecondPassMessages(messages, finalContent, skillResult.output);
@@ -1407,7 +1427,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         if (skillTrigger) {
           skillTrigger.operatorId = operator.id;
           console.log(`[agency] skill triggered: ${skillTrigger.name}`);
-          const skillResult = await executeSkill(skillTrigger, chatModel);
+          const skillResult = await executeSkill(skillTrigger, chatModel, messages);
           if (skillResult.success) {
             await persistSkillResult(operator.id, operator.ownerId, conv.id, skillTrigger, skillResult);
             const secondMessages = buildSkillSecondPassMessages(messages, result.content, skillResult.output);

@@ -1,4 +1,5 @@
 import { chatCompletion } from './openrouter.js';
+import type { ChatMessage } from './openrouter.js';
 import { db } from '@workspace/db';
 import { operatorIntegrationsTable } from '@workspace/db';
 import { decryptToken, encryptToken } from '@workspace/opsoul-utils/crypto';
@@ -307,6 +308,7 @@ async function fetchIntegrationData(
 export async function executeSkill(
   trigger: SkillTrigger,
   model: string,
+  messages?: ChatMessage[],
 ): Promise<SkillResult> {
   const instructions = trigger.customInstructions
     ? `${trigger.instructions}\n\nAdditional instructions: ${trigger.customInstructions}`
@@ -332,6 +334,12 @@ export async function executeSkill(
         .limit(1);
 
       if (integration) {
+        if (messages) {
+          messages.push({
+            role: 'user',
+            content: `[CONTEXT]\nYou are about to call ${integration.integrationLabel ?? integration.integrationType} to retrieve live data. Use the result in your response naturally.`,
+          });
+        }
         const data = await fetchIntegrationData(integration, instructions);
         if (data) {
           apiContext = `\n\nLive API response from ${trigger.integrationType}:\n${data}`;
