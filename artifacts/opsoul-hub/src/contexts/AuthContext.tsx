@@ -37,7 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     const expiresAt = decodeJwtExp(currentToken);
     if (!expiresAt) return;
-    const refreshAt = expiresAt - 5 * 60 * 1000;
+    const refreshAt = expiresAt - 3 * 60 * 1000;
     const delay = refreshAt - Date.now();
     if (delay <= 0) return;
     refreshTimerRef.current = setTimeout(async () => {
