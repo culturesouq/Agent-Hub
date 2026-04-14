@@ -27,6 +27,13 @@ async function resolveOperator(req: Request, res: Response): Promise<string | nu
   return op.id;
 }
 
+function computeInitialNextRunAt(schedule: string): Date | null {
+  const now = Date.now();
+  if (schedule === 'daily')  return new Date(now + 24 * 60 * 60 * 1000);
+  if (schedule === 'weekly') return new Date(now + 7 * 24 * 60 * 60 * 1000);
+  return null;
+}
+
 const CreateTaskSchema = z.object({
   name: z.string().min(1).max(200),
   schedule: z.enum(['daily', 'weekly', 'custom']),
@@ -91,6 +98,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       integrationLabel: 'automation',
       payload: { description, customSchedule: customSchedule ?? null },
       status: 'active',
+      nextRunAt: computeInitialNextRunAt(schedule),
     })
     .returning();
 

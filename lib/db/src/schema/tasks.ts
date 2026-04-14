@@ -10,6 +10,7 @@ export const tasksTable = pgTable('tasks', {
   payload: jsonb('payload').notNull(),
   status: text('status').default('pending'),
   summary: text('summary'),
+  nextRunAt: timestamp('next_run_at'),
   createdAt: timestamp('created_at').defaultNow(),
   completedAt: timestamp('completed_at'),
 });
