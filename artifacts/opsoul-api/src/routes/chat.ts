@@ -441,7 +441,7 @@ function runPostResponseTasks(
     triggerSelfAwareness(operator.id, 'conversation_end').catch((err) => console.warn('[selfAwareness] failed:', err?.message));
     const shouldDistill = ((conv.messageCount ?? 0) % 10 === 0);
     if (shouldDistill) {
-      distillMemoriesFromConversations(operator.id, operator.ownerId, operator.name).catch(() => {});
+      distillMemoriesFromConversations(operator.id, operator.ownerId, operator.name).catch((err) => console.warn('[runPostResponse] distill failed:', err?.message));
     }
   }
 }
