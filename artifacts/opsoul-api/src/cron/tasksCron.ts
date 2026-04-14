@@ -13,6 +13,25 @@ import {
 } from '../utils/operatorCapabilityLoop.js';
 import type { Layer2Soul } from '../validation/operator.js';
 
+interface TaskPayload {
+  customSchedule?: string | null;
+  lastRunSummary?: string | null;
+  lastRunDurationSec?: number | null;
+  /** Legacy — kept for backward compatibility with rows created before the prompt column. */
+  description?: string | null;
+}
+
+function parseTaskPayload(raw: unknown): TaskPayload {
+  if (raw === null || raw === undefined || typeof raw !== 'object') return {};
+  const r = raw as Record<string, unknown>;
+  return {
+    customSchedule:     typeof r.customSchedule     === 'string'  ? r.customSchedule     : null,
+    lastRunSummary:     typeof r.lastRunSummary      === 'string'  ? r.lastRunSummary      : null,
+    lastRunDurationSec: typeof r.lastRunDurationSec  === 'number'  ? r.lastRunDurationSec  : null,
+    description:        typeof r.description         === 'string'  ? r.description         : null,
+  };
+}
+
 function computeNextRunAt(schedule: string, from: Date): Date | null {
   if (schedule === 'daily')  return new Date(from.getTime() + 24 * 60 * 60 * 1000);
   if (schedule === 'weekly') return new Date(from.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -52,7 +71,8 @@ async function runDueTasks(): Promise<void> {
         continue;
       }
 
-      const taskPrompt = task.prompt ?? (task.payload as any)?.description ?? '';
+      const payload = parseTaskPayload(task.payload);
+      const taskPrompt = task.prompt ?? payload.description ?? '';
       if (!taskPrompt) {
         console.warn(`[TASKS] Task ${task.id} has no prompt — advancing schedule to avoid retry spam`);
         const nextRunAt = computeNextRunAt(task.taskType, now);
@@ -124,17 +144,14 @@ async function runDueTasks(): Promise<void> {
       }
 
       const nextRunAt = computeNextRunAt(task.taskType, now);
+      const updatedPayload: TaskPayload = {
+        ...payload,
+        lastRunSummary:     summary,
+        lastRunDurationSec: parseFloat(durationSec.toFixed(1)),
+      };
 
       await db.update(tasksTable)
-        .set({
-          nextRunAt,
-          lastRunAt: now,
-          payload: {
-            ...(task.payload as object),
-            lastRunSummary: summary,
-            lastRunDurationSec: parseFloat(durationSec.toFixed(1)),
-          },
-        })
+        .set({ nextRunAt, lastRunAt: now, payload: updatedPayload })
         .where(eq(tasksTable.id, task.id));
 
       console.log(
@@ -146,16 +163,14 @@ async function runDueTasks(): Promise<void> {
       console.error(`[TASKS] Task ${task.id} failed:`, (err as Error).message);
       const nextRunAt = computeNextRunAt(task.taskType, now);
       const durationSec = (Date.now() - startTime) / 1000;
+      const payload = parseTaskPayload(task.payload);
+      const errorPayload: TaskPayload = {
+        ...payload,
+        lastRunSummary:     `Error: ${(err as Error).message?.slice(0, 200)}`,
+        lastRunDurationSec: parseFloat(durationSec.toFixed(1)),
+      };
       await db.update(tasksTable)
-        .set({
-          nextRunAt,
-          lastRunAt: now,
-          payload: {
-            ...(task.payload as object),
-            lastRunSummary: `Error: ${(err as Error).message?.slice(0, 200)}`,
-            lastRunDurationSec: parseFloat(durationSec.toFixed(1)),
-          },
-        })
+        .set({ nextRunAt, lastRunAt: now, payload: errorPayload })
         .where(eq(tasksTable.id, task.id));
     }
   }

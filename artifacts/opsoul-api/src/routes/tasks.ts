@@ -10,6 +10,25 @@ import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
 
+interface TaskPayload {
+  customSchedule?: string | null;
+  lastRunSummary?: string | null;
+  lastRunDurationSec?: number | null;
+  /** Legacy — kept for backward compatibility with rows created before the prompt column. */
+  description?: string | null;
+}
+
+function parseTaskPayload(raw: unknown): TaskPayload {
+  if (raw === null || raw === undefined || typeof raw !== 'object') return {};
+  const r = raw as Record<string, unknown>;
+  return {
+    customSchedule:    typeof r.customSchedule === 'string'    ? r.customSchedule    : null,
+    lastRunSummary:    typeof r.lastRunSummary  === 'string'    ? r.lastRunSummary    : null,
+    lastRunDurationSec: typeof r.lastRunDurationSec === 'number' ? r.lastRunDurationSec : null,
+    description:       typeof r.description    === 'string'    ? r.description       : null,
+  };
+}
+
 async function resolveOperator(req: Request, res: Response): Promise<string | null> {
   const [op] = await db
     .select({ id: operatorsTable.id })
@@ -50,18 +69,19 @@ const UpdateTaskSchema = z.object({
 });
 
 function serializeTask(r: typeof tasksTable.$inferSelect) {
+  const payload = parseTaskPayload(r.payload);
   return {
     id: r.id,
     operatorId: r.operatorId,
     name: r.contextName,
     schedule: r.taskType,
-    prompt: r.prompt ?? (r.payload as any)?.description ?? '',
-    customSchedule: (r.payload as any)?.customSchedule ?? null,
+    prompt: r.prompt ?? payload.description ?? '',
+    customSchedule: payload.customSchedule ?? null,
     status: r.status ?? 'active',
     nextRunAt: r.nextRunAt,
-    lastRunAt: r.lastRunAt ?? (r.payload as any)?.lastRunAt ?? null,
-    lastRunSummary: (r.payload as any)?.lastRunSummary ?? null,
-    lastRunDurationSec: (r.payload as any)?.lastRunDurationSec ?? null,
+    lastRunAt: r.lastRunAt ?? null,
+    lastRunSummary: payload.lastRunSummary ?? null,
+    lastRunDurationSec: payload.lastRunDurationSec ?? null,
     createdAt: r.createdAt,
   };
 }
@@ -90,6 +110,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   }
 
   const { name, schedule, prompt, customSchedule } = parsed.data;
+  const payload: TaskPayload = { customSchedule: customSchedule ?? null };
 
   const [created] = await db
     .insert(tasksTable)
@@ -100,7 +121,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       taskType: schedule,
       integrationLabel: 'automation',
       prompt,
-      payload: { customSchedule: customSchedule ?? null },
+      payload,
       status: 'active',
       nextRunAt: computeInitialNextRunAt(schedule),
     })
@@ -131,12 +152,17 @@ router.patch('/:taskId', async (req: Request, res: Response): Promise<void> => {
   }
 
   const { name, schedule, prompt, customSchedule, status } = parsed.data;
-  const currentPayload = (existing.payload as any) ?? {};
+  const currentPayload = parseTaskPayload(existing.payload);
 
   const newSchedule = schedule ?? existing.taskType;
   const nextRunAt = schedule && schedule !== existing.taskType
     ? computeInitialNextRunAt(schedule)
     : undefined;
+
+  const updatedPayload: TaskPayload = {
+    ...currentPayload,
+    customSchedule: customSchedule ?? currentPayload.customSchedule,
+  };
 
   const [updated] = await db
     .update(tasksTable)
@@ -144,10 +170,7 @@ router.patch('/:taskId', async (req: Request, res: Response): Promise<void> => {
       contextName: name ?? existing.contextName,
       taskType: newSchedule,
       prompt: prompt ?? existing.prompt,
-      payload: {
-        ...currentPayload,
-        customSchedule: customSchedule ?? currentPayload.customSchedule,
-      },
+      payload: updatedPayload,
       status: status ?? existing.status,
       ...(nextRunAt !== undefined ? { nextRunAt } : {}),
     })
