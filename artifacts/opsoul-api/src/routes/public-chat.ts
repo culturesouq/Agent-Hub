@@ -26,13 +26,6 @@ import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
 import type { Layer2Soul } from '../validation/operator.js';
 import { eq, and, desc, sql } from 'drizzle-orm';
 
-interface ActiveSkill {
-  name: string;
-  instructions: string;
-  customInstructions?: string | null;
-  outputFormat?: string | null;
-}
-
 const router = Router();
 router.use(requireSlotKey);
 
@@ -203,7 +196,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       })),
   ];
 
-  const activeSkills: ActiveSkill[] = allSkills.map(s => ({
+  const activeSkills = allSkills.map(s => ({
     name:         s.name,
     description:  s.triggerDescription,
     instructions: s.instructions,

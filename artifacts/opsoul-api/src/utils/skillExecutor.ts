@@ -334,10 +334,11 @@ export async function executeSkill(
         .limit(1);
 
       if (integration) {
+        const name = integration.integrationLabel ?? integration.integrationType;
         if (messages) {
           messages.push({
             role: 'user',
-            content: `[CONTEXT]\nYou are about to call ${integration.integrationLabel ?? integration.integrationType} to retrieve live data. Use the result in your response naturally.`,
+            content: `[CONTEXT]\nYou are about to call ${name} to retrieve live data. Use the result in your response naturally.`,
           });
         }
         const data = await fetchIntegrationData(integration, instructions);

@@ -23,13 +23,6 @@ import type { LiveStationData } from '../utils/systemPrompt.js';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { eq, and } from 'drizzle-orm';
 
-interface ActiveSkill {
-  name: string;
-  instructions: string;
-  customInstructions?: string | null;
-  outputFormat?: string | null;
-}
-
 const router = Router();
 router.use(requireSlotKey);
 
@@ -204,7 +197,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     layer2Soul: layer2Soul as any,
   };
 
-  const activeSkills: ActiveSkill[] = allSkills.map(s => ({
+  const activeSkills = allSkills.map(s => ({
     name: s.name,
     instructions: s.instructions,
     outputFormat: s.outputFormat ?? undefined,
