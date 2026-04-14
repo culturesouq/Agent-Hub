@@ -2,10 +2,15 @@ import { db } from '@workspace/db';
 import { tasksTable, operatorsTable } from '@workspace/db';
 import { eq, and, lte, isNotNull } from 'drizzle-orm';
 import { buildSystemPrompt } from '../utils/systemPrompt.js';
-import { chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
+import { CHAT_MODEL } from '../utils/openrouter.js';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { storeMemory, searchMemory } from '../utils/memoryEngine.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
+import {
+  loadOperatorSkills,
+  runCapabilityLoop,
+  type ChatMessage,
+} from '../utils/operatorCapabilityLoop.js';
 import type { Layer2Soul } from '../validation/operator.js';
 
 function computeNextRunAt(schedule: string, from: Date): Date | null {
@@ -65,24 +70,25 @@ async function runDueTasks(): Promise<void> {
 
       const taskEmbedding = await embed(taskPrompt);
 
-      const [memoryHits, kbHits] = await Promise.all([
+      const [memoryHits, kbHits, skills] = await Promise.all([
         searchMemory(operator.id, taskEmbedding),
         searchBothKbs(operator.id, taskEmbedding, 4, 0.3, (operator.archetype as string[]) ?? []),
+        loadOperatorSkills(operator.id),
       ]);
 
-      const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
+      const messages: ChatMessage[] = [
         { role: 'system', content: systemPromptText },
       ];
 
       if (kbHits.length > 0) {
         const kbContext = buildRagContext(kbHits);
-        messages.push({ role: 'user', content: `[CONTEXT — knowledge base]\n${kbContext}` });
+        messages.push({ role: 'user',      content: `[CONTEXT]\nKnowledge retrieved for this task:\n${kbContext}` });
         messages.push({ role: 'assistant', content: 'Understood. I have absorbed the relevant knowledge.' });
       }
 
       if (memoryHits.length > 0) {
-        const memCtx = memoryHits.map(m => `• ${m.content}`).join('\n');
-        messages.push({ role: 'user', content: `[CONTEXT — memory]\n${memCtx}` });
+        const memCtx = memoryHits.map(m => `[${m.memoryType}] ${m.content}`).join('\n');
+        messages.push({ role: 'user',      content: `[CONTEXT]\nMemory recalled from past conversations:\n${memCtx}` });
         messages.push({ role: 'assistant', content: 'Understood. I remember this context.' });
       }
 
@@ -91,17 +97,21 @@ async function runDueTasks(): Promise<void> {
         content: `[SCHEDULED TASK: ${task.contextName}]\n${taskPrompt}`,
       });
 
-      const result = await chatCompletion(messages, CHAT_MODEL);
+      const { content, skillFired, skillName } = await runCapabilityLoop(
+        messages,
+        `[SCHEDULED TASK: ${task.contextName}] ${taskPrompt}`,
+        skills,
+        CHAT_MODEL,
+      );
 
-      const output = result.content?.trim() ?? '';
       const durationSec = (Date.now() - startTime) / 1000;
-      const summary = output.slice(0, 300);
+      const summary = content.slice(0, 300);
 
-      if (output) {
+      if (content) {
         await storeMemory(
           operator.id,
           operator.ownerId,
-          `[Scheduled task: ${task.contextName}] ${summary}`,
+          `[Scheduled task: ${task.contextName}${skillFired ? ` (skill: ${skillName})` : ''}] ${summary}`,
           'context',
           'ai_distilled',
           0.8,
@@ -123,7 +133,10 @@ async function runDueTasks(): Promise<void> {
         })
         .where(eq(tasksTable.id, task.id));
 
-      console.log(`[TASKS] Task "${task.contextName}" (${task.id}) completed in ${durationSec.toFixed(1)}s`);
+      console.log(
+        `[TASKS] Task "${task.contextName}" (${task.id}) completed in ${durationSec.toFixed(1)}s` +
+        (skillFired ? ` [skill: ${skillName}]` : ''),
+      );
 
     } catch (err) {
       console.error(`[TASKS] Task ${task.id} failed:`, (err as Error).message);
