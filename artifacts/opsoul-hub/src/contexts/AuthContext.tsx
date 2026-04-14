@@ -18,7 +18,10 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 function decodeJwtExp(token: string): number | null {
   try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
+    const b64url = token.split('.')[1];
+    const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+    const payload = JSON.parse(atob(padded));
     return typeof payload.exp === 'number' ? payload.exp * 1000 : null;
   } catch {
     return null;
