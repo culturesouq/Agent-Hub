@@ -35,7 +35,7 @@ import { resolveScope } from '../utils/scopeResolver.js';
 import { scrapeUrl } from '../utils/urlScraper.js';
 import type { ContentPart } from '../utils/openrouter.js';
 import { verifyAndStore, persistKbSeedEntry } from '../utils/kbIntake.js';
-import { eq, and, asc } from 'drizzle-orm';
+import { eq, and, asc, sql } from 'drizzle-orm';
 import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
 import { isWebSearchAvailable, executeWebSearch } from '../utils/capabilityEngine.js';
 
@@ -153,6 +153,14 @@ async function loadActiveSkills(operatorId: string): Promise<ActiveSkill[]> {
 // Silently extracts name/rawIdentity/archetype/mandate from the birth conversation
 
 async function extractBirthIdentity(operatorId: string, conversationId: string): Promise<void> {
+  // DB guard first — skip LLM entirely if rawIdentity is already written.
+  // Handles stale in-memory state and concurrent duplicate calls.
+  const [current] = await db
+    .select({ rawIdentity: operatorsTable.rawIdentity })
+    .from(operatorsTable)
+    .where(eq(operatorsTable.id, operatorId));
+  if (current?.rawIdentity) return;
+
   const msgs = await db
     .select({ role: messagesTable.role, content: messagesTable.content })
     .from(messagesTable)
@@ -194,11 +202,6 @@ Return ONLY valid JSON, no markdown, no explanation:
   }
 
   if (!extracted.name || !extracted.rawIdentity || !extracted.archetype?.length || !extracted.mandate) return;
-
-  // DB-level guard — handles both stale in-memory state (Issue 1) and concurrent race (Issue 5).
-  // Only the first successful extraction writes. All subsequent calls skip silently.
-  const [current] = await db.select({ rawIdentity: operatorsTable.rawIdentity }).from(operatorsTable).where(eq(operatorsTable.id, operatorId));
-  if (current?.rawIdentity) return;
 
   await db.update(operatorsTable)
     .set({
@@ -932,7 +935,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             tokenCount: null,
           });
           await db.update(conversationsTable)
-            .set({ messageCount: (conv.messageCount ?? 0) + 2, lastMessageAt: new Date() })
+            .set({ messageCount: sql`message_count + 2`, lastMessageAt: new Date() })
             .where(eq(conversationsTable.id, conv.id));
           console.log(`[chat] partial message saved on disconnect (${fullContent.length} chars)`);
         } catch {
@@ -1243,7 +1246,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       });
 
       await db.update(conversationsTable)
-        .set({ messageCount: (conv.messageCount ?? 0) + 2, lastMessageAt: new Date() })
+        .set({ messageCount: sql`message_count + 2`, lastMessageAt: new Date() })
         .where(eq(conversationsTable.id, conv.id));
 
       cleanupKeepalive();
@@ -1451,7 +1454,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       });
 
       await db.update(conversationsTable)
-        .set({ messageCount: (conv.messageCount ?? 0) + 2, lastMessageAt: new Date() })
+        .set({ messageCount: sql`message_count + 2`, lastMessageAt: new Date() })
         .where(eq(conversationsTable.id, conv.id));
 
       res.json({
