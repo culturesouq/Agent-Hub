@@ -105,6 +105,7 @@ async function runDueTasks(): Promise<void> {
         `[SCHEDULED TASK: ${task.contextName}] ${taskPrompt}`,
         skills,
         CHAT_MODEL,
+        operator.id,
       );
 
       const durationSec = (Date.now() - startTime) / 1000;
