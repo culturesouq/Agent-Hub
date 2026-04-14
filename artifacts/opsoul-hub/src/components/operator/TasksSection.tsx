@@ -20,7 +20,7 @@ export default function TasksSection({ operatorId }: { operatorId: string }) {
   const [addForm, setAddForm] = useState({
     name: "",
     schedule: "daily" as "daily" | "weekly" | "custom",
-    description: "",
+    prompt: "",
     customSchedule: "",
   });
 
@@ -37,7 +37,7 @@ export default function TasksSection({ operatorId }: { operatorId: string }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "tasks"] });
       setIsAddOpen(false);
-      setAddForm({ name: "", schedule: "daily", description: "", customSchedule: "" });
+      setAddForm({ name: "", schedule: "daily", prompt: "", customSchedule: "" });
       toast({ title: "Automation created" });
     },
     onError: (err: any) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
@@ -66,7 +66,7 @@ export default function TasksSection({ operatorId }: { operatorId: string }) {
     createTask.mutate({
       name: addForm.name,
       schedule: addForm.schedule,
-      description: addForm.description,
+      prompt: addForm.prompt,
       customSchedule: addForm.schedule === "custom" ? addForm.customSchedule : undefined,
     });
   };
@@ -142,8 +142,8 @@ export default function TasksSection({ operatorId }: { operatorId: string }) {
               <div className="space-y-2">
                 <Label className="font-mono text-xs uppercase text-muted-foreground">What to do</Label>
                 <Textarea
-                  value={addForm.description}
-                  onChange={e => setAddForm({ ...addForm, description: e.target.value })}
+                  value={addForm.prompt}
+                  onChange={e => setAddForm({ ...addForm, prompt: e.target.value })}
                   required
                   className="font-mono min-h-[100px] resize-none"
                   placeholder="Describe what your operator should do when this task runs..."
@@ -201,7 +201,7 @@ export default function TasksSection({ operatorId }: { operatorId: string }) {
                   </Badge>
                 </div>
                 <p className="font-mono text-xs text-muted-foreground line-clamp-2">
-                  {task.description}
+                  {task.prompt}
                 </p>
                 {task.lastRunAt ? (
                   <div className="space-y-0.5">

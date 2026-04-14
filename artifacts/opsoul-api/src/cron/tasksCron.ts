@@ -3,7 +3,9 @@ import { tasksTable, operatorsTable } from '@workspace/db';
 import { eq, and, lte, isNotNull } from 'drizzle-orm';
 import { buildSystemPrompt } from '../utils/systemPrompt.js';
 import { chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
-import { storeMemory } from '../utils/memoryEngine.js';
+import { embed } from '@workspace/opsoul-utils/ai';
+import { storeMemory, searchMemory } from '../utils/memoryEngine.js';
+import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import type { Layer2Soul } from '../validation/operator.js';
 
 function computeNextRunAt(schedule: string, from: Date): Date | null {
@@ -44,29 +46,52 @@ async function runDueTasks(): Promise<void> {
         continue;
       }
 
-      const prompt = (task.payload as any)?.description ?? '';
-      if (!prompt) {
+      const taskPrompt = task.prompt ?? (task.payload as any)?.description ?? '';
+      if (!taskPrompt) {
         console.warn(`[TASKS] Task ${task.id} has no prompt — skipping`);
         continue;
       }
 
+      const layer2Soul = operator.layer2Soul as Layer2Soul;
       const systemPromptText = buildSystemPrompt({
-        name:               operator.name ?? 'Operator',
-        rawIdentity:        operator.rawIdentity,
-        archetype:          (operator.layer2Soul as any)?.archetype ?? [],
-        mandate:            (operator.layer2Soul as any)?.mandate ?? '',
-        coreValues:         (operator.layer2Soul as any)?.coreValues ?? null,
-        ethicalBoundaries:  (operator.layer2Soul as any)?.ethicalBoundaries ?? null,
-        layer2Soul:         operator.layer2Soul as Layer2Soul,
+        name:              operator.name ?? 'Operator',
+        rawIdentity:       operator.rawIdentity,
+        archetype:         (operator.archetype as string[]) ?? [],
+        mandate:           operator.mandate ?? '',
+        coreValues:        (operator.coreValues as string[] | null) ?? null,
+        ethicalBoundaries: (operator.ethicalBoundaries as string[] | null) ?? null,
+        layer2Soul,
       });
 
-      const result = await chatCompletion(
-        [
-          { role: 'system', content: systemPromptText },
-          { role: 'user',   content: `[SCHEDULED TASK: ${task.contextName}]\n${prompt}` },
-        ],
-        CHAT_MODEL,
-      );
+      const taskEmbedding = await embed(taskPrompt);
+
+      const [memoryHits, kbHits] = await Promise.all([
+        searchMemory(operator.id, taskEmbedding),
+        searchBothKbs(operator.id, taskEmbedding, 4, 0.3, (operator.archetype as string[]) ?? []),
+      ]);
+
+      const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
+        { role: 'system', content: systemPromptText },
+      ];
+
+      if (kbHits.length > 0) {
+        const kbContext = buildRagContext(kbHits);
+        messages.push({ role: 'user', content: `[CONTEXT — knowledge base]\n${kbContext}` });
+        messages.push({ role: 'assistant', content: 'Understood. I have absorbed the relevant knowledge.' });
+      }
+
+      if (memoryHits.length > 0) {
+        const memCtx = memoryHits.map(m => `• ${m.content}`).join('\n');
+        messages.push({ role: 'user', content: `[CONTEXT — memory]\n${memCtx}` });
+        messages.push({ role: 'assistant', content: 'Understood. I remember this context.' });
+      }
+
+      messages.push({
+        role: 'user',
+        content: `[SCHEDULED TASK: ${task.contextName}]\n${taskPrompt}`,
+      });
+
+      const result = await chatCompletion(messages, CHAT_MODEL);
 
       const output = result.content?.trim() ?? '';
       const durationSec = (Date.now() - startTime) / 1000;
@@ -89,9 +114,9 @@ async function runDueTasks(): Promise<void> {
       await db.update(tasksTable)
         .set({
           nextRunAt,
+          lastRunAt: now,
           payload: {
             ...(task.payload as object),
-            lastRunAt: now.toISOString(),
             lastRunSummary: summary,
             lastRunDurationSec: parseFloat(durationSec.toFixed(1)),
           },
@@ -103,14 +128,15 @@ async function runDueTasks(): Promise<void> {
     } catch (err) {
       console.error(`[TASKS] Task ${task.id} failed:`, (err as Error).message);
       const nextRunAt = computeNextRunAt(task.taskType, now);
+      const durationSec = (Date.now() - startTime) / 1000;
       await db.update(tasksTable)
         .set({
           nextRunAt,
+          lastRunAt: now,
           payload: {
             ...(task.payload as object),
-            lastRunAt: now.toISOString(),
             lastRunSummary: `Error: ${(err as Error).message?.slice(0, 200)}`,
-            lastRunDurationSec: parseFloat(((Date.now() - startTime) / 1000).toFixed(1)),
+            lastRunDurationSec: parseFloat(durationSec.toFixed(1)),
           },
         })
         .where(eq(tasksTable.id, task.id));

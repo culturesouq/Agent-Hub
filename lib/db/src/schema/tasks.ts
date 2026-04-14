@@ -7,10 +7,12 @@ export const tasksTable = pgTable('tasks', {
   contextName: text('context_name').notNull(),
   taskType: text('task_type').notNull(),
   integrationLabel: text('integration_label').notNull(),
+  prompt: text('prompt'),
   payload: jsonb('payload').notNull(),
   status: text('status').default('pending'),
   summary: text('summary'),
   nextRunAt: timestamp('next_run_at'),
+  lastRunAt: timestamp('last_run_at'),
   createdAt: timestamp('created_at').defaultNow(),
   completedAt: timestamp('completed_at'),
 });

@@ -154,11 +154,12 @@ export interface Task {
   operatorId: string;
   name: string;
   schedule: "daily" | "weekly" | "custom";
-  description: string;
+  prompt: string;
   customSchedule?: string;
   status: string;
-  createdAt: string;
+  nextRunAt?: string;
   lastRunAt?: string;
   lastRunSummary?: string;
   lastRunDurationSec?: number;
+  createdAt: string;
 }

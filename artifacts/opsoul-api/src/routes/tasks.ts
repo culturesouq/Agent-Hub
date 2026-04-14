@@ -37,17 +37,34 @@ function computeInitialNextRunAt(schedule: string): Date | null {
 const CreateTaskSchema = z.object({
   name: z.string().min(1).max(200),
   schedule: z.enum(['daily', 'weekly', 'custom']),
-  description: z.string().min(1).max(2000),
+  prompt: z.string().min(1).max(2000),
   customSchedule: z.string().optional(),
 });
 
 const UpdateTaskSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   schedule: z.enum(['daily', 'weekly', 'custom']).optional(),
-  description: z.string().min(1).max(2000).optional(),
+  prompt: z.string().min(1).max(2000).optional(),
   customSchedule: z.string().optional(),
   status: z.enum(['active', 'paused']).optional(),
 });
+
+function serializeTask(r: typeof tasksTable.$inferSelect) {
+  return {
+    id: r.id,
+    operatorId: r.operatorId,
+    name: r.contextName,
+    schedule: r.taskType,
+    prompt: r.prompt ?? (r.payload as any)?.description ?? '',
+    customSchedule: (r.payload as any)?.customSchedule ?? null,
+    status: r.status ?? 'active',
+    nextRunAt: r.nextRunAt,
+    lastRunAt: r.lastRunAt ?? (r.payload as any)?.lastRunAt ?? null,
+    lastRunSummary: (r.payload as any)?.lastRunSummary ?? null,
+    lastRunDurationSec: (r.payload as any)?.lastRunDurationSec ?? null,
+    createdAt: r.createdAt,
+  };
+}
 
 router.get('/', async (req: Request, res: Response): Promise<void> => {
   const operatorId = await resolveOperator(req, res);
@@ -59,21 +76,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     .where(eq(tasksTable.operatorId, operatorId))
     .orderBy(desc(tasksTable.createdAt));
 
-  const tasks = rows.map(r => ({
-    id: r.id,
-    operatorId: r.operatorId,
-    name: r.contextName,
-    schedule: r.taskType,
-    description: (r.payload as any)?.description ?? '',
-    customSchedule: (r.payload as any)?.customSchedule,
-    status: r.status ?? 'active',
-    createdAt: r.createdAt,
-    lastRunAt: (r.payload as any)?.lastRunAt ?? null,
-    lastRunSummary: (r.payload as any)?.lastRunSummary ?? null,
-    lastRunDurationSec: (r.payload as any)?.lastRunDurationSec ?? null,
-  }));
-
-  res.json({ tasks });
+  res.json({ tasks: rows.map(serializeTask) });
 });
 
 router.post('/', async (req: Request, res: Response): Promise<void> => {
@@ -86,7 +89,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  const { name, schedule, description, customSchedule } = parsed.data;
+  const { name, schedule, prompt, customSchedule } = parsed.data;
 
   const [created] = await db
     .insert(tasksTable)
@@ -96,23 +99,15 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       contextName: name,
       taskType: schedule,
       integrationLabel: 'automation',
-      payload: { description, customSchedule: customSchedule ?? null },
+      prompt,
+      payload: { customSchedule: customSchedule ?? null },
       status: 'active',
       nextRunAt: computeInitialNextRunAt(schedule),
     })
     .returning();
 
   triggerSelfAwareness(operatorId, 'conversation_end').catch(() => {});
-  res.status(201).json({
-    id: created.id,
-    operatorId: created.operatorId,
-    name: created.contextName,
-    schedule: created.taskType,
-    description,
-    customSchedule,
-    status: created.status,
-    createdAt: created.createdAt,
-  });
+  res.status(201).json(serializeTask(created));
 });
 
 router.patch('/:taskId', async (req: Request, res: Response): Promise<void> => {
@@ -135,7 +130,7 @@ router.patch('/:taskId', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  const { name, schedule, description, customSchedule, status } = parsed.data;
+  const { name, schedule, prompt, customSchedule, status } = parsed.data;
   const currentPayload = (existing.payload as any) ?? {};
 
   const [updated] = await db
@@ -143,8 +138,9 @@ router.patch('/:taskId', async (req: Request, res: Response): Promise<void> => {
     .set({
       contextName: name ?? existing.contextName,
       taskType: schedule ?? existing.taskType,
+      prompt: prompt ?? existing.prompt,
       payload: {
-        description: description ?? currentPayload.description,
+        ...currentPayload,
         customSchedule: customSchedule ?? currentPayload.customSchedule,
       },
       status: status ?? existing.status,
@@ -153,16 +149,7 @@ router.patch('/:taskId', async (req: Request, res: Response): Promise<void> => {
     .returning();
 
   triggerSelfAwareness(operatorId, 'conversation_end').catch(() => {});
-  res.json({
-    id: updated.id,
-    operatorId: updated.operatorId,
-    name: updated.contextName,
-    schedule: updated.taskType,
-    description: (updated.payload as any)?.description ?? '',
-    customSchedule: (updated.payload as any)?.customSchedule,
-    status: updated.status,
-    createdAt: updated.createdAt,
-  });
+  res.json(serializeTask(updated));
 });
 
 router.delete('/:taskId', async (req: Request, res: Response): Promise<void> => {

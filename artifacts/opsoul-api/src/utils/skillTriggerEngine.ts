@@ -88,7 +88,7 @@ export async function detectSkillTrigger(
       instructions:       userMatch.skill.instructions,
       outputFormat:       userMatch.skill.outputFormat,
       customInstructions: userMatch.skill.customInstructions,
-      extractedParams:    operatorResponse ?? userMessage,
+      extractedParams:    userMessage,
       integrationType:    userMatch.skill.integrationType ?? undefined,
       initiatedBy:        'user',
     };
