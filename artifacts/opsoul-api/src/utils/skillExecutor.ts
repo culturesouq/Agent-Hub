@@ -1,10 +1,13 @@
 import { chatCompletion } from './openrouter.js';
-import type { ChatMessage } from './openrouter.js';
 import { db } from '@workspace/db';
 import { operatorIntegrationsTable } from '@workspace/db';
 import { decryptToken, encryptToken } from '@workspace/opsoul-utils/crypto';
 import { eq, and } from 'drizzle-orm';
 import type { SkillTrigger } from './skillTriggerEngine.js';
+import { webSearch } from './webSearch.js';
+import { executeHttpRequest } from './httpExecutor.js';
+import { writeOperatorFile } from './fileExecutor.js';
+import { seedKbEntry } from './kbSeedExecutor.js';
 
 export interface SkillResult {
   skillName: string;
@@ -305,10 +308,32 @@ async function fetchIntegrationData(
   }
 }
 
+async function extractParams<T extends object>(
+  context: string,
+  schema: string,
+  model: string,
+): Promise<T | null> {
+  try {
+    const result = await chatCompletion(
+      [
+        {
+          role: 'system',
+          content: `Extract parameters from the provided context and return them as a valid JSON object matching this schema: ${schema}. Return ONLY valid JSON — no markdown fences, no explanation.`,
+        },
+        { role: 'user', content: context },
+      ],
+      model,
+    );
+    const raw = result.content.trim().replace(/^```[\w]*\n?|```$/g, '');
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
 export async function executeSkill(
   trigger: SkillTrigger,
   model: string,
-  messages?: ChatMessage[],
 ): Promise<SkillResult> {
   const instructions = trigger.customInstructions
     ? `${trigger.instructions}\n\nAdditional instructions: ${trigger.customInstructions}`
@@ -318,45 +343,139 @@ export async function executeSkill(
     ? `\n\nReturn your response in this format: ${trigger.outputFormat}`
     : '';
 
-  let apiContext = '';
+  const integrationType = trigger.integrationType?.toLowerCase() ?? '';
 
-  if (trigger.operatorId && trigger.integrationType) {
-    try {
-      const [integration] = await db
-        .select()
-        .from(operatorIntegrationsTable)
-        .where(
-          and(
-            eq(operatorIntegrationsTable.operatorId, trigger.operatorId),
-            eq(operatorIntegrationsTable.integrationType, trigger.integrationType),
-          ),
-        )
-        .limit(1);
-
-      if (integration) {
-        const name = integration.integrationLabel ?? integration.integrationType;
-        if (messages) {
-          messages.push({
-            role: 'user',
-            content: `[CONTEXT]\nYou are about to call ${name} to retrieve live data. Use the result in your response naturally.`,
-          });
-        }
-        const data = await fetchIntegrationData(integration, instructions);
-        if (data) {
-          apiContext = `\n\nLive API response from ${trigger.integrationType}:\n${data}`;
-          console.log(`[skillExecutor] integration data fetched for ${trigger.integrationType}`);
-        }
-      } else {
-        console.log(`[skillExecutor] no integration found for type=${trigger.integrationType}, operator=${trigger.operatorId} — falling back to LLM-only`);
+  try {
+    // ── web_search ───────────────────────────────────────────────────────
+    if (integrationType === 'web_search') {
+      const params = await extractParams<{ query: string }>(
+        `Context: ${trigger.extractedParams}\nInstructions: ${instructions}`,
+        '{ "query": "string — the search query to run" }',
+        'anthropic/claude-haiku-4-5',
+      );
+      const query = params?.query?.trim() || trigger.extractedParams.slice(0, 200);
+      console.log(`[skillExecutor] web_search: "${query}"`);
+      const hits = await webSearch(query);
+      if (!hits.length) {
+        return { skillName: trigger.name, output: 'Web search returned no results.', success: false, error: 'No results' };
       }
-    } catch (err: any) {
-      console.warn('[skillExecutor] integration lookup failed:', err?.message);
+      const searchContext = hits.map((h, i) => `[${i + 1}] ${h.title}\n${h.url}\n${h.snippet}`).join('\n\n');
+      const synthesisResult = await chatCompletion(
+        [
+          {
+            role: 'system',
+            content: 'You are executing a skill on behalf of an AI Operator. Synthesize the search results into a clear, useful answer. Cite sources where relevant.',
+          },
+          {
+            role: 'user',
+            content: `Skill: ${trigger.name}\nInstructions: ${instructions}${outputFormatLine}\n\nSearch results:\n${searchContext}`,
+          },
+        ],
+        model,
+      );
+      return { skillName: trigger.name, output: synthesisResult.content, success: true };
     }
-  }
 
-  const hasLiveData = !!apiContext;
+    // ── http_request ─────────────────────────────────────────────────────
+    if (integrationType === 'http_request') {
+      if (!trigger.operatorId) {
+        return { skillName: trigger.name, output: 'HTTP request skill requires operatorId.', success: false, error: 'Missing operatorId' };
+      }
+      const params = await extractParams<{
+        method: string;
+        url: string;
+        headers?: Record<string, string>;
+        body?: string;
+      }>(
+        `Context: ${trigger.extractedParams}\nInstructions: ${instructions}`,
+        '{ "method": "GET|POST|PUT|PATCH|DELETE", "url": "full URL", "headers": { "key": "value" }, "body": "optional request body string" }',
+        'anthropic/claude-haiku-4-5',
+      );
+      if (!params?.method || !params?.url) {
+        return { skillName: trigger.name, output: 'Could not extract HTTP request parameters from context.', success: false, error: 'Parameter extraction failed' };
+      }
+      console.log(`[skillExecutor] http_request: ${params.method} ${params.url}`);
+      const httpResult = await executeHttpRequest(trigger.operatorId, params);
+      return { skillName: trigger.name, output: httpResult, success: true };
+    }
 
-  const prompt = `You are executing a skill on behalf of an AI Operator. Your output will be used by the operator to report findings back to their owner.
+    // ── write_file ───────────────────────────────────────────────────────
+    if (integrationType === 'write_file') {
+      if (!trigger.operatorId || !trigger.operatorOwnerId) {
+        return { skillName: trigger.name, output: 'Write file skill requires operatorId and operatorOwnerId.', success: false, error: 'Missing IDs' };
+      }
+      const params = await extractParams<{ filename: string; content: string }>(
+        `Context: ${trigger.extractedParams}\nInstructions: ${instructions}`,
+        '{ "filename": "the file name with extension", "content": "the full content to write" }',
+        'anthropic/claude-haiku-4-5',
+      );
+      if (!params?.filename || !params?.content) {
+        return { skillName: trigger.name, output: 'Could not extract file write parameters from context.', success: false, error: 'Parameter extraction failed' };
+      }
+      console.log(`[skillExecutor] write_file: "${params.filename}"`);
+      const fileResult = await writeOperatorFile(trigger.operatorId, trigger.operatorOwnerId, params.filename, params.content);
+      return { skillName: trigger.name, output: fileResult.message, success: fileResult.success };
+    }
+
+    // ── kb_seed ──────────────────────────────────────────────────────────
+    if (integrationType === 'kb_seed') {
+      if (!trigger.operatorId || !trigger.operatorOwnerId) {
+        return { skillName: trigger.name, output: 'KB seed skill requires operatorId and operatorOwnerId.', success: false, error: 'Missing IDs' };
+      }
+      const params = await extractParams<{ content: string; source: string; confidence?: number }>(
+        `Context: ${trigger.extractedParams}\nInstructions: ${instructions}`,
+        '{ "content": "the knowledge content to store (minimum 50 characters)", "source": "source name or description", "confidence": 65 }',
+        'anthropic/claude-haiku-4-5',
+      );
+      if (!params?.content || !params?.source) {
+        return { skillName: trigger.name, output: 'Could not extract KB seed parameters from context.', success: false, error: 'Parameter extraction failed' };
+      }
+      console.log(`[skillExecutor] kb_seed: source="${params.source}"`);
+      const confidence = Math.max(40, Math.min(85, params.confidence ?? 65));
+      const seedResult = await seedKbEntry(trigger.operatorId, trigger.operatorOwnerId, params.content, params.source, confidence);
+      if (!seedResult.stored) {
+        return { skillName: trigger.name, output: `KB entry not stored: ${seedResult.reason}`, success: false, error: seedResult.reason };
+      }
+      return {
+        skillName: trigger.name,
+        output: `Knowledge entry stored from "${params.source}". Confidence: ${confidence}. Status: pending — queued for VAEL verification.`,
+        success: true,
+      };
+    }
+
+    // ── OAuth integrations (default path) ────────────────────────────────
+    let apiContext = '';
+
+    if (trigger.operatorId && trigger.integrationType) {
+      try {
+        const [integration] = await db
+          .select()
+          .from(operatorIntegrationsTable)
+          .where(
+            and(
+              eq(operatorIntegrationsTable.operatorId, trigger.operatorId),
+              eq(operatorIntegrationsTable.integrationType, trigger.integrationType),
+            ),
+          )
+          .limit(1);
+
+        if (integration) {
+          const data = await fetchIntegrationData(integration, instructions);
+          if (data) {
+            apiContext = `\n\nLive API response from ${trigger.integrationType}:\n${data}`;
+            console.log(`[skillExecutor] integration data fetched for ${trigger.integrationType}`);
+          }
+        } else {
+          console.log(`[skillExecutor] no integration found for type=${trigger.integrationType}, operator=${trigger.operatorId}`);
+        }
+      } catch (err: any) {
+        console.warn('[skillExecutor] integration lookup failed:', err?.message);
+      }
+    }
+
+    const hasLiveData = !!apiContext;
+
+    const prompt = `You are executing a skill on behalf of an AI Operator. Your output will be used by the operator to report findings back to their owner.
 
 Skill: ${trigger.name}
 Instructions: ${instructions}${outputFormatLine}
@@ -366,22 +485,12 @@ ${trigger.extractedParams}${apiContext}
 
 ${hasLiveData
   ? `The live API data above contains raw information. Interpret it. Extract what matters. Return a clear, human-readable findings report — specific facts, key items, important numbers, relevant names. No raw JSON, no raw URLs, no API field names. Write as if you are an agent reporting back after completing research.`
-  : `You have no live data for this task. The integration is either not connected or did not return results.
-Execute this skill using your reasoning and general knowledge only.
-You MUST begin your response with: "Note: I'm working from reasoning only — no live data was available for this task."
-Never present your output as verified data. Use language like "based on what I know", "my assessment is", or "from general knowledge".`
+  : `You have no live data for this task. The integration is either not connected or did not return results. Execute this skill using your reasoning and general knowledge only.`
 }`;
 
-  try {
-    const result = await chatCompletion(
-      [{ role: 'user', content: prompt }],
-      model,
-    );
-    return {
-      skillName: trigger.name,
-      output:    result.content,
-      success:   true,
-    };
+    const result = await chatCompletion([{ role: 'user', content: prompt }], model);
+    return { skillName: trigger.name, output: result.content, success: true };
+
   } catch (err: any) {
     console.error(`[skillExecutor] failed for skill ${trigger.name}:`, err?.message);
     return {

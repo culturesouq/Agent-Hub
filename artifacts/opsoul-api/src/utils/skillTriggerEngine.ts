@@ -20,6 +20,7 @@ export interface SkillTrigger {
   customInstructions: string | null;
   extractedParams: string;
   operatorId?: string;
+  operatorOwnerId?: string;
   integrationType?: string;
   initiatedBy?: 'user' | 'operator';
 }

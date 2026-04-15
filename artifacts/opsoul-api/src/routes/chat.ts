@@ -1349,10 +1349,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         const skillTrigger = await detectSkillTrigger(message, agencySkills, finalContent);
         if (skillTrigger) {
           skillTrigger.operatorId = operator.id;
+          skillTrigger.operatorOwnerId = operator.ownerId;
           console.log(`[agency] skill triggered: ${skillTrigger.name}`);
           res.write(`data: ${JSON.stringify({ running: skillTrigger.name })}\n\n`);
           res.write(`data: ${JSON.stringify({ clear: true })}\n\n`);
-          const skillResult = await executeSkill(skillTrigger, chatModel, messages);
+          const skillResult = await executeSkill(skillTrigger, chatModel);
           if (skillResult.success) {
             await persistSkillResult(operator.id, operator.ownerId, conv.id, skillTrigger, skillResult);
             const skillMessages = buildSkillSecondPassMessages(messages, finalContent, skillResult.output);
@@ -1575,8 +1576,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         const skillTrigger = await detectSkillTrigger(message, agencySkills, result.content);
         if (skillTrigger) {
           skillTrigger.operatorId = operator.id;
+          skillTrigger.operatorOwnerId = operator.ownerId;
           console.log(`[agency] skill triggered: ${skillTrigger.name}`);
-          const skillResult = await executeSkill(skillTrigger, chatModel, messages);
+          const skillResult = await executeSkill(skillTrigger, chatModel);
           if (skillResult.success) {
             await persistSkillResult(operator.id, operator.ownerId, conv.id, skillTrigger, skillResult);
             const secondMessages = buildSkillSecondPassMessages(messages, result.content, skillResult.output);

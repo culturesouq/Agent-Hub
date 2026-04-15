@@ -70,7 +70,15 @@ const SKILLS_TO_SEED = [
   { name: 'Assumption Audit', archetype: 'Analyst', description: 'Surfaces and stress-tests the assumptions embedded in a plan, argument, or decision.', triggerDescription: 'user has a plan or argument and needs the hidden assumptions identified and tested', instructions: `Read their plan or argument carefully. Extract every assumption.\nFor each assumption:\n1. State it explicitly ("This assumes that X")\n2. Is it validated or taken for granted?\n3. What is the risk if this assumption is wrong? Low / Medium / High\n4. How could it be tested or de-risked?\n5. Which assumption is the most load-bearing — the one that, if wrong, breaks everything?\nAssumptions are not problems. Unexamined assumptions are.`, outputFormat: 'Assumption → validated? → risk if wrong → how to test → most load-bearing' },
 ];
 
-const PLATFORM_SKILLS_GENERIC = [
+const PLATFORM_SKILLS_GENERIC: Array<{
+  name: string;
+  archetype: string;
+  description: string;
+  triggerDescription: string;
+  instructions: string;
+  outputFormat: string;
+  integrationType?: string;
+}> = [
   {
     name: 'Explore Connected App',
     archetype: 'All',
@@ -78,6 +86,42 @@ const PLATFORM_SKILLS_GENERIC = [
     triggerDescription: 'user asks what operator can do with their app, wants to explore connected app capabilities, or mentions a custom app connection',
     instructions: `When a user asks what you can do with their connected app, check the app schema if available. Summarize in plain language what actions are possible. Suggest 3 specific things to start with. Ask which one they want. Never dump raw schema. Talk like a person.`,
     outputFormat: 'conversational',
+  },
+  {
+    name: 'Web Search',
+    archetype: 'All',
+    integrationType: 'web_search',
+    description: 'Searches the web for current information, recent events, and real-time data.',
+    triggerDescription: 'user asks about current events, recent news, live data, or anything requiring up-to-date information from the web',
+    instructions: 'When triggered, extract the most relevant search query from the user request. Run the search. Synthesize the top results into a clear, factual answer. Cite sources where relevant. Do not fabricate results.',
+    outputFormat: 'Findings summary with source references',
+  },
+  {
+    name: 'HTTP Request',
+    archetype: 'All',
+    integrationType: 'http_request',
+    description: 'Makes authenticated HTTP requests to external APIs using stored operator secrets.',
+    triggerDescription: 'user wants to call an external API, fetch data from a URL, or interact with a web service using stored credentials',
+    instructions: 'Extract the HTTP method, URL, headers, and body from the context. Use {{SECRET_NAME}} placeholders in headers or body to reference stored secrets. Execute the request and return the response in a readable format.',
+    outputFormat: 'HTTP response summary with status code and key data',
+  },
+  {
+    name: 'Write File',
+    archetype: 'All',
+    integrationType: 'write_file',
+    description: 'Creates or updates a file in the operator file workspace.',
+    triggerDescription: 'user wants to save content, create a document, write a file, or persist output to the operator workspace',
+    instructions: 'Extract the filename and content from the context. Write the file to the operator workspace. Confirm the write was successful and report the filename and size.',
+    outputFormat: 'File write confirmation with filename and character count',
+  },
+  {
+    name: 'KB Seed',
+    archetype: 'All',
+    integrationType: 'kb_seed',
+    description: 'Stores verified knowledge into the operator knowledge base for future recall.',
+    triggerDescription: 'user or operator has synthesized knowledge worth storing for future reference, or wants to add a fact to the knowledge base',
+    instructions: 'Extract the knowledge content, its source, and an appropriate confidence level (40-85). Store it in the KB. Report the outcome including confidence and verification status.',
+    outputFormat: 'KB storage confirmation with confidence and status',
   },
 ];
 
@@ -104,6 +148,7 @@ export async function runInitSeed(): Promise<void> {
         archetype: skill.archetype,
         author: 'opsoul',
         installCount: 0,
+        integrationType: skill.integrationType ?? null,
       });
       console.log(`[initSeed]   + platform / ${skill.name}`);
     }

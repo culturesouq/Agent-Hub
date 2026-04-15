@@ -100,7 +100,7 @@ export async function runCapabilityLoop(
     if (trigger) {
       if (operatorId) trigger.operatorId = operatorId;
       console.log(`[capability-loop] skill triggered: ${trigger.name}`);
-      const result = await executeSkill(trigger, modelStr, messages);
+      const result = await executeSkill(trigger, modelStr);
       if (result.success) {
         skillFired = true;
         skillName  = trigger.name;
