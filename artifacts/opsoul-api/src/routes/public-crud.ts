@@ -109,6 +109,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   if (trigger) {
     try {
       trigger.operatorId = slot.operatorId;
+      trigger.operatorOwnerId = slot.ownerId;
       const skillModel = operator.defaultModel && operator.defaultModel !== 'opsoul/auto'
         ? operator.defaultModel
         : 'anthropic/claude-haiku-4-5';
