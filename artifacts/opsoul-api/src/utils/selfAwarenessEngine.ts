@@ -76,6 +76,7 @@ export interface CapabilityState {
     name: string;
     isActive: boolean;
     description: string;
+    integrationType?: string | null;
   }[];
   ownerKbChunks: number;
   operatorKbChunks: number;
@@ -223,6 +224,7 @@ async function buildCapabilityState(operatorId: string): Promise<CapabilityState
         name: platformSkillsTable.name,
         isActive: operatorSkillsTable.isActive,
         description: platformSkillsTable.description,
+        integrationType: platformSkillsTable.integrationType,
       })
       .from(operatorSkillsTable)
       .innerJoin(platformSkillsTable, eq(operatorSkillsTable.skillId, platformSkillsTable.id))
@@ -256,6 +258,7 @@ async function buildCapabilityState(operatorId: string): Promise<CapabilityState
       name: s.name,
       isActive: s.isActive ?? false,
       description: s.description,
+      integrationType: s.integrationType ?? null,
     })),
     ownerKbChunks: Number(ownerKbCount[0]?.total ?? 0),
     operatorKbChunks: Number(operatorKbStats[0]?.total ?? 0),

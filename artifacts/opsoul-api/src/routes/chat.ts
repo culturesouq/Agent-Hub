@@ -46,6 +46,106 @@ interface ActiveSkill {
   outputFormat?: string | null;
 }
 
+export interface LiveStationData {
+  integrations: { type: string; label: string; status: string; scopes?: string[] | null }[];
+  tasks: { name: string; status: string; lastRunAt?: string | null; lastRunSummary?: string | null; payload?: Record<string, unknown> | null }[];
+  fileCount: number;
+  fileNames?: string[];
+  deploymentSlots?: { name: string; surfaceType: string; apiKeyPreview: string; isActive: boolean; allowedOrigins?: string[] | null }[];
+  secretLabels?: string[];
+}
+
+const SKILL_HOW_TO: Record<string, string> = {
+  web_search: `Trigger when the user asks for current info, recent events, or real-time data.
+Run a live web search. Provide a precise search query.
+Result: titles, snippets, and URLs. Cite sources when using web results.`,
+
+  http_request: `Call external APIs directly. Provide: method (GET/POST/PUT/DELETE), url, optional headers and body.
+Reference stored secrets with {{SECRET_NAME}} syntax — substituted server-side before the request.
+Result: raw API response. Parse JSON if needed. Report HTTP errors clearly.`,
+
+  write_file: `Persist content to the operator file workspace.
+Provide: filename (with extension) and content (text, JSON, CSV, etc.).
+Result: file saved and available in the file list. Use for reports, exports, structured output.`,
+
+  kb_seed: `Add verified knowledge to your own knowledge base.
+Provide: content (the fact or knowledge) and source (where it came from).
+Entry is stored at appropriate confidence and available in future KB searches.`,
+};
+
+const INTEGRATION_HOW_TO: Record<string, string> = {
+  gmail: `Base URL: https://gmail.googleapis.com/gmail/v1/users/me
+Auth: Authorization: Bearer {token} (injected automatically)
+GET /messages (q, maxResults, pageToken) | GET /messages/{id} | POST /messages/send (raw: base64url)
+Pagination: use nextPageToken. Decode message bodies from base64url before reading.`,
+
+  github: `Base URL: https://api.github.com
+Auth: Authorization: Bearer {token} (injected automatically)
+GET /user | GET /repos/{owner}/{repo}/issues (state, per_page, page) | POST /repos/{owner}/{repo}/issues | GET /repos/{owner}/{repo}/pulls
+Pagination: page param (per_page max 100) or Link header.`,
+
+  notion: `Base URL: https://api.notion.com/v1
+Auth: Authorization: Bearer {token}, Notion-Version: 2022-06-28 (both injected automatically)
+POST /search ({query}) | GET /pages/{id} | PATCH /pages/{id} | POST /pages | POST /databases/{id}/query
+Pagination: use start_cursor from response.`,
+
+  slack: `Base URL: https://slack.com/api
+Auth: Authorization: Bearer {token} (injected automatically)
+POST /chat.postMessage (channel, text) | GET /conversations.list (limit, cursor) | GET /conversations.history (channel, limit, cursor)
+Pagination: use response_metadata.next_cursor.`,
+
+  google_calendar: `Base URL: https://www.googleapis.com/calendar/v3/calendars/primary
+Auth: Authorization: Bearer {token} (injected automatically)
+GET /events (timeMin, timeMax, maxResults, pageToken) | POST /events (summary, start, end) | PATCH /events/{id} | DELETE /events/{id}
+Pagination: use nextPageToken.`,
+
+  linear: `Base URL: https://api.linear.app/graphql (GraphQL — all calls are POST)
+Auth: Authorization: Bearer {token} (injected automatically)
+Query: {issues(filter:{state:{name:{eq:"Todo"}}}){nodes{id title}}} | Mutations: issueCreate, issueUpdate
+Pagination: use pageInfo.endCursor in after param.`,
+
+  airtable: `Base URL: https://api.airtable.com/v0/{baseId}/{tableId}
+Auth: Authorization: Bearer {token} (injected automatically)
+GET / (filterByFormula, maxRecords, pageSize, offset) | POST / ({fields:{...}}) | PATCH /{recordId} | DELETE /{recordId}
+Pagination: use offset from response.`,
+};
+
+function buildStationContext(data: LiveStationData): string {
+  const lines: string[] = ['[STATION]'];
+
+  const activeIntegrations = data.integrations.filter(
+    (i) => i.status === 'connected' || i.status === 'active',
+  );
+  if (activeIntegrations.length > 0) {
+    lines.push(`Active integrations (${activeIntegrations.length}):`);
+    for (const int of activeIntegrations) {
+      lines.push(`- ${int.label} [${int.type}]`);
+      const howTo = INTEGRATION_HOW_TO[int.type];
+      if (howTo) lines.push(howTo);
+    }
+  }
+
+  const activeTasks = data.tasks.filter((t) => t.status === 'active');
+  if (activeTasks.length > 0) {
+    lines.push(`Active tasks (${activeTasks.length}):`);
+    for (const task of activeTasks) {
+      const summary = task.lastRunSummary ? ` — last run: ${task.lastRunSummary}` : '';
+      lines.push(`- ${task.name}${summary}`);
+    }
+  }
+
+  if (data.fileCount > 0) {
+    const names = (data.fileNames ?? []).slice(0, 5).join(', ');
+    lines.push(`Files: ${data.fileCount} available${names ? ` (${names}${data.fileCount > 5 ? '...' : ''})` : ''}`);
+  }
+
+  if (data.secretLabels && data.secretLabels.length > 0) {
+    lines.push(`Stored secrets (use as {{SECRET_NAME}} in http_request): ${data.secretLabels.join(', ')}`);
+  }
+
+  return lines.length > 1 ? lines.join('\n') : '';
+}
+
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
 
@@ -541,6 +641,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
               ].slice(0, 5),
             }
           : null,
+        workspaceManifest: selfAwarenessData.workspaceManifest as SelfAwarenessSnapshot['workspaceManifest'],
       }
     : null;
 
@@ -750,6 +851,56 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       role: 'user',
       content: `[CONTEXT]\nMemory recalled from past conversations:\n${memLines}`,
     });
+  }
+
+  // [STATION] — live integration state, active tasks, files, stored secrets
+  if (liveStation) {
+    const stationContext = buildStationContext(liveStation);
+    if (stationContext) {
+      messages.push({ role: 'user', content: stationContext });
+    }
+  }
+
+  // [CAPABILITY] — KB state, memory count, per-skill how-to instructions
+  const cap = selfAwareness?.capabilityState as {
+    ownerKbChunks?: number;
+    operatorKbChunks?: number;
+    skills?: { name: string; isActive: boolean; description?: string; integrationType?: string | null }[];
+  } | null | undefined;
+  const wm = selfAwareness?.workspaceManifest;
+  if (cap) {
+    const capLines: string[] = ['[CAPABILITY]'];
+
+    const kbTotal = (cap.ownerKbChunks ?? 0) + (cap.operatorKbChunks ?? 0);
+    if (kbTotal > 0 && wm?.kbByTier) {
+      const { high = 0, medium = 0, low = 0 } = wm.kbByTier;
+      capLines.push(`KB: ${kbTotal} entries (${high} high confidence, ${medium} medium, ${low} low)`);
+    } else if (kbTotal > 0) {
+      capLines.push(`KB: ${kbTotal} entries`);
+    }
+
+    if (wm?.totalMemoryActive && wm.totalMemoryActive > 0) {
+      capLines.push(`Memory: ${wm.totalMemoryActive} active memories from past conversations`);
+    }
+
+    const activeSkills = (cap.skills ?? []).filter((s) => s.isActive);
+    if (activeSkills.length > 0) {
+      capLines.push(`Active skills:`);
+      for (const skill of activeSkills) {
+        const howTo = SKILL_HOW_TO[skill.integrationType ?? ''];
+        capLines.push(`- ${skill.name}`);
+        if (howTo) {
+          capLines.push(howTo);
+        } else if (skill.description) {
+          capLines.push(`  ${skill.description}`);
+        }
+      }
+      capLines.push('If a skill fails — report the failure clearly. Do not guess or fabricate results.');
+    }
+
+    if (capLines.length > 1) {
+      messages.push({ role: 'user', content: capLines.join('\n') });
+    }
   }
 
   messages.push({ role: 'user', content: userContent });
