@@ -105,6 +105,26 @@ function fallbackEval(): LLMEvaluation {
   };
 }
 
+export function computeCoverageScore(kbHits: { confidenceScore?: number }[]): number {
+  if (!kbHits.length) return 0;
+  const sum = kbHits.reduce((acc, hit) => acc + (hit.confidenceScore ?? 0), 0);
+  return (sum / kbHits.length) / 100;
+}
+
+export async function resolveKbGap(query: string, operatorId: string): Promise<string | null> {
+  try {
+    const result = await curiositySearch(query, operatorId);
+    const tieredSources = result.sources.filter(s => s.tier !== null);
+    if (!tieredSources.length) return null;
+    return tieredSources
+      .slice(0, 3)
+      .map(s => `${s.title}: ${s.snippet}`)
+      .join('\n');
+  } catch {
+    return null;
+  }
+}
+
 export async function curiositySearch(
   claim: string,
   operatorId: string,

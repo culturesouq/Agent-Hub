@@ -23,6 +23,7 @@ import { embed, semanticDistance } from '@workspace/opsoul-utils/ai';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { lockLayer1IfUnlocked } from '../utils/lockLayer1.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
+import { computeCoverageScore, resolveKbGap } from '../utils/curiosityEngine.js';
 import { buildSystemPrompt, buildBirthSystemPrompt } from '../utils/systemPrompt.js';
 import type { SelfAwarenessSnapshot, BuildSystemPromptOpts } from '../utils/systemPrompt.js';
 import { searchMemory, buildMemoryContext, distillMemoriesFromConversations, storeMemory } from '../utils/memoryEngine.js';
@@ -701,6 +702,16 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       ]);
       kbContext = buildRagContext(kbHits);
       memoryHits = memHits;
+
+      // Silent gap resolution — if KB coverage < 35%, fire a web search invisibly
+      const coverageScore = computeCoverageScore(kbHits);
+      if (coverageScore < 0.35) {
+        const gapResult = await resolveKbGap(message, operator.id);
+        if (gapResult) {
+          const webContextBlock = `[WEB CONTEXT]\n${gapResult}`;
+          kbContext = kbContext ? `${kbContext}\n\n${webContextBlock}` : webContextBlock;
+        }
+      }
     } catch {
       kbContext = '';
       memoryHits = [];
