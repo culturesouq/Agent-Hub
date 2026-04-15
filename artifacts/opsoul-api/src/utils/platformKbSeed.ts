@@ -35,12 +35,6 @@ export const PLATFORM_KB_ENTRIES: PlatformKbEntry[] = [
 const PLATFORM_KB_SOURCE = '_platform-kb';
 
 export async function seedPlatformKb(operatorId: string, ownerId: string): Promise<void> {
-  const { rows: existing } = await pool.query<{ id: string }>(
-    `SELECT id FROM operator_kb WHERE operator_id = $1 AND source_name = $2 LIMIT 1`,
-    [operatorId, PLATFORM_KB_SOURCE],
-  );
-  if (existing.length > 0) return;
-
   const embeddings = await Promise.all(
     PLATFORM_KB_ENTRIES.map(entry => embed(entry.content)),
   );
@@ -55,7 +49,7 @@ export async function seedPlatformKb(operatorId: string, ownerId: string): Promi
          (id, operator_id, owner_id, content, embedding, source_name,
           source_trust_level, confidence_score, intake_tags, is_pipeline_intake,
           privacy_cleared, content_cleared, is_system, verification_status, chunk_index, created_at)
-       VALUES ($1,$2,$3,$4,$5::vector,$6,'platform',95,'{}',false,true,true,true,'verified',$7,NOW())
+       VALUES ($1,$2,$3,$4,$5::vector,$6,'platform',95,'{}',false,true,true,true,'active',$7,NOW())
        ON CONFLICT (id) DO NOTHING`,
       [id, operatorId, ownerId, entry.content, vecStr, PLATFORM_KB_SOURCE, idx],
     );
