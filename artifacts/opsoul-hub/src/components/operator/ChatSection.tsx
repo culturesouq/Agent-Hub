@@ -134,6 +134,18 @@ function ToolOutputBlock({ skillName, output, toolType }: { skillName: string; o
   );
 }
 
+function BouncingDots() {
+  return (
+    <div className="flex justify-start">
+      <div className="flex items-center gap-1 px-3 py-2.5">
+        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:0ms]" />
+        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:150ms]" />
+        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:300ms]" />
+      </div>
+    </div>
+  );
+}
+
 export default function ChatSection({ operatorId }: { operatorId: string }) {
   const queryClient = useQueryClient();
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
@@ -153,7 +165,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
-  const [queuedMessage, setQueuedMessage] = useState<string | null>(null);
+  const [messageQueue, setMessageQueue] = useState<string[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -161,7 +173,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const queueRef = useRef<{ message: string; attachments: Attachment[] } | null>(null);
+  const queueRef = useRef<{ message: string; attachments: Attachment[] }[]>([]);
 
   const isStreaming = !!streamingMsg;
   const isBusy = isStreaming || isAgencyProcessing;
@@ -180,9 +192,9 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     setRunningTool(null);
     setWritingFile(null);
     setCallingUrl(null);
-    // also cancel any queued message
-    queueRef.current = null;
-    setQueuedMessage(null);
+    // also cancel any queued messages
+    queueRef.current = [];
+    setMessageQueue([]);
   };
 
   const scrollToBottom = useCallback((instant = false) => {
@@ -567,26 +579,20 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     setAttachments([]);
 
     if (isBusy) {
-      if (queueRef.current) {
-        stopResponse();
-        executeSend(msgText, pendingAttachments);
-        return;
-      }
-      queueRef.current = { message: msgText, attachments: pendingAttachments };
-      setQueuedMessage(msgText);
+      queueRef.current.push({ message: msgText, attachments: pendingAttachments });
+      setMessageQueue(prev => [...prev, msgText]);
       return;
     }
 
     executeSend(msgText, pendingAttachments);
   };
 
-  // Auto-fire queued message as soon as operator finishes
+  // Auto-fire next queued message as soon as operator finishes
   useEffect(() => {
     if (isBusy) return;
-    const queued = queueRef.current;
-    if (!queued) return;
-    queueRef.current = null;
-    setQueuedMessage(null);
+    if (queueRef.current.length === 0) return;
+    const queued = queueRef.current.shift()!;
+    setMessageQueue(prev => prev.slice(1));
     executeSend(queued.message, queued.attachments);
   }, [isBusy]);
 
@@ -737,14 +743,8 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
             )}
 
             {/* Waiting for first token — bouncing dots */}
-            {isAgencyProcessing && !streamingMsg && !searchingQuery && !seedingSource && !readingUrl && !runningTool && !writingFile && !callingUrl && (
-              <div className="flex justify-start">
-                <div className="flex items-center gap-1 px-3 py-2.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:0ms]" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:150ms]" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:300ms]" />
-                </div>
-              </div>
+            {isBusy && !streamingMsg && !searchingQuery && !seedingSource && !readingUrl && !runningTool && !writingFile && !callingUrl && (
+              <BouncingDots />
             )}
 
             <div ref={sentinelRef} />
@@ -789,20 +789,27 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
             ))}
           </div>
         )}
-        {queuedMessage !== null && (
-          <div className="flex items-center gap-2 px-1 mb-1">
-            <div className="flex-1 flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 rounded px-2 py-1 border border-border/30">
-              <span className="text-primary font-medium">Queued:</span>
-              <span className="truncate">{queuedMessage}</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => { queueRef.current = null; setQueuedMessage(null); }}
-              className="text-muted-foreground hover:text-foreground shrink-0"
-              title="Cancel queued message"
-            >
-              <X className="w-3 h-3" />
-            </button>
+        {messageQueue.length > 0 && (
+          <div className="space-y-1 px-1 mb-1">
+            {messageQueue.map((msg, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <div className="flex-1 flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 rounded px-2 py-1 border border-border/30">
+                  <span className="text-primary font-medium">{i === 0 ? 'Next:' : 'Queued:'}</span>
+                  <span className="truncate">{msg}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    queueRef.current.splice(i, 1);
+                    setMessageQueue(prev => prev.filter((_, j) => j !== i));
+                  }}
+                  className="text-muted-foreground hover:text-foreground shrink-0"
+                  title="Cancel queued message"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
           </div>
         )}
         <form onSubmit={sendMessage} className="flex gap-2">
@@ -854,7 +861,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                 }
               }
             }}
-            placeholder={isBusy && !queuedMessage ? "Type to queue next message…" : "Type a message… (Shift+Enter for new line)"}
+            placeholder={isBusy ? "Type to queue next message…" : "Type a message… (Shift+Enter for new line)"}
             rows={1}
             disabled={false}
             className="flex-1 font-sans bg-background/50 border border-border/50 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/30 resize-none overflow-y-auto leading-relaxed disabled:opacity-50 placeholder:text-muted-foreground"
@@ -866,7 +873,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
               onClick={stopResponse}
               className="shrink-0 w-10 bg-destructive hover:bg-destructive/90 text-destructive-foreground"
               variant="default"
-              title={queuedMessage ? "Stop response & cancel queue" : "Stop response"}
+              title={messageQueue.length > 0 ? "Stop response & cancel queue" : "Stop response"}
             >
               <Square className="w-4 h-4 fill-current" />
             </Button>
