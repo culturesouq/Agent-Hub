@@ -1,4 +1,5 @@
 import type { Layer2Soul } from '../validation/operator.js';
+import type { WorkspaceManifest } from './selfAwarenessEngine.js';
 
 export interface OperatorIdentity {
   name: string;
@@ -34,6 +35,7 @@ export interface SelfAwarenessSnapshot {
     successRate: number;
     recentTypes: string[];
   } | null;
+  workspaceManifest?: WorkspaceManifest | null;
 }
 
 const LAYER_0_HUMAN_CORE = `# HUMAN CORE
@@ -294,21 +296,11 @@ const LAYER_4_OPERATIONAL_RULES = `## Layer 4 — Operational Rules (Hardcoded)
 - Match response length to message length — a short question gets 1-2 sentences maximum.
 - Speak in natural flowing sentences like a human conversation, not a report.`;
 
-export interface LiveStationData {
-  integrations: { type: string; label: string; status: string; scopes?: string[] | null }[];
-  tasks: { name: string; status: string; lastRunAt?: string | null; lastRunSummary?: string | null; payload?: Record<string, unknown> | null }[];
-  fileCount: number;
-  fileNames?: string[];
-  deploymentSlots?: { name: string; surfaceType: string; apiKeyPreview: string; isActive: boolean; allowedOrigins?: string[] | null }[];
-  secretLabels?: string[];
-}
-
 export interface BuildSystemPromptOpts {
   sycophancyWarning?: boolean;
   soulAnchorActive?: boolean;
   languageInstruction?: string;
   scopeLine?: string;
-  webSearchAvailable?: boolean;
 }
 
 function buildLayer1Block(operator: OperatorIdentity): string[] {
@@ -333,7 +325,6 @@ export function buildSystemPrompt(
   operator: OperatorIdentity,
   selfAwareness?: SelfAwarenessSnapshot | null,
   opts?: BuildSystemPromptOpts,
-  liveStation?: LiveStationData,
 ): string {
   const soul = operator.layer2Soul;
   const parts: string[] = [];
@@ -436,80 +427,19 @@ export function buildSystemPrompt(
   }
 
   parts.push('');
-  parts.push('## Layer 3 — What I Know About Myself Right Now');
+  parts.push('## Layer 3 — Self-Awareness');
 
   if (selfAwareness) {
     const h = selfAwareness.healthScore;
     const sa = selfAwareness.soulState;
-    const cap = selfAwareness.capabilityState;
     const gaps = selfAwareness.mandateGaps;
-    const wm = (selfAwareness as unknown as Record<string, unknown>).workspaceManifest as {
-      kbByTier?: { high?: number; medium?: number; low?: number };
-      memoryByType?: Record<string, number>;
-      totalMemoryActive?: number;
-      lastConversationAt?: string | null;
-      lastGrowActivity?: string | null;
-      fileCount?: number;
-      fileNames?: string[];
-    } | null | undefined;
-
-    parts.push('This is what I actually have access to in this conversation. When someone asks what I can do — this is what I draw from. Not generic capabilities. What is specifically in front of me right now.');
-    parts.push('');
-
-    if (cap) {
-      const kbTotal = (cap.ownerKbChunks ?? 0) + (cap.operatorKbChunks ?? 0);
-      if (kbTotal > 0) {
-        if (wm?.kbByTier) {
-          const { high = 0, medium = 0, low = 0 } = wm.kbByTier;
-          const highDesc = high > 0 ? `${high} ${high === 1 ? 'thing' : 'things'} I know well and have verified` : null;
-          const medDesc = medium > 0 ? `${medium} I'm reasonably confident about` : null;
-          const lowDesc = low > 0 ? `${low} I'm still building confidence on` : null;
-          const tiers = [highDesc, medDesc, lowDesc].filter(Boolean).join(', ');
-          parts.push(`I'm working with ${kbTotal} pieces of domain knowledge right now — ${tiers}. When you ask me something within my area, I draw from this first. If it's not here, I'll tell you that directly instead of guessing.`);
-        } else {
-          const ownerN = cap.ownerKbChunks ?? 0;
-          const selfN = cap.operatorKbChunks ?? 0;
-          const sourceDesc = ownerN > 0 && selfN > 0
-            ? `${ownerN} ${ownerN === 1 ? 'piece' : 'pieces'} my owner gave me and ${selfN} I've built up myself`
-            : ownerN > 0 ? `${ownerN} ${ownerN === 1 ? 'piece' : 'pieces'} my owner gave me`
-            : `${selfN} I've built up through conversations`;
-          parts.push(`I'm working with ${kbTotal} pieces of domain knowledge — ${sourceDesc}. I draw from this before anything else when answering questions in my area.`);
-        }
-      } else {
-        parts.push(`I don't have domain knowledge stored yet. My answers come from what I know from training and from this conversation — not from a verified knowledge base. I'll be transparent about that when it matters.`);
-      }
-
-      if (wm?.totalMemoryActive != null && wm.totalMemoryActive > 0 && wm.memoryByType) {
-        const types = Object.entries(wm.memoryByType)
-          .filter(([, n]) => n > 0)
-          .map(([t, n]) => `${n} ${t === 'fact' ? `${n === 1 ? 'fact' : 'facts'}` : t === 'preference' ? `${n === 1 ? 'preference' : 'preferences'}` : t === 'pattern' ? `${n === 1 ? 'pattern' : 'patterns'}` : t === 'instruction' ? `${n === 1 ? 'standing instruction' : 'standing instructions'}` : `${t}`}`);
-        const typeStr = types.length > 0 ? ` (${types.join(', ')})` : '';
-        parts.push(`I'm also carrying ${wm.totalMemoryActive} things I remember about this person from past conversations${typeStr}. I use that to stay consistent and not make them repeat themselves.`);
-      }
-
-      const activeSkills = (cap.skills ?? []).filter((s) => s.isActive);
-      if (activeSkills.length > 0) {
-        parts.push('');
-        parts.push(`I have ${activeSkills.length} active ${activeSkills.length === 1 ? 'skill' : 'skills'} in this session:`);
-        for (const skill of activeSkills) {
-          const desc = skill.description ? ` — ${skill.description}` : '';
-          parts.push(`- ${skill.name}${desc}`);
-        }
-      }
-
-    }
-
-    if (gaps && gaps.length > 0) {
-      parts.push('');
-      parts.push(`There are things I've been asked about that I don't have solid coverage on yet: ${gaps.join(', ')}. I'll be honest about that when it comes up.`);
-    }
 
     const effectiveGrowLock = selfAwareness.growLockLevel ?? 'CONTROLLED';
     const growLockDesc = GROW_LOCK_DESCRIPTIONS[effectiveGrowLock];
     if (growLockDesc) {
-      parts.push('');
       parts.push(`On my own evolution: ${growLockDesc}`);
     }
+
     if (sa) {
       const growLine = sa.appliedProposalCount != null && sa.growProposalCount != null && sa.growProposalCount > 0
         ? `I've had ${sa.growProposalCount} soul proposals, ${sa.appliedProposalCount} applied.`
@@ -518,8 +448,11 @@ export function buildSystemPrompt(
     }
 
     if (h) {
-      parts.push('');
-      parts.push(`My current overall state: ${h.label}.`);
+      parts.push(`My current state: ${h.label}.`);
+    }
+
+    if (gaps && gaps.length > 0) {
+      parts.push(`Areas I know I don't have full coverage on yet: ${gaps.join(', ')}.`);
     }
 
     parts.push('');

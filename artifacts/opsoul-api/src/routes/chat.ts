@@ -23,7 +23,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { lockLayer1IfUnlocked } from '../utils/lockLayer1.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { buildSystemPrompt, buildBirthSystemPrompt } from '../utils/systemPrompt.js';
-import type { SelfAwarenessSnapshot, BuildSystemPromptOpts, LiveStationData } from '../utils/systemPrompt.js';
+import type { SelfAwarenessSnapshot, BuildSystemPromptOpts } from '../utils/systemPrompt.js';
 import { searchMemory, buildMemoryContext, distillMemoriesFromConversations, storeMemory } from '../utils/memoryEngine.js';
 import type { MemoryHit } from '../utils/memoryEngine.js';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
@@ -577,7 +577,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     : undefined;
 
   const scopeLine = `[SCOPE: ${conv.scopeType} | ${conv.scopeId}]`;
-  const promptOpts: BuildSystemPromptOpts = { sycophancyWarning, soulAnchorActive, languageInstruction, scopeLine, webSearchAvailable: isWebSearchAvailable() };
+  const promptOpts: BuildSystemPromptOpts = { sycophancyWarning, soulAnchorActive, languageInstruction, scopeLine };
 
   // Merge archetype-born skills with owner-installed skills.
   // Installed skills win on name conflict — archetype defaults fill in the rest.
@@ -626,7 +626,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   const isBirthMode = !operator.rawIdentity;
 
   // Build live station data — fetched fresh every turn so the operator always knows their real state
-  const liveStation: LiveStationData = {
+  const liveStation = {
     integrations: liveIntegrations.map(i => ({
       type: i.type ?? '',
       label: i.label ?? '',
@@ -669,7 +669,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         },
         selfAwareness,
         promptOpts,
-        liveStation,
       );
 
   // Build user content — plain string or multimodal array when attachments present

@@ -19,7 +19,6 @@ import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
 import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { buildSystemPrompt } from '../utils/systemPrompt.js';
-import type { LiveStationData } from '../utils/systemPrompt.js';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { eq, and } from 'drizzle-orm';
 
@@ -155,7 +154,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       .where(eq(operatorSecretsTable.operatorId, slot.operatorId)),
   ]);
 
-  const liveStation: LiveStationData = {
+  const liveStation = {
     integrations: liveIntegrations.map(i => ({
       type: i.type ?? '',
       label: i.label ?? '',
@@ -216,7 +215,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     operatorIdentity,
     undefined,
     { scopeLine: crudScopeLine },
-    liveStation,
   );
 
   const result = await chatCompletion(

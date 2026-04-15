@@ -229,7 +229,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       layer2Soul:        operator.layer2Soul as Layer2Soul,
     },
     null,
-    { webSearchAvailable: false, scopeLine: `[SCOPE: ${scope.scopeType} | ${scope.scopeId}]` },
+    { scopeLine: `[SCOPE: ${scope.scopeType} | ${scope.scopeId}]` },
   );
 
   const messages: ChatMessage[] = [
