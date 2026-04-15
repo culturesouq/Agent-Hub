@@ -123,7 +123,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   let ragContext = '';
   try {
     const embedding = await embed(action);
-    const kbHits = await searchBothKbs(slot.operatorId, slot.ownerId, embedding, 5, 30);
+    const kbHits = await searchBothKbs(slot.operatorId, embedding, 5, 30, operator.archetype ?? [], operator.domainTags ?? []);
     ragContext = buildRagContext(kbHits);
   } catch { /* non-fatal */ }
 

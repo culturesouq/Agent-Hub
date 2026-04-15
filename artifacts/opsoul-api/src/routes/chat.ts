@@ -1312,7 +1312,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
               webSearchCount++;
               loopMessages.push(
                 { role: 'assistant', content: iterContent },
-                { role: 'system', content: `[Web Search: ${narratedQuery}]\n${capResult.output}` },
+                { role: 'system', content: `[Web Search] ${narratedQuery}\n${capResult.output}` },
               );
               continue;
             }
@@ -1326,6 +1326,21 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
       // Hit max iterations without a clean final — use everything streamed
       if (!finalContent) finalContent = fullContent;
+
+      // Silence guard — force a summary pass if tool loop produced no user-facing text
+      if (!finalContent || finalContent.trim().length < 5) {
+        loopMessages.push({ role: 'user', content: 'Summarize what you just did and share the result.' });
+        for await (const chunk of streamChat(loopMessages, { ...chatOpts, tools: undefined })) {
+          if (chunk.delta) {
+            finalContent += chunk.delta;
+            res.write(`data: ${JSON.stringify({ delta: chunk.delta })}\n\n`);
+          }
+          if (chunk.done && chunk.usage) {
+            completionTokens += chunk.usage.completionTokens;
+          }
+        }
+      }
+
       finalTokens = completionTokens;
 
       // ── SKILL TRIGGER (post-loop, only if no web search or http_request ran) ─
@@ -1437,7 +1452,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             capabilityFired = true;
             const searchMessages: ChatMessage[] = [
               ...messages,
-              { role: 'system', content: `[Web Search: ${narratedQuery}]\n${capResult.output}` },
+              { role: 'system', content: `[Web Search] ${narratedQuery}\n${capResult.output}` },
             ];
             const secondResult = await chatCompletion(searchMessages, chatOpts);
             finalContent = secondResult.content;
@@ -1459,7 +1474,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             capabilityFired = true;
             const toolResultMessages: ChatMessage[] = [
               ...messages,
-              { role: 'system', content: `[Web Search: ${searchQuery}]\n${capResult.output}` },
+              { role: 'system', content: `[Web Search] ${searchQuery}\n${capResult.output}` },
             ];
             const secondResult = await chatCompletion(toolResultMessages, chatOpts);
             finalContent = secondResult.content;
