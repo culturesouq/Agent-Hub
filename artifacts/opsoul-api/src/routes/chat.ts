@@ -18,6 +18,7 @@ import {
 import { detectSkillTrigger } from '../utils/skillTriggerEngine.js';
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
 import { executeSkill } from '../utils/skillExecutor.js';
+import { executeHttpRequest } from '../utils/httpExecutor.js';
 import { embed, semanticDistance } from '@workspace/opsoul-utils/ai';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { lockLayer1IfUnlocked } from '../utils/lockLayer1.js';
@@ -983,40 +984,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // Agency skills — built once, shared by both paths
   const agencySkills = buildAgencySkills(skills, archetypeDefaultSkills, installedNames, operator);
 
-  // http_request executor — resolves {{SECRET_NAME}} placeholders server-side, never exposed to client
-  async function executeHttpRequest(
-    args: { method: string; url: string; headers?: Record<string, string>; body?: string },
-  ): Promise<string> {
-    const secretRows = await db
-      .select({ key: operatorSecretsTable.key, valueEncrypted: operatorSecretsTable.valueEncrypted })
-      .from(operatorSecretsTable)
-      .where(eq(operatorSecretsTable.operatorId, operator.id));
-
-    const secretMap: Record<string, string> = {};
-    for (const s of secretRows) {
-      try { secretMap[s.key] = decryptToken(s.valueEncrypted); } catch { /* skip bad entry */ }
-    }
-
-    const resolve = (str: string) =>
-      str.replace(/\{\{([A-Z0-9_]+)\}\}/g, (_, name) => secretMap[name] ?? `{{${name}}}`);
-
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    for (const [k, v] of Object.entries(args.headers ?? {})) {
-      headers[resolve(k)] = resolve(v);
-    }
-
-    const fetchOpts: RequestInit = { method: args.method, headers };
-    if (args.body && ['POST', 'PUT', 'PATCH'].includes(args.method.toUpperCase())) {
-      fetchOpts.body = resolve(args.body);
-    }
-
-    const resp = await fetch(resolve(args.url), fetchOpts);
-    const text = await resp.text();
-    let output: string;
-    try { output = JSON.stringify(JSON.parse(text), null, 2); } catch { output = text.slice(0, 3000); }
-    return `HTTP ${resp.status} ${resp.statusText}\n${output}`;
-  }
-
   // http_request tool — only offered when the operator has stored secrets
   const httpRequestTool: ToolDefinition | null = liveSecrets.length > 0 ? {
     type: 'function',
@@ -1287,7 +1254,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             res.write(`data: ${JSON.stringify({ calling: httpArgs.url })}\n\n`);
             let toolResultText: string;
             try {
-              toolResultText = await executeHttpRequest(httpArgs);
+              toolResultText = await executeHttpRequest(operator.id, httpArgs);
             } catch (err: any) {
               toolResultText = `HTTP request failed: ${err.message}`;
             }
@@ -1549,7 +1516,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           capabilityFired = true;
           let httpResult: string;
           try {
-            httpResult = await executeHttpRequest(httpArgs);
+            httpResult = await executeHttpRequest(operator.id, httpArgs);
           } catch (err: any) {
             httpResult = `HTTP request failed: ${err.message}`;
           }
