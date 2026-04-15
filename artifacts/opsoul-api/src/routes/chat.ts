@@ -691,6 +691,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   ];
 
   let kbContext = '';
+  let webGapContext = '';
   let memoryHits: MemoryHit[] = [];
 
   if (kbSearch) {
@@ -708,8 +709,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       if (coverageScore < 0.35) {
         const gapResult = await resolveKbGap(message, operator.id);
         if (gapResult) {
-          const webContextBlock = `[WEB CONTEXT]\n${gapResult}`;
-          kbContext = kbContext ? `${kbContext}\n\n${webContextBlock}` : webContextBlock;
+          webGapContext = gapResult;
         }
       }
     } catch {
@@ -854,6 +854,13 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     messages.push({
       role: 'user',
       content: `[CONTEXT]\nKnowledge retrieved for this conversation:\n${kbContext}`,
+    });
+  }
+
+  if (webGapContext) {
+    messages.push({
+      role: 'user',
+      content: `[WEB CONTEXT]\n${webGapContext}`,
     });
   }
 
