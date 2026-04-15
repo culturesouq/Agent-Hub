@@ -28,7 +28,7 @@ export interface SelfAwarenessSnapshot {
   capabilityState?: {
     ownerKbChunks?: number;
     operatorKbChunks?: number;
-    skills?: { name: string; isActive: boolean; description?: string }[];
+    skills?: { name: string; isActive: boolean; description?: string; integrationType?: string | null }[];
     integrations?: { label: string; status: string; type?: string; scopes?: string[] }[];
   } | null;
   taskSummary?: {

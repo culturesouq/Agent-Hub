@@ -862,11 +862,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   }
 
   // [CAPABILITY] — KB state, memory count, per-skill how-to instructions
-  const cap = selfAwareness?.capabilityState as {
-    ownerKbChunks?: number;
-    operatorKbChunks?: number;
-    skills?: { name: string; isActive: boolean; description?: string; integrationType?: string | null }[];
-  } | null | undefined;
+  const cap = selfAwareness?.capabilityState;
   const wm = selfAwareness?.workspaceManifest;
   if (cap) {
     const capLines: string[] = ['[CAPABILITY]'];
