@@ -1,6 +1,5 @@
 import { db } from '@workspace/db';
 import { operatorKbTable } from '@workspace/db';
-import { eq, and } from 'drizzle-orm';
 
 interface PlatformKbEntry {
   content: string;
@@ -34,17 +33,6 @@ export const PLATFORM_KB_ENTRIES: PlatformKbEntry[] = [
 ];
 
 export async function seedPlatformKb(operatorId: string, ownerId: string): Promise<void> {
-  const existing = await db
-    .select({ id: operatorKbTable.id })
-    .from(operatorKbTable)
-    .where(and(
-      eq(operatorKbTable.operatorId, operatorId),
-      eq(operatorKbTable.isSystem, true),
-    ))
-    .limit(1);
-
-  if (existing.length > 0) return;
-
   for (let idx = 0; idx < PLATFORM_KB_ENTRIES.length; idx++) {
     const entry = PLATFORM_KB_ENTRIES[idx];
     await db
