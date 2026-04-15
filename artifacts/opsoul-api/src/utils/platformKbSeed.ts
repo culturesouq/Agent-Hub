@@ -43,7 +43,7 @@ export async function seedPlatformKb(operatorId: string, ownerId: string): Promi
         ownerId,
         content: entry.content,
         confidenceScore: 95,
-        verificationStatus: 'verified',
+        verificationStatus: 'active',
         isSystem: true,
         sourceTrustLevel: 'platform',
       })
