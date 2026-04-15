@@ -85,6 +85,7 @@ export async function runCapabilityLoop(
   skills: InstalledSkill[],
   modelOrOptions: string | ChatOptions,
   operatorId?: string,
+  operatorOwnerId?: string,
 ): Promise<CapabilityLoopResult> {
   const modelStr = typeof modelOrOptions === 'string' ? modelOrOptions : (modelOrOptions.model ?? 'claude-sonnet-4-5');
 
@@ -99,6 +100,7 @@ export async function runCapabilityLoop(
     const trigger = await detectSkillTrigger(userMessage, skills, content);
     if (trigger) {
       if (operatorId) trigger.operatorId = operatorId;
+      if (operatorOwnerId) trigger.operatorOwnerId = operatorOwnerId;
       console.log(`[capability-loop] skill triggered: ${trigger.name}`);
       const result = await executeSkill(trigger, modelStr);
       if (result.success) {

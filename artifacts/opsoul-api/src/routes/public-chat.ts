@@ -295,6 +295,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       const trigger = await detectSkillTrigger(message, allSkills, fullContent);
       if (trigger) {
         trigger.operatorId = slot.operatorId;
+        trigger.operatorOwnerId = slot.ownerId;
         res.write(`data: ${JSON.stringify({ running: trigger.name })}\n\n`);
         const skillResult = await executeSkill(trigger, model);
         if (skillResult.success) {
@@ -365,6 +366,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       const trigger = await detectSkillTrigger(message, allSkills, result.content);
       if (trigger) {
         trigger.operatorId = slot.operatorId;
+        trigger.operatorOwnerId = slot.ownerId;
         const skillResult = await executeSkill(trigger, model);
         if (skillResult.success) {
           const secondMessages = buildSkillSecondPassMessages(systemPrompt, messages, result.content, skillResult.output);

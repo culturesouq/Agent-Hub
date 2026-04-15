@@ -126,6 +126,7 @@ async function runDueTasks(): Promise<void> {
         skills,
         CHAT_MODEL,
         operator.id,
+        operator.ownerId,
       );
 
       const durationSec = (Date.now() - startTime) / 1000;
