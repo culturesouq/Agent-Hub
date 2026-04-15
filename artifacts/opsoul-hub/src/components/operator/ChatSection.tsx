@@ -733,17 +733,17 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
               </div>
             )}
 
-            {/* Unified live status pill */}
-            {(readingUrl || searchingQuery || seedingSource || runningTool || writingFile || callingUrl) && (
+            {/* Unified live status pill — search or tool running */}
+            {(searchingQuery || runningTool) && (
               <div className="flex justify-start">
                 <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-primary/20 bg-primary/5 text-primary/60 text-[11px] font-mono">
-                  {callingUrl ? <><Globe className="w-3 h-3" /> Calling {callingUrl}…</> : readingUrl ? `📄 Reading…` : searchingQuery ? `🔍 Searching…` : seedingSource ? `🧬 Seeding…` : writingFile ? `📝 Writing ${writingFile}…` : `⚡ Running ${runningTool}…`}
+                  {searchingQuery ? `🔍 Searching…` : `⚡ ${runningTool}`}
                 </span>
               </div>
             )}
 
             {/* Waiting for first token — bouncing dots */}
-            {isBusy && !streamingMsg && !searchingQuery && !seedingSource && !readingUrl && !runningTool && !writingFile && !callingUrl && (
+            {isBusy && !streamingMsg && !searchingQuery && !runningTool && (
               <BouncingDots />
             )}
 
@@ -861,16 +861,16 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                 }
               }
             }}
-            placeholder={isBusy ? "Type to queue next message…" : "Type a message… (Shift+Enter for new line)"}
+            placeholder="Type a message… (Shift+Enter for new line)"
             rows={1}
-            disabled={false}
+            disabled={isBusy}
             className="flex-1 font-sans bg-background/50 border border-border/50 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/30 resize-none overflow-y-auto leading-relaxed disabled:opacity-50 placeholder:text-muted-foreground"
             style={{ minHeight: "36px", maxHeight: "200px" }}
           />
           {isBusy ? (
             <Button
               type="button"
-              onClick={stopResponse}
+              onClick={() => { stopResponse(); setMessageQueue([]); }}
               className="shrink-0 w-10 bg-destructive hover:bg-destructive/90 text-destructive-foreground"
               variant="default"
               title={messageQueue.length > 0 ? "Stop response & cancel queue" : "Stop response"}
