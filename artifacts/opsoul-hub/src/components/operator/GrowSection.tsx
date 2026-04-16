@@ -74,10 +74,13 @@ function ProposalCard({
   const [testError, setTestError] = useState<string | null>(null);
 
   const statusConfig = {
-    applied:            { color: "text-green-500 border-green-500/30 bg-green-500/10",  label: "Applied" },
-    rejected:           { color: "text-red-500 border-red-500/30 bg-red-500/10",        label: "Rejected" },
-    needs_owner_review: { color: "text-amber-500 border-amber-500/30 bg-amber-500/10",  label: "Needs review" },
-    pending:            { color: "text-primary border-primary/30 bg-primary/10",         label: "Pending" },
+    applied:            { color: "text-green-500 border-green-500/30 bg-green-500/10",   label: "Applied" },
+    rejected:           { color: "text-red-500 border-red-500/30 bg-red-500/10",         label: "Rejected" },
+    needs_owner_review: { color: "text-amber-500 border-amber-500/30 bg-amber-500/10",   label: "Needs review" },
+    no_change:          { color: "text-muted-foreground border-border bg-muted/30",       label: "No change" },
+    manual_review:      { color: "text-orange-500 border-orange-500/30 bg-orange-500/10", label: "Manual review" },
+    pending_evaluation: { color: "text-blue-400 border-blue-400/30 bg-blue-400/10",      label: "Evaluating" },
+    pending:            { color: "text-primary border-primary/30 bg-primary/10",          label: "Pending" },
   };
   const status = statusConfig[prop.status as keyof typeof statusConfig] ?? statusConfig.pending;
 
