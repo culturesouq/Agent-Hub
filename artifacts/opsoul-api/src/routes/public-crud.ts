@@ -218,12 +218,16 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     { scopeLine: crudScopeLine },
   );
 
+  const resolvedModel = operator.defaultModel && operator.defaultModel !== 'opsoul/auto'
+    ? operator.defaultModel
+    : 'anthropic/claude-haiku-4-5';
+
   const result = await chatCompletion(
     [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: actionText },
     ],
-    operator.defaultModel ?? 'anthropic/claude-haiku-4-5',
+    resolvedModel,
   );
 
   res.json({ result: result.content });
