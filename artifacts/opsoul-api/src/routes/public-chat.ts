@@ -106,10 +106,14 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         and(
           eq(conversationsTable.id, conversationId),
           eq(conversationsTable.operatorId, slot.operatorId),
-          eq(conversationsTable.scopeId, scope.scopeId),
         ),
       );
-    conv = existing;
+    if (existing) {
+      conv = existing;
+      // Use the scope from the existing conversation — not the freshly generated one
+      scope.scopeId = existing.scopeId;
+      scope.scopeType = existing.scopeType;
+    }
   }
 
   if (!conv && slot.surfaceType === 'authenticated' && userId) {
