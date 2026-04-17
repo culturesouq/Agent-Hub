@@ -15,9 +15,7 @@ import {
   operatorDeploymentSlotsTable,
   operatorSecretsTable,
 } from '@workspace/db';
-import { detectSkillTrigger } from '../utils/skillTriggerEngine.js';
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
-import { executeSkill } from '../utils/skillExecutor.js';
 import { executeHttpRequest } from '../utils/httpExecutor.js';
 import { embed, semanticDistance } from '@workspace/opsoul-utils/ai';
 import { requireAuth } from '../middleware/requireAuth.js';
@@ -1343,40 +1341,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
       finalTokens = completionTokens;
 
-      // ── SKILL TRIGGER (post-loop, only if no web search or http_request ran) ─
-      let capabilityFired = webSearchCount > 0 || httpRequestFired;
-      if (!capabilityFired) {
-        const skillTrigger = await detectSkillTrigger(message, agencySkills, finalContent);
-        if (skillTrigger) {
-          skillTrigger.operatorId = operator.id;
-          skillTrigger.operatorOwnerId = operator.ownerId;
-          console.log(`[agency] skill triggered: ${skillTrigger.name}`);
-          res.write(`data: ${JSON.stringify({ running: skillTrigger.name })}\n\n`);
-          res.write(`data: ${JSON.stringify({ clear: true })}\n\n`);
-          const skillResult = await executeSkill(skillTrigger, chatModel);
-          if (skillResult.success) {
-            await persistSkillResult(operator.id, operator.ownerId, conv.id, skillTrigger, skillResult);
-            const skillMessages = buildSkillSecondPassMessages(messages, finalContent, skillResult.output);
-            let skillContent = '';
-            let skillTokens = 0;
-            for await (const chunk of streamChat(skillMessages, chatOpts)) {
-              if (chunk.delta) {
-                skillContent += chunk.delta;
-                res.write(`data: ${JSON.stringify({ delta: chunk.delta })}\n\n`);
-              }
-              if (chunk.done && chunk.usage) {
-                promptTokens += chunk.usage.promptTokens;
-                skillTokens = chunk.usage.completionTokens;
-              }
-            }
-            if (skillContent) {
-              finalContent = skillContent;
-              finalTokens = skillTokens;
-            }
-          }
-        }
-      }
-
       // Signal to frontend that response is complete, DB write happening
       res.write(`data: ${JSON.stringify({ processing: true })}\n\n`);
 
@@ -1568,25 +1532,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           finalContent = secondResult.content;
           finalPromptTokens = secondResult.promptTokens;
           finalCompletionTokens = secondResult.completionTokens;
-        }
-      }
-
-      // Skill trigger — only if no web search already fired
-      if (!capabilityFired) {
-        const skillTrigger = await detectSkillTrigger(message, agencySkills, result.content);
-        if (skillTrigger) {
-          skillTrigger.operatorId = operator.id;
-          skillTrigger.operatorOwnerId = operator.ownerId;
-          console.log(`[agency] skill triggered: ${skillTrigger.name}`);
-          const skillResult = await executeSkill(skillTrigger, chatModel);
-          if (skillResult.success) {
-            await persistSkillResult(operator.id, operator.ownerId, conv.id, skillTrigger, skillResult);
-            const secondMessages = buildSkillSecondPassMessages(messages, result.content, skillResult.output);
-            const secondResult = await chatCompletion(secondMessages, chatOpts);
-            finalContent = secondResult.content;
-            finalPromptTokens = secondResult.promptTokens;
-            finalCompletionTokens = secondResult.completionTokens;
-          }
         }
       }
 

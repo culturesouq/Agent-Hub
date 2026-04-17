@@ -15,9 +15,7 @@ import { searchMemory, distillMemoriesFromConversations } from '../utils/memoryE
 import type { MemoryHit } from '../utils/memoryEngine.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { buildSystemPrompt } from '../utils/systemPrompt.js';
-import { detectSkillTrigger } from '../utils/skillTriggerEngine.js';
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
-import { executeSkill } from '../utils/skillExecutor.js';
 import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import type { ChatMessage } from '../utils/openrouter.js';
 
@@ -293,26 +291,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         }
       }
 
-      let finalContent = fullContent;
-
-      // ── Skill trigger detection (after first LLM response) ──
-      const trigger = await detectSkillTrigger(message, allSkills, fullContent);
-      if (trigger) {
-        trigger.operatorId = slot.operatorId;
-        trigger.operatorOwnerId = slot.ownerId;
-        const skillResult = await executeSkill(trigger, model);
-        if (skillResult.success) {
-          const secondMessages = buildSkillSecondPassMessages(systemPrompt, messages, fullContent, skillResult.output);
-          let secondContent = '';
-          for await (const chunk of streamChat(secondMessages, model)) {
-            if (chunk.delta) {
-              secondContent += chunk.delta;
-              res.write(`data: ${JSON.stringify({ delta: chunk.delta })}\n\n`);
-            }
-          }
-          finalContent = secondContent;
-        }
-      }
+      const finalContent = fullContent;
 
       await db.insert(messagesTable).values({
         id: crypto.randomUUID(),
@@ -362,22 +341,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    let finalContent = result.content;
-
-    // ── Skill trigger detection (after first LLM response) ──
-    try {
-      const trigger = await detectSkillTrigger(message, allSkills, result.content);
-      if (trigger) {
-        trigger.operatorId = slot.operatorId;
-        trigger.operatorOwnerId = slot.ownerId;
-        const skillResult = await executeSkill(trigger, model);
-        if (skillResult.success) {
-          const secondMessages = buildSkillSecondPassMessages(systemPrompt, messages, result.content, skillResult.output);
-          const secondResult = await chatCompletion(secondMessages, model);
-          finalContent = secondResult.content;
-        }
-      }
-    } catch { /* skill path failure — return first response */ }
+    const finalContent = result.content;
 
     await db.insert(messagesTable).values({
       id: crypto.randomUUID(),
