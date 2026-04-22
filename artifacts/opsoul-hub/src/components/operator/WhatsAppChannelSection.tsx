@@ -78,6 +78,7 @@ export default function WhatsAppChannelSection({ operatorId }: { operatorId: str
           integrationLabel: phoneNumberId.trim(),
           token: accessToken.trim(),
           scopes: ["whatsapp"],
+          appSchema: { phoneNumberId: phoneNumberId.trim() },
         }),
       }),
     onSuccess: () => {

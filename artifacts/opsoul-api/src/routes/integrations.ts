@@ -36,6 +36,10 @@ const CreateIntegrationSchema = z.object({
   token: z.string().min(1).max(4000).optional(),
   scopes: z.array(z.string().max(100)).max(50).optional(),
   contextsAssigned: z.array(z.string()).max(20).optional(),
+  appSchema: z.record(z.unknown()).optional().refine(
+    (v) => !v || JSON.stringify(v).length <= 4000,
+    { message: 'appSchema too large (max 4000 chars)' }
+  ),
 });
 
 const UpdateIntegrationSchema = z.object({
@@ -78,6 +82,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     status: 'connected',
     scopeUpdatePending: false,
     contextsAssigned: parsed.data.contextsAssigned ?? [],
+    appSchema: parsed.data.appSchema ?? null,
   }).returning();
 
   res.status(201).json(safeSerialize(integration));
