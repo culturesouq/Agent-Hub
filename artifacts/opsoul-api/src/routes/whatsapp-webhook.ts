@@ -1,12 +1,14 @@
 import { Router, type Request, type Response } from 'express';
+import crypto from 'crypto';
 import { db } from '@workspace/db';
-import { operatorIntegrationsTable, operatorsTable } from '@workspace/db';
+import { operatorIntegrationsTable, operatorsTable, conversationsTable, messagesTable } from '@workspace/db';
 import { decryptToken } from '@workspace/opsoul-utils/crypto';
 import { chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import { buildSystemPrompt } from '../utils/systemPrompt.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { searchMemory, buildMemoryContext } from '../utils/memoryEngine.js';
-import { eq, and } from 'drizzle-orm';
+import { resolveScope } from '../utils/scopeResolver.js';
+import { eq, and, asc, sql } from 'drizzle-orm';
 import OpenAI, { toFile } from 'openai';
 import { embed } from '@workspace/opsoul-utils/ai';
 import type { Layer2Soul } from '../validation/operator.js';
@@ -53,6 +55,69 @@ async function downloadWhatsAppMedia(
   return { buffer: Buffer.from(buf), mimeType: meta.mime_type ?? 'audio/ogg' };
 }
 
+async function resolveOrCreateConversation(
+  operatorId: string,
+  ownerId: string,
+  scopeId: string,
+  scopeType: string,
+  contextName: string,
+): Promise<typeof conversationsTable.$inferSelect> {
+  const [existing] = await db
+    .select()
+    .from(conversationsTable)
+    .where(
+      and(
+        eq(conversationsTable.operatorId, operatorId),
+        eq(conversationsTable.scopeId, scopeId),
+      ),
+    );
+  if (existing) return existing;
+
+  try {
+    const [created] = await db
+      .insert(conversationsTable)
+      .values({
+        id: crypto.randomUUID(),
+        operatorId,
+        ownerId,
+        contextName,
+        scopeId,
+        scopeType,
+        messageCount: 0,
+      })
+      .returning();
+    if (created) return created;
+  } catch {
+    // Race: another request created the row concurrently — fall through to re-select
+  }
+
+  const [raced] = await db
+    .select()
+    .from(conversationsTable)
+    .where(
+      and(
+        eq(conversationsTable.operatorId, operatorId),
+        eq(conversationsTable.scopeId, scopeId),
+      ),
+    );
+  return raced;
+}
+
+async function buildConvHistory(convId: string): Promise<ChatMessage[]> {
+  const msgs = await db
+    .select({ role: messagesTable.role, content: messagesTable.content })
+    .from(messagesTable)
+    .where(eq(messagesTable.conversationId, convId))
+    .orderBy(asc(messagesTable.createdAt));
+
+  return msgs.filter((m) => {
+    if (m.role === 'assistant' && typeof m.content === 'string' && m.content.trimStart().startsWith('Human:')) {
+      return false;
+    }
+    return true;
+  }) as ChatMessage[];
+}
+
 router.get('/:operatorId', (req: Request, res: Response): void => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
@@ -67,7 +132,7 @@ router.get('/:operatorId', (req: Request, res: Response): void => {
 router.post('/:operatorId', async (req: Request, res: Response): Promise<void> => {
   res.sendStatus(200);
 
-  const { operatorId } = req.params;
+  const { operatorId } = req.params as { operatorId: string };
   const body = req.body as Record<string, unknown>;
 
   const entry = Array.isArray(body.entry) ? body.entry[0] as Record<string, unknown> : null;
@@ -147,6 +212,23 @@ router.post('/:operatorId', async (req: Request, res: Response): Promise<void> =
 
   if (!userMessage.trim()) return;
 
+  const scope = resolveScope({ operatorId, source: 'whatsapp', callerId: from });
+  const conv = await resolveOrCreateConversation(
+    operatorId,
+    operator.ownerId,
+    scope.scopeId,
+    scope.scopeType,
+    `whatsapp:${from}`,
+  );
+
+  await db.insert(messagesTable).values({
+    id: crypto.randomUUID(),
+    operatorId,
+    conversationId: conv.id,
+    role: 'user',
+    content: userMessage,
+  });
+
   try {
     const embedding = await embed(userMessage);
     const [hits, memHits] = await Promise.all([
@@ -174,19 +256,51 @@ router.post('/:operatorId', async (req: Request, res: Response): Promise<void> =
       { scopeLine },
     );
 
-    const messages: ChatMessage[] = [{ role: 'system', content: systemPrompt }];
-    if (memCtx) messages.push({ role: 'system', content: `[MEMORY]\n${memCtx}` });
-    messages.push({ role: 'user', content: userMessage });
+    const history = await buildConvHistory(conv.id);
+
+    const chatMessages: ChatMessage[] = [{ role: 'system', content: systemPrompt }];
+    if (memCtx) chatMessages.push({ role: 'system', content: `[MEMORY]\n${memCtx}` });
+    chatMessages.push(...history);
 
     const model = (operator.defaultModel && operator.defaultModel !== 'opsoul/auto')
       ? operator.defaultModel
       : CHAT_MODEL;
 
-    const result = await chatCompletion(messages, model);
+    const result = await chatCompletion(chatMessages, model);
+
+    await db.insert(messagesTable).values({
+      id: crypto.randomUUID(),
+      operatorId,
+      conversationId: conv.id,
+      role: 'assistant',
+      content: result.content,
+    });
+
+    await db
+      .update(conversationsTable)
+      .set({ messageCount: sql`message_count + 2`, lastMessageAt: new Date() })
+      .where(eq(conversationsTable.id, conv.id));
+
     await sendWhatsAppMessage(accessToken, phoneNumberId, from, result.content);
   } catch (err: unknown) {
     console.error('[whatsapp-webhook] reply error', err);
-    await sendWhatsAppMessage(accessToken, phoneNumberId, from, 'Sorry, I encountered an error. Please try again.');
+    const errorReply = 'Sorry, I encountered an error. Please try again.';
+    await sendWhatsAppMessage(accessToken, phoneNumberId, from, errorReply);
+    try {
+      await db.insert(messagesTable).values({
+        id: crypto.randomUUID(),
+        operatorId,
+        conversationId: conv.id,
+        role: 'assistant',
+        content: errorReply,
+      });
+      await db
+        .update(conversationsTable)
+        .set({ messageCount: sql`message_count + 2`, lastMessageAt: new Date() })
+        .where(eq(conversationsTable.id, conv.id));
+    } catch {
+      // best-effort
+    }
   }
 });
 
