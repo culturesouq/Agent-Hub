@@ -45,6 +45,7 @@ import { runInitSeed } from './utils/initSeed.js';
 import { backfillIntegrationSkills } from './utils/autoInstallIntegrationSkills.js';
 import { backfillAllAgencyCore } from './utils/seedAgencyCore.js';
 import { backfillTelegramWebhookSecrets } from './utils/backfillTelegramSecrets.js';
+import { backfillWhatsAppAppSecrets } from './utils/backfillWhatsAppSecrets.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
@@ -238,6 +239,7 @@ async function start(): Promise<void> {
   backfillIntegrationSkills().catch((err) => console.error('[autoInstall] backfill failed:', err?.message));
   backfillAllAgencyCore().catch((err) => console.error('[agency-core] backfill failed:', err?.message));
   backfillTelegramWebhookSecrets().catch((err) => console.error('[telegram-secrets] backfill failed:', err?.message));
+  backfillWhatsAppAppSecrets().catch((err) => console.error('[whatsapp-backfill] failed:', err?.message));
 
   startGrowCron();
   startMemoryCron();

@@ -157,10 +157,6 @@ router.post('/:operatorId', async (req: RequestWithRawBody, res: Response): Prom
       console.error(`[whatsapp-webhook] failed to decrypt appSecret for operator ${operatorId}`);
     }
   }
-  if (!appSecret && typeof appSchema?.appSecret === 'string') {
-    console.warn(`[whatsapp-webhook] operator ${operatorId} is using a legacy plain-text appSecret — re-save credentials to migrate to encrypted storage`);
-    appSecret = appSchema.appSecret;
-  }
   if (!appSecret) {
     console.warn(`[whatsapp-webhook] no appSecret configured for operator ${operatorId} — rejecting`);
     res.sendStatus(403);

@@ -11,6 +11,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { requireAdmin } from '../middleware/requireAdmin.js';
 import { eq, sql, and, gte, desc } from 'drizzle-orm';
 import { backfillTelegramWebhookSecrets } from '../utils/backfillTelegramSecrets.js';
+import { backfillWhatsAppAppSecrets } from '../utils/backfillWhatsAppSecrets.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -139,6 +140,17 @@ router.post('/backfill/telegram-webhook-secrets', async (_req: Request, res: Res
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[admin] backfill telegram webhook secrets failed:', err);
+    res.status(500).json({ ok: false, error: message });
+  }
+});
+
+router.post('/backfill/whatsapp-app-secrets', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await backfillWhatsAppAppSecrets();
+    res.json({ ok: true, ...result });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[admin] backfill whatsapp app secrets failed:', err);
     res.status(500).json({ ok: false, error: message });
   }
 });
