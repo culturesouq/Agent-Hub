@@ -357,7 +357,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
       recorder.start(100);
       mediaRecorderRef.current = recorder;
       setRecording(true);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("[mic] getUserMedia failed:", err);
       alert("Microphone access denied. Please allow microphone access in your browser settings.");
     }
@@ -381,11 +381,15 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
       const formData = new FormData();
       formData.append("audio", blob, `recording.${ext}`);
       const res = await authFetch("/api/transcribe", { method: "POST", body: formData });
-      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as any).error || `HTTP ${res.status}`); }
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({})) as Record<string, unknown>;
+        throw new Error(typeof e.error === 'string' ? e.error : `HTTP ${res.status}`);
+      }
       const data = await res.json();
       if (data.transcript) setInput((prev) => (prev ? `${prev} ${data.transcript}` : data.transcript));
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("[transcribe]", err);
+      alert("Transcription failed. Please try again.");
     } finally {
       setTranscribing(false);
       mediaRecorderRef.current = null;

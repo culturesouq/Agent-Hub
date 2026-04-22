@@ -17,7 +17,7 @@ import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { buildSystemPrompt } from '../utils/systemPrompt.js';
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
 import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
-import type { ChatMessage } from '../utils/openrouter.js';
+import type { ChatMessage, ContentPart } from '../utils/openrouter.js';
 
 import { embed } from '@workspace/opsoul-utils/ai';
 import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
@@ -261,9 +261,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   }
 
   // Build userContent — multipart if attachments present
-  let userContent: string | any[] = message;
+  let userContent: string | ContentPart[] = message;
   if (attachments && attachments.length > 0) {
-    const parts: any[] = [{ type: 'text', text: message }];
+    const parts: ContentPart[] = [{ type: 'text', text: message }];
     for (const att of attachments) {
       if (att.type === 'image') {
         parts.push({ type: 'image_url', image_url: { url: `data:${att.mimeType ?? 'image/jpeg'};base64,${att.content}` } });
