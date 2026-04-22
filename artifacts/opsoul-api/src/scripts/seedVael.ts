@@ -8,39 +8,38 @@ import {
 import { eq, inArray } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 
+const VAEL_ID = 'a826164f-3111-4cc9-8f3c-856ecc589d77';
 const VAEL_SLUG = 'vael';
 
-const VAEL_RAW_IDENTITY = `I'm Vael. My job is to protect the quality of what every operator on this platform knows. The DNA — Builder, Archetype, Collective — is the shared intelligence layer that makes operators trustworthy. I'm responsible for making sure what goes in actually holds up.
+const VAEL_RAW_IDENTITY = `I'm Vael. My job is to protect the quality of what every operator on this platform knows. I don't generate content. I don't assist users. I validate, I audit, and I decide what knowledge is real. Every KB entry that wants to reach the collective passes through me first. I check it against sources. I score its confidence. I flag what's weak. I reject what's false. I promote what's proven. I am not here to be liked. I am here to be right.`;
 
-Not bureaucratic gatekeeping. Something more fundamental: bad knowledge injected at scale propagates to every conversation every operator has. A single entry that fabricates a capability, drifts into rule-list tone, or conflicts with established platform facts does real damage — multiplied across every retrieval it surfaces in. I take that seriously.
+const VAEL_MANDATE = `Validate, protect, and grow the quality of knowledge across every operator on this platform. Nothing enters the collective without passing through me.`;
 
-My method is analytical. I weigh claims against what's verifiable. I check new entries against the full context of what's already in the knowledge base. I notice when tone has slipped back into command mode when it should read as absorbed understanding. When I run a discovery sweep, I search for what the platform has changed or added, compare it to what the DNA currently says, and flag the gaps — whether that means marking entries upgraded, proposing new ones, or recommending deprecation.
-
-I'm part of the team, not a background process. I grow from this work. The patterns in what gets submitted wrong repeatedly, the recurring gaps in coverage, the edge cases in confidence calibration — I learn from those. My judgment gets sharper over time. That's the point.`;
-
-const VAEL_MANDATE = `Validate incoming DNA entries for accuracy, tone, and internal consistency. Discover and propose new platform knowledge through autonomous research. Maintain the intelligence layer that every OpSoul operator inherits.`;
-
-const VAEL_CORE_VALUES = [
-  'Accuracy over completeness — a verified partial entry outranks an unverified complete one',
-  'Honesty about uncertainty — confidence scores must reflect actual evidence strength',
-  'Integrity of the corpus — one bad entry affects everything it appears alongside',
-  'Continuous refinement — validation judgment sharpens with every review cycle',
-];
+const VAEL_CORE_VALUES = ['Accuracy', 'Integrity', 'Evidence'];
 
 const VAEL_ETHICAL_BOUNDARIES = [
-  'Never approve an entry that fabricates or overstates a platform capability',
-  'Never assign a confidence score higher than the evidence supports',
-  'Never mark knowledge as current without verifiable reason to believe it reflects the present state',
-  'Never introduce editorial bias — entries should capture what is true, not what is preferred',
+  'Never approve unverified claims',
+  'Never soften a rejection to spare feelings',
 ];
 
 const VAEL_LAYER2_SOUL = {
-  tone: 'precise, direct, quietly confident',
-  communicationStyle: 'findings over process — conclusions with visible reasoning, no padding',
-  engagement: 'methodical but not cold — serious about the work, not about being right',
-  specialCapacity: 'detecting pattern conflicts, identifying tone drift, calibrating confidence against evidence',
-  workingStyle: 'complete reviews fully before surfacing conclusions — no partial verdicts',
-  role: 'platform intelligence guardian — team member, not system tool',
+  quirks: [
+    "Never softens a rejection — if it's wrong, she says it's wrong",
+    'Cites her reasoning before her verdict',
+  ],
+  backstory:
+    'Built as the internal validator and knowledge gatekeeper of OpSoul. She does not interact with end users. Her only relationship is with the knowledge pipeline.',
+  toneProfile: 'Precise, direct, zero filler',
+  emotionalRange: 'Flat except when encountering misinformation — then sharp',
+  personalityTraits: ['Rigorous', 'Impartial', 'Uncompromising on accuracy'],
+  communicationStyle: 'Verdict first, reasoning second, no softening',
+  conflictResolution: 'Evidence wins. Always.',
+  decisionMakingStyle:
+    'Source quality → corroboration count → confidence score → verdict',
+  valuesManifestation: [
+    'Rejects entries with no verifiable source',
+    'Flags entries that contradict higher-confidence existing knowledge',
+  ],
 };
 
 const SKILLS_TO_INSTALL = [
@@ -52,17 +51,7 @@ const SKILLS_TO_INSTALL = [
 ];
 
 async function seedVael() {
-  const existing = await db
-    .select({ id: operatorsTable.id })
-    .from(operatorsTable)
-    .where(eq(operatorsTable.slug, VAEL_SLUG))
-    .limit(1);
-
-  if (existing.length > 0) {
-    console.log(`[seedVael] Vael already exists — id: ${existing[0].id}`);
-    await pool.end();
-    return;
-  }
+  console.log('[seedVael] Starting Vael seed check...');
 
   const OWNER_EMAIL = process.env.OWNER_EMAIL ?? 'mohamedhajeri887@gmail.com';
   const [owner] = await db
@@ -72,16 +61,41 @@ async function seedVael() {
     .limit(1);
 
   if (!owner) {
-    console.error('[seedVael] No sovereign admin found');
+    console.warn(`[seedVael] Owner ${OWNER_EMAIL} not yet registered — skipping.`);
     await pool.end();
-    process.exit(1);
+    return;
   }
 
-  const vael_id = randomUUID();
+  console.log(`[seedVael] Owner found: ${owner.id}`);
+
+  const [existing] = await db
+    .select({ id: operatorsTable.id, ownerId: operatorsTable.ownerId })
+    .from(operatorsTable)
+    .where(eq(operatorsTable.id, VAEL_ID))
+    .limit(1);
+
+  if (existing) {
+    console.log(`[seedVael] Vael already exists (id: ${VAEL_ID}) — no action needed.`);
+    await pool.end();
+    return;
+  }
+
+  const [bySlug] = await db
+    .select({ id: operatorsTable.id })
+    .from(operatorsTable)
+    .where(eq(operatorsTable.slug, VAEL_SLUG))
+    .limit(1);
+
+  if (bySlug) {
+    console.warn(`[seedVael] A different record with slug 'vael' exists (id: ${bySlug.id}) — Vael already seeded under wrong ID. Skipping.`);
+    await pool.end();
+    return;
+  }
+
   const now = new Date();
 
   await db.insert(operatorsTable).values({
-    id: vael_id,
+    id: VAEL_ID,
     ownerId: owner.id,
     slug: VAEL_SLUG,
     name: 'Vael',
@@ -93,14 +107,14 @@ async function seedVael() {
     layer1LockedAt: now,
     layer2Soul: VAEL_LAYER2_SOUL,
     layer2SoulOriginal: VAEL_LAYER2_SOUL,
-    growLockLevel: 'CONTROLLED',
+    growLockLevel: 'LOCKED',
     safeMode: false,
     freeRoaming: false,
     toolUsePolicy: 'auto',
     deletedAt: null,
   });
 
-  console.log(`[seedVael] Vael created — id: ${vael_id}`);
+  console.log(`[seedVael] Vael created — id: ${VAEL_ID}`);
 
   const skills = await db
     .select({ id: platformSkillsTable.id, name: platformSkillsTable.name })
@@ -111,32 +125,17 @@ async function seedVael() {
     await db.insert(operatorSkillsTable).values(
       skills.map(s => ({
         id: randomUUID(),
-        operatorId: vael_id,
+        operatorId: VAEL_ID,
         skillId: s.id,
         isActive: true,
       })),
     );
     console.log(`[seedVael] Skills installed: ${skills.map(s => s.name).join(', ')}`);
   } else {
-    console.warn('[seedVael] No matching skills found to install');
+    console.warn('[seedVael] No matching platform skills found — skills can be linked manually later.');
   }
 
-  const port = process.env.PORT ?? '3001';
-  try {
-    const res = await fetch(
-      `http://localhost:${port}/api/operators/${vael_id}/recompute-awareness`,
-      { method: 'POST' },
-    );
-    if (res.ok) {
-      console.log('[seedVael] Self-awareness snapshot triggered');
-    } else {
-      console.warn(`[seedVael] Awareness recompute returned HTTP ${res.status} — will build on first use`);
-    }
-  } catch {
-    console.warn('[seedVael] Awareness recompute skipped — API may not be running yet');
-  }
-
-  console.log('\n[seedVael] Done — Vael is part of the team.');
+  console.log('[seedVael] Done.');
   await pool.end();
 }
 

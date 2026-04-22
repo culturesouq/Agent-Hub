@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "fuser -k 3001/tcp 2>/dev/null; sleep 0.5; tsx watch src/index.ts",
-    "start": "tsx src/index.ts",
+    "start": "tsx src/scripts/seedVael.ts; tsx src/index.ts",
     "test:longrun": "tsx src/scripts/longRunTest.ts",
     "backfill:telegram-secrets": "tsx src/scripts/runBackfillTelegramSecrets.ts"
   },
