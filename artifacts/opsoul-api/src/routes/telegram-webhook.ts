@@ -106,17 +106,7 @@ async function buildConvHistory(convId: string): Promise<ChatMessage[]> {
 }
 
 router.post('/:operatorId', async (req: Request, res: Response): Promise<void> => {
-  res.sendStatus(200);
-
-  const { operatorId } = req.params as { operatorId: string };
-  const update = req.body as Record<string, unknown>;
-  const message = (update.message ?? update.edited_message) as Record<string, unknown> | undefined;
-  if (!message) return;
-
-  const chatId = message.chat && typeof (message.chat as Record<string, unknown>).id === 'number'
-    ? (message.chat as Record<string, unknown>).id as number
-    : null;
-  if (!chatId) return;
+  const { operatorId } = req.params;
 
   const [integration] = await db
     .select()
@@ -127,7 +117,36 @@ router.post('/:operatorId', async (req: Request, res: Response): Promise<void> =
         eq(operatorIntegrationsTable.integrationType, 'telegram'),
       ),
     );
-  if (!integration?.tokenEncrypted) return;
+  if (!integration?.tokenEncrypted) {
+    res.sendStatus(200);
+    return;
+  }
+
+  const appSchema = integration.appSchema as Record<string, unknown> | null;
+  const storedSecret = typeof appSchema?.webhookSecretToken === 'string' ? appSchema.webhookSecretToken : null;
+  if (!storedSecret) {
+    console.warn(`[telegram-webhook] no webhookSecretToken configured for operator ${operatorId} — rejecting`);
+    res.sendStatus(403);
+    return;
+  }
+
+  const incoming = req.headers['x-telegram-bot-api-secret-token'];
+  if (incoming !== storedSecret) {
+    console.warn(`[telegram-webhook] secret token mismatch for operator ${operatorId}`);
+    res.sendStatus(403);
+    return;
+  }
+
+  res.sendStatus(200);
+
+  const update = req.body as Record<string, unknown>;
+  const message = (update.message ?? update.edited_message) as Record<string, unknown> | undefined;
+  if (!message) return;
+
+  const chatId = message.chat && typeof (message.chat as Record<string, unknown>).id === 'number'
+    ? (message.chat as Record<string, unknown>).id as number
+    : null;
+  if (!chatId) return;
 
   const botToken = decryptToken(integration.tokenEncrypted);
 

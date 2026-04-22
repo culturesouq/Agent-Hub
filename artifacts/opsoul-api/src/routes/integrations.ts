@@ -93,12 +93,22 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     } else {
       const botToken = decryptToken(tokenEncrypted);
       const webhookUrl = `${process.env.API_BASE_URL}/webhooks/telegram/${operatorId}`;
+      const webhookSecretToken = crypto.randomBytes(32).toString('hex');
       fetch(`https://api.telegram.org/bot${botToken}/setWebhook`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: webhookUrl }),
-      }).then(r => r.json()).then((data: unknown) => {
+        body: JSON.stringify({ url: webhookUrl, secret_token: webhookSecretToken }),
+      }).then(r => r.json()).then(async (data: unknown) => {
+        const result = data as { ok?: boolean };
+        if (!result.ok) {
+          console.error(`[integrations] Telegram setWebhook failed for operator ${operatorId}:`, data);
+          return;
+        }
         console.log(`[integrations] Telegram webhook set for operator ${operatorId}:`, data);
+        const existing = integration.appSchema as Record<string, unknown> | null;
+        await db.update(operatorIntegrationsTable)
+          .set({ appSchema: { ...(existing ?? {}), webhookSecretToken } })
+          .where(eq(operatorIntegrationsTable.id, integration.id));
       }).catch((err: unknown) => {
         console.error(`[integrations] Telegram webhook registration failed for operator ${operatorId}:`, err);
       });
@@ -272,12 +282,22 @@ router.patch('/:integrationId', async (req: Request, res: Response): Promise<voi
     } else {
       const botToken = decryptToken(updated.tokenEncrypted);
       const webhookUrl = `${process.env.API_BASE_URL}/webhooks/telegram/${operatorId}`;
+      const webhookSecretToken = crypto.randomBytes(32).toString('hex');
       fetch(`https://api.telegram.org/bot${botToken}/setWebhook`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: webhookUrl }),
-      }).then(r => r.json()).then((data: unknown) => {
+        body: JSON.stringify({ url: webhookUrl, secret_token: webhookSecretToken }),
+      }).then(r => r.json()).then(async (data: unknown) => {
+        const result = data as { ok?: boolean };
+        if (!result.ok) {
+          console.error(`[integrations] Telegram setWebhook re-registration failed for operator ${operatorId}:`, data);
+          return;
+        }
         console.log(`[integrations] Telegram webhook re-registered for operator ${operatorId}:`, data);
+        const existing = updated.appSchema as Record<string, unknown> | null;
+        await db.update(operatorIntegrationsTable)
+          .set({ appSchema: { ...(existing ?? {}), webhookSecretToken } })
+          .where(eq(operatorIntegrationsTable.id, updated.id));
       }).catch((err: unknown) => {
         console.error(`[integrations] Telegram webhook re-registration failed for operator ${operatorId}:`, err);
       });

@@ -48,7 +48,12 @@ import { backfillAllAgencyCore } from './utils/seedAgencyCore.js';
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
 
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({
+  limit: '10mb',
+  verify: (req: express.Request & { rawBody?: Buffer }, _res, buf) => {
+    req.rawBody = buf;
+  },
+}));
 app.use(cookieParser());
 
 // --- CORS strict allowlist ---
@@ -105,6 +110,18 @@ const publicLimiter = rateLimit({
   },
 });
 
+const webhookLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later' },
+  handler: (req, res, _next, options) => {
+    console.warn(`[rate-limit] webhook: ${req.ip} exceeded 60 req/min`);
+    res.status(429).json(options.message);
+  },
+});
+
 app.use('/api/auth', authLimiter, authRouter);
 app.use('/api/operators', operatorsRouter);
 app.use('/api/operators/:operatorId/owner-kb', ownerKbRouter);
@@ -129,8 +146,8 @@ app.use('/api/operators/:operatorId/secrets', operatorSecretsRouter);
 app.use('/api/operators/:operatorId/slots', deploymentSlotsRouter);
 app.use('/v1/chat', publicLimiter, publicChatRouter);
 app.use('/v1/action', publicLimiter, publicCrudRouter);
-app.use('/webhooks/telegram', telegramWebhookRouter);
-app.use('/webhooks/whatsapp', whatsappWebhookRouter);
+app.use('/webhooks/telegram', webhookLimiter, telegramWebhookRouter);
+app.use('/webhooks/whatsapp', webhookLimiter, whatsappWebhookRouter);
 
 app.get('/api/healthz', (_req, res) => {
   // Fire a non-blocking DB ping to keep the Neon endpoint warm.

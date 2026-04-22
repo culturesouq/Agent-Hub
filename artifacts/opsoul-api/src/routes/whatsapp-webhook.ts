@@ -14,6 +14,8 @@ import { embed } from '@workspace/opsoul-utils/ai';
 import type { Layer2Soul } from '../validation/operator.js';
 import type { ChatMessage } from '../utils/openrouter.js';
 
+type RequestWithRawBody = Request & { rawBody?: Buffer };
+
 const router = Router();
 
 const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN ?? 'opsoul_verify_2026';
@@ -129,10 +131,54 @@ router.get('/:operatorId', (req: Request, res: Response): void => {
   }
 });
 
-router.post('/:operatorId', async (req: Request, res: Response): Promise<void> => {
+router.post('/:operatorId', async (req: RequestWithRawBody, res: Response): Promise<void> => {
+  const { operatorId } = req.params;
+
+  const [integration] = await db
+    .select()
+    .from(operatorIntegrationsTable)
+    .where(
+      and(
+        eq(operatorIntegrationsTable.operatorId, operatorId),
+        eq(operatorIntegrationsTable.integrationType, 'whatsapp'),
+      ),
+    );
+  if (!integration?.tokenEncrypted) {
+    res.sendStatus(200);
+    return;
+  }
+
+  const appSchema = integration.appSchema as Record<string, unknown> | null;
+  const appSecret = typeof appSchema?.appSecret === 'string' ? appSchema.appSecret : null;
+  if (!appSecret) {
+    console.warn(`[whatsapp-webhook] no appSecret configured for operator ${operatorId} — rejecting`);
+    res.sendStatus(403);
+    return;
+  }
+
+  const sigHeader = req.headers['x-hub-signature-256'];
+  if (typeof sigHeader !== 'string' || !sigHeader.startsWith('sha256=')) {
+    console.warn(`[whatsapp-webhook] missing HMAC signature for operator ${operatorId}`);
+    res.sendStatus(403);
+    return;
+  }
+  const rawBody = req.rawBody;
+  if (!rawBody) {
+    console.warn(`[whatsapp-webhook] raw body unavailable for HMAC check on operator ${operatorId}`);
+    res.sendStatus(400);
+    return;
+  }
+  const expected = 'sha256=' + crypto.createHmac('sha256', appSecret).update(rawBody).digest('hex');
+  const sigBuf = Buffer.from(sigHeader);
+  const expBuf = Buffer.from(expected);
+  if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+    console.warn(`[whatsapp-webhook] HMAC mismatch for operator ${operatorId}`);
+    res.sendStatus(403);
+    return;
+  }
+
   res.sendStatus(200);
 
-  const { operatorId } = req.params as { operatorId: string };
   const body = req.body as Record<string, unknown>;
 
   const entry = Array.isArray(body.entry) ? body.entry[0] as Record<string, unknown> : null;
@@ -149,20 +195,8 @@ router.post('/:operatorId', async (req: Request, res: Response): Promise<void> =
   const from = typeof msg.from === 'string' ? msg.from : null;
   if (!from) return;
 
-  const [integration] = await db
-    .select()
-    .from(operatorIntegrationsTable)
-    .where(
-      and(
-        eq(operatorIntegrationsTable.operatorId, operatorId),
-        eq(operatorIntegrationsTable.integrationType, 'whatsapp'),
-      ),
-    );
-  if (!integration?.tokenEncrypted) return;
-
   const accessToken = decryptToken(integration.tokenEncrypted);
 
-  const appSchema = integration.appSchema as Record<string, unknown> | null;
   const phoneNumberId = typeof appSchema?.phoneNumberId === 'string' ? appSchema.phoneNumberId : null;
   if (!phoneNumberId) {
     console.error('[whatsapp-webhook] phoneNumberId missing from appSchema for operator', operatorId);
