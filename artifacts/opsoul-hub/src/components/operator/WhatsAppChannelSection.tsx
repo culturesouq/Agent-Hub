@@ -66,6 +66,7 @@ export default function WhatsAppChannelSection({ operatorId }: { operatorId: str
   const [appSecret, setAppSecret] = useState("");
   const [newAppSecret, setNewAppSecret] = useState("");
   const [showSecretForm, setShowSecretForm] = useState(false);
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
 
   const { data: integrations = [], isLoading } = useQuery({
     queryKey: ["operators", operatorId, "integrations"],
@@ -130,6 +131,7 @@ export default function WhatsAppChannelSection({ operatorId }: { operatorId: str
       queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "integrations"] });
       toast({ title: "App Secret removed", description: "Webhook HMAC validation has been disabled." });
       setShowSecretForm(false);
+      setShowRemoveConfirm(false);
     },
     onError: (err: Error) =>
       toast({ title: "Failed to remove App Secret", description: err.message, variant: "destructive" }),
@@ -220,14 +222,10 @@ export default function WhatsAppChannelSection({ operatorId }: { operatorId: str
                   size="sm"
                   variant="ghost"
                   className="font-mono text-[11px] text-muted-foreground hover:text-destructive"
-                  onClick={() => removeSecret.mutate()}
-                  disabled={removeSecret.isPending}
+                  onClick={() => setShowRemoveConfirm(true)}
+                  disabled={showRemoveConfirm}
                 >
-                  {removeSecret.isPending ? (
-                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                  ) : (
-                    <X className="w-3 h-3 mr-1" />
-                  )}
+                  <X className="w-3 h-3 mr-1" />
                   Remove Secret
                 </Button>
               </div>
@@ -250,6 +248,46 @@ export default function WhatsAppChannelSection({ operatorId }: { operatorId: str
                 <KeyRound className="w-3 h-3 mr-1" />
                 Add Secret
               </Button>
+            </div>
+          )}
+
+          {/* Remove secret confirmation */}
+          {showRemoveConfirm && (
+            <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-4 space-y-3">
+              <div className="flex items-start gap-2">
+                <ShieldAlert className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-mono text-xs font-semibold text-destructive">Remove App Secret?</p>
+                  <p className="font-mono text-[11px] text-muted-foreground mt-1">
+                    This will disable HMAC signature validation. Your webhook will no longer verify that messages come from Meta — anyone with your webhook URL could send spoofed messages.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 justify-end">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="font-mono text-xs"
+                  onClick={() => setShowRemoveConfirm(false)}
+                  disabled={removeSecret.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  className="font-mono text-xs"
+                  onClick={() => removeSecret.mutate()}
+                  disabled={removeSecret.isPending}
+                >
+                  {removeSecret.isPending ? (
+                    <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
+                  ) : (
+                    <X className="w-3 h-3 mr-1.5" />
+                  )}
+                  Yes, remove secret
+                </Button>
+              </div>
             </div>
           )}
 
