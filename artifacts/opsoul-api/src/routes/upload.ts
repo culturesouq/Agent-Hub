@@ -58,7 +58,9 @@ router.post('/', upload.single('file'), async (req: Request, res: Response): Pro
     // PDF — extract text via pdf-parse
     if (mimetype === 'application/pdf') {
       const pdfModule = await import('pdf-parse');
-      const pdfParse = (pdfModule as any).default ?? pdfModule;
+      const raw = (pdfModule as any).default ?? pdfModule;
+      const pdfParse: (buf: Buffer) => Promise<{ text: string }> =
+        typeof raw === 'function' ? raw : (raw as any).default;
       const data = await pdfParse(buffer);
       const content = data.text.slice(0, 12000);
       res.json({ type: 'text', content, name: originalname });
