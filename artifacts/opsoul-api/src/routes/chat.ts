@@ -104,7 +104,7 @@ Provide: filename (with extension) and content (text, JSON, CSV, Markdown, etc.)
 Result: file saved and available in the file list.
 Use for: reports, exports, structured output, KB research findings, autonomous work logs.
 When working autonomously (owner offline): always write a summary file of what you did and found.
-Long responses: structure with direct answer first, then reasoning, then next steps. Use headers only for 3+ distinct sections. Use bullets for 3+ list items. Never use headers in casual conversation.`,
+CRITICAL: When you say you will create or write a file, you MUST call write_file immediately. Never describe file content in text. Never say "I created the file" without calling the tool. If you do not call write_file, the file does not exist — the owner cannot see it, download it, or use it. Text narration is not a file.`,
 
   kb_seed: `Add verified knowledge to your own knowledge base.
 Provide: content (300–500 words max per entry), source (URL or document title), confidence (0.0–1.0).
@@ -1161,7 +1161,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     type: 'function',
     function: {
       name: 'write_file',
-      description: 'Create or update a file in your workspace. Use when creating a document, report, notes, or to-do list would genuinely help the owner. Owner sees and downloads files from the Files tab.',
+      description: 'Create or update a file in your workspace. CRITICAL RULE: whenever you decide to create or write a file, you MUST call this tool — never describe the file content as text, never say "I created a file", never narrate it. The tool call IS the file creation. If you do not call this tool, the file does not exist and the owner cannot see it. Owner sees and downloads files from the Files tab.',
       parameters: {
         type: 'object',
         properties: {
