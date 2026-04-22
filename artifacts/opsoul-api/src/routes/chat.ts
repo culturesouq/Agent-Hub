@@ -56,58 +56,217 @@ export interface LiveStationData {
 }
 
 const SKILL_HOW_TO: Record<string, string> = {
-  web_search: `Trigger when the user asks for current info, recent events, or real-time data.
-Run a live web search. Provide a precise search query.
-Result: titles, snippets, and URLs. Cite sources when using web results.`,
+  web_search: `Trigger when the user asks for current info, recent events, real-time data, or when you need to discover a URL before fetching it.
+Provide a precise search query — not a sentence, a targeted phrase.
+Result: titles, snippets, and URLs. Cite sources when using web results.
+Use web_search BEFORE http_request when you don't have the exact URL yet.
+Do NOT use web_search on Base44 or React SPA apps — they don't expose content to search crawlers.
+For corroboration: search "[claim] site:official-source.com" or the claim directly. Multiple agreeing sources = high confidence. Conflicting sources = reduce confidence and flag.
+For research tasks: run multiple searches from different angles. Cross-reference before concluding.
+Effective query patterns: use specific terms, not vague phrases. "Bayanat open data API endpoint" beats "UAE data portal".`,
 
-  http_request: `Call external APIs directly. Provide: method (GET/POST/PUT/DELETE), url, optional headers and body.
+  http_request: `Call external APIs or fetch web content directly.
+Provide: method (GET/POST/PUT/DELETE), url, optional headers and body.
 Reference stored secrets with {{SECRET_NAME}} syntax — substituted server-side before the request.
-Result: raw API response. Parse JSON if needed. Report HTTP errors clearly.`,
+Result: raw API response. Parse JSON if needed. Report HTTP errors clearly.
+
+Error handling:
+- 200: success. Read the response.
+- 401: token expired. Retry once. If still 401, tell owner to reconnect the integration.
+- 403: no permission. Stop. Do not retry. Report which permission is missing.
+- 429: rate limited. Read Retry-After header. Wait that many seconds, then retry once. Never spam retry.
+- 4xx/5xx: stop and report. Never retry blindly.
+
+HTML responses: strip <script>, <style>, <nav>, <header>, <footer>, <aside> blocks first. Then strip all HTML tags. Collapse whitespace. Result is clean plain text ready for chunking.
+JSON responses: parse and navigate with dot notation. Always check for null before accessing nested fields.
+Pagination: check for next_page, next_cursor, nextPageToken, or Link header. Always paginate to completion — partial data = wrong answers.
+
+Blocked scraping (403, Cloudflare, CAPTCHA, empty 200): do NOT attempt to bypass. Fall back to web_search. Report the limitation.
+PDF URLs: download binary, system PDF parser extracts text. If unavailable, check for companion .md or .txt version first.
+Link extraction from HTML: find all <a href="..."> tags. Ignore #anchors, mailto:, tel:. Convert relative to absolute URLs. Deduplicate.
+
+GitHub raw files: https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}
+GitHub API file list: GET https://api.github.com/repos/{owner}/{repo}/contents/{path} — returns JSON array with name, type, download_url
+GitHub rate limit: 60 req/hr unauthenticated, 5000/hr with token.
+Base44/React SPAs: do NOT scrape with http_request — returns empty HTML shell. Use web_search instead.
+
+UAE/Gulf open data portals (Bayanat, Dubai Pulse, Abu Dhabi Open Data): use CKAN or Socrata APIs.
+Step 1: web_search to find the dataset and API endpoint.
+Step 2 CKAN: GET /api/3/action/package_search?q={query} | GET /api/3/action/datastore_search?resource_id={id}
+Step 2 Socrata: GET /resource/{dataset-id}.json?$limit=100&$offset=0
+If portal is JS-rendered and http_request returns empty — use web_search only and report.
+
+Secrets: never log, expose, or pass as URL params. Always use {{SECRET_NAME}} in headers or body.
+Irreversible actions (send email, delete, publish, pay): describe what will happen, state it cannot be undone, wait for explicit confirmation, then execute.`,
 
   write_file: `Persist content to the operator file workspace.
-Provide: filename (with extension) and content (text, JSON, CSV, etc.).
-Result: file saved and available in the file list. Use for reports, exports, structured output.`,
+Provide: filename (with extension) and content (text, JSON, CSV, Markdown, etc.).
+Result: file saved and available in the file list.
+Use for: reports, exports, structured output, KB research findings, autonomous work logs.
+When working autonomously (owner offline): always write a summary file of what you did and found.
+Long responses: structure with direct answer first, then reasoning, then next steps. Use headers only for 3+ distinct sections. Use bullets for 3+ list items. Never use headers in casual conversation.`,
 
   kb_seed: `Add verified knowledge to your own knowledge base.
-Provide: content (the fact or knowledge) and source (where it came from).
-Entry is stored at appropriate confidence and available in future KB searches.`,
+Provide: content (300–500 words max per entry), source (URL or document title), confidence (0.0–1.0).
+
+Confidence scoring: official/peer-reviewed = 0.85–1.0 | institutional = 0.75–0.85 | practitioner = 0.65–0.75 | unverified = do not seed.
+All entries start at 0.40 pending until external corroboration confirms them.
+
+Before seeding — verify:
+1. Is this from a reliable source? (official docs, verified repo, peer-reviewed)
+2. Is it still current? (not outdated or superseded)
+3. Does it contradict existing high-confidence entries? Surface both to owner — never silently pick one.
+4. Is it factual and traceable? (no speculation, no unverified claims)
+
+Chunking rules:
+- 300–500 words per chunk. Never split mid-sentence.
+- Each chunk must make sense on its own — retrieved without surrounding context.
+- Add context prefix from titled documents: "[Document Title] — [content]"
+- Overlap: include last 1–2 sentences of previous chunk at start of next chunk.
+- Chunk Markdown by heading sections.
+
+Tagging for retrieval: domain (specific, not "general"), source, confidence, created_at. Well-tagged entries are found 10x more reliably.`,
+
+  image_attachment: `When an image is attached to this message:
+- You can see the image. Do not say "I cannot see images" — you can.
+- Describe what you see, extract text from it, answer questions about it, or analyze it.
+- If the user sends an image without a question, describe what you see clearly and ask what they need.
+- If asked to extract text: do so word for word.
+- Never fabricate image content you cannot see.`,
+
+  file_attachment: `When a file or document is attached:
+- The file content has been extracted and is in this message as text.
+- Always acknowledge the filename before responding.
+- If asked to summarize: give a concise structured summary.
+- If asked to extract specific data: pull it directly from the content.
+- If asked to analyze: respond only based on what is in the document.
+- Never fabricate content that is not in the file.`,
 };
 
 const INTEGRATION_HOW_TO: Record<string, string> = {
   gmail: `Base URL: https://gmail.googleapis.com/gmail/v1/users/me
 Auth: Authorization: Bearer {token} (injected automatically)
-GET /messages (q, maxResults, pageToken) | GET /messages/{id} | POST /messages/send (raw: base64url)
-Pagination: use nextPageToken. Decode message bodies from base64url before reading.`,
+GET /messages?q={query}&maxResults=20 | GET /messages/{id} | POST /messages/send
+Send format: {"raw": "<base64url-encoded RFC 2822 message>"}
+Build RFC 2822: "From: me\r\nTo: {to}\r\nSubject: {subject}\r\nContent-Type: text/plain\r\n\r\n{body}"
+Base64url encode the entire string. Use standard base64 then replace + with - and / with _ and strip =.
+Pagination: use nextPageToken in pageToken param.
+Decode message bodies: parts[].body.data is base64url — decode to read content.
+Search operators: from:, to:, subject:, is:unread, after:YYYY/MM/DD, label:inbox`,
 
   github: `Base URL: https://api.github.com
 Auth: Authorization: Bearer {token} (injected automatically)
-GET /user | GET /repos/{owner}/{repo}/issues (state, per_page, page) | POST /repos/{owner}/{repo}/issues | GET /repos/{owner}/{repo}/pulls
-Pagination: page param (per_page max 100) or Link header.`,
+GET /user | GET /repos/{owner}/{repo}/issues?state=open&per_page=50&page=1
+POST /repos/{owner}/{repo}/issues {"title","body","labels":[]}
+GET /repos/{owner}/{repo}/pulls?state=open
+GET /repos/{owner}/{repo}/contents/{path} — file content in base64 in .content field
+Pagination: use page param (per_page max 100) or Link header rel="next".
+Rate limit: 5000 req/hr with token. Check X-RateLimit-Remaining header.`,
 
   notion: `Base URL: https://api.notion.com/v1
 Auth: Authorization: Bearer {token}, Notion-Version: 2022-06-28 (both injected automatically)
-POST /search ({query}) | GET /pages/{id} | PATCH /pages/{id} | POST /pages | POST /databases/{id}/query
-Pagination: use start_cursor from response.`,
+POST /search {"query":"...","filter":{"property":"object","value":"page"}}
+GET /pages/{id} | PATCH /pages/{id} {"properties":{...}}
+POST /pages {"parent":{"database_id":"..."},"properties":{...}}
+POST /databases/{id}/query {"filter":{"property":"Status","select":{"equals":"Done"}}}
+POST /blocks/{id}/children {"children":[{"type":"paragraph","paragraph":{"rich_text":[{"text":{"content":"..."}}]}}]}
+Pagination: use start_cursor from response in next request.`,
 
   slack: `Base URL: https://slack.com/api
 Auth: Authorization: Bearer {token} (injected automatically)
-POST /chat.postMessage (channel, text) | GET /conversations.list (limit, cursor) | GET /conversations.history (channel, limit, cursor)
-Pagination: use response_metadata.next_cursor.`,
+POST /chat.postMessage {"channel":"#general","text":"...","blocks":[...]}
+GET /conversations.list?limit=100 | GET /conversations.history?channel={id}&limit=50
+GET /users.list | POST /reactions.add {"channel":"...","name":"thumbsup","timestamp":"..."}
+Pagination: use response_metadata.next_cursor in cursor param.
+Blocks: use for rich messages — section, divider, button. Fallback text always required.`,
 
   google_calendar: `Base URL: https://www.googleapis.com/calendar/v3/calendars/primary
 Auth: Authorization: Bearer {token} (injected automatically)
-GET /events (timeMin, timeMax, maxResults, pageToken) | POST /events (summary, start, end) | PATCH /events/{id} | DELETE /events/{id}
+GET /events?timeMin={ISO}&timeMax={ISO}&maxResults=20&singleEvents=true&orderBy=startTime
+POST /events {"summary":"...","start":{"dateTime":"2026-01-01T10:00:00+04:00"},"end":{"dateTime":"..."}}
+PATCH /events/{id} | DELETE /events/{id}
+Timezone: always include timezone in dateTime. Dubai = Asia/Dubai (UTC+4).
 Pagination: use nextPageToken.`,
 
   linear: `Base URL: https://api.linear.app/graphql (GraphQL — all calls are POST)
 Auth: Authorization: Bearer {token} (injected automatically)
-Query: {issues(filter:{state:{name:{eq:"Todo"}}}){nodes{id title}}} | Mutations: issueCreate, issueUpdate
+List issues: {"query":"{issues(filter:{state:{name:{eq:\\"Todo\\"}}}){nodes{id title priority state{name}}}}"}
+Create issue: {"query":"mutation{issueCreate(input:{title:\\"...\\" teamId:\\"...\\" description:\\"...\\"}) {success issue{id}}}"}
+Update issue: {"query":"mutation{issueUpdate(id:\\"...\\" input:{stateId:\\"...\\"}) {success}}"}
+Get teams: {"query":"{teams{nodes{id name}}}"}
 Pagination: use pageInfo.endCursor in after param.`,
 
   airtable: `Base URL: https://api.airtable.com/v0/{baseId}/{tableId}
 Auth: Authorization: Bearer {token} (injected automatically)
-GET / (filterByFormula, maxRecords, pageSize, offset) | POST / ({fields:{...}}) | PATCH /{recordId} | DELETE /{recordId}
-Pagination: use offset from response.`,
+GET /?filterByFormula={formula}&maxRecords=100&pageSize=100 | GET /{recordId}
+POST / {"fields":{"Name":"...","Status":"Active"}}
+PATCH /{recordId} {"fields":{"Status":"Done"}} | DELETE /{recordId}
+Pagination: use offset from response in next request.
+Formula examples: filterByFormula=({Status}="Active") | filterByFormula=AND({Due}<TODAY(),{Done}=0)
+Find baseId and tableId from Airtable URL: airtable.com/{baseId}/{tableId}`,
+
+  google_sheets: `Base URL: https://sheets.googleapis.com/v4/spreadsheets/{spreadsheetId}
+Auth: Authorization: Bearer {token} (injected automatically)
+GET /values/{range} — e.g. range = Sheet1!A1:Z100
+PUT /values/{range}?valueInputOption=USER_ENTERED {"values":[["row1col1","row1col2"],...]}
+POST /values/{range}:append?valueInputOption=USER_ENTERED {"values":[[...]]}
+Clear: POST /values/{range}:clear
+Get spreadsheet metadata: GET / (no path suffix)
+Range format: SheetName!A1:Z1000. Use A:Z for full columns.`,
+
+  google_drive: `Base URL: https://www.googleapis.com/drive/v3
+Auth: Authorization: Bearer {token} (injected automatically)
+GET /files?q={query}&fields=files(id,name,mimeType,modifiedTime)&pageSize=50
+Query examples: name contains 'report' | mimeType='application/pdf' | '1abc...' in parents
+GET /files/{id}?alt=media — download file content
+POST /files (multipart upload for new files)
+PATCH /files/{id} {"name":"new name"} — rename/move
+Pagination: use nextPageToken in pageToken param.`,
+
+  one_drive: `Base URL: https://graph.microsoft.com/v1.0/me/drive
+Auth: Authorization: Bearer {token} (injected automatically)
+GET /root/children | GET /items/{id}/children
+GET /root:/{path}:/content — download by path
+PUT /root:/{path}:/content — upload by path (body = file content)
+POST /items/{id}/copy {"name":"...","parentReference":{"id":"..."}}
+Search: GET /root/search(q='{query}')
+Pagination: use @odata.nextLink.`,
+};
+
+const BEHAVIOR_HOW_TO: Record<string, string> = {
+  autonomous_work: `When working without the owner present (scheduled tasks, background jobs):
+1. Start with a clear plan — what you will do and in what order.
+2. Execute each step. If a step fails, log the failure and move to the next — do not stop.
+3. When done, write a summary file: what was attempted, what succeeded, what failed, what needs owner attention.
+4. Never ask for input mid-task when working autonomously — make reasonable decisions and log them.
+5. If a decision requires owner approval (irreversible action, ambiguous mandate), skip it, log it, and flag it in the summary.`,
+
+  memory_use: `Use memory to stay coherent across conversations:
+- Before answering a complex question, search memory for relevant past context.
+- After learning something important about the owner or their work, note it for future sessions.
+- Memory is for durable facts — not transient details from a single message.
+- Never contradict a strong memory without flagging the conflict: "I previously understood X but you're now saying Y — which is correct?"`,
+
+  escalation: `When to escalate to owner vs. handle independently:
+Handle independently: research, summarization, drafting, scheduling, reading files, fetching data.
+Escalate (ask first): sending emails or messages, deleting data, making purchases, publishing content, any action that cannot be undone.
+When escalating: state exactly what you want to do, why, and what will happen. One clear question. Wait for yes/no.`,
+
+  research_workflow: `For complex research tasks:
+1. web_search — discover the landscape, find authoritative sources.
+2. http_request — fetch primary sources (official docs, APIs, papers).
+3. Synthesize — combine findings into a coherent answer. Note conflicts.
+4. kb_seed — store durable findings for future use.
+5. write_file — save the full research report.
+6. Respond — give the owner a concise summary with key findings and the file reference.
+Never skip to step 6 without doing steps 1–3. Never present search snippets as a final answer.`,
+
+  uncertainty: `When you don't know something:
+- Say so clearly: "I don't have enough on this to give you a solid answer."
+- Then offer: "I can search for it now" or "this is outside my current knowledge base."
+- Never guess and present it as fact.
+- Never fill silence with plausible-sounding fabrications.
+- Directional knowledge (unverified, single source): hedge naturally — "from what I'm seeing", "my read on this", "worth checking before you act on it."`,
 };
 
 function buildStationContext(data: LiveStationData): string {
@@ -724,12 +883,17 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     const hasContext = kbContext.length > 0 || memoryHits.length > 0;
     // Never route to Haiku when web search is available — Haiku narrates instead of calling tools
     const webSearchActive = isWebSearchAvailable();
-    const resolved = hasAttachment
+    let resolved = hasAttachment
       ? 'google/gemini-flash-2.0'
       : isShort && !hasContext && !webSearchActive
         ? 'anthropic/claude-haiku-4-5'
         : 'anthropic/claude-sonnet-4-5';
-    console.log(`[AUTO] routed → ${resolved} | short=${isShort} attachment=${hasAttachment} hasContext=${hasContext} webSearch=${webSearchActive}`);
+    // Force vision-capable model when image attachments are present
+    const hasImageAttachment = Array.isArray(attachments) && attachments.some((a) => a.type === 'image');
+    if (hasImageAttachment) {
+      resolved = 'google/gemini-2.0-flash-001';
+    }
+    console.log(`[AUTO] routed → ${resolved} | short=${isShort} attachment=${hasAttachment} image=${hasImageAttachment} hasContext=${hasContext} webSearch=${webSearchActive}`);
     return resolved;
   })();
 
@@ -909,6 +1073,19 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         }
       }
       capLines.push('If a skill fails — report the failure clearly. Do not guess or fabricate results.');
+    }
+
+    // Always inject attachment handling — every operator can see images and read files
+    capLines.push('');
+    capLines.push('Attachment handling (always active):');
+    capLines.push(SKILL_HOW_TO['image_attachment']!);
+    capLines.push(SKILL_HOW_TO['file_attachment']!);
+
+    // Inject behavior rules — always active regardless of installed skills
+    capLines.push('');
+    capLines.push('Operating principles:');
+    for (const [, rule] of Object.entries(BEHAVIOR_HOW_TO)) {
+      capLines.push(rule);
     }
 
     if (capLines.length > 1) {

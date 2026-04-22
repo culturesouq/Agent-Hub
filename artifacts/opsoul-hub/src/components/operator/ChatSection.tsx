@@ -293,19 +293,36 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     }
   }, [convosLoading, convosArray.length, createConv.isPending, activeConvId]);
 
+  const authFetch = async (url: string, init: RequestInit): Promise<Response> => {
+    let token = localStorage.getItem("opsoul_token");
+    const res = await fetch(url, {
+      ...init,
+      headers: { ...(init.headers ?? {}), Authorization: `Bearer ${token}` },
+    });
+    if (res.status === 401) {
+      const refreshRes = await fetch("/api/auth/refresh", { method: "POST", credentials: "include" });
+      if (refreshRes.ok) {
+        const { accessToken } = await refreshRes.json();
+        localStorage.setItem("opsoul_token", accessToken);
+        token = accessToken;
+        return fetch(url, {
+          ...init,
+          headers: { ...(init.headers ?? {}), Authorization: `Bearer ${token}` },
+        });
+      }
+      window.dispatchEvent(new Event("auth-unauthorized"));
+    }
+    return res;
+  };
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
     try {
-      const token = localStorage.getItem("opsoul_token");
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
+      const res = await authFetch("/api/upload", { method: "POST", body: formData });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       const att: Attachment = {
@@ -318,6 +335,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
       setAttachments((prev) => [...prev, att]);
     } catch (err) {
       console.error("[upload]", err);
+      alert("Upload failed. Please try again.");
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -325,51 +343,53 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   };
 
   const startRecording = async () => {
+    if (recording || transcribing) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      const options = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? { mimeType: "audio/webm;codecs=opus" }
+        : MediaRecorder.isTypeSupported("audio/webm")
+        ? { mimeType: "audio/webm" }
+        : {};
+      const recorder = new MediaRecorder(stream, options as MediaRecorderOptions);
       audioChunksRef.current = [];
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
-      };
-      recorder.start();
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      recorder.start(100);
       mediaRecorderRef.current = recorder;
       setRecording(true);
-    } catch (err) {
+    } catch (err: any) {
       console.error("[mic] getUserMedia failed:", err);
+      alert("Microphone access denied. Please allow microphone access in your browser settings.");
     }
   };
 
   const stopRecording = async () => {
     const recorder = mediaRecorderRef.current;
-    if (!recorder || recorder.state === "inactive") return;
+    if (!recorder || recorder.state === "inactive") { setRecording(false); return; }
     setRecording(false);
-    await new Promise<void>((resolve) => {
-      recorder.onstop = () => resolve();
-      recorder.stop();
-      recorder.stream.getTracks().forEach((t) => t.stop());
-    });
-    const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-    if (blob.size < 100) return;
-    setTranscribing(true);
     try {
-      const token = localStorage.getItem("opsoul_token");
-      const formData = new FormData();
-      formData.append("audio", blob, "recording.webm");
-      const res = await fetch("/api/transcribe", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
+      await new Promise<void>((resolve) => {
+        recorder.onstop = () => resolve();
+        recorder.stop();
+        recorder.stream.getTracks().forEach((t) => t.stop());
       });
+      const mimeType = recorder.mimeType || "audio/webm";
+      const blob = new Blob(audioChunksRef.current, { type: mimeType });
+      if (blob.size < 100) return;
+      setTranscribing(true);
+      const ext = mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : "webm";
+      const formData = new FormData();
+      formData.append("audio", blob, `recording.${ext}`);
+      const res = await authFetch("/api/transcribe", { method: "POST", body: formData });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as any).error || `HTTP ${res.status}`); }
       const data = await res.json();
-      if (data.transcript) {
-        setInput((prev) => (prev ? `${prev} ${data.transcript}` : data.transcript));
-      }
+      if (data.transcript) setInput((prev) => (prev ? `${prev} ${data.transcript}` : data.transcript));
     } catch (err) {
       console.error("[transcribe]", err);
     } finally {
       setTranscribing(false);
       mediaRecorderRef.current = null;
+      audioChunksRef.current = [];
     }
   };
 
@@ -831,24 +851,23 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
           >
             <Paperclip className={`w-4 h-4 ${uploading ? "animate-pulse text-primary" : ""}`} />
           </Button>
-          <Button
+          <button
             type="button"
-            variant="ghost"
-            size="icon"
-            className={`shrink-0 w-9 h-9 transition-colors ${
-              recording
-                ? "text-red-500 bg-red-500/10 hover:bg-red-500/20"
-                : transcribing
-                ? "text-primary"
-                : "text-muted-foreground hover:text-primary"
-            }`}
-            onPointerDown={startRecording}
-            onPointerUp={stopRecording}
+            onMouseDown={startRecording}
+            onMouseUp={stopRecording}
+            onTouchStart={(e) => { e.preventDefault(); startRecording(); }}
+            onTouchEnd={(e) => { e.preventDefault(); stopRecording(); }}
+            onMouseLeave={() => { if (recording) stopRecording(); }}
             disabled={isBusy || uploading}
             title={recording ? "Release to transcribe" : transcribing ? "Transcribing…" : "Hold to record"}
+            className={`p-2 rounded-lg transition-colors ${
+              recording ? "bg-red-500/20 text-red-400 animate-pulse"
+              : transcribing ? "text-primary/60 animate-pulse"
+              : "text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/30"
+            }`}
           >
-            <Mic className={`w-4 h-4 ${transcribing ? "animate-pulse" : ""}`} />
-          </Button>
+            <Mic className="w-4 h-4" />
+          </button>
           <textarea
             ref={textareaRef}
             value={input}

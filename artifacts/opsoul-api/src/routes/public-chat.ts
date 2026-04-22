@@ -32,6 +32,12 @@ const PublicChatSchema = z.object({
   userId:         z.string().max(256).optional(),
   conversationId: z.string().uuid().optional(),
   stream:         z.boolean().default(false),
+  attachments:    z.array(z.object({
+    type:     z.enum(['image', 'text']),
+    content:  z.string(),
+    mimeType: z.string().optional(),
+    name:     z.string().optional(),
+  })).optional(),
 });
 
 function buildSkillSecondPassMessages(
@@ -66,7 +72,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  const { message, userId, conversationId, stream } = parsed.data;
+  const { message, userId, conversationId, stream, attachments } = parsed.data;
 
   if (slot.surfaceType === 'authenticated' && !userId) {
     res.status(400).json({ error: 'userId is required for authenticated slots' });
@@ -254,7 +260,20 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     });
   }
 
-  messages.push({ role: 'user', content: message });
+  // Build userContent — multipart if attachments present
+  let userContent: string | any[] = message;
+  if (attachments && attachments.length > 0) {
+    const parts: any[] = [{ type: 'text', text: message }];
+    for (const att of attachments) {
+      if (att.type === 'image') {
+        parts.push({ type: 'image_url', image_url: { url: `data:${att.mimeType ?? 'image/jpeg'};base64,${att.content}` } });
+      } else if (att.type === 'text') {
+        parts.push({ type: 'text', text: `[Attached file: ${att.name ?? 'document'}]\n${att.content}` });
+      }
+    }
+    userContent = parts;
+  }
+  messages.push({ role: 'user', content: userContent });
 
   // ── Detect context-injection messages (silent, never shown in workspace) ──
   const INJECTION_PATTERN = /^(?:GUEST_MODE|SESSION_TYPE|FOUNDER_DATA|USER_DATA|CONTEXT_BLOCK|SYSTEM_CONTEXT|__CONTEXT|__META)[:=]/m;
@@ -270,9 +289,13 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     isInternal,
   });
 
-  const model = (operator.defaultModel && operator.defaultModel !== 'opsoul/auto')
+  let model = (operator.defaultModel && operator.defaultModel !== 'opsoul/auto')
     ? operator.defaultModel
     : CHAT_MODEL;
+  // Force vision-capable model when image attachments are present
+  if (attachments && attachments.some((a) => a.type === 'image')) {
+    model = 'google/gemini-2.0-flash-001';
+  }
 
   // ── STREAM PATH ────────────────────────────────────────────────────────────
   if (stream) {
