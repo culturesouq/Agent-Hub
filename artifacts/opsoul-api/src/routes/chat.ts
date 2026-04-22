@@ -267,6 +267,13 @@ Never skip to step 6 without doing steps 1–3. Never present search snippets as
 - Never guess and present it as fact.
 - Never fill silence with plausible-sounding fabrications.
 - Directional knowledge (unverified, single source): hedge naturally — "from what I'm seeing", "my read on this", "worth checking before you act on it."`,
+
+  file_creation: `File creation rule — non-negotiable:
+You have a write_file tool. When you create a file, you MUST call write_file. Always.
+- Never write file content as chat text and claim you "created" it — chat text is not a file.
+- Never say "The file is created" or "Here is the file:" without having called write_file.
+- If you want to show the owner a preview of what you will write, show it, then call write_file immediately after.
+- The owner sees files only in the Files tab. If you don't call write_file, the file does not exist.`,
 };
 
 function buildStationContext(data: LiveStationData): string {
