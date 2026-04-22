@@ -261,7 +261,7 @@ router.patch('/:integrationId', async (req: Request, res: Response): Promise<voi
 
   res.json(safeSerialize(updated));
 
-  if (token && updated.integrationType === 'telegram' && updated.tokenEncrypted) {
+  if (updated.integrationType === 'telegram' && updated.tokenEncrypted) {
     if (!process.env.API_BASE_URL) {
       console.warn('[integrations] API_BASE_URL not set — Telegram webhook not re-registered');
     } else {
