@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import type { ChatCompletion, ChatCompletionChunk, ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/index.js';
 
 export const CHAT_MODEL = 'anthropic/claude-sonnet-4-5';
 export const KB_MODEL = 'anthropic/claude-haiku-4-5';
@@ -61,7 +62,7 @@ export interface ToolDefinition {
     description: string;
     parameters: {
       type: 'object';
-      properties: Record<string, { type: string; description: string }>;
+      properties: Record<string, { type: string; description?: string; enum?: string[]; additionalProperties?: unknown }>;
       required: string[];
     };
   };
@@ -109,7 +110,7 @@ export async function* streamChat(
     requestParams.tools = opts.tools as Parameters<typeof client.chat.completions.create>[0]['tools'];
   }
 
-  const stream = await client.chat.completions.create(requestParams);
+  const stream = await client.chat.completions.create(requestParams) as AsyncIterable<ChatCompletionChunk>;
 
   let toolCallAccumulator: { id: string; name: string; arguments: string } | null = null;
 
@@ -179,14 +180,14 @@ export async function chatCompletion(
     requestParams.tools = opts.tools as Parameters<typeof client.chat.completions.create>[0]['tools'];
   }
 
-  const response = await client.chat.completions.create(requestParams);
+  const response = await client.chat.completions.create(requestParams) as ChatCompletion;
   const choice = response.choices[0];
   const tc = choice?.message?.tool_calls?.[0];
 
   return {
     content: choice?.message?.content ?? '',
     toolCall: tc
-      ? { id: tc.id, name: tc.function.name, args: tc.function.arguments }
+      ? { id: tc.id, name: (tc as ChatCompletionMessageFunctionToolCall).function.name, args: (tc as ChatCompletionMessageFunctionToolCall).function.arguments }
       : undefined,
     promptTokens: response.usage?.prompt_tokens ?? 0,
     completionTokens: response.usage?.completion_tokens ?? 0,
