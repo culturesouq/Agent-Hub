@@ -50,7 +50,7 @@ const UpdateIntegrationSchema = z.object({
   contextsAssigned: z.array(z.string()).max(20).optional(),
   scopeUpdatePending: z.boolean().optional(),
   scopeUpdateSummary: z.string().max(500).optional(),
-  appSecret: z.string().min(1).max(500).optional(),
+  appSecret: z.string().max(500).nullable().optional(),
 });
 
 function safeSerialize(integration: typeof operatorIntegrationsTable.$inferSelect) {
@@ -305,7 +305,11 @@ router.patch('/:integrationId', async (req: Request, res: Response): Promise<voi
   if (token) updates.tokenEncrypted = encryptToken(token);
 
   if (appSecret !== undefined) {
-    updates.refreshTokenEncrypted = encryptToken(appSecret);
+    if (appSecret === null || appSecret === '') {
+      updates.refreshTokenEncrypted = null;
+    } else {
+      updates.refreshTokenEncrypted = encryptToken(appSecret);
+    }
     const [currentRow] = await db
       .select({ appSchema: operatorIntegrationsTable.appSchema })
       .from(operatorIntegrationsTable)

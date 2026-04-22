@@ -5,7 +5,7 @@ import { Integration } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CheckCircle2, MessageCircle, Trash2, Loader2, ExternalLink, ShieldAlert, ShieldCheck, KeyRound } from "lucide-react";
+import { CheckCircle2, MessageCircle, Trash2, Loader2, ExternalLink, ShieldAlert, ShieldCheck, KeyRound, X } from "lucide-react";
 
 function WhatsAppLogo() {
   return (
@@ -120,6 +120,21 @@ export default function WhatsAppChannelSection({ operatorId }: { operatorId: str
       toast({ title: "Failed to save App Secret", description: err.message, variant: "destructive" }),
   });
 
+  const removeSecret = useMutation({
+    mutationFn: () =>
+      apiFetch(`/operators/${operatorId}/integrations/${connected!.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ appSecret: null }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "integrations"] });
+      toast({ title: "App Secret removed", description: "Webhook HMAC validation has been disabled." });
+      setShowSecretForm(false);
+    },
+    onError: (err: Error) =>
+      toast({ title: "Failed to remove App Secret", description: err.message, variant: "destructive" }),
+  });
+
   const disconnect = useMutation({
     mutationFn: (integrationId: string) =>
       apiFetch(`/operators/${operatorId}/integrations/${integrationId}`, { method: "DELETE" }),
@@ -191,15 +206,31 @@ export default function WhatsAppChannelSection({ operatorId }: { operatorId: str
                   All incoming webhooks are verified against your Meta App Secret.
                 </p>
               </div>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="font-mono text-[11px] text-muted-foreground shrink-0"
-                onClick={() => setShowSecretForm((v) => !v)}
-              >
-                <KeyRound className="w-3 h-3 mr-1" />
-                Update
-              </Button>
+              <div className="flex items-center gap-1 shrink-0">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="font-mono text-[11px] text-muted-foreground"
+                  onClick={() => setShowSecretForm((v) => !v)}
+                >
+                  <KeyRound className="w-3 h-3 mr-1" />
+                  Update
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="font-mono text-[11px] text-muted-foreground hover:text-destructive"
+                  onClick={() => removeSecret.mutate()}
+                  disabled={removeSecret.isPending}
+                >
+                  {removeSecret.isPending ? (
+                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                  ) : (
+                    <X className="w-3 h-3 mr-1" />
+                  )}
+                  Remove Secret
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 flex items-start gap-3">
