@@ -34,6 +34,8 @@ import operatorSecretsRouter from './routes/operator-secrets.js';
 import deploymentSlotsRouter from './routes/deployment-slots.js';
 import publicChatRouter from './routes/public-chat.js';
 import publicCrudRouter from './routes/public-crud.js';
+import telegramWebhookRouter from './routes/telegram-webhook.js';
+import whatsappWebhookRouter from './routes/whatsapp-webhook.js';
 import { startGrowCron } from './cron/growCron.js';
 import { startMemoryCron } from './cron/memoryCron.js';
 import { startDriftCron } from './cron/driftCron.js';
@@ -127,6 +129,8 @@ app.use('/api/operators/:operatorId/secrets', operatorSecretsRouter);
 app.use('/api/operators/:operatorId/slots', deploymentSlotsRouter);
 app.use('/v1/chat', publicLimiter, publicChatRouter);
 app.use('/v1/action', publicLimiter, publicCrudRouter);
+app.use('/webhooks/telegram', telegramWebhookRouter);
+app.use('/webhooks/whatsapp', whatsappWebhookRouter);
 
 app.get('/api/healthz', (_req, res) => {
   // Fire a non-blocking DB ping to keep the Neon endpoint warm.

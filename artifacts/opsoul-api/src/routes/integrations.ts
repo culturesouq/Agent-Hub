@@ -82,6 +82,24 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   res.status(201).json(safeSerialize(integration));
 
+  if (parsed.data.integrationType === 'telegram' && tokenEncrypted) {
+    if (!process.env.API_BASE_URL) {
+      console.warn('[integrations] API_BASE_URL not set — Telegram webhook not auto-registered');
+    } else {
+      const botToken = decryptToken(tokenEncrypted);
+      const webhookUrl = `${process.env.API_BASE_URL}/webhooks/telegram/${operatorId}`;
+      fetch(`https://api.telegram.org/bot${botToken}/setWebhook`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: webhookUrl }),
+      }).then(r => r.json()).then((data: unknown) => {
+        console.log(`[integrations] Telegram webhook set for operator ${operatorId}:`, data);
+      }).catch((err: unknown) => {
+        console.error(`[integrations] Telegram webhook registration failed for operator ${operatorId}:`, err);
+      });
+    }
+  }
+
   triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});
 });
 
@@ -242,6 +260,24 @@ router.patch('/:integrationId', async (req: Request, res: Response): Promise<voi
     .returning();
 
   res.json(safeSerialize(updated));
+
+  if (token && updated.integrationType === 'telegram' && updated.tokenEncrypted) {
+    if (!process.env.API_BASE_URL) {
+      console.warn('[integrations] API_BASE_URL not set — Telegram webhook not re-registered');
+    } else {
+      const botToken = decryptToken(updated.tokenEncrypted);
+      const webhookUrl = `${process.env.API_BASE_URL}/webhooks/telegram/${operatorId}`;
+      fetch(`https://api.telegram.org/bot${botToken}/setWebhook`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: webhookUrl }),
+      }).then(r => r.json()).then((data: unknown) => {
+        console.log(`[integrations] Telegram webhook re-registered for operator ${operatorId}:`, data);
+      }).catch((err: unknown) => {
+        console.error(`[integrations] Telegram webhook re-registration failed for operator ${operatorId}:`, err);
+      });
+    }
+  }
 
   triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});
 });
