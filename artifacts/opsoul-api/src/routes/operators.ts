@@ -725,7 +725,7 @@ router.patch('/:id/safe-mode', async (req: Request, res: Response): Promise<void
 });
 
 router.post('/:operatorId/recompute-awareness', async (req: Request, res: Response): Promise<void> => {
-  const { operatorId } = req.params;
+  const { operatorId } = req.params as { operatorId: string };
   await recomputeSelfAwareness(operatorId, 'force');
   res.json({ ok: true });
 });

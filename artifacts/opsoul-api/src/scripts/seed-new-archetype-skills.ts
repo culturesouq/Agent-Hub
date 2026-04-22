@@ -1,3 +1,4 @@
+// @ts-ignore
 import pg from 'pg';
 import { randomUUID } from 'crypto';
 

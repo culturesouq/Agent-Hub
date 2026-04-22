@@ -106,7 +106,7 @@ async function buildConvHistory(convId: string): Promise<ChatMessage[]> {
 }
 
 router.post('/:operatorId', async (req: Request, res: Response): Promise<void> => {
-  const { operatorId } = req.params;
+  const { operatorId } = req.params as { operatorId: string };
 
   const [integration] = await db
     .select()

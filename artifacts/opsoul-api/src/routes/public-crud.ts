@@ -114,7 +114,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         ? operator.defaultModel
         : 'anthropic/claude-haiku-4-5';
       const skillResult = await executeSkill(trigger, skillModel);
-      res.json({ result: skillResult.output, skill: trigger.skillName });
+      res.json({ result: skillResult.output, skill: trigger.name });
       return;
     } catch { /* fall through to LLM */ }
   }

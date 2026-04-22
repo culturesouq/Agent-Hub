@@ -132,7 +132,7 @@ router.get('/:operatorId', (req: Request, res: Response): void => {
 });
 
 router.post('/:operatorId', async (req: RequestWithRawBody, res: Response): Promise<void> => {
-  const { operatorId } = req.params;
+  const { operatorId } = req.params as { operatorId: string };
 
   const [integration] = await db
     .select()

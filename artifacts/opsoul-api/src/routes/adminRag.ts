@@ -24,7 +24,7 @@ async function extractTextFromBuffer(buffer: Buffer, mimetype: string, filename:
   const ext = extOf(filename);
   if (TEXT_EXTS.has(ext) || mimetype.startsWith('text/')) return buffer.toString('utf-8');
   if (mimetype === 'application/pdf' || ext === '.pdf') {
-    const pdfParse = (await import('pdf-parse')).default;
+    const pdfParse = (await import('pdf-parse') as unknown as { default: (buf: Buffer) => Promise<{ text: string }> }).default;
     const data = await pdfParse(buffer);
     return data.text;
   }
@@ -639,7 +639,7 @@ router.post('/inbox', async (req: Request, res: Response): Promise<void> => {
 });
 
 router.delete('/inbox/:filename', async (req: Request, res: Response): Promise<void> => {
-  const filename = path.basename(req.params.filename);
+  const filename = path.basename(String(req.params.filename));
   if (!/\.(md|txt)$/i.test(filename)) {
     res.status(400).json({ error: 'Invalid filename' });
     return;

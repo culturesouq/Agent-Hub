@@ -8,13 +8,13 @@ import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 const router = Router({ mergeParams: true });
 
 router.get('/', async (req, res) => {
-  const id = (req.params as { id: string }).id;
+  const { operatorId } = req.params as { operatorId: string };
   const ownerId = req.owner!.ownerId;
   try {
     const files = await db
       .select()
       .from(operatorFilesTable)
-      .where(and(eq(operatorFilesTable.operatorId, id), eq(operatorFilesTable.ownerId, ownerId)))
+      .where(and(eq(operatorFilesTable.operatorId, operatorId), eq(operatorFilesTable.ownerId, ownerId)))
       .orderBy(operatorFilesTable.updatedAt);
     res.json(files);
   } catch (err) {
@@ -23,21 +23,21 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const id = (req.params as { id: string }).id;
+  const { operatorId } = req.params as { operatorId: string };
   const ownerId = req.owner!.ownerId;
   const { filename, content = '' } = req.body;
   if (!filename) { res.status(400).json({ error: 'filename required' }); return; }
   try {
     const [file] = await db.insert(operatorFilesTable).values({
       id: crypto.randomUUID(),
-      operatorId: id,
+      operatorId,
       ownerId,
       filename,
       content,
       createdAt: new Date(),
       updatedAt: new Date(),
     }).returning();
-    triggerSelfAwareness(id, 'kb_learn').catch(() => {});
+    triggerSelfAwareness(operatorId, 'kb_learn').catch(() => {});
     res.json(file);
   } catch (err) {
     res.status(500).json({ error: 'Failed to create file' });
@@ -45,14 +45,13 @@ router.post('/', async (req, res) => {
 });
 
 router.get('/:fileId', async (req, res) => {
-  const { fileId } = req.params;
-  const id = (req.params as { id: string }).id;
+  const { fileId, operatorId } = req.params as { fileId: string; operatorId: string };
   const ownerId = req.owner!.ownerId;
   try {
     const [file] = await db
       .select()
       .from(operatorFilesTable)
-      .where(and(eq(operatorFilesTable.id, fileId), eq(operatorFilesTable.operatorId, id), eq(operatorFilesTable.ownerId, ownerId)));
+      .where(and(eq(operatorFilesTable.id, fileId), eq(operatorFilesTable.operatorId, operatorId), eq(operatorFilesTable.ownerId, ownerId)));
     if (!file) { res.status(404).json({ error: 'File not found' }); return; }
     res.json(file);
   } catch (err) {
@@ -61,7 +60,7 @@ router.get('/:fileId', async (req, res) => {
 });
 
 router.patch('/:fileId', async (req, res) => {
-  const { fileId } = req.params;
+  const { fileId, operatorId } = req.params as { fileId: string; operatorId: string };
   const ownerId = req.owner!.ownerId;
   const { filename, content } = req.body;
   try {
@@ -71,7 +70,7 @@ router.patch('/:fileId', async (req, res) => {
       .where(and(eq(operatorFilesTable.id, fileId), eq(operatorFilesTable.ownerId, ownerId)))
       .returning();
     if (!file) { res.status(404).json({ error: 'File not found' }); return; }
-    triggerSelfAwareness((req.params as any).id, 'kb_learn').catch(() => {});
+    triggerSelfAwareness(operatorId, 'kb_learn').catch(() => {});
     res.json(file);
   } catch (err) {
     res.status(500).json({ error: 'Failed to update file' });
@@ -79,13 +78,13 @@ router.patch('/:fileId', async (req, res) => {
 });
 
 router.delete('/:fileId', async (req, res) => {
-  const { fileId } = req.params;
+  const { fileId, operatorId } = req.params as { fileId: string; operatorId: string };
   const ownerId = req.owner!.ownerId;
   try {
     await db
       .delete(operatorFilesTable)
       .where(and(eq(operatorFilesTable.id, fileId), eq(operatorFilesTable.ownerId, ownerId)));
-    triggerSelfAwareness((req.params as any).id, 'kb_learn').catch(() => {});
+    triggerSelfAwareness(operatorId, 'kb_learn').catch(() => {});
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete file' });

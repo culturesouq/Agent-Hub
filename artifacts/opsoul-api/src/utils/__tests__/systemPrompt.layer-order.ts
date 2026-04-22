@@ -39,7 +39,7 @@ function indexOf(prompt: string, marker: string): number {
 
 console.log('\n=== System Prompt Layer Ordering Test ===\n');
 
-const promptWithKb = buildSystemPrompt(MOCK_OPERATOR, KB_CONTEXT);
+const promptWithKb = buildSystemPrompt(MOCK_OPERATOR, null, { scopeLine: KB_CONTEXT });
 const promptNoKb = buildSystemPrompt(MOCK_OPERATOR);
 
 const L0_MARKER = 'Layer 0 — Human Core';
