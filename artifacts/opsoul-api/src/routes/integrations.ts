@@ -50,11 +50,22 @@ const UpdateIntegrationSchema = z.object({
   contextsAssigned: z.array(z.string()).max(20).optional(),
   scopeUpdatePending: z.boolean().optional(),
   scopeUpdateSummary: z.string().max(500).optional(),
+  appSecret: z.string().min(1).max(500).optional(),
 });
 
 function safeSerialize(integration: typeof operatorIntegrationsTable.$inferSelect) {
   const { tokenEncrypted: _t, refreshTokenEncrypted: _r, ...safe } = integration;
-  return { ...safe, hasToken: !!_t };
+  const rawSchema = safe.appSchema as Record<string, unknown> | null;
+  const isWhatsApp = integration.integrationType === 'whatsapp';
+  const hasAppSecret = isWhatsApp
+    ? typeof rawSchema?.appSecret === 'string' && rawSchema.appSecret.length > 0
+    : false;
+  let appSchema: Record<string, unknown> | null = rawSchema;
+  if (isWhatsApp && rawSchema) {
+    const { appSecret: _s, ...schemaWithoutSecret } = rawSchema;
+    appSchema = Object.keys(schemaWithoutSecret).length > 0 ? schemaWithoutSecret : null;
+  }
+  return { ...safe, appSchema, hasToken: !!_t, hasAppSecret };
 }
 
 router.post('/', async (req: Request, res: Response): Promise<void> => {
@@ -264,9 +275,18 @@ router.patch('/:integrationId', async (req: Request, res: Response): Promise<voi
 
   if (!existing) { res.status(404).json({ error: 'Integration not found' }); return; }
 
-  const { token, ...rest } = parsed.data;
+  const { token, appSecret, ...rest } = parsed.data;
   const updates: Record<string, unknown> = { ...rest };
   if (token) updates.tokenEncrypted = encryptToken(token);
+
+  if (appSecret !== undefined) {
+    const [currentRow] = await db
+      .select({ appSchema: operatorIntegrationsTable.appSchema })
+      .from(operatorIntegrationsTable)
+      .where(eq(operatorIntegrationsTable.id, req.params.integrationId));
+    const existingSchema = (currentRow?.appSchema as Record<string, unknown> | null) ?? {};
+    updates.appSchema = { ...existingSchema, appSecret };
+  }
 
   const [updated] = await db
     .update(operatorIntegrationsTable)

@@ -5,7 +5,7 @@ import { Integration } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CheckCircle2, MessageCircle, Trash2, Loader2, ExternalLink } from "lucide-react";
+import { CheckCircle2, MessageCircle, Trash2, Loader2, ExternalLink, ShieldAlert, ShieldCheck, KeyRound } from "lucide-react";
 
 function WhatsAppLogo() {
   return (
@@ -46,7 +46,13 @@ const STEPS = [
   },
   {
     num: 5,
-    text: "Paste both values below and click Connect.",
+    text: "From your app's Settings → Basic, copy the",
+    highlight: "App Secret",
+    link: null,
+  },
+  {
+    num: 6,
+    text: "Paste all values below and click Connect.",
     highlight: null,
     link: null,
   },
@@ -57,6 +63,9 @@ export default function WhatsAppChannelSection({ operatorId }: { operatorId: str
   const queryClient = useQueryClient();
   const [accessToken, setAccessToken] = useState("");
   const [phoneNumberId, setPhoneNumberId] = useState("");
+  const [appSecret, setAppSecret] = useState("");
+  const [newAppSecret, setNewAppSecret] = useState("");
+  const [showSecretForm, setShowSecretForm] = useState(false);
 
   const { data: integrations = [], isLoading } = useQuery({
     queryKey: ["operators", operatorId, "integrations"],
@@ -78,7 +87,10 @@ export default function WhatsAppChannelSection({ operatorId }: { operatorId: str
           integrationLabel: phoneNumberId.trim(),
           token: accessToken.trim(),
           scopes: ["whatsapp"],
-          appSchema: { phoneNumberId: phoneNumberId.trim() },
+          appSchema: {
+            phoneNumberId: phoneNumberId.trim(),
+            ...(appSecret.trim() ? { appSecret: appSecret.trim() } : {}),
+          },
         }),
       }),
     onSuccess: () => {
@@ -86,9 +98,26 @@ export default function WhatsAppChannelSection({ operatorId }: { operatorId: str
       toast({ title: "WhatsApp connected", description: "Your number is now linked to this operator." });
       setAccessToken("");
       setPhoneNumberId("");
+      setAppSecret("");
     },
     onError: (err: Error) =>
       toast({ title: "Connection failed", description: err.message, variant: "destructive" }),
+  });
+
+  const updateSecret = useMutation({
+    mutationFn: () =>
+      apiFetch(`/operators/${operatorId}/integrations/${connected!.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ appSecret: newAppSecret.trim() }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "integrations"] });
+      toast({ title: "App Secret saved", description: "HMAC signature validation is now active." });
+      setNewAppSecret("");
+      setShowSecretForm(false);
+    },
+    onError: (err: Error) =>
+      toast({ title: "Failed to save App Secret", description: err.message, variant: "destructive" }),
   });
 
   const disconnect = useMutation({
@@ -123,32 +152,113 @@ export default function WhatsAppChannelSection({ operatorId }: { operatorId: str
         <div className="h-40 rounded-xl border border-border/30 bg-card/20 animate-pulse" />
       ) : connected ? (
         /* ── Connected state ── */
-        <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-5 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
-            <div>
-              <p className="font-mono text-sm font-bold text-green-400">Connected</p>
-              {connected.integrationLabel && (
-                <p className="font-mono text-xs text-muted-foreground mt-0.5">
-                  Phone Number ID: <span className="text-foreground">{connected.integrationLabel}</span>
-                </p>
-              )}
+        <div className="space-y-3">
+          <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-5 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
+              <div>
+                <p className="font-mono text-sm font-bold text-green-400">Connected</p>
+                {connected.integrationLabel && (
+                  <p className="font-mono text-xs text-muted-foreground mt-0.5">
+                    Phone Number ID: <span className="text-foreground">{connected.integrationLabel}</span>
+                  </p>
+                )}
+              </div>
             </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="font-mono text-xs text-muted-foreground hover:text-destructive"
+              onClick={() => disconnect.mutate(connected.id)}
+              disabled={disconnect.isPending}
+            >
+              {disconnect.isPending ? (
+                <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+              )}
+              Disconnect
+            </Button>
           </div>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="font-mono text-xs text-muted-foreground hover:text-destructive"
-            onClick={() => disconnect.mutate(connected.id)}
-            disabled={disconnect.isPending}
-          >
-            {disconnect.isPending ? (
-              <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-            ) : (
-              <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-            )}
-            Disconnect
-          </Button>
+
+          {/* HMAC security status */}
+          {connected.hasAppSecret ? (
+            <div className="rounded-lg border border-green-500/20 bg-green-500/5 px-4 py-3 flex items-center gap-3">
+              <ShieldCheck className="w-4 h-4 text-green-400 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="font-mono text-xs text-green-400 font-semibold">HMAC signature validation active</p>
+                <p className="font-mono text-[11px] text-muted-foreground mt-0.5">
+                  All incoming webhooks are verified against your Meta App Secret.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="font-mono text-[11px] text-muted-foreground shrink-0"
+                onClick={() => setShowSecretForm((v) => !v)}
+              >
+                <KeyRound className="w-3 h-3 mr-1" />
+                Update
+              </Button>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 flex items-start gap-3">
+              <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="font-mono text-xs text-amber-400 font-semibold">No App Secret — webhook is unprotected</p>
+                <p className="font-mono text-[11px] text-muted-foreground mt-0.5">
+                  Without an App Secret, anyone can send spoofed messages to your webhook. Add your Meta App Secret to enable HMAC validation.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="font-mono text-[11px] text-amber-400 hover:text-amber-300 shrink-0"
+                onClick={() => setShowSecretForm((v) => !v)}
+              >
+                <KeyRound className="w-3 h-3 mr-1" />
+                Add Secret
+              </Button>
+            </div>
+          )}
+
+          {/* Update app secret form */}
+          {showSecretForm && (
+            <div className="rounded-xl border border-border/40 bg-card/30 p-4 space-y-3">
+              <p className="font-mono text-xs text-muted-foreground">
+                Find your App Secret in the Meta for Developers portal under{" "}
+                <span className="text-foreground">Settings → Basic</span>.
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  type="password"
+                  placeholder="Meta App Secret"
+                  value={newAppSecret}
+                  onChange={(e) => setNewAppSecret(e.target.value)}
+                  className="font-mono text-xs flex-1"
+                  autoComplete="off"
+                />
+                <Button
+                  onClick={() => updateSecret.mutate()}
+                  disabled={!newAppSecret.trim() || updateSecret.isPending}
+                  className="font-mono text-xs shrink-0"
+                >
+                  {updateSecret.isPending ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    "Save"
+                  )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => { setShowSecretForm(false); setNewAppSecret(""); }}
+                  className="font-mono text-xs shrink-0"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         /* ── Setup flow ── */
@@ -210,6 +320,24 @@ export default function WhatsAppChannelSection({ operatorId }: { operatorId: str
                 className="font-mono text-xs"
                 autoComplete="off"
               />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="font-mono text-xs text-muted-foreground uppercase tracking-wider">
+                App Secret{" "}
+                <span className="normal-case text-muted-foreground/60">(recommended)</span>
+              </label>
+              <Input
+                type="password"
+                placeholder="From Meta app Settings → Basic"
+                value={appSecret}
+                onChange={(e) => setAppSecret(e.target.value)}
+                className="font-mono text-xs"
+                autoComplete="off"
+              />
+              <p className="font-mono text-[11px] text-muted-foreground/60">
+                Required to validate webhook signatures and block spoofed messages.
+              </p>
             </div>
 
             <div className="flex items-center justify-between pt-1">

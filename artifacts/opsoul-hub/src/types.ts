@@ -119,6 +119,8 @@ export interface Integration {
   status: string;
   scopes: string[];
   hasToken: boolean;
+  hasAppSecret?: boolean;
+  appSchema?: Record<string, unknown> | null;
   createdAt: string;
 }
 
