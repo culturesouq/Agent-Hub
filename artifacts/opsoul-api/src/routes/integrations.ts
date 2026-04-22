@@ -2,13 +2,14 @@ import { Router, type Request, type Response } from 'express';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { db } from '@workspace/db';
-import { operatorIntegrationsTable, operatorsTable } from '@workspace/db';
+import { operatorIntegrationsTable, operatorsTable, ownersTable } from '@workspace/db';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { eq, and } from 'drizzle-orm';
 import { encryptToken, decryptToken } from '@workspace/opsoul-utils/crypto';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { chatCompletion } from '../utils/openrouter.js';
 import { autoRemoveIntegrationSkills } from '../utils/autoInstallIntegrationSkills.js';
+import { sendEmail, telegramWebhookFailureEmail } from '../lib/email.js';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -28,6 +29,29 @@ async function resolveOperator(req: Request, res: Response): Promise<string | nu
     return null;
   }
   return op.id;
+}
+
+async function notifyTelegramWebhookError(ownerId: string, operatorId: string, reason: string): Promise<void> {
+  try {
+    const [owner] = await db
+      .select({ email: ownersTable.email })
+      .from(ownersTable)
+      .where(eq(ownersTable.id, ownerId));
+    if (!owner?.email) {
+      console.warn(`[integrations] Could not find owner email for ownerId=${ownerId} — skipping alert`);
+      return;
+    }
+    const dashboardUrl = process.env.APP_BASE_URL
+      ? `${process.env.APP_BASE_URL}/operators/${operatorId}/integrations`
+      : 'https://opsoul.io';
+    await sendEmail(
+      owner.email,
+      'Action required: Your Telegram bot failed to connect',
+      telegramWebhookFailureEmail(reason, dashboardUrl),
+    );
+  } catch (err) {
+    console.error('[integrations] Failed to send Telegram webhook failure email:', err);
+  }
 }
 
 const CreateIntegrationSchema = z.object({
@@ -133,6 +157,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           await db.update(operatorIntegrationsTable)
             .set({ status: 'error', appSchema: { ...(existing ?? {}), webhookError: reason } })
             .where(eq(operatorIntegrationsTable.id, integration.id));
+          notifyTelegramWebhookError(req.owner!.ownerId, operatorId, reason).catch(() => {});
           return;
         }
         console.log(`[integrations] Telegram webhook set for operator ${operatorId}:`, data);
@@ -147,6 +172,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         await db.update(operatorIntegrationsTable)
           .set({ status: 'error', appSchema: { ...(existing ?? {}), webhookError: reason } })
           .where(eq(operatorIntegrationsTable.id, integration.id));
+        notifyTelegramWebhookError(req.owner!.ownerId, operatorId, reason).catch(() => {});
       });
     }
   }
@@ -289,7 +315,7 @@ router.patch('/:integrationId', async (req: Request, res: Response): Promise<voi
   }
 
   const [existing] = await db
-    .select({ id: operatorIntegrationsTable.id })
+    .select({ id: operatorIntegrationsTable.id, status: operatorIntegrationsTable.status })
     .from(operatorIntegrationsTable)
     .where(
       and(
@@ -300,6 +326,7 @@ router.patch('/:integrationId', async (req: Request, res: Response): Promise<voi
 
   if (!existing) { res.status(404).json({ error: 'Integration not found' }); return; }
 
+  const previousStatus = existing.status;
   const { token, appSecret, ...rest } = parsed.data;
   const updates: Record<string, unknown> = { ...rest };
   if (token) updates.tokenEncrypted = encryptToken(token);
@@ -347,6 +374,9 @@ router.patch('/:integrationId', async (req: Request, res: Response): Promise<voi
           await db.update(operatorIntegrationsTable)
             .set({ status: 'error', appSchema: { ...(existing ?? {}), webhookError: reason } })
             .where(eq(operatorIntegrationsTable.id, updated.id));
+          if (previousStatus !== 'error') {
+            notifyTelegramWebhookError(req.owner!.ownerId, operatorId, reason).catch(() => {});
+          }
           return;
         }
         console.log(`[integrations] Telegram webhook re-registered for operator ${operatorId}:`, data);
@@ -361,6 +391,9 @@ router.patch('/:integrationId', async (req: Request, res: Response): Promise<voi
         await db.update(operatorIntegrationsTable)
           .set({ status: 'error', appSchema: { ...(existing ?? {}), webhookError: reason } })
           .where(eq(operatorIntegrationsTable.id, updated.id));
+        if (previousStatus !== 'error') {
+          notifyTelegramWebhookError(req.owner!.ownerId, operatorId, reason).catch(() => {});
+        }
       });
     }
   }
