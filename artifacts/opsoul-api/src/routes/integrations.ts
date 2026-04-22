@@ -58,7 +58,7 @@ function safeSerialize(integration: typeof operatorIntegrationsTable.$inferSelec
   const rawSchema = safe.appSchema as Record<string, unknown> | null;
   const isWhatsApp = integration.integrationType === 'whatsapp';
   const hasAppSecret = isWhatsApp
-    ? typeof rawSchema?.appSecret === 'string' && rawSchema.appSecret.length > 0
+    ? !!_r || (typeof rawSchema?.appSecret === 'string' && rawSchema.appSecret.length > 0)
     : false;
   let appSchema: Record<string, unknown> | null = rawSchema;
   if (isWhatsApp && rawSchema) {
@@ -82,6 +82,20 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     ? encryptToken(parsed.data.token)
     : null;
 
+  const rawAppSchema = parsed.data.appSchema as Record<string, unknown> | undefined;
+  let createRefreshTokenEncrypted: string | null = null;
+  let createAppSchema: Record<string, unknown> | null = rawAppSchema ?? null;
+  if (
+    parsed.data.integrationType === 'whatsapp' &&
+    rawAppSchema &&
+    typeof rawAppSchema.appSecret === 'string' &&
+    rawAppSchema.appSecret.length > 0
+  ) {
+    createRefreshTokenEncrypted = encryptToken(rawAppSchema.appSecret);
+    const { appSecret: _stripped, ...schemaWithoutSecret } = rawAppSchema;
+    createAppSchema = Object.keys(schemaWithoutSecret).length > 0 ? schemaWithoutSecret : null;
+  }
+
   const [integration] = await db.insert(operatorIntegrationsTable).values({
     id: crypto.randomUUID(),
     operatorId,
@@ -89,11 +103,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     integrationType: parsed.data.integrationType,
     integrationLabel: parsed.data.integrationLabel,
     tokenEncrypted,
+    refreshTokenEncrypted: createRefreshTokenEncrypted,
     scopes: parsed.data.scopes ?? [],
     status: 'connected',
     scopeUpdatePending: false,
     contextsAssigned: parsed.data.contextsAssigned ?? [],
-    appSchema: parsed.data.appSchema ?? null,
+    appSchema: createAppSchema,
   }).returning();
 
   res.status(201).json(safeSerialize(integration));
@@ -280,12 +295,14 @@ router.patch('/:integrationId', async (req: Request, res: Response): Promise<voi
   if (token) updates.tokenEncrypted = encryptToken(token);
 
   if (appSecret !== undefined) {
+    updates.refreshTokenEncrypted = encryptToken(appSecret);
     const [currentRow] = await db
       .select({ appSchema: operatorIntegrationsTable.appSchema })
       .from(operatorIntegrationsTable)
       .where(eq(operatorIntegrationsTable.id, req.params.integrationId));
     const existingSchema = (currentRow?.appSchema as Record<string, unknown> | null) ?? {};
-    updates.appSchema = { ...existingSchema, appSecret };
+    const { appSecret: _removed, ...cleanSchema } = existingSchema;
+    updates.appSchema = Object.keys(cleanSchema).length > 0 ? cleanSchema : null;
   }
 
   const [updated] = await db
