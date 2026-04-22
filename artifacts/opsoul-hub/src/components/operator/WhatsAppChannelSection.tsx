@@ -67,6 +67,7 @@ export default function WhatsAppChannelSection({ operatorId }: { operatorId: str
   const [newAppSecret, setNewAppSecret] = useState("");
   const [showSecretForm, setShowSecretForm] = useState(false);
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
+  const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
 
   const { data: integrations = [], isLoading } = useQuery({
     queryKey: ["operators", operatorId, "integrations"],
@@ -143,6 +144,7 @@ export default function WhatsAppChannelSection({ operatorId }: { operatorId: str
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "integrations"] });
       toast({ title: "WhatsApp disconnected" });
+      setShowDisconnectConfirm(false);
     },
     onError: (err: Error) =>
       toast({ title: "Disconnect failed", description: err.message, variant: "destructive" }),
@@ -186,17 +188,53 @@ export default function WhatsAppChannelSection({ operatorId }: { operatorId: str
               size="sm"
               variant="ghost"
               className="font-mono text-xs text-muted-foreground hover:text-destructive"
-              onClick={() => disconnect.mutate(connected.id)}
-              disabled={disconnect.isPending}
+              onClick={() => setShowDisconnectConfirm(true)}
+              disabled={disconnect.isPending || showDisconnectConfirm}
             >
-              {disconnect.isPending ? (
-                <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-              ) : (
-                <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-              )}
+              <Trash2 className="w-3.5 h-3.5 mr-1.5" />
               Disconnect
             </Button>
           </div>
+
+          {/* Disconnect confirmation */}
+          {showDisconnectConfirm && (
+            <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-4 space-y-3">
+              <div className="flex items-start gap-2">
+                <Trash2 className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-mono text-xs font-semibold text-destructive">Disconnect WhatsApp?</p>
+                  <p className="font-mono text-[11px] text-muted-foreground mt-1">
+                    This will permanently remove your access token, phone number ID, and webhook connection. You will need to re-enter all credentials to reconnect.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 justify-end">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="font-mono text-xs"
+                  onClick={() => setShowDisconnectConfirm(false)}
+                  disabled={disconnect.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  className="font-mono text-xs"
+                  onClick={() => disconnect.mutate(connected.id)}
+                  disabled={disconnect.isPending}
+                >
+                  {disconnect.isPending ? (
+                    <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-3 h-3 mr-1.5" />
+                  )}
+                  Yes, disconnect
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* HMAC security status */}
           {connected.hasAppSecret ? (
