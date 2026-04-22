@@ -30,11 +30,6 @@ function sleep(ms: number): Promise<void> {
 }
 
 export async function backfillTelegramWebhookSecrets(): Promise<BackfillResult> {
-  const apiBaseUrl = process.env.API_BASE_URL;
-  if (!apiBaseUrl) {
-    throw new Error('API_BASE_URL environment variable is not set — cannot register webhooks');
-  }
-
   const integrations = await db
     .select()
     .from(operatorIntegrationsTable)
@@ -65,6 +60,12 @@ export async function backfillTelegramWebhookSecrets(): Promise<BackfillResult> 
     }
 
     try {
+      const apiBaseUrl = process.env.API_BASE_URL;
+      if (!apiBaseUrl) {
+        result.failed++;
+        result.details.push({ integrationId, operatorId, status: 'failed', reason: 'API_BASE_URL environment variable is not set' });
+        continue;
+      }
       const botToken = decryptToken(tokenEncrypted!);
       const webhookUrl = `${apiBaseUrl}/webhooks/telegram/${operatorId}`;
       const webhookSecretToken = crypto.randomBytes(32).toString('hex');
