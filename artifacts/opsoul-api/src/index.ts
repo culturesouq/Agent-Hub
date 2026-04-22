@@ -47,6 +47,7 @@ import { backfillIntegrationSkills } from './utils/autoInstallIntegrationSkills.
 import { backfillAllAgencyCore } from './utils/seedAgencyCore.js';
 import { backfillTelegramWebhookSecrets } from './utils/backfillTelegramSecrets.js';
 import { backfillWhatsAppAppSecrets } from './utils/backfillWhatsAppSecrets.js';
+import { sweepStuckPendingIntegrations } from './utils/sweepStuckPendingIntegrations.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
@@ -236,6 +237,7 @@ async function start(): Promise<void> {
     console.log(`[opsoul-api] Public CRUD: POST /v1/action — slot-key authenticated, crud surface only`);
   });
 
+  sweepStuckPendingIntegrations().catch((err) => console.error('[sweep-pending] failed:', err?.message));
   runInitSeed().catch((err) => console.error('[initSeed] failed:', err?.message));
   backfillIntegrationSkills().catch((err) => console.error('[autoInstall] backfill failed:', err?.message));
   backfillAllAgencyCore().catch((err) => console.error('[agency-core] backfill failed:', err?.message));
