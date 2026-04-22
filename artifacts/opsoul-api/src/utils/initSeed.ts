@@ -258,6 +258,28 @@ export async function seedOwnerOperators(ownerId: string): Promise<void> {
   for (const op of OWNER_OPERATORS) {
     if (existingNames.has(op.name)) continue;
     if (op.id && existingIds.has(op.id)) continue;
+
+    // If a fixed ID is specified, check if it already exists under a DIFFERENT owner
+    // (e.g. Vael created in dev under a dev account, now needed under the production account)
+    if (op.id) {
+      const claimedElsewhere = await db
+        .select({ id: operatorsTable.id, ownerId: operatorsTable.ownerId })
+        .from(operatorsTable)
+        .where(eq(operatorsTable.id, op.id))
+        .limit(1);
+
+      if (claimedElsewhere.length > 0 && claimedElsewhere[0].ownerId !== ownerId) {
+        // Transfer the existing record to the correct owner
+        await db
+          .update(operatorsTable)
+          .set({ ownerId })
+          .where(eq(operatorsTable.id, op.id));
+        console.log(`[initSeed]   ~ operator transferred to correct owner: ${op.name} (${op.id})`);
+        seeded++;
+        continue;
+      }
+    }
+
     const newId = op.id ?? randomUUID();
     await db.insert(operatorsTable).values({
       id: newId,
