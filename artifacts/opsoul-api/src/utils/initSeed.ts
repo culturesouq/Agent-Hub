@@ -247,16 +247,18 @@ export async function runInitSeed(): Promise<void> {
 // ── Exported: call this after login/register for instant operator seeding ──
 export async function seedOwnerOperators(ownerId: string): Promise<void> {
   const existingOps = await db
-    .select({ name: operatorsTable.name })
+    .select({ name: operatorsTable.name, id: operatorsTable.id })
     .from(operatorsTable)
     .where(eq(operatorsTable.ownerId, ownerId));
 
   const existingNames = new Set(existingOps.map((r) => r.name));
+  const existingIds = new Set(existingOps.map((r) => r.id));
   let seeded = 0;
 
   for (const op of OWNER_OPERATORS) {
     if (existingNames.has(op.name)) continue;
-    const newId = randomUUID();
+    if (op.id && existingIds.has(op.id)) continue;
+    const newId = op.id ?? randomUUID();
     await db.insert(operatorsTable).values({
       id: newId,
       ownerId,
