@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { Integration } from "@/types";
@@ -110,6 +110,16 @@ export default function TelegramChannelSection({ operatorId }: { operatorId: str
       toast({ title: "Retry failed", description: err.message, variant: "destructive" });
     },
   });
+
+  const prevStatusRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    const currentStatus = connected?.status;
+    if (prevStatusRef.current === "pending" && currentStatus === "connected") {
+      toast({ title: "Your Telegram bot is ready to receive messages" });
+    }
+    prevStatusRef.current = currentStatus;
+  }, [connected?.status, toast]);
 
   const isPending = connected?.status === "pending";
   const isError = connected?.status === "error";
