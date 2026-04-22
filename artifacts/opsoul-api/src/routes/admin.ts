@@ -10,6 +10,7 @@ import {
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireAdmin } from '../middleware/requireAdmin.js';
 import { eq, sql, and, gte, desc } from 'drizzle-orm';
+import { backfillTelegramWebhookSecrets } from '../utils/backfillTelegramSecrets.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -129,6 +130,17 @@ router.patch('/owners/:id/toggle-admin', async (req: Request, res: Response): Pr
     .returning({ id: ownersTable.id, isSovereignAdmin: ownersTable.isSovereignAdmin });
 
   res.json(updated);
+});
+
+router.post('/backfill/telegram-webhook-secrets', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await backfillTelegramWebhookSecrets();
+    res.json({ ok: true, ...result });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[admin] backfill telegram webhook secrets failed:', err);
+    res.status(500).json({ ok: false, error: message });
+  }
 });
 
 export default router;
