@@ -44,6 +44,7 @@ import { startTasksCron } from './cron/tasksCron.js';
 import { runInitSeed } from './utils/initSeed.js';
 import { backfillIntegrationSkills } from './utils/autoInstallIntegrationSkills.js';
 import { backfillAllAgencyCore } from './utils/seedAgencyCore.js';
+import { backfillTelegramWebhookSecrets } from './utils/backfillTelegramSecrets.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
@@ -236,6 +237,7 @@ async function start(): Promise<void> {
   runInitSeed().catch((err) => console.error('[initSeed] failed:', err?.message));
   backfillIntegrationSkills().catch((err) => console.error('[autoInstall] backfill failed:', err?.message));
   backfillAllAgencyCore().catch((err) => console.error('[agency-core] backfill failed:', err?.message));
+  backfillTelegramWebhookSecrets().catch((err) => console.error('[telegram-secrets] backfill failed:', err?.message));
 
   startGrowCron();
   startMemoryCron();
