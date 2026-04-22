@@ -90,6 +90,7 @@ export default function TelegramChannelSection({ operatorId }: { operatorId: str
       apiFetch(`/operators/${operatorId}/integrations/${integrationId}`, { method: "DELETE" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "integrations"] });
+      setConfirmingDisconnect(false);
       toast({ title: "Telegram disconnected" });
     },
     onError: (err: Error) =>
@@ -110,6 +111,8 @@ export default function TelegramChannelSection({ operatorId }: { operatorId: str
       toast({ title: "Retry failed", description: err.message, variant: "destructive" });
     },
   });
+
+  const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
 
   const prevStatusRef = useRef<string | undefined>(undefined);
 
@@ -190,7 +193,7 @@ export default function TelegramChannelSection({ operatorId }: { operatorId: str
                   variant="outline"
                   className="font-mono text-xs border-destructive/40 text-destructive hover:bg-destructive/10"
                   onClick={() => retryWebhook.mutate(connected.id)}
-                  disabled={retryWebhook.isPending}
+                  disabled={retryWebhook.isPending || confirmingDisconnect}
                 >
                   {retryWebhook.isPending ? (
                     <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
@@ -203,45 +206,105 @@ export default function TelegramChannelSection({ operatorId }: { operatorId: str
                   size="sm"
                   variant="ghost"
                   className="font-mono text-xs text-muted-foreground hover:text-destructive"
-                  onClick={() => disconnect.mutate(connected.id)}
-                  disabled={disconnect.isPending}
+                  onClick={() => setConfirmingDisconnect(true)}
+                  disabled={disconnect.isPending || confirmingDisconnect}
                 >
-                  {disconnect.isPending ? (
-                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                  ) : (
-                    <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-                  )}
+                  <Trash2 className="w-3.5 h-3.5 mr-1.5" />
                   Disconnect
                 </Button>
               </div>
+              {confirmingDisconnect && (
+                <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-4 space-y-3 mt-1">
+                  <p className="font-mono text-sm font-bold text-destructive">Confirm disconnect</p>
+                  <p className="font-mono text-xs text-muted-foreground leading-relaxed">
+                    This will remove your bot token and deregister the Telegram webhook. Your bot will stop receiving messages immediately. This action cannot be undone — you will need to re-enter your token to reconnect.
+                  </p>
+                  <div className="flex items-center gap-2 pt-1">
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="font-mono text-xs"
+                      onClick={() => disconnect.mutate(connected.id)}
+                      disabled={disconnect.isPending}
+                    >
+                      {disconnect.isPending ? (
+                        <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                      )}
+                      {disconnect.isPending ? "Disconnecting…" : "Yes, disconnect"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="font-mono text-xs text-muted-foreground"
+                      onClick={() => setConfirmingDisconnect(false)}
+                      disabled={disconnect.isPending}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
-            <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-5 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
-                <div>
-                  <p className="font-mono text-sm font-bold text-green-400">Connected</p>
-                  {connected.integrationLabel && (
-                    <p className="font-mono text-xs text-muted-foreground mt-0.5">
-                      {connected.integrationLabel}
-                    </p>
-                  )}
+            <div className="space-y-3">
+              <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-5 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
+                  <div>
+                    <p className="font-mono text-sm font-bold text-green-400">Connected</p>
+                    {connected.integrationLabel && (
+                      <p className="font-mono text-xs text-muted-foreground mt-0.5">
+                        {connected.integrationLabel}
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="font-mono text-xs text-muted-foreground hover:text-destructive"
-                onClick={() => disconnect.mutate(connected.id)}
-                disabled={disconnect.isPending}
-              >
-                {disconnect.isPending ? (
-                  <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                ) : (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="font-mono text-xs text-muted-foreground hover:text-destructive"
+                  onClick={() => setConfirmingDisconnect(true)}
+                  disabled={disconnect.isPending || confirmingDisconnect}
+                >
                   <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-                )}
-                Disconnect
-              </Button>
+                  Disconnect
+                </Button>
+              </div>
+              {confirmingDisconnect && (
+                <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-4 space-y-3">
+                  <p className="font-mono text-sm font-bold text-destructive">Confirm disconnect</p>
+                  <p className="font-mono text-xs text-muted-foreground leading-relaxed">
+                    This will remove your bot token and deregister the Telegram webhook. Your bot will stop receiving messages immediately. This action cannot be undone — you will need to re-enter your token to reconnect.
+                  </p>
+                  <div className="flex items-center gap-2 pt-1">
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="font-mono text-xs"
+                      onClick={() => disconnect.mutate(connected.id)}
+                      disabled={disconnect.isPending}
+                    >
+                      {disconnect.isPending ? (
+                        <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                      )}
+                      {disconnect.isPending ? "Disconnecting…" : "Yes, disconnect"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="font-mono text-xs text-muted-foreground"
+                      onClick={() => setConfirmingDisconnect(false)}
+                      disabled={disconnect.isPending}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
