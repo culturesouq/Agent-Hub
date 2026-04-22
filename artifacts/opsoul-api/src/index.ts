@@ -41,6 +41,7 @@ import { startMemoryCron } from './cron/memoryCron.js';
 import { startDriftCron } from './cron/driftCron.js';
 import { startKeepAliveCron } from './cron/keepAliveCron.js';
 import { startTasksCron } from './cron/tasksCron.js';
+import { startTelegramWebhookRetryCron } from './cron/telegramWebhookRetryCron.js';
 import { runInitSeed } from './utils/initSeed.js';
 import { backfillIntegrationSkills } from './utils/autoInstallIntegrationSkills.js';
 import { backfillAllAgencyCore } from './utils/seedAgencyCore.js';
@@ -246,6 +247,7 @@ async function start(): Promise<void> {
   startDriftCron();
   startKeepAliveCron();
   startTasksCron();
+  startTelegramWebhookRetryCron();
 }
 
 start().catch((err) => {
