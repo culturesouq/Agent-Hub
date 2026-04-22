@@ -125,18 +125,28 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: webhookUrl, secret_token: webhookSecretToken }),
       }).then(r => r.json()).then(async (data: unknown) => {
-        const result = data as { ok?: boolean };
+        const result = data as { ok?: boolean; description?: string };
+        const existing = integration.appSchema as Record<string, unknown> | null;
         if (!result.ok) {
+          const reason = result.description ?? 'Telegram returned ok=false';
           console.error(`[integrations] Telegram setWebhook failed for operator ${operatorId}:`, data);
+          await db.update(operatorIntegrationsTable)
+            .set({ status: 'error', appSchema: { ...(existing ?? {}), webhookError: reason } })
+            .where(eq(operatorIntegrationsTable.id, integration.id));
           return;
         }
         console.log(`[integrations] Telegram webhook set for operator ${operatorId}:`, data);
+        const { webhookError: _e, ...existingWithoutError } = existing ?? {};
+        await db.update(operatorIntegrationsTable)
+          .set({ status: 'connected', appSchema: { ...existingWithoutError, webhookSecretToken } })
+          .where(eq(operatorIntegrationsTable.id, integration.id));
+      }).catch(async (err: unknown) => {
+        const reason = err instanceof Error ? err.message : String(err);
+        console.error(`[integrations] Telegram webhook registration failed for operator ${operatorId}:`, err);
         const existing = integration.appSchema as Record<string, unknown> | null;
         await db.update(operatorIntegrationsTable)
-          .set({ appSchema: { ...(existing ?? {}), webhookSecretToken } })
+          .set({ status: 'error', appSchema: { ...(existing ?? {}), webhookError: reason } })
           .where(eq(operatorIntegrationsTable.id, integration.id));
-      }).catch((err: unknown) => {
-        console.error(`[integrations] Telegram webhook registration failed for operator ${operatorId}:`, err);
       });
     }
   }
@@ -325,23 +335,99 @@ router.patch('/:integrationId', async (req: Request, res: Response): Promise<voi
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: webhookUrl, secret_token: webhookSecretToken }),
       }).then(r => r.json()).then(async (data: unknown) => {
-        const result = data as { ok?: boolean };
+        const result = data as { ok?: boolean; description?: string };
+        const existing = updated.appSchema as Record<string, unknown> | null;
         if (!result.ok) {
+          const reason = result.description ?? 'Telegram returned ok=false';
           console.error(`[integrations] Telegram setWebhook re-registration failed for operator ${operatorId}:`, data);
+          await db.update(operatorIntegrationsTable)
+            .set({ status: 'error', appSchema: { ...(existing ?? {}), webhookError: reason } })
+            .where(eq(operatorIntegrationsTable.id, updated.id));
           return;
         }
         console.log(`[integrations] Telegram webhook re-registered for operator ${operatorId}:`, data);
+        const { webhookError: _e, ...existingWithoutError } = existing ?? {};
+        await db.update(operatorIntegrationsTable)
+          .set({ status: 'connected', appSchema: { ...existingWithoutError, webhookSecretToken } })
+          .where(eq(operatorIntegrationsTable.id, updated.id));
+      }).catch(async (err: unknown) => {
+        const reason = err instanceof Error ? err.message : String(err);
+        console.error(`[integrations] Telegram webhook re-registration failed for operator ${operatorId}:`, err);
         const existing = updated.appSchema as Record<string, unknown> | null;
         await db.update(operatorIntegrationsTable)
-          .set({ appSchema: { ...(existing ?? {}), webhookSecretToken } })
+          .set({ status: 'error', appSchema: { ...(existing ?? {}), webhookError: reason } })
           .where(eq(operatorIntegrationsTable.id, updated.id));
-      }).catch((err: unknown) => {
-        console.error(`[integrations] Telegram webhook re-registration failed for operator ${operatorId}:`, err);
       });
     }
   }
 
   triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});
+});
+
+router.post('/:integrationId/retry-webhook', async (req: Request, res: Response): Promise<void> => {
+  const operatorId = await resolveOperator(req, res);
+  if (!operatorId) return;
+
+  const [integration] = await db
+    .select()
+    .from(operatorIntegrationsTable)
+    .where(
+      and(
+        eq(operatorIntegrationsTable.id, req.params.integrationId),
+        eq(operatorIntegrationsTable.operatorId, operatorId),
+      ),
+    );
+
+  if (!integration) { res.status(404).json({ error: 'Integration not found' }); return; }
+  if (integration.integrationType !== 'telegram') {
+    res.status(400).json({ error: 'Only telegram integrations support webhook retry' });
+    return;
+  }
+  if (!integration.tokenEncrypted) {
+    res.status(400).json({ error: 'No bot token stored — reconnect the integration first' });
+    return;
+  }
+  if (!process.env.API_BASE_URL) {
+    res.status(500).json({ error: 'API_BASE_URL not configured — contact support' });
+    return;
+  }
+
+  try {
+    const botToken = decryptToken(integration.tokenEncrypted);
+    const webhookUrl = `${process.env.API_BASE_URL}/webhooks/telegram/${operatorId}`;
+    const webhookSecretToken = crypto.randomBytes(32).toString('hex');
+    const telegramRes = await fetch(`https://api.telegram.org/bot${botToken}/setWebhook`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: webhookUrl, secret_token: webhookSecretToken }),
+    });
+    const data = await telegramRes.json() as { ok?: boolean; description?: string };
+    const existing = integration.appSchema as Record<string, unknown> | null;
+
+    if (!data.ok) {
+      const reason = data.description ?? 'Telegram returned ok=false';
+      await db.update(operatorIntegrationsTable)
+        .set({ status: 'error', appSchema: { ...(existing ?? {}), webhookError: reason } })
+        .where(eq(operatorIntegrationsTable.id, integration.id));
+      res.status(502).json({ ok: false, error: reason });
+      return;
+    }
+
+    const { webhookError: _e, ...existingWithoutError } = existing ?? {};
+    const [updated] = await db.update(operatorIntegrationsTable)
+      .set({ status: 'connected', appSchema: { ...existingWithoutError, webhookSecretToken } })
+      .where(eq(operatorIntegrationsTable.id, integration.id))
+      .returning();
+
+    res.json({ ok: true, integration: safeSerialize(updated) });
+  } catch (err: unknown) {
+    const reason = err instanceof Error ? err.message : String(err);
+    const existing = integration.appSchema as Record<string, unknown> | null;
+    await db.update(operatorIntegrationsTable)
+      .set({ status: 'error', appSchema: { ...(existing ?? {}), webhookError: reason } })
+      .where(eq(operatorIntegrationsTable.id, integration.id));
+    res.status(500).json({ ok: false, error: reason });
+  }
 });
 
 router.delete('/:integrationId', async (req: Request, res: Response): Promise<void> => {

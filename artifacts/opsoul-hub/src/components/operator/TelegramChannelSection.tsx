@@ -5,7 +5,7 @@ import { Integration } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CheckCircle2, Send, Trash2, Loader2, ExternalLink } from "lucide-react";
+import { CheckCircle2, Send, Trash2, Loader2, ExternalLink, AlertCircle, RefreshCw } from "lucide-react";
 
 function TelegramLogo() {
   return (
@@ -90,6 +90,24 @@ export default function TelegramChannelSection({ operatorId }: { operatorId: str
       toast({ title: "Disconnect failed", description: err.message, variant: "destructive" }),
   });
 
+  const retryWebhook = useMutation({
+    mutationFn: (integrationId: string) =>
+      apiFetch<{ ok: boolean; error?: string }>(`/operators/${operatorId}/integrations/${integrationId}/retry-webhook`, {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "integrations"] });
+      toast({ title: "Webhook registered", description: "Your bot is now ready to receive messages." });
+    },
+    onError: (err: Error) => {
+      queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "integrations"] });
+      toast({ title: "Retry failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const isError = connected?.status === "error";
+  const webhookError = connected?.appSchema?.webhookError as string | undefined;
+
   return (
     <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300 glass-panel rounded-2xl border border-border/30 p-6">
       {/* Header */}
@@ -108,33 +126,81 @@ export default function TelegramChannelSection({ operatorId }: { operatorId: str
       {isLoading ? (
         <div className="h-40 rounded-xl border border-border/30 bg-card/20 animate-pulse" />
       ) : connected ? (
-        /* ── Connected state ── */
-        <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-5 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
-            <div>
-              <p className="font-mono text-sm font-bold text-green-400">Connected</p>
-              {connected.integrationLabel && (
-                <p className="font-mono text-xs text-muted-foreground mt-0.5">
-                  {connected.integrationLabel}
-                </p>
-              )}
+        /* ── Connected / Error state ── */
+        <div className="space-y-3">
+          {isError ? (
+            <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-5 space-y-3">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-mono text-sm font-bold text-destructive">Webhook registration failed</p>
+                  <p className="font-mono text-xs text-muted-foreground mt-1 leading-relaxed">
+                    {webhookError
+                      ? webhookError
+                      : "Telegram could not register the webhook. The bot will not receive messages until this is resolved."}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="font-mono text-xs border-destructive/40 text-destructive hover:bg-destructive/10"
+                  onClick={() => retryWebhook.mutate(connected.id)}
+                  disabled={retryWebhook.isPending}
+                >
+                  {retryWebhook.isPending ? (
+                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+                  )}
+                  {retryWebhook.isPending ? "Retrying…" : "Re-register webhook"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="font-mono text-xs text-muted-foreground hover:text-destructive"
+                  onClick={() => disconnect.mutate(connected.id)}
+                  disabled={disconnect.isPending}
+                >
+                  {disconnect.isPending ? (
+                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                  )}
+                  Disconnect
+                </Button>
+              </div>
             </div>
-          </div>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="font-mono text-xs text-muted-foreground hover:text-destructive"
-            onClick={() => disconnect.mutate(connected.id)}
-            disabled={disconnect.isPending}
-          >
-            {disconnect.isPending ? (
-              <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-            ) : (
-              <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-            )}
-            Disconnect
-          </Button>
+          ) : (
+            <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-5 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
+                <div>
+                  <p className="font-mono text-sm font-bold text-green-400">Connected</p>
+                  {connected.integrationLabel && (
+                    <p className="font-mono text-xs text-muted-foreground mt-0.5">
+                      {connected.integrationLabel}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="font-mono text-xs text-muted-foreground hover:text-destructive"
+                onClick={() => disconnect.mutate(connected.id)}
+                disabled={disconnect.isPending}
+              >
+                {disconnect.isPending ? (
+                  <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                )}
+                Disconnect
+              </Button>
+            </div>
+          )}
         </div>
       ) : (
         /* ── Setup flow ── */
