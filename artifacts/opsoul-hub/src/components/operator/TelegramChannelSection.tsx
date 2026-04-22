@@ -53,6 +53,12 @@ export default function TelegramChannelSection({ operatorId }: { operatorId: str
     queryFn: () =>
       apiFetch<{ integrations: Integration[] }>(`/operators/${operatorId}/integrations`)
         .then((r) => r.integrations ?? []),
+    refetchInterval: (query) => {
+      const tg = (query.state.data as Integration[] | undefined)?.find(
+        (i) => i.integrationType === "telegram"
+      );
+      return tg?.status === "pending" ? 2000 : false;
+    },
   });
 
   const connected = (integrations as Integration[]).find(
@@ -72,7 +78,7 @@ export default function TelegramChannelSection({ operatorId }: { operatorId: str
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "integrations"] });
-      toast({ title: "Telegram connected", description: "Your bot is now linked to this operator." });
+      toast({ title: "Registering webhook…", description: "Your bot token was saved. The webhook will be ready in a moment." });
       setToken("");
     },
     onError: (err: Error) =>
@@ -105,6 +111,7 @@ export default function TelegramChannelSection({ operatorId }: { operatorId: str
     },
   });
 
+  const isPending = connected?.status === "pending";
   const isError = connected?.status === "error";
   const webhookError = connected?.appSchema?.webhookError as string | undefined;
 
@@ -126,9 +133,35 @@ export default function TelegramChannelSection({ operatorId }: { operatorId: str
       {isLoading ? (
         <div className="h-40 rounded-xl border border-border/30 bg-card/20 animate-pulse" />
       ) : connected ? (
-        /* ── Connected / Error state ── */
+        /* ── Connected / Pending / Error state ── */
         <div className="space-y-3">
-          {isError ? (
+          {isPending ? (
+            <div className="rounded-xl border border-border/40 bg-card/20 p-5 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <Loader2 className="w-5 h-5 text-muted-foreground shrink-0 animate-spin" />
+                <div>
+                  <p className="font-mono text-sm font-bold text-muted-foreground">Registering webhook…</p>
+                  <p className="font-mono text-xs text-muted-foreground/70 mt-0.5">
+                    Connecting your bot to this operator. This usually takes a moment.
+                  </p>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="font-mono text-xs text-muted-foreground hover:text-destructive"
+                onClick={() => disconnect.mutate(connected.id)}
+                disabled={disconnect.isPending}
+              >
+                {disconnect.isPending ? (
+                  <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                )}
+                Cancel
+              </Button>
+            </div>
+          ) : isError ? (
             <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-5 space-y-3">
               <div className="flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />

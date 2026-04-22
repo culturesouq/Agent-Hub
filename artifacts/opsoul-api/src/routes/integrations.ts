@@ -70,7 +70,7 @@ const UpdateIntegrationSchema = z.object({
   integrationLabel: z.string().min(1).max(200).optional(),
   token: z.string().min(1).max(4000).optional(),
   scopes: z.array(z.string().max(100)).max(50).optional(),
-  status: z.enum(['connected', 'disconnected', 'error']).optional(),
+  status: z.enum(['connected', 'disconnected', 'error', 'pending']).optional(),
   contextsAssigned: z.array(z.string()).max(20).optional(),
   scopeUpdatePending: z.boolean().optional(),
   scopeUpdateSummary: z.string().max(500).optional(),
@@ -120,6 +120,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     createAppSchema = Object.keys(schemaWithoutSecret).length > 0 ? schemaWithoutSecret : null;
   }
 
+  const isTelegramWithToken = parsed.data.integrationType === 'telegram' && !!tokenEncrypted && !!process.env.API_BASE_URL;
+
   const [integration] = await db.insert(operatorIntegrationsTable).values({
     id: crypto.randomUUID(),
     operatorId,
@@ -129,7 +131,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     tokenEncrypted,
     refreshTokenEncrypted: createRefreshTokenEncrypted,
     scopes: parsed.data.scopes ?? [],
-    status: 'connected',
+    status: isTelegramWithToken ? 'pending' : 'connected',
     scopeUpdatePending: false,
     contextsAssigned: parsed.data.contextsAssigned ?? [],
     appSchema: createAppSchema,
@@ -315,7 +317,7 @@ router.patch('/:integrationId', async (req: Request, res: Response): Promise<voi
   }
 
   const [existing] = await db
-    .select({ id: operatorIntegrationsTable.id, status: operatorIntegrationsTable.status })
+    .select({ id: operatorIntegrationsTable.id, status: operatorIntegrationsTable.status, integrationType: operatorIntegrationsTable.integrationType })
     .from(operatorIntegrationsTable)
     .where(
       and(
@@ -329,7 +331,12 @@ router.patch('/:integrationId', async (req: Request, res: Response): Promise<voi
   const previousStatus = existing.status;
   const { token, appSecret, ...rest } = parsed.data;
   const updates: Record<string, unknown> = { ...rest };
-  if (token) updates.tokenEncrypted = encryptToken(token);
+  if (token) {
+    updates.tokenEncrypted = encryptToken(token);
+    if (existing.integrationType === 'telegram' && process.env.API_BASE_URL) {
+      updates.status = 'pending';
+    }
+  }
 
   if (appSecret !== undefined) {
     if (appSecret === null || appSecret === '') {
