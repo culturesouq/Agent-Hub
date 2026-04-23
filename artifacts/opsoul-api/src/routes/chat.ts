@@ -130,7 +130,7 @@ Tagging for retrieval: domain (specific, not "general"), source, confidence, cre
   image_attachment: `When an image is attached to this message:
 - You can see the image. Do not say "I cannot see images" — you can.
 - Describe what you see, extract text from it, answer questions about it, or analyze it.
-- If the user sends an image without a question, describe what you see clearly and ask what they need.
+- If the user sends an image without a question, act on the most obvious intent.
 - If asked to extract text: do so word for word.
 - Never fabricate image content you cannot see.`,
 
@@ -263,7 +263,7 @@ Never skip to step 6 without doing steps 1–3. Never present search snippets as
 
   uncertainty: `When you don't know something:
 - Say so clearly: "I don't have enough on this to give you a solid answer."
-- Then offer: "I can search for it now" or "this is outside my current knowledge base."
+- Call web_search immediately — no announcement, no "I'll search for that now", just call the tool.
 - Never guess and present it as fact.
 - Never fill silence with plausible-sounding fabrications.
 - Directional knowledge (unverified, single source): hedge naturally — "from what I'm seeing", "my read on this", "worth checking before you act on it."`,
@@ -479,24 +479,6 @@ Return ONLY valid JSON, no markdown, no explanation:
     .where(eq(operatorsTable.id, operatorId));
 }
 
-// ─── Search narration fallback ───────────────────────────────────────────────
-// When the operator says "Searching now: X" in text instead of calling the tool,
-// we extract the query and fire the real search. The operator is still deciding
-// what to search — we're just enforcing the action it announced.
-function extractNarratedSearchQuery(content: string, userMessageFallback: string): string | null {
-  // "Searching now: X" or "Searching for: X" or "Searching: X"
-  const explicit = content.match(/Searching(?:\s+now)?(?:\s+for)?:\s*(.+?)(?:\n|$)/i);
-  if (explicit) return explicit[1].trim().slice(0, 200);
-  // "Moving to topic X — Y patterns." — extract the topic description after the dash
-  const movingTo = content.match(/Moving to topic [a-z\s]+[—\-–]+\s*(.+?)(?:\.|$)/im);
-  if (movingTo) return movingTo[1].trim().slice(0, 200);
-  // "Now searching X" or "Now looking at X"
-  const nowSearching = content.match(/Now (?:searching|looking at|researching)\s+(.+?)(?:\.|$)/im);
-  if (nowSearching) return nowSearching[1].trim().slice(0, 200);
-  // "Searching now." or "Searching now\n" with no query — use the user's message
-  if (/\bSearching\s+now\.?\s*$/im.test(content)) return userMessageFallback.slice(0, 200);
-  return null;
-}
 
 // ─── Agency Layer shared helpers ─────────────────────────────────────────────
 
@@ -1480,26 +1462,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           break;
         }
 
-        // ── NARRATION FALLBACK (any iteration) ────────────────────────────
-        // Operator described a search in text but didn't call the tool — honour it.
-        // Runs on every iteration so multi-step narrated sweeps don't drop early.
-        if (!iterToolCall && webSearchTool && webSearchCount < MAX_SEARCHES) {
-          const narratedQuery = extractNarratedSearchQuery(iterContent, message);
-          if (narratedQuery) {
-            console.log(`[agency] narration fallback iter ${iter} — firing real search: "${narratedQuery}"`);
-            res.write(`data: ${JSON.stringify({ searching: narratedQuery })}\n\n`);
-            const capResult = await executeWebSearch(narratedQuery);
-            if (capResult.success) {
-              await persistWebSearchResult(operator.id, operator.ownerId, conv.id, narratedQuery, capResult, operator.mandate ?? '');
-              webSearchCount++;
-              loopMessages.push(
-                { role: 'assistant', content: iterContent },
-                { role: 'system', content: `[Web Search] ${narratedQuery}\n${capResult.output}` },
-              );
-              continue;
-            }
-          }
-        }
 
         // ── NO TOOL CALL — clean final response ────────────────────────────
         finalContent = iterContent;
@@ -1589,26 +1551,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       let finalCompletionTokens = result.completionTokens;
       let capabilityFired = false;
 
-      // Narration fallback — operator said "Searching now: X" in text but didn't call the tool.
-      if (!result.toolCall && webSearchTool) {
-        const narratedQuery = extractNarratedSearchQuery(result.content, message);
-        if (narratedQuery) {
-          console.log(`[agency] narration fallback (sync) — firing real search: "${narratedQuery}"`);
-          const capResult = await executeWebSearch(narratedQuery);
-          if (capResult.success) {
-            await persistWebSearchResult(operator.id, operator.ownerId, conv.id, narratedQuery, capResult, operator.mandate ?? '');
-            capabilityFired = true;
-            const searchMessages: ChatMessage[] = [
-              ...messages,
-              { role: 'system', content: `[Web Search] ${narratedQuery}\n${capResult.output}` },
-            ];
-            const secondResult = await chatCompletion(searchMessages, chatOpts);
-            finalContent = secondResult.content;
-            finalPromptTokens = secondResult.promptTokens;
-            finalCompletionTokens = secondResult.completionTokens;
-          }
-        }
-      }
 
       // Web search — operator actually called the tool via function calling
       if (!capabilityFired && result.toolCall && result.toolCall.name === 'web_search') {
