@@ -249,7 +249,7 @@ router.post('/entries', async (req: Request, res: Response): Promise<void> => {
 });
 
 router.put('/entries/:id', async (req: Request, res: Response): Promise<void> => {
-  const { id } = req.params;
+  const { id } = req.params as Record<string, string>;
   const { title, content, tags, isActive, archetype, sourceName, confidence, knowledgeStatus, dnaScope, archetypeScope, domainTags } = req.body as {
     title?: string;
     content?: string;
@@ -296,7 +296,7 @@ router.put('/entries/:id', async (req: Request, res: Response): Promise<void> =>
 });
 
 router.patch('/entries/:id/scope', async (req: Request, res: Response): Promise<void> => {
-  const { id } = req.params;
+  const { id } = req.params as Record<string, string>;
   const { dnaScope, archetypeScope, domainTags } = req.body as {
     dnaScope?: 'general' | 'specialty';
     archetypeScope?: string[];
@@ -324,7 +324,7 @@ router.patch('/entries/:id/scope', async (req: Request, res: Response): Promise<
 });
 
 router.delete('/entries/:id', async (req: Request, res: Response): Promise<void> => {
-  const { id } = req.params;
+  const { id } = req.params as Record<string, string>;
   const [existing] = await db.select().from(ragDnaTable).where(eq(ragDnaTable.id, id));
   if (!existing) {
     res.status(404).json({ error: 'Entry not found' });
@@ -567,7 +567,7 @@ router.post('/sources', async (req: Request, res: Response): Promise<void> => {
 });
 
 router.patch('/sources/:sourceId', async (req: Request, res: Response): Promise<void> => {
-  const { sourceId } = req.params;
+  const { sourceId } = req.params as Record<string, string>;
   const { name, url, notes, isActive } = req.body as {
     name?: string; url?: string; notes?: string; isActive?: boolean;
   };
@@ -594,7 +594,7 @@ router.patch('/sources/:sourceId', async (req: Request, res: Response): Promise<
 });
 
 router.delete('/sources/:sourceId', async (req: Request, res: Response): Promise<void> => {
-  const { sourceId } = req.params;
+  const { sourceId } = req.params as Record<string, string>;
   await db.delete(ragSourcesTable).where(eq(ragSourcesTable.id, sourceId));
   res.json({ ok: true, deleted: sourceId });
 });
@@ -639,7 +639,7 @@ router.post('/inbox', async (req: Request, res: Response): Promise<void> => {
 });
 
 router.delete('/inbox/:filename', async (req: Request, res: Response): Promise<void> => {
-  const filename = path.basename(String(req.params.filename));
+  const filename = path.basename(String(req.params.filename as string));
   if (!/\.(md|txt)$/i.test(filename)) {
     res.status(400).json({ error: 'Invalid filename' });
     return;

@@ -344,7 +344,7 @@ async function resolveOperatorAndConv(
     .from(operatorsTable)
     .where(
       and(
-        eq(operatorsTable.id, req.params.operatorId),
+        eq(operatorsTable.id, req.params.operatorId as string),
         eq(operatorsTable.ownerId, req.owner!.ownerId),
       ),
     );
@@ -360,7 +360,7 @@ async function resolveOperatorAndConv(
     .from(conversationsTable)
     .where(
       and(
-        eq(conversationsTable.id, req.params.convId),
+        eq(conversationsTable.id, req.params.convId as string),
         eq(conversationsTable.operatorId, operator.id),
         eq(conversationsTable.scopeId, expectedScope.scopeId),
       ),

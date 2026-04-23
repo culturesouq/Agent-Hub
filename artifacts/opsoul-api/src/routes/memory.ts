@@ -29,7 +29,7 @@ async function resolveOperator(
     .from(operatorsTable)
     .where(
       and(
-        eq(operatorsTable.id, req.params.operatorId),
+        eq(operatorsTable.id, req.params.operatorId as string),
         eq(operatorsTable.ownerId, req.owner!.ownerId),
       ),
     );
@@ -160,7 +160,7 @@ router.get('/:memId', async (req: Request, res: Response): Promise<void> => {
     .from(operatorMemoryTable)
     .where(
       and(
-        eq(operatorMemoryTable.id, req.params.memId),
+        eq(operatorMemoryTable.id, req.params.memId as string),
         eq(operatorMemoryTable.operatorId, op.id),
       ),
     );
@@ -186,7 +186,7 @@ router.patch('/:memId', async (req: Request, res: Response): Promise<void> => {
     .from(operatorMemoryTable)
     .where(
       and(
-        eq(operatorMemoryTable.id, req.params.memId),
+        eq(operatorMemoryTable.id, req.params.memId as string),
         eq(operatorMemoryTable.operatorId, op.id),
       ),
     );
@@ -214,7 +214,7 @@ router.patch('/:memId', async (req: Request, res: Response): Promise<void> => {
   const [updated] = await db
     .update(operatorMemoryTable)
     .set(updates)
-    .where(eq(operatorMemoryTable.id, req.params.memId))
+    .where(eq(operatorMemoryTable.id, req.params.memId as string))
     .returning();
 
   const { embedding: _, ...safe } = updated;
@@ -230,15 +230,15 @@ router.delete('/:memId', async (req: Request, res: Response): Promise<void> => {
     .from(operatorMemoryTable)
     .where(
       and(
-        eq(operatorMemoryTable.id, req.params.memId),
+        eq(operatorMemoryTable.id, req.params.memId as string),
         eq(operatorMemoryTable.operatorId, op.id),
       ),
     );
 
   if (!existing) { res.status(404).json({ error: 'Memory not found' }); return; }
 
-  await db.delete(operatorMemoryTable).where(eq(operatorMemoryTable.id, req.params.memId));
-  res.json({ ok: true, deleted: req.params.memId });
+  await db.delete(operatorMemoryTable).where(eq(operatorMemoryTable.id, req.params.memId as string));
+  res.json({ ok: true, deleted: req.params.memId as string });
 });
 
 router.post('/search', async (req: Request, res: Response): Promise<void> => {

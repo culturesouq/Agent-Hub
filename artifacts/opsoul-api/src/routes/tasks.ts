@@ -35,7 +35,7 @@ async function resolveOperator(req: Request, res: Response): Promise<string | nu
     .from(operatorsTable)
     .where(
       and(
-        eq(operatorsTable.id, req.params.operatorId),
+        eq(operatorsTable.id, req.params.operatorId as string),
         eq(operatorsTable.ownerId, req.owner!.ownerId),
       ),
     );
@@ -138,7 +138,7 @@ router.patch('/:taskId', async (req: Request, res: Response): Promise<void> => {
   const [existing] = await db
     .select()
     .from(tasksTable)
-    .where(and(eq(tasksTable.id, req.params.taskId), eq(tasksTable.operatorId, operatorId)));
+    .where(and(eq(tasksTable.id, req.params.taskId as string), eq(tasksTable.operatorId, operatorId)));
 
   if (!existing) {
     res.status(404).json({ error: 'Task not found' });
@@ -188,7 +188,7 @@ router.delete('/:taskId', async (req: Request, res: Response): Promise<void> => 
   const [existing] = await db
     .select({ id: tasksTable.id })
     .from(tasksTable)
-    .where(and(eq(tasksTable.id, req.params.taskId), eq(tasksTable.operatorId, operatorId)));
+    .where(and(eq(tasksTable.id, req.params.taskId as string), eq(tasksTable.operatorId, operatorId)));
 
   if (!existing) {
     res.status(404).json({ error: 'Task not found' });

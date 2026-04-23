@@ -28,7 +28,7 @@ async function resolveOperator(req: Request, res: Response): Promise<string | nu
     .from(operatorsTable)
     .where(
       and(
-        eq(operatorsTable.id, req.params.operatorId),
+        eq(operatorsTable.id, req.params.operatorId as string),
         eq(operatorsTable.ownerId, req.owner!.ownerId),
       ),
     );
@@ -107,7 +107,7 @@ router.get('/proposals/:proposalId', async (req: Request, res: Response): Promis
     .from(growProposalsTable)
     .where(
       and(
-        eq(growProposalsTable.id, req.params.proposalId),
+        eq(growProposalsTable.id, req.params.proposalId as string),
         eq(growProposalsTable.operatorId, operatorId),
       ),
     );
@@ -136,7 +136,7 @@ router.patch('/proposals/:proposalId/decide', async (req: Request, res: Response
     .from(growProposalsTable)
     .where(
       and(
-        eq(growProposalsTable.id, req.params.proposalId),
+        eq(growProposalsTable.id, req.params.proposalId as string),
         eq(growProposalsTable.operatorId, operatorId),
       ),
     );
@@ -252,7 +252,7 @@ router.post('/test-proposal/:proposalId', async (req: Request, res: Response): P
   const [proposal] = await db
     .select()
     .from(growProposalsTable)
-    .where(and(eq(growProposalsTable.id, req.params.proposalId), eq(growProposalsTable.operatorId, operatorId)));
+    .where(and(eq(growProposalsTable.id, req.params.proposalId as string), eq(growProposalsTable.operatorId, operatorId)));
   if (!proposal) { res.status(404).json({ error: 'Proposal not found' }); return; }
 
   const [operator] = await db.select().from(operatorsTable).where(eq(operatorsTable.id, operatorId));

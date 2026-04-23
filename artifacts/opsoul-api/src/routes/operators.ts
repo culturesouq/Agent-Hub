@@ -291,7 +291,7 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
   const [op] = await db
     .select()
     .from(operatorsTable)
-    .where(and(eq(operatorsTable.id, req.params.id), operatorFilter(req)));
+    .where(and(eq(operatorsTable.id, req.params.id as string), operatorFilter(req)));
 
   if (!op) { res.status(404).json({ error: 'Operator not found' }); return; }
   res.json(serializeOperator(op));
@@ -301,7 +301,7 @@ router.patch('/:id', async (req: Request, res: Response): Promise<void> => {
   const [op] = await db
     .select()
     .from(operatorsTable)
-    .where(and(eq(operatorsTable.id, req.params.id), operatorFilter(req)));
+    .where(and(eq(operatorsTable.id, req.params.id as string), operatorFilter(req)));
 
   if (!op) { res.status(404).json({ error: 'Operator not found' }); return; }
 
@@ -327,7 +327,7 @@ router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
   const [op] = await db
     .select({ id: operatorsTable.id })
     .from(operatorsTable)
-    .where(and(eq(operatorsTable.id, req.params.id), operatorFilter(req)));
+    .where(and(eq(operatorsTable.id, req.params.id as string), operatorFilter(req)));
 
   if (!op) { res.status(404).json({ error: 'Operator not found' }); return; }
 
@@ -339,7 +339,7 @@ router.post('/:id/lock-layer1', async (req: Request, res: Response): Promise<voi
   const [op] = await db
     .select()
     .from(operatorsTable)
-    .where(and(eq(operatorsTable.id, req.params.id), operatorFilter(req)));
+    .where(and(eq(operatorsTable.id, req.params.id as string), operatorFilter(req)));
 
   if (!op) { res.status(404).json({ error: 'Operator not found' }); return; }
 
@@ -372,7 +372,7 @@ router.get('/:id/soul', async (req: Request, res: Response): Promise<void> => {
       layer1LockedAt: operatorsTable.layer1LockedAt,
     })
     .from(operatorsTable)
-    .where(and(eq(operatorsTable.id, req.params.id), operatorFilter(req)));
+    .where(and(eq(operatorsTable.id, req.params.id as string), operatorFilter(req)));
 
   if (!op) { res.status(404).json({ error: 'Operator not found' }); return; }
 
@@ -391,7 +391,7 @@ router.patch('/:id/soul', async (req: Request, res: Response): Promise<void> => 
   const [op] = await db
     .select()
     .from(operatorsTable)
-    .where(and(eq(operatorsTable.id, req.params.id), operatorFilter(req)));
+    .where(and(eq(operatorsTable.id, req.params.id as string), operatorFilter(req)));
 
   if (!op) { res.status(404).json({ error: 'Operator not found' }); return; }
 
@@ -439,7 +439,7 @@ router.post('/:id/soul/reset', async (req: Request, res: Response): Promise<void
   const [op] = await db
     .select()
     .from(operatorsTable)
-    .where(and(eq(operatorsTable.id, req.params.id), operatorFilter(req)));
+    .where(and(eq(operatorsTable.id, req.params.id as string), operatorFilter(req)));
 
   if (!op) { res.status(404).json({ error: 'Operator not found' }); return; }
 
@@ -469,7 +469,7 @@ router.patch('/:id/grow-lock', async (req: Request, res: Response): Promise<void
   const [op] = await db
     .select({ id: operatorsTable.id, ownerId: operatorsTable.ownerId })
     .from(operatorsTable)
-    .where(and(eq(operatorsTable.id, req.params.id), operatorFilter(req)));
+    .where(and(eq(operatorsTable.id, req.params.id as string), operatorFilter(req)));
 
   if (!op) { res.status(404).json({ error: 'Operator not found' }); return; }
 
@@ -499,7 +499,7 @@ router.patch('/:id/identity-from-description', async (req: Request, res: Respons
   const [op] = await db
     .select()
     .from(operatorsTable)
-    .where(and(eq(operatorsTable.id, req.params.id), operatorFilter(req)));
+    .where(and(eq(operatorsTable.id, req.params.id as string), operatorFilter(req)));
 
   if (!op) { res.status(404).json({ error: 'Operator not found' }); return; }
 
@@ -578,7 +578,7 @@ router.patch('/:id/soul/from-description', async (req: Request, res: Response): 
   const [op] = await db
     .select()
     .from(operatorsTable)
-    .where(and(eq(operatorsTable.id, req.params.id), operatorFilter(req)));
+    .where(and(eq(operatorsTable.id, req.params.id as string), operatorFilter(req)));
 
   if (!op) { res.status(404).json({ error: 'Operator not found' }); return; }
 
@@ -636,7 +636,7 @@ router.patch('/:id/model-settings', async (req: Request, res: Response): Promise
   const [op] = await db
     .select({ id: operatorsTable.id, ownerId: operatorsTable.ownerId })
     .from(operatorsTable)
-    .where(and(eq(operatorsTable.id, req.params.id), operatorFilter(req)));
+    .where(and(eq(operatorsTable.id, req.params.id as string), operatorFilter(req)));
 
   if (!op) { res.status(404).json({ error: 'Operator not found' }); return; }
 
@@ -682,7 +682,7 @@ router.post('/:id/model-settings/verify-key', async (req: Request, res: Response
   const [op] = await db
     .select({ id: operatorsTable.id })
     .from(operatorsTable)
-    .where(and(eq(operatorsTable.id, req.params.id), operatorFilter(req)));
+    .where(and(eq(operatorsTable.id, req.params.id as string), operatorFilter(req)));
 
   if (!op) { res.status(404).json({ error: 'Operator not found' }); return; }
 
@@ -708,7 +708,7 @@ router.patch('/:id/safe-mode', async (req: Request, res: Response): Promise<void
   const [op] = await db
     .select({ id: operatorsTable.id, ownerId: operatorsTable.ownerId })
     .from(operatorsTable)
-    .where(and(eq(operatorsTable.id, req.params.id), operatorFilter(req)));
+    .where(and(eq(operatorsTable.id, req.params.id as string), operatorFilter(req)));
 
   if (!op) { res.status(404).json({ error: 'Operator not found' }); return; }
 

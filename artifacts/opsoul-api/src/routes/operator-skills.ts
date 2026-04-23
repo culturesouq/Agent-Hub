@@ -16,7 +16,7 @@ async function resolveOperator(req: Request, res: Response): Promise<string | nu
     .from(operatorsTable)
     .where(
       and(
-        eq(operatorsTable.id, req.params.operatorId),
+        eq(operatorsTable.id, req.params.operatorId as string),
         eq(operatorsTable.ownerId, req.owner!.ownerId),
       ),
     );
@@ -125,7 +125,7 @@ router.patch('/:installId', async (req: Request, res: Response): Promise<void> =
     .from(operatorSkillsTable)
     .where(
       and(
-        eq(operatorSkillsTable.id, req.params.installId),
+        eq(operatorSkillsTable.id, req.params.installId as string),
         eq(operatorSkillsTable.operatorId, operatorId),
       ),
     );
@@ -141,7 +141,7 @@ router.patch('/:installId', async (req: Request, res: Response): Promise<void> =
   const [updated] = await db
     .update(operatorSkillsTable)
     .set(updates)
-    .where(eq(operatorSkillsTable.id, req.params.installId))
+    .where(eq(operatorSkillsTable.id, req.params.installId as string))
     .returning();
 
   triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});
@@ -157,14 +157,14 @@ router.delete('/:installId', async (req: Request, res: Response): Promise<void> 
     .from(operatorSkillsTable)
     .where(
       and(
-        eq(operatorSkillsTable.id, req.params.installId),
+        eq(operatorSkillsTable.id, req.params.installId as string),
         eq(operatorSkillsTable.operatorId, operatorId),
       ),
     );
 
   if (!existing) { res.status(404).json({ error: 'Skill install not found' }); return; }
 
-  await db.delete(operatorSkillsTable).where(eq(operatorSkillsTable.id, req.params.installId));
+  await db.delete(operatorSkillsTable).where(eq(operatorSkillsTable.id, req.params.installId as string));
 
   const [skill] = await db
     .select({ installCount: platformSkillsTable.installCount })
@@ -178,7 +178,7 @@ router.delete('/:installId', async (req: Request, res: Response): Promise<void> 
   }
 
   triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});
-  res.json({ ok: true, uninstalled: req.params.installId });
+  res.json({ ok: true, uninstalled: req.params.installId as string });
 });
 
 export default router;

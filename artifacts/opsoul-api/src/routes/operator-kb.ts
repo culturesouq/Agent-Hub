@@ -41,7 +41,7 @@ async function resolveOperator(req: Request, res: Response): Promise<string | nu
     .from(operatorsTable)
     .where(
       and(
-        eq(operatorsTable.id, req.params.operatorId),
+        eq(operatorsTable.id, req.params.operatorId as string),
         eq(operatorsTable.ownerId, req.owner!.ownerId),
       ),
     );
@@ -148,7 +148,7 @@ router.get('/:chunkId', async (req: Request, res: Response): Promise<void> => {
     .from(operatorKbTable)
     .where(
       and(
-        eq(operatorKbTable.id, req.params.chunkId),
+        eq(operatorKbTable.id, req.params.chunkId as string),
         eq(operatorKbTable.operatorId, operatorId),
       ),
     );
@@ -166,7 +166,7 @@ router.patch('/:chunkId', async (req: Request, res: Response): Promise<void> => 
     .from(operatorKbTable)
     .where(
       and(
-        eq(operatorKbTable.id, req.params.chunkId),
+        eq(operatorKbTable.id, req.params.chunkId as string),
         eq(operatorKbTable.operatorId, operatorId),
       ),
     );
@@ -217,7 +217,7 @@ router.delete('/:chunkId', async (req: Request, res: Response): Promise<void> =>
     .from(operatorKbTable)
     .where(
       and(
-        eq(operatorKbTable.id, req.params.chunkId),
+        eq(operatorKbTable.id, req.params.chunkId as string),
         eq(operatorKbTable.operatorId, operatorId),
       ),
     );

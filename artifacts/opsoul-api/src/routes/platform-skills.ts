@@ -52,7 +52,7 @@ router.get('/:skillId', async (req: Request, res: Response): Promise<void> => {
   const [skill] = await db
     .select()
     .from(platformSkillsTable)
-    .where(eq(platformSkillsTable.id, req.params.skillId));
+    .where(eq(platformSkillsTable.id, req.params.skillId as string));
 
   if (!skill) { res.status(404).json({ error: 'Skill not found' }); return; }
   res.json(skill);
@@ -68,14 +68,14 @@ router.patch('/:skillId', async (req: Request, res: Response): Promise<void> => 
   const [existing] = await db
     .select({ id: platformSkillsTable.id })
     .from(platformSkillsTable)
-    .where(eq(platformSkillsTable.id, req.params.skillId));
+    .where(eq(platformSkillsTable.id, req.params.skillId as string));
 
   if (!existing) { res.status(404).json({ error: 'Skill not found' }); return; }
 
   const [updated] = await db
     .update(platformSkillsTable)
     .set(parsed.data)
-    .where(eq(platformSkillsTable.id, req.params.skillId))
+    .where(eq(platformSkillsTable.id, req.params.skillId as string))
     .returning();
 
   res.json(updated);
@@ -85,12 +85,12 @@ router.delete('/:skillId', async (req: Request, res: Response): Promise<void> =>
   const [existing] = await db
     .select({ id: platformSkillsTable.id })
     .from(platformSkillsTable)
-    .where(eq(platformSkillsTable.id, req.params.skillId));
+    .where(eq(platformSkillsTable.id, req.params.skillId as string));
 
   if (!existing) { res.status(404).json({ error: 'Skill not found' }); return; }
 
-  await db.delete(platformSkillsTable).where(eq(platformSkillsTable.id, req.params.skillId));
-  res.json({ ok: true, deleted: req.params.skillId });
+  await db.delete(platformSkillsTable).where(eq(platformSkillsTable.id, req.params.skillId as string));
+  res.json({ ok: true, deleted: req.params.skillId as string });
 });
 
 export default router;

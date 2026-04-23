@@ -20,7 +20,7 @@ async function resolveOperator(req: Request, res: Response): Promise<{ id: strin
     .from(operatorsTable)
     .where(
       and(
-        eq(operatorsTable.id, req.params.operatorId),
+        eq(operatorsTable.id, req.params.operatorId as string),
         eq(operatorsTable.ownerId, req.owner!.ownerId),
       ),
     );
@@ -99,7 +99,7 @@ router.get('/:convId', async (req: Request, res: Response): Promise<void> => {
     .from(conversationsTable)
     .where(
       and(
-        eq(conversationsTable.id, req.params.convId),
+        eq(conversationsTable.id, req.params.convId as string),
         eq(conversationsTable.operatorId, op.id),
       ),
     );
@@ -117,7 +117,7 @@ router.get('/:convId/messages', async (req: Request, res: Response): Promise<voi
     .from(conversationsTable)
     .where(
       and(
-        eq(conversationsTable.id, req.params.convId),
+        eq(conversationsTable.id, req.params.convId as string),
         eq(conversationsTable.operatorId, op.id),
       ),
     );
@@ -142,7 +142,7 @@ router.delete('/:convId', async (req: Request, res: Response): Promise<void> => 
     .from(conversationsTable)
     .where(
       and(
-        eq(conversationsTable.id, req.params.convId),
+        eq(conversationsTable.id, req.params.convId as string),
         eq(conversationsTable.operatorId, op.id),
       ),
     );

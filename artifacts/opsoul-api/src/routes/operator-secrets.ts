@@ -17,7 +17,7 @@ async function resolveOperator(req: Request, res: Response): Promise<string | nu
     .from(operatorsTable)
     .where(
       and(
-        eq(operatorsTable.id, req.params.operatorId),
+        eq(operatorsTable.id, req.params.operatorId as string),
         eq(operatorsTable.ownerId, req.owner!.ownerId),
       ),
     );
@@ -116,7 +116,7 @@ router.get('/:secretId/reveal', async (req: Request, res: Response): Promise<voi
     .from(operatorSecretsTable)
     .where(
       and(
-        eq(operatorSecretsTable.id, req.params.secretId),
+        eq(operatorSecretsTable.id, req.params.secretId as string),
         eq(operatorSecretsTable.operatorId, operatorId),
         eq(operatorSecretsTable.ownerId, req.owner!.ownerId),
       ),
@@ -142,7 +142,7 @@ router.patch('/:secretId', async (req: Request, res: Response): Promise<void> =>
     .from(operatorSecretsTable)
     .where(
       and(
-        eq(operatorSecretsTable.id, req.params.secretId),
+        eq(operatorSecretsTable.id, req.params.secretId as string),
         eq(operatorSecretsTable.operatorId, operatorId),
         eq(operatorSecretsTable.ownerId, req.owner!.ownerId),
       ),
@@ -169,7 +169,7 @@ router.delete('/:secretId', async (req: Request, res: Response): Promise<void> =
     .from(operatorSecretsTable)
     .where(
       and(
-        eq(operatorSecretsTable.id, req.params.secretId),
+        eq(operatorSecretsTable.id, req.params.secretId as string),
         eq(operatorSecretsTable.operatorId, operatorId),
         eq(operatorSecretsTable.ownerId, req.owner!.ownerId),
       ),
@@ -179,10 +179,10 @@ router.delete('/:secretId', async (req: Request, res: Response): Promise<void> =
 
   await db
     .delete(operatorSecretsTable)
-    .where(eq(operatorSecretsTable.id, req.params.secretId));
+    .where(eq(operatorSecretsTable.id, req.params.secretId as string));
 
   triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});
-  res.json({ ok: true, deleted: req.params.secretId });
+  res.json({ ok: true, deleted: req.params.secretId as string });
 });
 
 export default router;

@@ -41,7 +41,7 @@ async function resolveOperator(req: Request, res: Response): Promise<string | nu
     .from(operatorsTable)
     .where(
       and(
-        eq(operatorsTable.id, req.params.operatorId),
+        eq(operatorsTable.id, req.params.operatorId as string),
         eq(operatorsTable.ownerId, req.owner!.ownerId),
       ),
     );
@@ -138,7 +138,7 @@ router.patch('/:slotId', async (req: Request, res: Response): Promise<void> => {
     .from(operatorDeploymentSlotsTable)
     .where(
       and(
-        eq(operatorDeploymentSlotsTable.id, req.params.slotId),
+        eq(operatorDeploymentSlotsTable.id, req.params.slotId as string),
         eq(operatorDeploymentSlotsTable.operatorId, operatorId),
       ),
     );
@@ -156,7 +156,7 @@ router.patch('/:slotId', async (req: Request, res: Response): Promise<void> => {
   const [updated] = await db
     .update(operatorDeploymentSlotsTable)
     .set(updates)
-    .where(eq(operatorDeploymentSlotsTable.id, req.params.slotId))
+    .where(eq(operatorDeploymentSlotsTable.id, req.params.slotId as string))
     .returning({
       id: operatorDeploymentSlotsTable.id,
       name: operatorDeploymentSlotsTable.name,
@@ -182,7 +182,7 @@ router.delete('/:slotId', async (req: Request, res: Response): Promise<void> => 
     .from(operatorDeploymentSlotsTable)
     .where(
       and(
-        eq(operatorDeploymentSlotsTable.id, req.params.slotId),
+        eq(operatorDeploymentSlotsTable.id, req.params.slotId as string),
         eq(operatorDeploymentSlotsTable.operatorId, operatorId),
       ),
     );
@@ -195,9 +195,9 @@ router.delete('/:slotId', async (req: Request, res: Response): Promise<void> => 
   await db
     .update(operatorDeploymentSlotsTable)
     .set({ isActive: false, revokedAt: new Date() })
-    .where(eq(operatorDeploymentSlotsTable.id, req.params.slotId));
+    .where(eq(operatorDeploymentSlotsTable.id, req.params.slotId as string));
 
-  res.json({ ok: true, revoked: req.params.slotId });
+  res.json({ ok: true, revoked: req.params.slotId as string });
 });
 
 export default router;

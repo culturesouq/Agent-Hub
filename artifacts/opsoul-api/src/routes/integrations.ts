@@ -20,7 +20,7 @@ async function resolveOperator(req: Request, res: Response): Promise<string | nu
     .from(operatorsTable)
     .where(
       and(
-        eq(operatorsTable.id, req.params.operatorId),
+        eq(operatorsTable.id, req.params.operatorId as string),
         eq(operatorsTable.ownerId, req.owner!.ownerId),
       ),
     );
@@ -297,7 +297,7 @@ router.get('/:integrationId', async (req: Request, res: Response): Promise<void>
     .from(operatorIntegrationsTable)
     .where(
       and(
-        eq(operatorIntegrationsTable.id, req.params.integrationId),
+        eq(operatorIntegrationsTable.id, req.params.integrationId as string),
         eq(operatorIntegrationsTable.operatorId, operatorId),
       ),
     );
@@ -321,7 +321,7 @@ router.patch('/:integrationId', async (req: Request, res: Response): Promise<voi
     .from(operatorIntegrationsTable)
     .where(
       and(
-        eq(operatorIntegrationsTable.id, req.params.integrationId),
+        eq(operatorIntegrationsTable.id, req.params.integrationId as string),
         eq(operatorIntegrationsTable.operatorId, operatorId),
       ),
     );
@@ -347,7 +347,7 @@ router.patch('/:integrationId', async (req: Request, res: Response): Promise<voi
     const [currentRow] = await db
       .select({ appSchema: operatorIntegrationsTable.appSchema })
       .from(operatorIntegrationsTable)
-      .where(eq(operatorIntegrationsTable.id, req.params.integrationId));
+      .where(eq(operatorIntegrationsTable.id, req.params.integrationId as string));
     const existingSchema = (currentRow?.appSchema as Record<string, unknown> | null) ?? {};
     const { appSecret: _removed, ...cleanSchema } = existingSchema;
     updates.appSchema = Object.keys(cleanSchema).length > 0 ? cleanSchema : null;
@@ -356,7 +356,7 @@ router.patch('/:integrationId', async (req: Request, res: Response): Promise<voi
   const [updated] = await db
     .update(operatorIntegrationsTable)
     .set(updates)
-    .where(eq(operatorIntegrationsTable.id, req.params.integrationId))
+    .where(eq(operatorIntegrationsTable.id, req.params.integrationId as string))
     .returning();
 
   res.json(safeSerialize(updated));
@@ -417,7 +417,7 @@ router.post('/:integrationId/retry-webhook', async (req: Request, res: Response)
     .from(operatorIntegrationsTable)
     .where(
       and(
-        eq(operatorIntegrationsTable.id, req.params.integrationId),
+        eq(operatorIntegrationsTable.id, req.params.integrationId as string),
         eq(operatorIntegrationsTable.operatorId, operatorId),
       ),
     );
@@ -483,7 +483,7 @@ router.delete('/:integrationId', async (req: Request, res: Response): Promise<vo
     .from(operatorIntegrationsTable)
     .where(
       and(
-        eq(operatorIntegrationsTable.id, req.params.integrationId),
+        eq(operatorIntegrationsTable.id, req.params.integrationId as string),
         eq(operatorIntegrationsTable.operatorId, operatorId),
       ),
     );
@@ -491,9 +491,9 @@ router.delete('/:integrationId', async (req: Request, res: Response): Promise<vo
   if (!existing) { res.status(404).json({ error: 'Integration not found' }); return; }
 
   await db.delete(operatorIntegrationsTable)
-    .where(eq(operatorIntegrationsTable.id, req.params.integrationId));
+    .where(eq(operatorIntegrationsTable.id, req.params.integrationId as string));
 
-  res.json({ ok: true, deleted: req.params.integrationId });
+  res.json({ ok: true, deleted: req.params.integrationId as string });
 
   autoRemoveIntegrationSkills(operatorId, existing.integrationType).catch(() => {});
   triggerSelfAwareness(operatorId, 'integration_change').catch(() => {});

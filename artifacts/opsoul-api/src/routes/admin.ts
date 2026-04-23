@@ -117,7 +117,7 @@ router.get('/drift-alerts', async (_req: Request, res: Response): Promise<void> 
 });
 
 router.patch('/owners/:id/toggle-admin', async (req: Request, res: Response): Promise<void> => {
-  const { id } = req.params;
+  const { id } = req.params as Record<string, string>;
   const [owner] = await db.select().from(ownersTable).where(eq(ownersTable.id, id));
   if (!owner) {
     res.status(404).json({ error: 'Owner not found' });

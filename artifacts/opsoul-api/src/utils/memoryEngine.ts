@@ -116,7 +116,7 @@ export async function storeMemory(
     operatorId,
     ownerId,
     content,
-    embedding: embedding as unknown as string,
+    embedding,
     memoryType,
     sourceTrustLevel,
     weight,
