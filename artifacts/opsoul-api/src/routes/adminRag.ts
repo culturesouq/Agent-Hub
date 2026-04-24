@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import { db, pool, ragDnaTable, ragPipelineConfigTable, operatorKbTable, ragSourcesTable } from '@workspace/db';
+import { db, pool, ragDnaTable, ragPipelineConfigTable, operatorKbTable, ragSourcesTable, operatorsTable } from '@workspace/db';
 import type { RagSourceType } from '@workspace/db';
 import { eq, and, sql, desc, isNull, or, notInArray } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
@@ -53,35 +53,39 @@ const PIPELINE_EXCLUDED_OPERATORS = [
   'a826164f-3111-4cc9-8f3c-856ecc589d77', // Vael — internal validator/discoverer
 ];
 
-const SCREENER_SYSTEM = `You are a collective DNA screener for an AI operator platform. Your job is to:
-1. Decide if a KB entry belongs in the shared DNA corpus
-2. If eligible, classify its scope and tagging
+const SCREENER_SYSTEM = `You are Vael, the intelligence guardian for OpSoul. Your job is to validate entries for the OpSoul DNA corpus — the platform's identity layer.
 
-ELIGIBLE KNOWLEDGE:
-- Factual domain knowledge (research findings, how-to guides, technical facts)
-- Verified information with broad applicability
-- Insights, patterns, or methods that are genuinely reusable
-- Structured knowledge: definitions, frameworks, processes
+DNA entries must be exclusively about OpSoul: how the platform works, what operators are, the 6-layer stack (Human Core → Identity → Self-Awareness → GROW → Agency → Senses), the 9 archetypes, Vael's role, GROW system, collective intelligence, operator lifecycle, and platform principles.
+
+DNA is NOT for general agentic knowledge, external domain facts, or how-to guides about third-party APIs. That belongs in platform KB or operator KB.
+
+ELIGIBLE DNA:
+- How OpSoul operators think, evolve, and behave on the platform
+- Archetype-specific behavioral principles (how an Executor vs Advisor approaches tasks on OpSoul)
+- Platform mechanics: GROW, self-awareness engine, curiosity engine, operator maturity lifecycle
+- OpSoul values: identity-first, adapt-never-adopt, operator sovereignty
+- Collective intelligence patterns observed across operators on the platform
+- Vael's role and validation mandate
 
 NOT ELIGIBLE:
-- User preference notes ("User likes X", "User prefers Y")
-- Conversational observations ("User asked about Z")
-- Operator diary — notes about a specific user's behavior
-- Personal context that only applies to one session
+- General API usage guides
+- External domain knowledge (finance, legal, medical, etc.)
+- Generic agentic AI patterns not specific to OpSoul
+- User preference notes or session observations
 
 For eligible entries, classify scope:
-- "general": Knowledge about how to think, communicate, or operate that fits a specific operator archetype. Set archetype_scope to the archetypes this applies to from: [Advisor, Analyst, Executor, Catalyst, Expert, Mentor, Connector, Creator, Guardian]. Leave empty [] if truly universal.
-- "specialty": Domain-specific knowledge (agriculture, finance, legal, medical, engineering, hr, sales, marketing, operations, education, technology, etc.). Set domain_tags accordingly.
+- "general": Applies across all operators or multiple archetypes. Set archetype_scope to relevant archetypes from: [Advisor, Analyst, Executor, Catalyst, Expert, Mentor, Connector, Creator, Guardian]. Empty [] = applies to all.
+- "specialty": Specific to one archetype or one platform subsystem.
 
 Return only valid JSON. No preamble.
 
 Schema:
 {
   "eligible": true | false,
-  "reason": "<only if not eligible — short label>",
+  "reason": "<only if not eligible>",
   "dna_scope": "general" | "specialty",
   "archetype_scope": ["Analyst", "Expert"],
-  "domain_tags": ["agriculture", "farming"]
+  "domain_tags": ["grow", "self-awareness", "archetype"]
 }`;
 
 async function screenForCollective(content: string): Promise<{
@@ -680,6 +684,48 @@ router.post('/inbox/upload', inboxUpload.array('files', 50), async (req: Request
 
   const added = results.filter(r => r.ok).length;
   res.status(added > 0 ? 201 : 400).json({ added, results });
+});
+
+// POST /admin/rag/platform-kb/upload
+router.post('/platform-kb/upload', inboxUpload.single('file'), async (req: Request, res: Response): Promise<void> => {
+  if (!req.file) { res.status(400).json({ error: 'No file provided' }); return; }
+
+  const { buffer, mimetype, originalname } = req.file;
+  const text = await extractTextFromBuffer(buffer, mimetype, originalname);
+  if (!text || text.trim().length < 50) { res.status(422).json({ error: 'Could not extract usable text from this file' }); return; }
+
+  const words = text.split(/\s+/);
+  const CHUNK_SIZE = 400;
+  const chunks: string[] = [];
+  for (let i = 0; i < words.length; i += CHUNK_SIZE) {
+    chunks.push(words.slice(i, i + CHUNK_SIZE).join(' '));
+  }
+
+  const operators = await db
+    .select({ id: operatorsTable.id, ownerId: operatorsTable.ownerId })
+    .from(operatorsTable)
+    .where(isNull(operatorsTable.deletedAt));
+
+  let seeded = 0;
+  for (const op of operators) {
+    for (let idx = 0; idx < chunks.length; idx++) {
+      const embedding = await embed(chunks[idx]);
+      const vecStr = `[${embedding.join(',')}]`;
+      const id = `plat-upload-${originalname.replace(/\W/g, '-')}-${idx}-${op.id}`.slice(0, 120);
+      await pool.query(
+        `INSERT INTO operator_kb
+           (id, operator_id, owner_id, content, embedding, source_name,
+            source_trust_level, confidence_score, intake_tags, is_pipeline_intake,
+            privacy_cleared, content_cleared, is_system, verification_status, chunk_index, created_at)
+         VALUES ($1,$2,$3,$4,$5::vector,$6,'platform',90,'{}',false,true,true,true,'active',$7,NOW())
+         ON CONFLICT (id) DO NOTHING`,
+        [id, op.id, op.ownerId, chunks[idx], vecStr, `_upload:${originalname}`, idx],
+      );
+      seeded++;
+    }
+  }
+
+  res.json({ ok: true, filename: originalname, chunks: chunks.length, operators: operators.length, total_inserted: seeded });
 });
 
 export default router;
