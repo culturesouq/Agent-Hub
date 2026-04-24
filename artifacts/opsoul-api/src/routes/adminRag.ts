@@ -16,30 +16,77 @@ import multer from 'multer';
 const INBOX_DIR     = path.resolve(process.cwd(), 'knowledge_inbox');
 const PROCESSED_DIR = path.join(INBOX_DIR, 'processed');
 
-const TEXT_EXTS = new Set(['.txt','.md','.markdown','.csv','.json','.log','.yaml','.yml','.toml','.ini','.html','.htm','.xml','.rst']);
+const TEXT_EXTS = new Set(['.txt','.md','.markdown','.csv','.json','.log','.yaml','.yml','.toml','.ini','.html','.htm','.xml','.rst','.jsonl','.tsv','.ndjson']);
 
 function extOf(name: string) { return ('.' + name.split('.').pop()!.toLowerCase()); }
 
+function stripHtml(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 async function extractTextFromBuffer(buffer: Buffer, mimetype: string, filename: string): Promise<string | null> {
   const ext = extOf(filename);
+
+  // XLSX / XLS
+  if (ext === '.xlsx' || ext === '.xls'
+      || mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      || mimetype === 'application/vnd.ms-excel') {
+    const XLSX = await import('xlsx');
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    const csvRows = workbook.SheetNames.map(name =>
+      XLSX.utils.sheet_to_csv(workbook.Sheets[name])
+    );
+    return csvRows.join('\n\n');
+  }
+
+  // JSONL / NDJSON — extract values from each line
+  if (ext === '.jsonl' || ext === '.ndjson') {
+    const lines = buffer.toString('utf-8').split('\n').filter(Boolean);
+    const texts = lines.map(line => {
+      try {
+        const obj = JSON.parse(line);
+        return Object.values(obj).filter(v => typeof v === 'string').join(' ');
+      } catch { return line; }
+    });
+    return texts.join('\n');
+  }
+
+  // Plain text / structured text formats
   if (TEXT_EXTS.has(ext) || mimetype.startsWith('text/')) return buffer.toString('utf-8');
+
+  // PDF
   if (mimetype === 'application/pdf' || ext === '.pdf') {
     const pdfParse = (await import('pdf-parse') as unknown as { default: (buf: Buffer) => Promise<{ text: string }> }).default;
     const data = await pdfParse(buffer);
     return data.text;
   }
+
+  // DOCX
   if (mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || ext === '.docx') {
     const mammoth = await import('mammoth');
     const result = await mammoth.extractRawText({ buffer });
     return result.value;
   }
+
+  // Legacy .doc — not supported
   if (mimetype === 'application/msword' || ext === '.doc') return null;
+
+  // Best-effort UTF-8 fallback for any other format
   return buffer.toString('utf-8');
 }
 
 const inboxUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 },
+  limits: { fileSize: 200 * 1024 * 1024 }, // 200 MB
 });
 
 // ── Pipeline content screener ────────────────────────────────────────────────
@@ -725,7 +772,92 @@ router.post('/platform-kb/upload', inboxUpload.single('file'), async (req: Reque
     }
   }
 
-  res.json({ ok: true, filename: originalname, chunks: chunks.length, operators: operators.length, total_inserted: seeded });
+  res.json({ ok: true, source: originalname, chunks: chunks.length, operators: operators.length, total_inserted: seeded });
+});
+
+// POST /admin/rag/platform-kb/ingest-url
+router.post('/platform-kb/ingest-url', requireAuth, requireAdmin, async (req: Request, res: Response): Promise<void> => {
+  const { url } = req.body as { url?: string };
+  if (!url?.trim() || !/^https?:\/\//i.test(url.trim())) {
+    res.status(400).json({ error: 'A valid http/https URL is required' });
+    return;
+  }
+  const targetUrl = url.trim();
+
+  let fetchRes: globalThis.Response;
+  try {
+    const ctrl = new AbortController();
+    const timeoutId = setTimeout(() => ctrl.abort(), 30_000);
+    fetchRes = await fetch(targetUrl, {
+      signal: ctrl.signal,
+      headers: { 'User-Agent': 'OpSoul-LoadingBay/1.0' },
+    });
+    clearTimeout(timeoutId);
+  } catch (err: unknown) {
+    res.status(502).json({ error: `Failed to fetch URL: ${err instanceof Error ? err.message : String(err)}` });
+    return;
+  }
+
+  if (!fetchRes.ok) {
+    res.status(502).json({ error: `URL returned HTTP ${fetchRes.status}` });
+    return;
+  }
+
+  const contentType = fetchRes.headers.get('content-type') ?? 'text/plain';
+  const ab = await fetchRes.arrayBuffer();
+  const buffer = Buffer.from(ab);
+
+  const urlPath = new URL(targetUrl).pathname;
+  const urlExt = path.extname(urlPath);
+  const pseudoFilename = (path.basename(urlPath) || 'content') + (urlExt ? '' : contentType.includes('html') ? '.html' : contentType.includes('json') ? '.json' : '.txt');
+
+  let text = await extractTextFromBuffer(buffer, contentType, pseudoFilename);
+
+  // Strip HTML for web pages
+  if (contentType.includes('html') || pseudoFilename.endsWith('.html') || pseudoFilename.endsWith('.htm')) {
+    text = stripHtml(text ?? '');
+  }
+
+  if (!text || text.trim().length < 50) {
+    res.status(422).json({ error: 'Could not extract usable text from this URL' });
+    return;
+  }
+
+  const words = text.split(/\s+/);
+  const CHUNK_SIZE = 400;
+  const chunks: string[] = [];
+  for (let i = 0; i < words.length; i += CHUNK_SIZE) {
+    chunks.push(words.slice(i, i + CHUNK_SIZE).join(' '));
+  }
+
+  const hostname = new URL(targetUrl).hostname;
+  const sourceName = `_url:${targetUrl}`.slice(0, 200);
+
+  const operators = await db
+    .select({ id: operatorsTable.id, ownerId: operatorsTable.ownerId })
+    .from(operatorsTable)
+    .where(isNull(operatorsTable.deletedAt));
+
+  let seeded = 0;
+  for (const op of operators) {
+    for (let idx = 0; idx < chunks.length; idx++) {
+      const embedding = await embed(chunks[idx]);
+      const vecStr = `[${embedding.join(',')}]`;
+      const id = `plat-url-${hostname.replace(/\W/g, '-')}-${idx}-${op.id}`.slice(0, 120);
+      const insertResult = await pool.query(
+        `INSERT INTO operator_kb
+           (id, operator_id, owner_id, content, embedding, source_name,
+            source_trust_level, confidence_score, intake_tags, is_pipeline_intake,
+            privacy_cleared, content_cleared, is_system, verification_status, chunk_index, created_at)
+         VALUES ($1,$2,$3,$4,$5::vector,$6,'platform',90,'{}',false,true,true,true,'active',$7,NOW())
+         ON CONFLICT (id) DO NOTHING`,
+        [id, op.id, op.ownerId, chunks[idx], vecStr, sourceName, idx],
+      );
+      seeded += insertResult.rowCount ?? 0;
+    }
+  }
+
+  res.json({ ok: true, source: targetUrl, chunks: chunks.length, operators: operators.length, total_inserted: seeded });
 });
 
 export default router;

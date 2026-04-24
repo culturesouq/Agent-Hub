@@ -160,9 +160,10 @@ export default function AdminPage() {
   const [ragSubTab, setRagSubTab] = useState<"builder" | "archetype" | "collective" | "platform">("builder");
   const [platformUpload, setPlatformUpload] = useState<{
     uploading: boolean;
-    result: { filename: string; chunks: number; operators: number } | null;
+    result: { source: string; chunks: number; operators: number } | null;
     error: string | null;
   }>({ uploading: false, result: null, error: null });
+  const [platformUrlInput, setPlatformUrlInput] = useState("");
   const platformFileRef = useRef<HTMLInputElement>(null);
   const [ragSources, setRagSources] = useState<RagSource[]>([]);
   const [sourceForm, setSourceForm] = useState({ name: "", sourceType: "huggingface" as RagSource["sourceType"], url: "", notes: "" });
@@ -328,13 +329,29 @@ export default function AdminPage() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const result = await apiFetch<{ ok: boolean; filename: string; chunks: number; operators: number; total_inserted: number }>(
+      const result = await apiFetch<{ ok: boolean; source: string; chunks: number; operators: number; total_inserted: number }>(
         "/admin/rag/platform-kb/upload",
         { method: "POST", body: formData }
       );
-      setPlatformUpload({ uploading: false, result: { filename: result.filename, chunks: result.chunks, operators: result.operators }, error: null });
+      setPlatformUpload({ uploading: false, result: { source: result.source, chunks: result.chunks, operators: result.operators }, error: null });
     } catch (err) {
       setPlatformUpload({ uploading: false, result: null, error: err instanceof Error ? err.message : "Upload failed" });
+    }
+  }
+
+  async function handlePlatformKbIngestUrl() {
+    const url = platformUrlInput.trim();
+    if (!url || !/^https?:\/\//i.test(url)) return;
+    setPlatformUpload({ uploading: true, result: null, error: null });
+    try {
+      const result = await apiFetch<{ ok: boolean; source: string; chunks: number; operators: number; total_inserted: number }>(
+        "/admin/rag/platform-kb/ingest-url",
+        { method: "POST", body: JSON.stringify({ url }) }
+      );
+      setPlatformUpload({ uploading: false, result: { source: result.source, chunks: result.chunks, operators: result.operators }, error: null });
+      setPlatformUrlInput("");
+    } catch (err) {
+      setPlatformUpload({ uploading: false, result: null, error: err instanceof Error ? err.message : "Ingest failed" });
     }
   }
 
@@ -902,39 +919,66 @@ export default function AdminPage() {
               <div className="space-y-4">
                 <div className="glass-panel p-6 space-y-5">
                   <div>
-                    <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Platform KB — Upload File</h3>
-                    <p className="font-sans text-xs text-muted-foreground/70">Upload a document to seed all active operators' knowledge bases. Supported formats: PDF, DOCX, TXT, MD, CSV, JSON.</p>
+                    <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Platform KB — Loading Bay</h3>
+                    <p className="font-sans text-xs text-muted-foreground/70">Drop any file or paste a URL — content is chunked, embedded, and seeded into all active operators' knowledge bases.</p>
                   </div>
 
                   {!platformUpload.uploading && !platformUpload.result && !platformUpload.error && (
-                    <div
-                      className="border-2 border-dashed border-border/40 rounded-lg p-10 flex flex-col items-center gap-4 cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-all"
-                      onClick={() => platformFileRef.current?.click()}
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        const file = e.dataTransfer.files[0];
-                        if (file) handlePlatformKbUpload(file);
-                      }}
-                    >
-                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                        <span className="text-primary text-lg">↑</span>
-                      </div>
-                      <div className="text-center">
-                        <div className="font-sans text-sm text-on-surface mb-1">Drop file here or click to browse</div>
-                        <div className="font-label text-[10px] uppercase tracking-widest text-muted-foreground">PDF · DOCX · TXT · MD · CSV · JSON</div>
-                      </div>
-                      <input
-                        ref={platformFileRef}
-                        type="file"
-                        accept=".pdf,.docx,.txt,.md,.csv,.json"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
+                    <div className="space-y-4">
+                      <div
+                        className="border-2 border-dashed border-border/40 rounded-lg p-10 flex flex-col items-center gap-4 cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-all"
+                        onClick={() => platformFileRef.current?.click()}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          const file = e.dataTransfer.files[0];
                           if (file) handlePlatformKbUpload(file);
-                          e.target.value = "";
                         }}
-                      />
+                      >
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <span className="text-primary text-lg">↑</span>
+                        </div>
+                        <div className="text-center">
+                          <div className="font-sans text-sm text-on-surface mb-1">Drop any file or click to browse</div>
+                          <div className="font-label text-[10px] uppercase tracking-widest text-muted-foreground">PDF · DOCX · TXT · MD · XLSX · CSV · JSON · JSONL · XML · YAML · and more</div>
+                          <div className="font-label text-[9px] text-muted-foreground/50 mt-1">Up to 200 MB</div>
+                        </div>
+                        <input
+                          ref={platformFileRef}
+                          type="file"
+                          accept="*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handlePlatformKbUpload(file);
+                            e.target.value = "";
+                          }}
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 h-px bg-border/30" />
+                        <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground/50">or ingest a URL</span>
+                        <div className="flex-1 h-px bg-border/30" />
+                      </div>
+
+                      <div className="flex gap-2">
+                        <input
+                          type="url"
+                          placeholder="https://docs.example.com/page"
+                          value={platformUrlInput}
+                          onChange={(e) => setPlatformUrlInput(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") handlePlatformKbIngestUrl(); }}
+                          className="flex-1 bg-surface-container/50 border border-border/40 rounded-lg px-4 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50"
+                        />
+                        <button
+                          onClick={handlePlatformKbIngestUrl}
+                          disabled={!platformUrlInput.trim() || !/^https?:\/\//i.test(platformUrlInput)}
+                          className="px-5 py-2.5 bg-primary/10 border border-primary/30 text-primary font-label text-[10px] uppercase tracking-widest rounded-lg hover:bg-primary/20 disabled:opacity-40 transition-all whitespace-nowrap"
+                        >
+                          Fetch & Ingest
+                        </button>
+                      </div>
                     </div>
                   )}
 
@@ -954,8 +998,8 @@ export default function AdminPage() {
                       </div>
                       <div className="grid grid-cols-3 gap-4">
                         <div>
-                          <div className="font-label text-[9px] uppercase tracking-widest text-muted-foreground mb-1">File</div>
-                          <div className="font-mono text-xs text-on-surface truncate">{platformUpload.result.filename}</div>
+                          <div className="font-label text-[9px] uppercase tracking-widest text-muted-foreground mb-1">Source</div>
+                          <div className="font-mono text-xs text-on-surface truncate" title={platformUpload.result.source}>{platformUpload.result.source}</div>
                         </div>
                         <div>
                           <div className="font-label text-[9px] uppercase tracking-widest text-muted-foreground mb-1">Chunks</div>
