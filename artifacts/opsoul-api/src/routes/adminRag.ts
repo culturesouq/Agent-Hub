@@ -775,6 +775,54 @@ router.post('/platform-kb/upload', inboxUpload.single('file'), async (req: Reque
   res.json({ ok: true, source: originalname, chunks: chunks.length, operators: operators.length, total_inserted: seeded });
 });
 
+// POST /admin/rag/platform-kb/seed  — seed V1 corpus into all active operators
+router.post('/platform-kb/seed', requireAuth, requireAdmin, async (req: Request, res: Response): Promise<void> => {
+  const { PLATFORM_KB_V1 } = await import('../scripts/platformKbV1Data.js');
+
+  const operators = await db
+    .select({ id: operatorsTable.id, ownerId: operatorsTable.ownerId })
+    .from(operatorsTable)
+    .where(isNull(operatorsTable.deletedAt));
+
+  if (operators.length === 0) {
+    res.json({ ok: true, operators: 0, entries: PLATFORM_KB_V1.length, inserted: 0, skipped: 0 });
+    return;
+  }
+
+  // Compute embeddings once for all entries
+  const embeddings: number[][] = [];
+  for (const entry of PLATFORM_KB_V1) {
+    embeddings.push(await embed(entry.content));
+  }
+
+  let inserted = 0;
+  let skipped = 0;
+
+  for (const op of operators) {
+    for (let idx = 0; idx < PLATFORM_KB_V1.length; idx++) {
+      const entry = PLATFORM_KB_V1[idx];
+      const vecStr = `[${embeddings[idx].join(',')}]`;
+      const id = entry.id
+        ? `plat-${entry.id.toLowerCase()}-${op.id}`
+        : `plat-${String(idx).padStart(3, '0')}-${op.id}`;
+
+      const result = await pool.query(
+        `INSERT INTO operator_kb
+           (id, operator_id, owner_id, content, embedding, source_name,
+            source_trust_level, confidence_score, intake_tags, is_pipeline_intake,
+            privacy_cleared, content_cleared, is_system, verification_status, chunk_index, created_at)
+         VALUES ($1,$2,$3,$4,$5::vector,$6,'platform',95,'{}',false,true,true,true,'active',$7,NOW())
+         ON CONFLICT (id) DO NOTHING`,
+        [id, op.id, op.ownerId, entry.content, vecStr, '_platform-kb', idx],
+      );
+      if ((result.rowCount ?? 0) > 0) inserted++;
+      else skipped++;
+    }
+  }
+
+  res.json({ ok: true, operators: operators.length, entries: PLATFORM_KB_V1.length, inserted, skipped });
+});
+
 // POST /admin/rag/platform-kb/ingest-url
 router.post('/platform-kb/ingest-url', requireAuth, requireAdmin, async (req: Request, res: Response): Promise<void> => {
   const { url } = req.body as { url?: string };
