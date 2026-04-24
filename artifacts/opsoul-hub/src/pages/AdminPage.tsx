@@ -927,7 +927,7 @@ export default function AdminPage() {
                       <input
                         ref={platformFileRef}
                         type="file"
-                        accept=".pdf,.docx,.doc,.txt,.md,.csv,.json"
+                        accept=".pdf,.docx,.txt,.md,.csv,.json"
                         className="hidden"
                         onChange={(e) => {
                           const file = e.target.files?.[0];
