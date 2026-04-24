@@ -1034,7 +1034,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   // ── Inject OpSoul DNA — platform identity layer ───────────────────────────
   const dnaEntries = await db
-    .select({ content: ragDnaTable.content, layer: ragDnaTable.layer })
+    .select({ content: ragDnaTable.content })
     .from(ragDnaTable)
     .where(eq(ragDnaTable.isActive, true))
     .orderBy(desc(ragDnaTable.confidence))
