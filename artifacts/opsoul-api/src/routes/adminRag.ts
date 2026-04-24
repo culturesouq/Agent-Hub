@@ -712,7 +712,7 @@ router.post('/platform-kb/upload', inboxUpload.single('file'), async (req: Reque
       const embedding = await embed(chunks[idx]);
       const vecStr = `[${embedding.join(',')}]`;
       const id = `plat-upload-${originalname.replace(/\W/g, '-')}-${idx}-${op.id}`.slice(0, 120);
-      await pool.query(
+      const insertResult = await pool.query(
         `INSERT INTO operator_kb
            (id, operator_id, owner_id, content, embedding, source_name,
             source_trust_level, confidence_score, intake_tags, is_pipeline_intake,
@@ -721,7 +721,7 @@ router.post('/platform-kb/upload', inboxUpload.single('file'), async (req: Reque
          ON CONFLICT (id) DO NOTHING`,
         [id, op.id, op.ownerId, chunks[idx], vecStr, `_upload:${originalname}`, idx],
       );
-      seeded++;
+      seeded += insertResult.rowCount ?? 0;
     }
   }
 
