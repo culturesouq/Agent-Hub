@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
 import { apiFetch } from "@/lib/api";
@@ -157,7 +157,13 @@ export default function AdminPage() {
   const [ragStats, setRagStats] = useState<RagStats | null>(null);
   const [ragEntries, setRagEntries] = useState<RagEntry[]>([]);
   const [ragPipeline, setRagPipeline] = useState<PipelineConfig | null>(null);
-  const [ragSubTab, setRagSubTab] = useState<"builder" | "archetype" | "collective">("builder");
+  const [ragSubTab, setRagSubTab] = useState<"builder" | "archetype" | "collective" | "platform">("builder");
+  const [platformUpload, setPlatformUpload] = useState<{
+    uploading: boolean;
+    result: { filename: string; chunks: number; operators: number } | null;
+    error: string | null;
+  }>({ uploading: false, result: null, error: null });
+  const platformFileRef = useRef<HTMLInputElement>(null);
   const [ragSources, setRagSources] = useState<RagSource[]>([]);
   const [sourceForm, setSourceForm] = useState({ name: "", sourceType: "huggingface" as RagSource["sourceType"], url: "", notes: "" });
   const [sourceSaving, setSourceSaving] = useState(false);
@@ -276,7 +282,7 @@ export default function AdminPage() {
     setRagRunning(true);
     setRagRunResult(null);
     try {
-      const result = await apiFetch<{ extracted: number; candidatesScanned: number }>("/admin/rag/pipeline/run", { method: "POST" });
+      const result = await apiFetch<{ extracted: number; candidatesScanned: number; filteredByScreener: number; filteredByDedup: number; screenerRejections: { content: string; reason: string }[] }>("/admin/rag/pipeline/run", { method: "POST" });
       setRagRunResult(result);
       await loadRag();
     } finally {
@@ -315,6 +321,21 @@ export default function AdminPage() {
   async function deleteSource(id: string) {
     await apiFetch(`/admin/rag/sources/${id}`, { method: "DELETE" });
     setRagSources(prev => prev.filter(s => s.id !== id));
+  }
+
+  async function handlePlatformKbUpload(file: File) {
+    setPlatformUpload({ uploading: true, result: null, error: null });
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const result = await apiFetch<{ ok: boolean; filename: string; chunks: number; operators: number; total_inserted: number }>(
+        "/admin/rag/platform-kb/upload",
+        { method: "POST", body: formData }
+      );
+      setPlatformUpload({ uploading: false, result: { filename: result.filename, chunks: result.chunks, operators: result.operators }, error: null });
+    } catch (err) {
+      setPlatformUpload({ uploading: false, result: null, error: err instanceof Error ? err.message : "Upload failed" });
+    }
   }
 
 
@@ -690,8 +711,8 @@ export default function AdminPage() {
             )}
 
             {/* Sub-tabs */}
-            <div className="flex gap-1">
-              {(["builder", "archetype", "collective"] as const).map((sub) => (
+            <div className="flex gap-1 flex-wrap">
+              {(["builder", "archetype", "collective", "platform"] as const).map((sub) => (
                 <button
                   key={sub}
                   onClick={() => { setRagSubTab(sub); setRagForm({ title: "", content: "", archetype: "", tags: "" }); }}
@@ -701,7 +722,7 @@ export default function AdminPage() {
                       : "text-muted-foreground hover:text-foreground hover:bg-white/5"
                   }`}
                 >
-                  {sub === "builder" ? "Builder DNA" : sub === "archetype" ? "Archetype DNA" : "Collective Pipeline"}
+                  {sub === "builder" ? "Platform Principles" : sub === "archetype" ? "Archetype Soul" : sub === "collective" ? "Collective Intelligence" : "Platform KB"}
                 </button>
               ))}
             </div>
@@ -710,7 +731,7 @@ export default function AdminPage() {
             {ragSubTab === "builder" && (
               <div className="space-y-4">
                 <div className="glass-panel p-6 space-y-4">
-                  <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Add Builder DNA Entry</h3>
+                  <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Platform Principles — Add Entry</h3>
                   <input
                     placeholder="Title — e.g. Gmail Permission Constraints"
                     value={ragForm.title}
@@ -784,7 +805,7 @@ export default function AdminPage() {
             {ragSubTab === "archetype" && (
               <div className="space-y-4">
                 <div className="glass-panel p-6 space-y-4">
-                  <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Add Archetype DNA Entry</h3>
+                  <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Archetype Soul — Add Entry</h3>
                   <div className="grid grid-cols-2 gap-3">
                     <input
                       placeholder="Title"
@@ -876,7 +897,104 @@ export default function AdminPage() {
               </div>
             )}
 
-            {/* Collective Pipeline */}
+            {/* Platform KB Upload */}
+            {ragSubTab === "platform" && (
+              <div className="space-y-4">
+                <div className="glass-panel p-6 space-y-5">
+                  <div>
+                    <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Platform KB — Upload File</h3>
+                    <p className="font-sans text-xs text-muted-foreground/70">Upload a document to seed all active operators' knowledge bases. Supported formats: PDF, DOCX, TXT, MD, CSV, JSON.</p>
+                  </div>
+
+                  {!platformUpload.uploading && !platformUpload.result && !platformUpload.error && (
+                    <div
+                      className="border-2 border-dashed border-border/40 rounded-lg p-10 flex flex-col items-center gap-4 cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-all"
+                      onClick={() => platformFileRef.current?.click()}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const file = e.dataTransfer.files[0];
+                        if (file) handlePlatformKbUpload(file);
+                      }}
+                    >
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                        <span className="text-primary text-lg">↑</span>
+                      </div>
+                      <div className="text-center">
+                        <div className="font-sans text-sm text-on-surface mb-1">Drop file here or click to browse</div>
+                        <div className="font-label text-[10px] uppercase tracking-widest text-muted-foreground">PDF · DOCX · TXT · MD · CSV · JSON</div>
+                      </div>
+                      <input
+                        ref={platformFileRef}
+                        type="file"
+                        accept=".pdf,.docx,.doc,.txt,.md,.csv,.json"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handlePlatformKbUpload(file);
+                          e.target.value = "";
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {platformUpload.uploading && (
+                    <div className="border border-border/30 rounded-lg p-8 flex flex-col items-center gap-3">
+                      <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                      <div className="font-label text-[10px] uppercase tracking-widest text-primary animate-pulse">Processing — embedding chunks…</div>
+                      <p className="font-sans text-xs text-muted-foreground text-center">This may take a moment depending on file size.</p>
+                    </div>
+                  )}
+
+                  {platformUpload.result && (
+                    <div className="border border-secondary/30 rounded-lg p-6 space-y-4 bg-secondary/5">
+                      <div className="flex items-center gap-3">
+                        <span className="status-beacon" />
+                        <span className="font-label text-[10px] uppercase tracking-widest text-secondary">Upload Complete</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-4">
+                        <div>
+                          <div className="font-label text-[9px] uppercase tracking-widest text-muted-foreground mb-1">File</div>
+                          <div className="font-mono text-xs text-on-surface truncate">{platformUpload.result.filename}</div>
+                        </div>
+                        <div>
+                          <div className="font-label text-[9px] uppercase tracking-widest text-muted-foreground mb-1">Chunks</div>
+                          <div className="font-headline text-xl font-bold text-secondary">{platformUpload.result.chunks}</div>
+                        </div>
+                        <div>
+                          <div className="font-label text-[9px] uppercase tracking-widest text-muted-foreground mb-1">Operators Seeded</div>
+                          <div className="font-headline text-xl font-bold text-primary">{platformUpload.result.operators}</div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setPlatformUpload({ uploading: false, result: null, error: null })}
+                        className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors"
+                      >
+                        Upload another file
+                      </button>
+                    </div>
+                  )}
+
+                  {platformUpload.error && (
+                    <div className="border border-destructive/30 rounded-lg p-6 space-y-3 bg-destructive/5">
+                      <div className="flex items-center gap-3">
+                        <span className="status-beacon-warn" />
+                        <span className="font-label text-[10px] uppercase tracking-widest text-destructive">Upload Failed</span>
+                      </div>
+                      <p className="font-sans text-xs text-muted-foreground">{platformUpload.error}</p>
+                      <button
+                        onClick={() => setPlatformUpload({ uploading: false, result: null, error: null })}
+                        className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors"
+                      >
+                        Try again
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Collective Intelligence */}
             {ragSubTab === "collective" && ragPipeline && (
               <div className="space-y-4">
                 {/* Eligibility guidance */}
