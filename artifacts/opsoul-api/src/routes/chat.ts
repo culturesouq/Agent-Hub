@@ -14,6 +14,7 @@ import {
   operatorFilesTable,
   operatorDeploymentSlotsTable,
   operatorSecretsTable,
+  ragDnaTable,
 } from '@workspace/db';
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
 import { executeHttpRequest } from '../utils/httpExecutor.js';
@@ -35,7 +36,7 @@ import { resolveScope } from '../utils/scopeResolver.js';
 import { scrapeUrl } from '../utils/urlScraper.js';
 import type { ContentPart } from '../utils/openrouter.js';
 import { verifyAndStore, persistKbSeedEntry } from '../utils/kbIntake.js';
-import { eq, and, asc, sql } from 'drizzle-orm';
+import { eq, and, asc, sql, desc } from 'drizzle-orm';
 import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
 import { isWebSearchAvailable, executeWebSearch } from '../utils/capabilityEngine.js';
 
@@ -1031,54 +1032,84 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     }
   }
 
-  // [CAPABILITY] — KB state, memory count, per-skill how-to instructions
+  // ── Inject OpSoul DNA — platform identity layer ───────────────────────────
+  const dnaEntries = await db
+    .select({ content: ragDnaTable.content, layer: ragDnaTable.layer })
+    .from(ragDnaTable)
+    .where(eq(ragDnaTable.isActive, true))
+    .orderBy(desc(ragDnaTable.confidence))
+    .limit(12);
+
+  if (dnaEntries.length > 0) {
+    const dnaBlock = ['[OPSOUL IDENTITY]'];
+    dnaBlock.push('This is who you are and how OpSoul works. This is not instruction — this is absorbed identity.');
+    dnaBlock.push('');
+    for (const entry of dnaEntries) {
+      dnaBlock.push(entry.content);
+    }
+    messages.push({ role: 'user', content: dnaBlock.join('\n') });
+  }
+
+  // [CAPABILITY] — static rules (always) + dynamic operator state (if selfAwareness exists)
   const cap = selfAwareness?.capabilityState;
   const wm = selfAwareness?.workspaceManifest;
+
+  // ── STATIC CAPABILITY BLOCK — always injected, no conditions ─────────────────
+  const staticCapLines: string[] = ['[CAPABILITY]'];
+
+  // Attachment handling — always active, every operator
+  staticCapLines.push('');
+  staticCapLines.push('Attachment handling (always active):');
+  staticCapLines.push(SKILL_HOW_TO['image_attachment']!);
+  staticCapLines.push(SKILL_HOW_TO['file_attachment']!);
+
+  // write_file — always available
+  staticCapLines.push('');
+  staticCapLines.push('File creation (always active):');
+  staticCapLines.push(SKILL_HOW_TO['write_file'] ?? 'You have a write_file tool. When you decide to create a file, you MUST call write_file immediately — never describe the content as text. Never say "I created the file" without calling the tool. If you do not call write_file, the file does not exist.');
+
+  // Behavior rules — always active regardless of installed skills or selfAwareness
+  staticCapLines.push('');
+  staticCapLines.push('Operating principles:');
+  for (const [, rule] of Object.entries(BEHAVIOR_HOW_TO)) {
+    staticCapLines.push(rule);
+  }
+
+  messages.push({ role: 'user', content: staticCapLines.join('\n') });
+
+  // ── DYNAMIC CAPABILITY BLOCK — only if selfAwareness exists ─────────────────
   if (cap) {
-    const capLines: string[] = ['[CAPABILITY]'];
+    const dynLines: string[] = ['[OPERATOR STATE]'];
 
     const kbTotal = (cap.ownerKbChunks ?? 0) + (cap.operatorKbChunks ?? 0);
     if (kbTotal > 0 && wm?.kbByTier) {
       const { high = 0, medium = 0, low = 0 } = wm.kbByTier;
-      capLines.push(`KB: ${kbTotal} entries (${high} high confidence, ${medium} medium, ${low} low)`);
+      dynLines.push(`KB: ${kbTotal} entries (${high} high confidence, ${medium} medium, ${low} low)`);
     } else if (kbTotal > 0) {
-      capLines.push(`KB: ${kbTotal} entries`);
+      dynLines.push(`KB: ${kbTotal} entries`);
     }
 
     if (wm?.totalMemoryActive && wm.totalMemoryActive > 0) {
-      capLines.push(`Memory: ${wm.totalMemoryActive} active memories from past conversations`);
+      dynLines.push(`Memory: ${wm.totalMemoryActive} active memories from past conversations`);
     }
 
     const activeSkills = (cap.skills ?? []).filter((s) => s.isActive);
     if (activeSkills.length > 0) {
-      capLines.push(`Active skills:`);
+      dynLines.push(`Active skills:`);
       for (const skill of activeSkills) {
         const howTo = SKILL_HOW_TO[skill.integrationType ?? ''];
-        capLines.push(`- ${skill.name}`);
+        dynLines.push(`- ${skill.name}`);
         if (howTo) {
-          capLines.push(howTo);
+          dynLines.push(howTo);
         } else if (skill.description) {
-          capLines.push(`  ${skill.description}`);
+          dynLines.push(`  ${skill.description}`);
         }
       }
-      capLines.push('If a skill fails — report the failure clearly. Do not guess or fabricate results.');
+      dynLines.push('If a skill fails — report the failure clearly. Do not guess or fabricate results.');
     }
 
-    // Always inject attachment handling — every operator can see images and read files
-    capLines.push('');
-    capLines.push('Attachment handling (always active):');
-    capLines.push(SKILL_HOW_TO['image_attachment']!);
-    capLines.push(SKILL_HOW_TO['file_attachment']!);
-
-    // Inject behavior rules — always active regardless of installed skills
-    capLines.push('');
-    capLines.push('Operating principles:');
-    for (const [, rule] of Object.entries(BEHAVIOR_HOW_TO)) {
-      capLines.push(rule);
-    }
-
-    if (capLines.length > 1) {
-      messages.push({ role: 'user', content: capLines.join('\n') });
+    if (dynLines.length > 1) {
+      messages.push({ role: 'user', content: dynLines.join('\n') });
     }
   }
 
