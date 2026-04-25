@@ -913,7 +913,7 @@ export default function AdminPage() {
               ) : (
                 <div className="divide-y divide-border/10">
                   {platformKbEntries.map((entry) => {
-                    const baseId = entry.id.replace(/^plat-/, "").replace(/-[^-]+$/, "");
+                    const baseId = entry.id.replace(/^plat-/, "").slice(0, -(36 + 1));
                     return (
                       <div key={entry.id} className="px-6 py-4 grid grid-cols-[1fr_120px_80px_100px_60px] gap-4 items-start hover:bg-white/2 transition-colors">
                         <p className="font-sans text-xs text-on-surface leading-relaxed">

@@ -80,6 +80,7 @@ router.get('/operators', async (_req: Request, res: Response): Promise<void> => 
       )`,
     })
     .from(operatorsTable)
+    .where(isNull(operatorsTable.deletedAt))
     .orderBy(desc(operatorsTable.createdAt));
 
   res.json(rows);
