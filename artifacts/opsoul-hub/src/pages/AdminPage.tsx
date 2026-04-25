@@ -45,6 +45,7 @@ interface DriftAlert {
 
 interface PlatformKbEntry {
   id: string;
+  base_id: string;
   content: string;
   source_name: string;
   confidence_score: number;
@@ -913,7 +914,6 @@ export default function AdminPage() {
               ) : (
                 <div className="divide-y divide-border/10">
                   {platformKbEntries.map((entry) => {
-                    const baseId = entry.id.replace(/^plat-/, "").slice(0, -(36 + 1));
                     return (
                       <div key={entry.id} className="px-6 py-4 grid grid-cols-[1fr_120px_80px_100px_60px] gap-4 items-start hover:bg-white/2 transition-colors">
                         <p className="font-sans text-xs text-on-surface leading-relaxed">
@@ -927,11 +927,11 @@ export default function AdminPage() {
                           {new Date(entry.created_at).toLocaleDateString()}
                         </span>
                         <button
-                          onClick={() => deletePlatformKbEntry(baseId)}
-                          disabled={deletingKbEntry === baseId}
+                          onClick={() => deletePlatformKbEntry(entry.base_id)}
+                          disabled={deletingKbEntry === entry.base_id}
                           className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-destructive disabled:opacity-40 transition-colors text-right"
                         >
-                          {deletingKbEntry === baseId ? "…" : "Delete"}
+                          {deletingKbEntry === entry.base_id ? "…" : "Delete"}
                         </button>
                       </div>
                     );

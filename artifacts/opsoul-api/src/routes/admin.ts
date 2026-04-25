@@ -188,12 +188,13 @@ router.delete('/owners/:id', async (req: Request, res: Response): Promise<void> 
   const [owner] = await db.select({ id: ownersTable.id }).from(ownersTable).where(eq(ownersTable.id, id));
   if (!owner) { res.status(404).json({ error: 'Owner not found' }); return; }
 
-  await db
-    .update(operatorsTable)
-    .set({ deletedAt: new Date() })
-    .where(and(eq(operatorsTable.ownerId, id), isNull(operatorsTable.deletedAt)));
-
-  await db.delete(ownersTable).where(eq(ownersTable.id, id));
+  await db.transaction(async (tx) => {
+    await tx
+      .update(operatorsTable)
+      .set({ deletedAt: new Date() })
+      .where(and(eq(operatorsTable.ownerId, id), isNull(operatorsTable.deletedAt)));
+    await tx.delete(ownersTable).where(eq(ownersTable.id, id));
+  });
 
   res.json({ ok: true });
 });

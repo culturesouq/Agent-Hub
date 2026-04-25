@@ -827,13 +827,16 @@ router.post('/platform-kb/seed', requireAuth, requireAdmin, async (req: Request,
 router.get('/platform-kb/entries', async (_req: Request, res: Response): Promise<void> => {
   const result = await pool.query<{
     id: string;
+    base_id: string;
     content: string;
     source_name: string;
     confidence_score: number;
     created_at: string;
   }>(
     `SELECT DISTINCT ON (content)
-       id, content, source_name, confidence_score, created_at
+       id,
+       REGEXP_REPLACE(id, '^plat-(.+)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', '\\1') AS base_id,
+       content, source_name, confidence_score, created_at
      FROM operator_kb
      WHERE is_system = true
      ORDER BY content, created_at DESC`,
