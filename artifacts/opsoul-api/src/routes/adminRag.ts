@@ -823,6 +823,35 @@ router.post('/platform-kb/seed', requireAuth, requireAdmin, async (req: Request,
   res.json({ ok: true, operators: operators.length, entries: PLATFORM_KB_V1.length, inserted, skipped });
 });
 
+// GET /admin/rag/platform-kb/entries — distinct platform KB entries (deduped by content)
+router.get('/platform-kb/entries', async (_req: Request, res: Response): Promise<void> => {
+  const result = await pool.query<{
+    id: string;
+    content: string;
+    source_name: string;
+    confidence_score: number;
+    created_at: string;
+  }>(
+    `SELECT DISTINCT ON (content)
+       id, content, source_name, confidence_score, created_at
+     FROM operator_kb
+     WHERE is_system = true
+     ORDER BY content, created_at DESC`,
+  );
+  res.json({ count: result.rows.length, entries: result.rows });
+});
+
+// DELETE /admin/rag/platform-kb/entries/:entryId — remove an entry across all operators
+router.delete('/platform-kb/entries/:entryId', async (req: Request, res: Response): Promise<void> => {
+  const { entryId } = req.params as Record<string, string>;
+  if (!entryId?.trim()) { res.status(400).json({ error: 'entryId is required' }); return; }
+  const result = await pool.query(
+    `DELETE FROM operator_kb WHERE id LIKE $1`,
+    [`plat-${entryId}-%`],
+  );
+  res.json({ ok: true, deleted: result.rowCount ?? 0 });
+});
+
 // POST /admin/rag/platform-kb/ingest-url
 router.post('/platform-kb/ingest-url', requireAuth, requireAdmin, async (req: Request, res: Response): Promise<void> => {
   const { url } = req.body as { url?: string };

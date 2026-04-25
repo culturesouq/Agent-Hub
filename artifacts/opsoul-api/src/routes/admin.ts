@@ -4,12 +4,13 @@ import {
   ownersTable,
   operatorsTable,
   messagesTable,
+  conversationsTable,
   selfAwarenessStateTable,
   opsLogsTable,
 } from '@workspace/db';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireAdmin } from '../middleware/requireAdmin.js';
-import { eq, sql, and, gte, desc } from 'drizzle-orm';
+import { eq, sql, and, gte, desc, asc, isNull } from 'drizzle-orm';
 import { backfillTelegramWebhookSecrets } from '../utils/backfillTelegramSecrets.js';
 import { backfillWhatsAppAppSecrets } from '../utils/backfillWhatsAppSecrets.js';
 
@@ -132,6 +133,106 @@ router.patch('/owners/:id/toggle-admin', async (req: Request, res: Response): Pr
 
   res.json(updated);
 });
+
+// ── Operator controls ──────────────────────────────────────────────────────
+
+router.patch('/operators/:id/safe-mode', async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params as Record<string, string>;
+  const { safeMode } = req.body as { safeMode?: boolean };
+  if (typeof safeMode !== 'boolean') {
+    res.status(400).json({ error: 'safeMode (boolean) is required' });
+    return;
+  }
+  const [updated] = await db
+    .update(operatorsTable)
+    .set({ safeMode })
+    .where(eq(operatorsTable.id, id))
+    .returning({ id: operatorsTable.id, safeMode: operatorsTable.safeMode });
+  if (!updated) { res.status(404).json({ error: 'Operator not found' }); return; }
+  res.json(updated);
+});
+
+router.patch('/operators/:id/grow-lock', async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params as Record<string, string>;
+  const { level } = req.body as { level?: string };
+  const VALID_LEVELS = ['OPEN', 'CONTROLLED', 'LOCKED', 'FROZEN'] as const;
+  if (!level || !VALID_LEVELS.includes(level as typeof VALID_LEVELS[number])) {
+    res.status(400).json({ error: `level must be one of: ${VALID_LEVELS.join(', ')}` });
+    return;
+  }
+  const [updated] = await db
+    .update(operatorsTable)
+    .set({ growLockLevel: level })
+    .where(eq(operatorsTable.id, id))
+    .returning({ id: operatorsTable.id, growLockLevel: operatorsTable.growLockLevel });
+  if (!updated) { res.status(404).json({ error: 'Operator not found' }); return; }
+  res.json(updated);
+});
+
+router.delete('/operators/:id', async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params as Record<string, string>;
+  const [updated] = await db
+    .update(operatorsTable)
+    .set({ deletedAt: new Date() })
+    .where(and(eq(operatorsTable.id, id), isNull(operatorsTable.deletedAt)))
+    .returning({ id: operatorsTable.id });
+  if (!updated) { res.status(404).json({ error: 'Operator not found or already deleted' }); return; }
+  res.json({ ok: true });
+});
+
+// ── Owner delete ───────────────────────────────────────────────────────────
+
+router.delete('/owners/:id', async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params as Record<string, string>;
+  const [owner] = await db.select({ id: ownersTable.id }).from(ownersTable).where(eq(ownersTable.id, id));
+  if (!owner) { res.status(404).json({ error: 'Owner not found' }); return; }
+
+  await db
+    .update(operatorsTable)
+    .set({ deletedAt: new Date() })
+    .where(and(eq(operatorsTable.ownerId, id), isNull(operatorsTable.deletedAt)));
+
+  await db.delete(ownersTable).where(eq(ownersTable.id, id));
+
+  res.json({ ok: true });
+});
+
+// ── Conversations inspector ────────────────────────────────────────────────
+
+router.get('/operators/:id/conversations', async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params as Record<string, string>;
+  const conversations = await db
+    .select({
+      id: conversationsTable.id,
+      createdAt: conversationsTable.createdAt,
+      messageCount: conversationsTable.messageCount,
+      contextName: conversationsTable.contextName,
+    })
+    .from(conversationsTable)
+    .where(eq(conversationsTable.operatorId, id))
+    .orderBy(desc(conversationsTable.createdAt))
+    .limit(50);
+  res.json(conversations);
+});
+
+router.get('/conversations/:id/messages', async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params as Record<string, string>;
+  const messages = await db
+    .select({
+      role: messagesTable.role,
+      content: messagesTable.content,
+      createdAt: messagesTable.createdAt,
+    })
+    .from(messagesTable)
+    .where(and(
+      eq(messagesTable.conversationId, id),
+      eq(messagesTable.isInternal, false),
+    ))
+    .orderBy(asc(messagesTable.createdAt));
+  res.json(messages);
+});
+
+// ── Backfill utilities ─────────────────────────────────────────────────────
 
 router.post('/backfill/telegram-webhook-secrets', async (_req: Request, res: Response): Promise<void> => {
   try {

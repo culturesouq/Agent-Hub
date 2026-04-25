@@ -43,43 +43,26 @@ interface DriftAlert {
   resolvedAt: string | null;
 }
 
-interface RagEntry {
+interface PlatformKbEntry {
   id: string;
-  layer: "builder" | "archetype" | "collective";
-  archetype: string | null;
-  title: string;
   content: string;
-  tags: string[];
-  isActive: boolean;
-  hasEmbedding: boolean;
-  dnaScope: "general" | "specialty" | null;
-  archetypeScope: string[] | null;
-  domainTags: string[] | null;
+  source_name: string;
+  confidence_score: number;
+  created_at: string;
+}
+
+interface AdminConversation {
+  id: string;
+  createdAt: string;
+  messageCount: number | null;
+  contextName: string;
+}
+
+interface AdminMessage {
+  role: string;
+  content: string;
   createdAt: string;
 }
-
-interface RagStats {
-  builderCount: number;
-  archetypeCount: number;
-  collectiveCount: number;
-  totalActive: number;
-  pipelineEnabled: boolean;
-  lastRunAt: string | null;
-  lastRunCount: number;
-  totalExtracted: number;
-}
-
-interface PipelineConfig {
-  id: string;
-  enabled: boolean;
-  minConfidenceScore: number;
-  deduplicationThreshold: number;
-  lastRunAt: string | null;
-  lastRunCount: number;
-  totalExtracted: number;
-}
-
-const ARCHETYPES = ["Advisor", "Executor", "Expert", "Connector", "Creator", "Guardian", "Builder", "Catalyst", "Analyst"];
 
 type Tab = "overview" | "owners" | "operators" | "drift" | "rag";
 
@@ -117,20 +100,6 @@ function DriftBar({ score }: { score: number | null }) {
   );
 }
 
-function GrowBadge({ level }: { level: string }) {
-  const colors: Record<string, string> = {
-    OPEN: "text-secondary",
-    CONTROLLED: "text-primary",
-    LOCKED: "text-amber-400",
-    FROZEN: "text-destructive",
-  };
-  return (
-    <span className={`font-label text-[10px] uppercase tracking-widest ${colors[level] ?? "text-muted-foreground"}`}>
-      {level}
-    </span>
-  );
-}
-
 export default function AdminPage() {
   const { owner, token } = useAuth();
   const [, setLocation] = useLocation();
@@ -140,24 +109,23 @@ export default function AdminPage() {
   const [operators, setOperators] = useState<AdminOperator[]>([]);
   const [driftAlerts, setDriftAlerts] = useState<DriftAlert[]>([]);
   const [loading, setLoading] = useState(true);
+
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [growLocking, setGrowLocking] = useState<string | null>(null);
+  const [confirmDeleteOp, setConfirmDeleteOp] = useState<string | null>(null);
+  const [confirmDeleteOwner, setConfirmDeleteOwner] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  interface RagSource {
-    id: string;
-    name: string;
-    sourceType: "huggingface" | "github_file" | "github_repo" | "raw_url";
-    url: string;
-    notes: string | null;
-    isActive: boolean;
-    lastFetchAt: string | null;
-    lastFetchCount: number;
-    createdAt: string;
-  }
+  const [inspectOp, setInspectOp] = useState<AdminOperator | null>(null);
+  const [inspectConversations, setInspectConversations] = useState<AdminConversation[]>([]);
+  const [inspectConvId, setInspectConvId] = useState<string | null>(null);
+  const [inspectMessages, setInspectMessages] = useState<AdminMessage[]>([]);
+  const [inspectLoading, setInspectLoading] = useState(false);
 
-  const [ragStats, setRagStats] = useState<RagStats | null>(null);
-  const [ragEntries, setRagEntries] = useState<RagEntry[]>([]);
-  const [ragPipeline, setRagPipeline] = useState<PipelineConfig | null>(null);
-  const [ragSubTab, setRagSubTab] = useState<"builder" | "archetype" | "collective" | "platform">("builder");
+  const [platformKbEntries, setPlatformKbEntries] = useState<PlatformKbEntry[]>([]);
+  const [seedingKb, setSeedingKb] = useState(false);
+  const [seedResult, setSeedResult] = useState<{ inserted: number; skipped: number } | null>(null);
+  const [deletingKbEntry, setDeletingKbEntry] = useState<string | null>(null);
   const [platformUpload, setPlatformUpload] = useState<{
     uploading: boolean;
     result: { source: string; chunks: number; operators: number } | null;
@@ -165,33 +133,14 @@ export default function AdminPage() {
   }>({ uploading: false, result: null, error: null });
   const [platformUrlInput, setPlatformUrlInput] = useState("");
   const platformFileRef = useRef<HTMLInputElement>(null);
-  const [ragSources, setRagSources] = useState<RagSource[]>([]);
-  const [sourceForm, setSourceForm] = useState({ name: "", sourceType: "huggingface" as RagSource["sourceType"], url: "", notes: "" });
-  const [sourceSaving, setSourceSaving] = useState(false);
-  const [ragArchetypeFilter, setRagArchetypeFilter] = useState<string>("");
-  const [ragForm, setRagForm] = useState({ title: "", content: "", archetype: "", tags: "" });
-  const [ragSaving, setRagSaving] = useState(false);
-  const [ragRunning, setRagRunning] = useState(false);
-  const [ragRunResult, setRagRunResult] = useState<{
-    extracted: number;
-    candidatesScanned: number;
-    filteredByScreener: number;
-    filteredByDedup: number;
-    screenerRejections: { content: string; reason: string }[];
-  } | null>(null);
 
-
-  const loadRag = useCallback(async () => {
-    const [s, entries, pipeline, sources] = await Promise.all([
-      apiFetch<RagStats>("/admin/rag/stats"),
-      apiFetch<RagEntry[]>("/admin/rag/entries"),
-      apiFetch<PipelineConfig>("/admin/rag/pipeline"),
-      apiFetch<RagSource[]>("/admin/rag/sources"),
-    ]);
-    setRagStats(s);
-    setRagEntries(entries);
-    setRagPipeline(pipeline);
-    setRagSources(sources);
+  const loadPlatformKb = useCallback(async () => {
+    try {
+      const data = await apiFetch<{ count: number; entries: PlatformKbEntry[] }>("/admin/rag/platform-kb/entries");
+      setPlatformKbEntries(data.entries);
+    } catch {
+      setPlatformKbEntries([]);
+    }
   }, []);
 
   useEffect(() => {
@@ -213,14 +162,13 @@ export default function AdminPage() {
         setOwners(o);
         setOperators(ops);
         setDriftAlerts(drift);
-        await loadRag();
+        await loadPlatformKb();
       } finally {
         setLoading(false);
       }
     }
     load();
-  }, [token, owner, setLocation, loadRag]);
-
+  }, [token, owner, setLocation, loadPlatformKb]);
 
   async function toggleAdmin(id: string) {
     setTogglingId(id);
@@ -237,91 +185,102 @@ export default function AdminPage() {
     }
   }
 
-  async function saveRagEntry() {
-    if (!ragForm.title.trim() || !ragForm.content.trim()) return;
-    setRagSaving(true);
+  async function toggleSafeMode(op: AdminOperator) {
+    setTogglingId(op.id);
     try {
-      await apiFetch("/admin/rag/entries", {
-        method: "POST",
-        body: JSON.stringify({
-          layer: ragSubTab,
-          archetype: ragSubTab === "archetype" ? ragForm.archetype : undefined,
-          title: ragForm.title.trim(),
-          content: ragForm.content.trim(),
-          tags: ragForm.tags ? ragForm.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
-        }),
+      await apiFetch(`/admin/operators/${op.id}/safe-mode`, {
+        method: "PATCH",
+        body: JSON.stringify({ safeMode: !op.safeMode }),
       });
-      setRagForm({ title: "", content: "", archetype: "", tags: "" });
-      await loadRag();
+      setOperators((prev) => prev.map((o) => o.id === op.id ? { ...o, safeMode: !op.safeMode } : o));
     } finally {
-      setRagSaving(false);
+      setTogglingId(null);
     }
   }
 
-  async function toggleRagEntry(id: string, isActive: boolean) {
-    await apiFetch(`/admin/rag/entries/${id}`, { method: "PUT", body: JSON.stringify({ isActive: !isActive }) });
-    setRagEntries((prev) => prev.map((e) => e.id === id ? { ...e, isActive: !isActive } : e));
-    setRagStats((prev) => prev ? { ...prev, totalActive: prev.totalActive + (isActive ? -1 : 1) } : prev);
-  }
-
-  async function deleteRagEntry(id: string) {
-    await apiFetch(`/admin/rag/entries/${id}`, { method: "DELETE" });
-    await loadRag();
-  }
-
-  async function patchEntryScope(id: string, patch: { dnaScope?: "general" | "specialty"; archetypeScope?: string[]; domainTags?: string[] }) {
-    const updated = await apiFetch<RagEntry>(`/admin/rag/entries/${id}/scope`, { method: "PATCH", body: JSON.stringify(patch) });
-    setRagEntries((prev) => prev.map((e) => e.id === id ? { ...e, ...updated } : e));
-  }
-
-  async function savePipelineConfig(updates: Partial<PipelineConfig>) {
-    const updated = await apiFetch<PipelineConfig>("/admin/rag/pipeline", { method: "PUT", body: JSON.stringify(updates) });
-    setRagPipeline(updated);
-  }
-
-  async function runPipeline() {
-    setRagRunning(true);
-    setRagRunResult(null);
+  async function changeGrowLock(opId: string, level: string) {
+    setGrowLocking(opId);
     try {
-      const result = await apiFetch<{ extracted: number; candidatesScanned: number; filteredByScreener: number; filteredByDedup: number; screenerRejections: { content: string; reason: string }[] }>("/admin/rag/pipeline/run", { method: "POST" });
-      setRagRunResult(result);
-      await loadRag();
-    } finally {
-      setRagRunning(false);
-    }
-  }
-
-  async function createSource() {
-    if (!sourceForm.name.trim() || !sourceForm.url.trim()) return;
-    setSourceSaving(true);
-    try {
-      const created = await apiFetch<RagSource>("/admin/rag/sources", {
-        method: "POST",
-        body: JSON.stringify({
-          name: sourceForm.name.trim(),
-          sourceType: sourceForm.sourceType,
-          url: sourceForm.url.trim(),
-          notes: sourceForm.notes.trim() || undefined,
-        }),
+      await apiFetch(`/admin/operators/${opId}/grow-lock`, {
+        method: "PATCH",
+        body: JSON.stringify({ level }),
       });
-      setRagSources(prev => [...prev, created]);
-      setSourceForm({ name: "", sourceType: "huggingface", url: "", notes: "" });
+      setOperators((prev) => prev.map((o) => o.id === opId ? { ...o, growLockLevel: level } : o));
     } finally {
-      setSourceSaving(false);
+      setGrowLocking(null);
     }
   }
 
-  async function toggleSource(id: string, isActive: boolean) {
-    const updated = await apiFetch<RagSource>(`/admin/rag/sources/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ isActive }),
-    });
-    setRagSources(prev => prev.map(s => s.id === id ? updated : s));
+  async function deleteOperator(id: string) {
+    setDeletingId(id);
+    try {
+      await apiFetch(`/admin/operators/${id}`, { method: "DELETE" });
+      setOperators((prev) => prev.filter((o) => o.id !== id));
+      setConfirmDeleteOp(null);
+    } finally {
+      setDeletingId(null);
+    }
   }
 
-  async function deleteSource(id: string) {
-    await apiFetch(`/admin/rag/sources/${id}`, { method: "DELETE" });
-    setRagSources(prev => prev.filter(s => s.id !== id));
+  async function deleteOwner(id: string) {
+    setDeletingId(id);
+    try {
+      await apiFetch(`/admin/owners/${id}`, { method: "DELETE" });
+      setOwners((prev) => prev.filter((o) => o.id !== id));
+      setOperators((prev) => prev.filter((o) => o.ownerId !== id));
+      setConfirmDeleteOwner(null);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  async function openInspect(op: AdminOperator) {
+    setInspectOp(op);
+    setInspectConvId(null);
+    setInspectMessages([]);
+    setInspectLoading(true);
+    try {
+      const convs = await apiFetch<AdminConversation[]>(`/admin/operators/${op.id}/conversations`);
+      setInspectConversations(convs);
+    } finally {
+      setInspectLoading(false);
+    }
+  }
+
+  async function openConversation(convId: string) {
+    setInspectConvId(convId);
+    setInspectLoading(true);
+    try {
+      const msgs = await apiFetch<AdminMessage[]>(`/admin/conversations/${convId}/messages`);
+      setInspectMessages(msgs);
+    } finally {
+      setInspectLoading(false);
+    }
+  }
+
+  async function seedPlatformKb() {
+    setSeedingKb(true);
+    setSeedResult(null);
+    try {
+      const result = await apiFetch<{ ok: boolean; inserted: number; skipped: number }>(
+        "/admin/rag/platform-kb/seed",
+        { method: "POST" }
+      );
+      setSeedResult({ inserted: result.inserted, skipped: result.skipped });
+      await loadPlatformKb();
+    } finally {
+      setSeedingKb(false);
+    }
+  }
+
+  async function deletePlatformKbEntry(entryId: string) {
+    setDeletingKbEntry(entryId);
+    try {
+      await apiFetch(`/admin/rag/platform-kb/entries/${entryId}`, { method: "DELETE" });
+      await loadPlatformKb();
+    } finally {
+      setDeletingKbEntry(null);
+    }
   }
 
   async function handlePlatformKbUpload(file: File) {
@@ -334,27 +293,11 @@ export default function AdminPage() {
         { method: "POST", body: formData }
       );
       setPlatformUpload({ uploading: false, result: { source: result.source, chunks: result.chunks, operators: result.operators }, error: null });
+      await loadPlatformKb();
     } catch (err) {
       setPlatformUpload({ uploading: false, result: null, error: err instanceof Error ? err.message : "Upload failed" });
     }
   }
-
-  async function handlePlatformKbIngestUrl() {
-    const url = platformUrlInput.trim();
-    if (!url || !/^https?:\/\//i.test(url)) return;
-    setPlatformUpload({ uploading: true, result: null, error: null });
-    try {
-      const result = await apiFetch<{ ok: boolean; source: string; chunks: number; operators: number; total_inserted: number }>(
-        "/admin/rag/platform-kb/ingest-url",
-        { method: "POST", body: JSON.stringify({ url }) }
-      );
-      setPlatformUpload({ uploading: false, result: { source: result.source, chunks: result.chunks, operators: result.operators }, error: null });
-      setPlatformUrlInput("");
-    } catch (err) {
-      setPlatformUpload({ uploading: false, result: null, error: err instanceof Error ? err.message : "Ingest failed" });
-    }
-  }
-
 
   if (loading) {
     return (
@@ -371,16 +314,171 @@ export default function AdminPage() {
     { id: "owners", label: "Owners", count: owners.length },
     { id: "operators", label: "Operators", count: operators.length },
     { id: "drift", label: "Drift Alerts", count: driftAlerts.length },
-    { id: "rag", label: "Intelligence", count: ragStats?.totalActive },
+    { id: "rag", label: "Platform KB", count: platformKbEntries.length },
   ];
+
+  const GROW_LEVELS = ["OPEN", "CONTROLLED", "LOCKED", "FROZEN"] as const;
+  const GROW_COLORS: Record<string, string> = {
+    OPEN: "text-secondary",
+    CONTROLLED: "text-primary",
+    LOCKED: "text-amber-400",
+    FROZEN: "text-destructive",
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground relative overflow-hidden">
       <NebulaBlobs />
       <div className="fixed inset-0 dot-grid opacity-10 pointer-events-none z-0" />
 
+      {/* Inspect modal */}
+      {inspectOp && (
+        <div className="fixed inset-0 z-50 flex items-start justify-end">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { setInspectOp(null); setInspectConvId(null); }} />
+          <div className="relative z-10 w-full max-w-lg h-screen bg-surface-container/95 border-l border-border/40 flex flex-col overflow-hidden">
+            <div className="px-6 py-5 border-b border-border/30 flex items-center justify-between flex-shrink-0">
+              <div>
+                <div className="font-sans text-sm font-medium text-on-surface">{inspectOp.name}</div>
+                <div className="font-label text-[10px] uppercase tracking-widest text-muted-foreground mt-0.5">
+                  {inspectConvId ? "Messages" : "Conversations"}
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                {inspectConvId && (
+                  <button
+                    onClick={() => { setInspectConvId(null); setInspectMessages([]); }}
+                    className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    ← Back
+                  </button>
+                )}
+                <button
+                  onClick={() => { setInspectOp(null); setInspectConvId(null); }}
+                  className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-destructive transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {inspectLoading ? (
+                <div className="flex items-center justify-center py-16">
+                  <div className="font-label text-[10px] uppercase tracking-widest text-primary animate-pulse">Loading…</div>
+                </div>
+              ) : !inspectConvId ? (
+                inspectConversations.length === 0 ? (
+                  <div className="px-6 py-16 text-center text-muted-foreground text-sm">No conversations yet.</div>
+                ) : (
+                  <div className="divide-y divide-border/10">
+                    {inspectConversations.map((conv) => (
+                      <button
+                        key={conv.id}
+                        onClick={() => openConversation(conv.id)}
+                        className="w-full px-6 py-4 flex items-center justify-between hover:bg-white/5 transition-colors text-left"
+                      >
+                        <div>
+                          <div className="font-sans text-xs text-on-surface mb-0.5 truncate max-w-[280px]">
+                            {conv.contextName || conv.id.slice(0, 20)}
+                          </div>
+                          <div className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">
+                            {new Date(conv.createdAt).toLocaleString()}
+                          </div>
+                        </div>
+                        <span className="font-mono text-xs text-secondary flex-shrink-0 ml-4">
+                          {conv.messageCount ?? 0} msg
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )
+              ) : (
+                <div className="px-6 py-4 space-y-4">
+                  {inspectMessages.length === 0 ? (
+                    <div className="text-center text-muted-foreground text-sm py-8">No messages.</div>
+                  ) : (
+                    inspectMessages.map((msg, i) => (
+                      <div key={i} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                        <div className={`max-w-[85%] rounded-lg px-4 py-2.5 ${
+                          msg.role === "user"
+                            ? "bg-primary/15 border border-primary/20"
+                            : "bg-surface-container border border-border/30"
+                        }`}>
+                          <div className="font-label text-[8px] uppercase tracking-widest text-muted-foreground mb-1">
+                            {msg.role}
+                          </div>
+                          <p className="font-sans text-xs text-on-surface whitespace-pre-wrap">{msg.content}</p>
+                          <div className="font-label text-[8px] text-muted-foreground/50 mt-1.5">
+                            {new Date(msg.createdAt).toLocaleTimeString()}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete operator confirm */}
+      {confirmDeleteOp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setConfirmDeleteOp(null)} />
+          <div className="relative z-10 glass-panel p-8 max-w-sm w-full mx-4">
+            <h3 className="font-headline text-lg text-on-surface mb-2">Delete Operator?</h3>
+            <p className="font-sans text-sm text-muted-foreground mb-6">
+              This will soft-delete the operator. Their data is preserved but the operator will be inactive.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setConfirmDeleteOp(null)}
+                className="font-label text-[10px] uppercase tracking-widest px-4 py-2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => deleteOperator(confirmDeleteOp)}
+                disabled={deletingId === confirmDeleteOp}
+                className="font-label text-[10px] uppercase tracking-widest px-5 py-2 bg-destructive/10 border border-destructive/40 text-destructive rounded hover:bg-destructive/20 disabled:opacity-40 transition-all"
+              >
+                {deletingId === confirmDeleteOp ? "Deleting…" : "Delete Operator"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete owner confirm */}
+      {confirmDeleteOwner && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setConfirmDeleteOwner(null)} />
+          <div className="relative z-10 glass-panel p-8 max-w-sm w-full mx-4">
+            <h3 className="font-headline text-lg text-on-surface mb-2">Delete Owner?</h3>
+            <p className="font-sans text-sm text-muted-foreground mb-6">
+              This will delete the owner and soft-delete all their operators. This cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setConfirmDeleteOwner(null)}
+                className="font-label text-[10px] uppercase tracking-widest px-4 py-2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => deleteOwner(confirmDeleteOwner)}
+                disabled={deletingId === confirmDeleteOwner}
+                className="font-label text-[10px] uppercase tracking-widest px-5 py-2 bg-destructive/10 border border-destructive/40 text-destructive rounded hover:bg-destructive/20 disabled:opacity-40 transition-all"
+              >
+                {deletingId === confirmDeleteOwner ? "Deleting…" : "Delete Owner + Operators"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
-      <header className="frosted-nav sticky top-0 z-50 px-8 h-16 flex items-center justify-between">
+      <header className="frosted-nav sticky top-0 z-40 px-8 h-16 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <a href="/" className="font-headline text-xl text-primary tracking-tight">OpSoul</a>
           <span className="text-muted-foreground/40 font-mono text-xs">/</span>
@@ -416,38 +514,25 @@ export default function AdminPage() {
         {/* Stats row */}
         {stats && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
-            <StatCard
-              label="Total Owners"
-              value={stats.totalOwners}
-              color="text-primary"
-              glow="bg-[radial-gradient(circle_at_top-left,rgba(205,150,255,0.06),transparent_60%)]"
-            />
-            <StatCard
-              label="Total Operators"
-              value={stats.totalOperators}
-              color="text-secondary"
-              glow="bg-[radial-gradient(circle_at_top-left,rgba(64,206,243,0.06),transparent_60%)]"
-            />
-            <StatCard
-              label="Messages (24h)"
-              value={stats.messagesLast24h.toLocaleString()}
-              color="text-primary"
-              glow="bg-[radial-gradient(circle_at_top-left,rgba(205,150,255,0.06),transparent_60%)]"
-            />
+            <StatCard label="Total Owners" value={stats.totalOwners} color="text-primary"
+              glow="bg-[radial-gradient(circle_at_top-left,rgba(205,150,255,0.06),transparent_60%)]" />
+            <StatCard label="Total Operators" value={stats.totalOperators} color="text-secondary"
+              glow="bg-[radial-gradient(circle_at_top-left,rgba(64,206,243,0.06),transparent_60%)]" />
+            <StatCard label="Messages (24h)" value={stats.messagesLast24h.toLocaleString()} color="text-primary"
+              glow="bg-[radial-gradient(circle_at_top-left,rgba(205,150,255,0.06),transparent_60%)]" />
             <StatCard
               label="Drift Alerts"
               value={stats.driftAlerts}
               color={stats.driftAlerts > 0 ? "text-amber-400" : "text-secondary"}
               glow={stats.driftAlerts > 0
                 ? "bg-[radial-gradient(circle_at_top-left,rgba(251,191,36,0.08),transparent_60%)]"
-                : "bg-[radial-gradient(circle_at_top-left,rgba(64,206,243,0.06),transparent_60%)]"
-              }
+                : "bg-[radial-gradient(circle_at_top-left,rgba(64,206,243,0.06),transparent_60%)]"}
             />
           </div>
         )}
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-8">
+        <div className="flex gap-1 mb-8 flex-wrap">
           {TABS.map((t) => (
             <button
               key={t.id}
@@ -508,9 +593,7 @@ export default function AdminPage() {
                         </div>
                       </div>
                       {o.isSovereignAdmin && (
-                        <span className="font-label text-[10px] uppercase tracking-widest text-primary">
-                          Admin
-                        </span>
+                        <span className="font-label text-[10px] uppercase tracking-widest text-primary">Admin</span>
                       )}
                     </div>
                   ))}
@@ -557,8 +640,8 @@ export default function AdminPage() {
               <table className="w-full">
                 <thead>
                   <tr className="bg-surface-container-high/50">
-                    {["Email", "Name", "Operators", "Registered", "Role"].map((h) => (
-                      <th key={h} className="pl-8 pr-4 py-3 text-left font-label text-[10px] uppercase tracking-widest text-muted-foreground first:pl-8">
+                    {["Email", "Name", "Operators", "Registered", "Role", "Actions"].map((h) => (
+                      <th key={h} className="pl-6 pr-4 py-3 text-left font-label text-[10px] uppercase tracking-widest text-muted-foreground">
                         {h}
                       </th>
                     ))}
@@ -566,17 +649,14 @@ export default function AdminPage() {
                 </thead>
                 <tbody>
                   {owners.map((o, i) => (
-                    <tr
-                      key={o.id}
-                      className={i % 2 === 0 ? "bg-transparent" : "bg-surface-container/30"}
-                    >
-                      <td className="pl-8 pr-4 py-4 font-mono text-sm text-on-surface">{o.email}</td>
-                      <td className="pl-8 pr-4 py-4 font-sans text-sm text-on-surface-variant">{o.name ?? "—"}</td>
-                      <td className="pl-8 pr-4 py-4 font-mono text-sm text-secondary">{o.operatorCount}</td>
-                      <td className="pl-8 pr-4 py-4 font-label text-[10px] text-muted-foreground">
+                    <tr key={o.id} className={i % 2 === 0 ? "bg-transparent" : "bg-surface-container/30"}>
+                      <td className="pl-6 pr-4 py-4 font-mono text-sm text-on-surface">{o.email}</td>
+                      <td className="pl-6 pr-4 py-4 font-sans text-sm text-on-surface-variant">{o.name ?? "—"}</td>
+                      <td className="pl-6 pr-4 py-4 font-mono text-sm text-secondary">{o.operatorCount}</td>
+                      <td className="pl-6 pr-4 py-4 font-label text-[10px] text-muted-foreground">
                         {new Date(o.createdAt).toLocaleDateString()}
                       </td>
-                      <td className="pl-8 pr-4 py-4">
+                      <td className="pl-6 pr-4 py-4">
                         <button
                           onClick={() => toggleAdmin(o.id)}
                           disabled={togglingId === o.id || o.id === owner?.id}
@@ -584,14 +664,24 @@ export default function AdminPage() {
                             o.isSovereignAdmin ? "text-primary" : "text-muted-foreground hover:text-primary"
                           } disabled:opacity-40`}
                         >
-                          {togglingId === o.id ? "..." : o.isSovereignAdmin ? "Sovereign" : "Standard"}
+                          {togglingId === o.id ? "…" : o.isSovereignAdmin ? "Admin" : "User"}
                         </button>
+                      </td>
+                      <td className="pl-6 pr-4 py-4">
+                        {o.id !== owner?.id && (
+                          <button
+                            onClick={() => setConfirmDeleteOwner(o.id)}
+                            className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-destructive transition-colors"
+                          >
+                            Delete
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
                   {owners.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="pl-8 py-12 text-muted-foreground text-sm">No owners registered.</td>
+                      <td colSpan={6} className="pl-6 py-12 text-muted-foreground text-sm">No owners found.</td>
                     </tr>
                   )}
                 </tbody>
@@ -612,8 +702,8 @@ export default function AdminPage() {
               <table className="w-full">
                 <thead>
                   <tr className="bg-surface-container-high/50">
-                    {["Operator", "Owner", "Archetype", "Messages", "Drift", "GROW", "Safe"].map((h) => (
-                      <th key={h} className="pl-8 pr-4 py-3 text-left font-label text-[10px] uppercase tracking-widest text-muted-foreground">
+                    {["Operator", "Owner", "Messages", "Drift", "GROW Lock", "Safe Mode", "Actions"].map((h) => (
+                      <th key={h} className="pl-6 pr-4 py-3 text-left font-label text-[10px] uppercase tracking-widest text-muted-foreground">
                         {h}
                       </th>
                     ))}
@@ -621,41 +711,61 @@ export default function AdminPage() {
                 </thead>
                 <tbody>
                   {operators.map((op, i) => (
-                    <tr
-                      key={op.id}
-                      className={i % 2 === 0 ? "bg-transparent" : "bg-surface-container/30"}
-                    >
-                      <td className="pl-8 pr-4 py-4 font-sans text-sm text-on-surface">{op.name}</td>
-                      <td className="pl-8 pr-4 py-4 font-mono text-xs text-muted-foreground">{op.ownerEmail}</td>
-                      <td className="pl-8 pr-4 py-4">
-                        <div className="flex flex-wrap gap-1">
-                          {(op.archetype ?? []).slice(0, 2).map((a: string) => (
-                            <span key={a} className="font-label text-[9px] uppercase tracking-widest text-secondary">
-                              {a}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="pl-8 pr-4 py-4 font-mono text-xs text-on-surface-variant">
+                    <tr key={op.id} className={i % 2 === 0 ? "bg-transparent" : "bg-surface-container/30"}>
+                      <td className="pl-6 pr-4 py-4 font-sans text-sm text-on-surface">{op.name}</td>
+                      <td className="pl-6 pr-4 py-4 font-mono text-xs text-muted-foreground">{op.ownerEmail}</td>
+                      <td className="pl-6 pr-4 py-4 font-mono text-xs text-on-surface-variant">
                         {op.messageCount.toLocaleString()}
                       </td>
-                      <td className="pl-8 pr-4 py-4">
+                      <td className="pl-6 pr-4 py-4">
                         <DriftBar score={op.driftScore} />
                       </td>
-                      <td className="pl-8 pr-4 py-4">
-                        <GrowBadge level={op.growLockLevel} />
+                      <td className="pl-6 pr-4 py-4">
+                        <select
+                          value={op.growLockLevel}
+                          onChange={(e) => changeGrowLock(op.id, e.target.value)}
+                          disabled={growLocking === op.id}
+                          className={`bg-transparent border border-border/30 rounded px-2 py-1 text-[10px] font-label uppercase tracking-widest focus:outline-none focus:border-primary/50 disabled:opacity-40 cursor-pointer ${GROW_COLORS[op.growLockLevel] ?? "text-muted-foreground"}`}
+                        >
+                          {GROW_LEVELS.map((lvl) => (
+                            <option key={lvl} value={lvl} className="text-foreground bg-surface-container">
+                              {lvl}
+                            </option>
+                          ))}
+                        </select>
                       </td>
-                      <td className="pl-8 pr-4 py-4">
-                        {op.safeMode
-                          ? <span className="font-label text-[10px] uppercase tracking-widest text-amber-400">On</span>
-                          : <span className="font-label text-[10px] uppercase tracking-widest text-muted-foreground">Off</span>
-                        }
+                      <td className="pl-6 pr-4 py-4">
+                        <button
+                          onClick={() => toggleSafeMode(op)}
+                          disabled={togglingId === op.id}
+                          className={`font-label text-[10px] uppercase tracking-widest transition-colors disabled:opacity-40 ${
+                            op.safeMode ? "text-amber-400 hover:text-amber-300" : "text-muted-foreground hover:text-secondary"
+                          }`}
+                        >
+                          {togglingId === op.id ? "…" : op.safeMode ? "On" : "Off"}
+                        </button>
+                      </td>
+                      <td className="pl-6 pr-4 py-4">
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => openInspect(op)}
+                            className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors"
+                          >
+                            Inspect
+                          </button>
+                          <button
+                            onClick={() => setConfirmDeleteOp(op.id)}
+                            className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-destructive transition-colors"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
                   {operators.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="pl-8 py-12 text-muted-foreground text-sm">No operators found.</td>
+                      <td colSpan={7} className="pl-6 py-12 text-muted-foreground text-sm">No operators found.</td>
                     </tr>
                   )}
                 </tbody>
@@ -702,637 +812,130 @@ export default function AdminPage() {
             )}
           </div>
         )}
-        {/* RAG Intelligence tab */}
+
+        {/* Platform KB tab */}
         {tab === "rag" && (
           <div className="space-y-6">
-            {/* Stats row */}
-            {ragStats && (
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="glass-panel p-6">
-                  <div className="font-headline text-3xl font-bold text-primary mb-1">{ragStats.builderCount}</div>
-                  <div className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Builder DNA</div>
+            {/* Header + actions */}
+            <div className="glass-panel p-6">
+              <div className="flex items-start justify-between gap-6 flex-wrap">
+                <div>
+                  <h3 className="font-headline text-xl text-on-surface mb-1">Platform KB</h3>
+                  <p className="font-sans text-xs text-muted-foreground/80">
+                    Shared knowledge seeded into every operator. Retrieved during conversations.
+                  </p>
+                  <div className="flex items-center gap-2 mt-3">
+                    <span className="font-mono text-2xl font-bold text-primary">{platformKbEntries.length}</span>
+                    <span className="font-label text-[10px] uppercase tracking-widest text-muted-foreground">entries</span>
+                  </div>
+                  {seedResult && (
+                    <div className="mt-2 font-mono text-xs text-secondary">
+                      Seed complete — {seedResult.inserted} inserted · {seedResult.skipped} skipped
+                    </div>
+                  )}
                 </div>
-                <div className="glass-panel p-6">
-                  <div className="font-headline text-3xl font-bold text-secondary mb-1">{ragStats.archetypeCount}</div>
-                  <div className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Archetype DNA</div>
-                </div>
-                <div className="glass-panel p-6">
-                  <div className="font-headline text-3xl font-bold text-primary mb-1">{ragStats.collectiveCount}</div>
-                  <div className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Collective</div>
-                </div>
-                <div className="glass-panel p-6">
-                  <div className="font-headline text-3xl font-bold text-secondary mb-1">{ragStats.totalExtracted}</div>
-                  <div className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Total Extracted</div>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <button
+                    onClick={seedPlatformKb}
+                    disabled={seedingKb}
+                    className="px-5 py-2.5 bg-primary/10 border border-primary/30 text-primary font-label text-[10px] uppercase tracking-widest rounded-lg hover:bg-primary/20 disabled:opacity-40 transition-all whitespace-nowrap"
+                  >
+                    {seedingKb ? "Seeding…" : "Seed V1 (100 entries)"}
+                  </button>
+                  <button
+                    onClick={() => platformFileRef.current?.click()}
+                    disabled={platformUpload.uploading}
+                    className="px-5 py-2.5 bg-surface-container border border-border/40 text-on-surface font-label text-[10px] uppercase tracking-widest rounded-lg hover:bg-white/5 disabled:opacity-40 transition-all whitespace-nowrap"
+                  >
+                    {platformUpload.uploading ? "Uploading…" : "Upload File"}
+                  </button>
+                  <input
+                    ref={platformFileRef}
+                    type="file"
+                    accept="*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handlePlatformKbUpload(file);
+                      e.target.value = "";
+                    }}
+                  />
                 </div>
               </div>
-            )}
-
-            {/* Sub-tabs */}
-            <div className="flex gap-1 flex-wrap">
-              {(["builder", "archetype", "collective", "platform"] as const).map((sub) => (
-                <button
-                  key={sub}
-                  onClick={() => { setRagSubTab(sub); setRagForm({ title: "", content: "", archetype: "", tags: "" }); }}
-                  className={`px-5 py-2 font-label text-[10px] uppercase tracking-widest transition-all ${
-                    ragSubTab === sub
-                      ? "bg-primary-container text-on-primary-container shadow-[inset_0_1px_0_rgba(205,150,255,0.20)]"
-                      : "text-muted-foreground hover:text-foreground hover:bg-white/5"
-                  }`}
-                >
-                  {sub === "builder" ? "Platform Principles" : sub === "archetype" ? "Archetype Soul" : sub === "collective" ? "Collective Intelligence" : "Platform KB"}
-                </button>
-              ))}
+              {platformUpload.result && (
+                <div className="mt-4 border border-secondary/20 rounded-lg px-4 py-3 bg-secondary/5 flex items-center justify-between">
+                  <div className="font-mono text-xs text-secondary">
+                    Uploaded — {platformUpload.result.chunks} chunks across {platformUpload.result.operators} operators
+                    <span className="text-muted-foreground ml-2">({platformUpload.result.source})</span>
+                  </div>
+                  <button
+                    onClick={() => setPlatformUpload({ uploading: false, result: null, error: null })}
+                    className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary ml-4 transition-colors"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
+              {platformUpload.error && (
+                <div className="mt-4 border border-destructive/20 rounded-lg px-4 py-3 bg-destructive/5 flex items-center justify-between">
+                  <span className="font-sans text-xs text-destructive">{platformUpload.error}</span>
+                  <button
+                    onClick={() => setPlatformUpload({ uploading: false, result: null, error: null })}
+                    className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary ml-4 transition-colors"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* Builder DNA */}
-            {ragSubTab === "builder" && (
-              <div className="space-y-4">
-                <div className="glass-panel p-6 space-y-4">
-                  <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Platform Principles — Add Entry</h3>
-                  <input
-                    placeholder="Title — e.g. Gmail Permission Constraints"
-                    value={ragForm.title}
-                    onChange={(e) => setRagForm((f) => ({ ...f, title: e.target.value }))}
-                    className="w-full bg-surface-container/50 border border-border/40 rounded-lg px-4 py-2.5 text-sm font-sans text-foreground focus:outline-none focus:border-primary/50"
-                  />
-                  <textarea
-                    placeholder="Knowledge content — what every operator should inherently know..."
-                    value={ragForm.content}
-                    onChange={(e) => setRagForm((f) => ({ ...f, content: e.target.value }))}
-                    rows={4}
-                    className="w-full bg-surface-container/50 border border-border/40 rounded-lg px-4 py-2.5 text-sm font-sans text-foreground focus:outline-none focus:border-primary/50 resize-none"
-                  />
-                  <div className="flex items-center gap-3">
-                    <input
-                      placeholder="Tags (comma-separated)"
-                      value={ragForm.tags}
-                      onChange={(e) => setRagForm((f) => ({ ...f, tags: e.target.value }))}
-                      className="flex-1 bg-surface-container/50 border border-border/40 rounded-lg px-4 py-2.5 text-sm font-sans text-foreground focus:outline-none focus:border-primary/50"
-                    />
-                    <button
-                      onClick={saveRagEntry}
-                      disabled={ragSaving || !ragForm.title.trim() || !ragForm.content.trim()}
-                      className="px-6 py-2.5 bg-primary text-primary-foreground font-label text-[10px] uppercase tracking-widest rounded-lg hover:opacity-90 disabled:opacity-40 transition-opacity"
-                    >
-                      {ragSaving ? "Embedding…" : "Add Entry"}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="glass-panel overflow-hidden">
-                  <div className="px-6 py-4 border-b border-border/30">
-                    <span className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                      {ragEntries.filter((e) => e.layer === "builder").length} Builder Entries
-                    </span>
-                  </div>
-                  {ragEntries.filter((e) => e.layer === "builder").map((entry) => (
-                    <div key={entry.id} className={`px-6 py-4 border-b border-border/20 flex items-start justify-between gap-4 ${!entry.isActive ? "opacity-40" : ""}`}>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-sans text-sm text-on-surface">{entry.title}</span>
-                          {entry.hasEmbedding && <span className="font-label text-[9px] uppercase tracking-widest text-secondary">Embedded</span>}
-                        </div>
-                        <p className="text-xs text-muted-foreground font-sans line-clamp-2">{entry.content}</p>
-                        {entry.tags.length > 0 && (
-                          <div className="flex gap-1 mt-2 flex-wrap">
-                            {entry.tags.map((t) => (
-                              <span key={t} className="font-label text-[9px] uppercase tracking-widest text-primary/60 border border-primary/20 rounded px-1.5 py-0.5">{t}</span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3 flex-shrink-0">
-                        <button onClick={() => toggleRagEntry(entry.id, entry.isActive)} className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">
-                          {entry.isActive ? "Deactivate" : "Activate"}
-                        </button>
-                        <button onClick={() => deleteRagEntry(entry.id)} className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-destructive transition-colors">
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                  {ragEntries.filter((e) => e.layer === "builder").length === 0 && (
-                    <div className="px-6 py-12 text-center text-muted-foreground text-sm">No builder DNA entries yet. Add platform knowledge above.</div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Archetype DNA */}
-            {ragSubTab === "archetype" && (
-              <div className="space-y-4">
-                <div className="glass-panel p-6 space-y-4">
-                  <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Archetype Soul — Add Entry</h3>
-                  <div className="grid grid-cols-2 gap-3">
-                    <input
-                      placeholder="Title"
-                      value={ragForm.title}
-                      onChange={(e) => setRagForm((f) => ({ ...f, title: e.target.value }))}
-                      className="w-full bg-surface-container/50 border border-border/40 rounded-lg px-4 py-2.5 text-sm font-sans text-foreground focus:outline-none focus:border-primary/50"
-                    />
-                    <select
-                      value={ragForm.archetype}
-                      onChange={(e) => setRagForm((f) => ({ ...f, archetype: e.target.value }))}
-                      className="w-full bg-surface-container/50 border border-border/40 rounded-lg px-4 py-2.5 text-sm font-sans text-foreground focus:outline-none focus:border-primary/50"
-                    >
-                      <option value="">Select Archetype</option>
-                      {ARCHETYPES.map((a) => <option key={a} value={a}>{a}</option>)}
-                    </select>
-                  </div>
-                  <textarea
-                    placeholder="Domain knowledge this archetype inherently knows..."
-                    value={ragForm.content}
-                    onChange={(e) => setRagForm((f) => ({ ...f, content: e.target.value }))}
-                    rows={4}
-                    className="w-full bg-surface-container/50 border border-border/40 rounded-lg px-4 py-2.5 text-sm font-sans text-foreground focus:outline-none focus:border-primary/50 resize-none"
-                  />
-                  <div className="flex items-center gap-3">
-                    <input
-                      placeholder="Tags (comma-separated)"
-                      value={ragForm.tags}
-                      onChange={(e) => setRagForm((f) => ({ ...f, tags: e.target.value }))}
-                      className="flex-1 bg-surface-container/50 border border-border/40 rounded-lg px-4 py-2.5 text-sm font-sans text-foreground focus:outline-none focus:border-primary/50"
-                    />
-                    <button
-                      onClick={saveRagEntry}
-                      disabled={ragSaving || !ragForm.title.trim() || !ragForm.content.trim() || !ragForm.archetype}
-                      className="px-6 py-2.5 bg-primary text-primary-foreground font-label text-[10px] uppercase tracking-widest rounded-lg hover:opacity-90 disabled:opacity-40 transition-opacity"
-                    >
-                      {ragSaving ? "Embedding…" : "Add Entry"}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Archetype filter */}
-                <div className="flex gap-2 flex-wrap">
-                  <button
-                    onClick={() => setRagArchetypeFilter("")}
-                    className={`px-4 py-1.5 font-label text-[10px] uppercase tracking-widest rounded-full border transition-all ${!ragArchetypeFilter ? "border-primary text-primary" : "border-border/40 text-muted-foreground hover:border-primary/50"}`}
-                  >
-                    All
-                  </button>
-                  {ARCHETYPES.map((a) => (
-                    <button
-                      key={a}
-                      onClick={() => setRagArchetypeFilter(a === ragArchetypeFilter ? "" : a)}
-                      className={`px-4 py-1.5 font-label text-[10px] uppercase tracking-widest rounded-full border transition-all ${ragArchetypeFilter === a ? "border-primary text-primary" : "border-border/40 text-muted-foreground hover:border-primary/50"}`}
-                    >
-                      {a}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="glass-panel overflow-hidden">
-                  {ragEntries
-                    .filter((e) => e.layer === "archetype" && (!ragArchetypeFilter || e.archetype === ragArchetypeFilter))
-                    .map((entry) => (
-                      <div key={entry.id} className={`px-6 py-4 border-b border-border/20 flex items-start justify-between gap-4 ${!entry.isActive ? "opacity-40" : ""}`}>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-label text-[9px] uppercase tracking-widest text-secondary">{entry.archetype}</span>
-                            <span className="font-sans text-sm text-on-surface">{entry.title}</span>
-                            {entry.hasEmbedding && <span className="font-label text-[9px] uppercase tracking-widest text-primary/60">Embedded</span>}
-                          </div>
-                          <p className="text-xs text-muted-foreground font-sans line-clamp-2">{entry.content}</p>
-                        </div>
-                        <div className="flex items-center gap-3 flex-shrink-0">
-                          <button onClick={() => toggleRagEntry(entry.id, entry.isActive)} className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">
-                            {entry.isActive ? "Deactivate" : "Activate"}
-                          </button>
-                          <button onClick={() => deleteRagEntry(entry.id)} className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-destructive transition-colors">
-                            Remove
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  {ragEntries.filter((e) => e.layer === "archetype" && (!ragArchetypeFilter || e.archetype === ragArchetypeFilter)).length === 0 && (
-                    <div className="px-6 py-12 text-center text-muted-foreground text-sm">
-                      {ragArchetypeFilter ? `No DNA entries for ${ragArchetypeFilter} yet.` : "No archetype DNA entries yet."}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Platform KB Upload */}
-            {ragSubTab === "platform" && (
-              <div className="space-y-4">
-                <div className="glass-panel p-6 space-y-5">
-                  <div>
-                    <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Platform KB — Loading Bay</h3>
-                    <p className="font-sans text-xs text-muted-foreground/70">Drop any file or paste a URL — content is chunked, embedded, and seeded into all active operators' knowledge bases.</p>
-                  </div>
-
-                  {!platformUpload.uploading && !platformUpload.result && !platformUpload.error && (
-                    <div className="space-y-4">
-                      <div
-                        className="border-2 border-dashed border-border/40 rounded-lg p-10 flex flex-col items-center gap-4 cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-all"
-                        onClick={() => platformFileRef.current?.click()}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          const file = e.dataTransfer.files[0];
-                          if (file) handlePlatformKbUpload(file);
-                        }}
-                      >
-                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                          <span className="text-primary text-lg">↑</span>
-                        </div>
-                        <div className="text-center">
-                          <div className="font-sans text-sm text-on-surface mb-1">Drop any file or click to browse</div>
-                          <div className="font-label text-[10px] uppercase tracking-widest text-muted-foreground">PDF · DOCX · TXT · MD · XLSX · CSV · JSON · JSONL · XML · YAML · and more</div>
-                          <div className="font-label text-[9px] text-muted-foreground/50 mt-1">Up to 200 MB</div>
-                        </div>
-                        <input
-                          ref={platformFileRef}
-                          type="file"
-                          accept="*"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) handlePlatformKbUpload(file);
-                            e.target.value = "";
-                          }}
-                        />
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <div className="flex-1 h-px bg-border/30" />
-                        <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground/50">or ingest a URL</span>
-                        <div className="flex-1 h-px bg-border/30" />
-                      </div>
-
-                      <div className="flex gap-2">
-                        <input
-                          type="url"
-                          placeholder="https://docs.example.com/page"
-                          value={platformUrlInput}
-                          onChange={(e) => setPlatformUrlInput(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === "Enter") handlePlatformKbIngestUrl(); }}
-                          className="flex-1 bg-surface-container/50 border border-border/40 rounded-lg px-4 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50"
-                        />
-                        <button
-                          onClick={handlePlatformKbIngestUrl}
-                          disabled={!platformUrlInput.trim() || !/^https?:\/\//i.test(platformUrlInput)}
-                          className="px-5 py-2.5 bg-primary/10 border border-primary/30 text-primary font-label text-[10px] uppercase tracking-widest rounded-lg hover:bg-primary/20 disabled:opacity-40 transition-all whitespace-nowrap"
-                        >
-                          Fetch & Ingest
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {platformUpload.uploading && (
-                    <div className="border border-border/30 rounded-lg p-8 flex flex-col items-center gap-3">
-                      <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                      <div className="font-label text-[10px] uppercase tracking-widest text-primary animate-pulse">Processing — embedding chunks…</div>
-                      <p className="font-sans text-xs text-muted-foreground text-center">This may take a moment depending on file size.</p>
-                    </div>
-                  )}
-
-                  {platformUpload.result && (
-                    <div className="border border-secondary/30 rounded-lg p-6 space-y-4 bg-secondary/5">
-                      <div className="flex items-center gap-3">
-                        <span className="status-beacon" />
-                        <span className="font-label text-[10px] uppercase tracking-widest text-secondary">Upload Complete</span>
-                      </div>
-                      <div className="grid grid-cols-3 gap-4">
-                        <div>
-                          <div className="font-label text-[9px] uppercase tracking-widest text-muted-foreground mb-1">Source</div>
-                          <div className="font-mono text-xs text-on-surface truncate" title={platformUpload.result.source}>{platformUpload.result.source}</div>
-                        </div>
-                        <div>
-                          <div className="font-label text-[9px] uppercase tracking-widest text-muted-foreground mb-1">Chunks</div>
-                          <div className="font-headline text-xl font-bold text-secondary">{platformUpload.result.chunks}</div>
-                        </div>
-                        <div>
-                          <div className="font-label text-[9px] uppercase tracking-widest text-muted-foreground mb-1">Operators Seeded</div>
-                          <div className="font-headline text-xl font-bold text-primary">{platformUpload.result.operators}</div>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => setPlatformUpload({ uploading: false, result: null, error: null })}
-                        className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors"
-                      >
-                        Upload another file
-                      </button>
-                    </div>
-                  )}
-
-                  {platformUpload.error && (
-                    <div className="border border-destructive/30 rounded-lg p-6 space-y-3 bg-destructive/5">
-                      <div className="flex items-center gap-3">
-                        <span className="status-beacon-warn" />
-                        <span className="font-label text-[10px] uppercase tracking-widest text-destructive">Upload Failed</span>
-                      </div>
-                      <p className="font-sans text-xs text-muted-foreground">{platformUpload.error}</p>
-                      <button
-                        onClick={() => setPlatformUpload({ uploading: false, result: null, error: null })}
-                        className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors"
-                      >
-                        Try again
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Collective Intelligence */}
-            {ragSubTab === "collective" && ragPipeline && (
-              <div className="space-y-4">
-                {/* Eligibility guidance */}
-                <div className="glass-panel p-5 border border-primary/10 space-y-3">
-                  <div className="font-label text-[10px] uppercase tracking-[0.2em] text-primary/70">What belongs in the collective pipeline</div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <div className="font-label text-[9px] uppercase tracking-widest text-secondary mb-2">✓ Eligible</div>
-                      {["Factual domain knowledge (research, how-to, technical facts)", "Verified information applicable across operators", "Insights, patterns, or methods any operator could use", "Structured knowledge: definitions, frameworks, processes"].map((item) => (
-                        <div key={item} className="text-xs text-muted-foreground font-sans flex gap-2">
-                          <span className="text-secondary shrink-0">—</span>{item}
-                        </div>
-                      ))}
-                    </div>
-                    <div className="space-y-1.5">
-                      <div className="font-label text-[9px] uppercase tracking-widest text-destructive/70 mb-2">✗ Blocked by screener</div>
-                      {["User preference notes (\"User likes X\", \"User prefers Y\")", "Conversational observations (\"User asked about Z\")", "Operator diary — notes about one user's behavior", "Personal context that only applies to one session"].map((item) => (
-                        <div key={item} className="text-xs text-muted-foreground font-sans flex gap-2">
-                          <span className="text-destructive/50 shrink-0">—</span>{item}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Config panel */}
-                <div className="glass-panel p-6 space-y-6">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Pipeline Configuration</h3>
-                    <div className="flex items-center gap-3">
-                      <span className={`font-label text-[10px] uppercase tracking-widest ${ragPipeline.enabled ? "text-secondary" : "text-muted-foreground"}`}>
-                        {ragPipeline.enabled ? "Active" : "Paused"}
-                      </span>
-                      <button
-                        onClick={() => savePipelineConfig({ enabled: !ragPipeline.enabled })}
-                        className={`w-10 h-5 rounded-full transition-colors relative ${ragPipeline.enabled ? "bg-secondary" : "bg-surface-container-high"}`}
-                      >
-                        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${ragPipeline.enabled ? "left-5" : "left-0.5"}`} />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <label className="font-label text-[10px] uppercase tracking-widest text-muted-foreground">
-                        Min Confidence Score — {ragPipeline.minConfidenceScore}%
-                      </label>
-                      <input
-                        type="range" min={50} max={100} value={ragPipeline.minConfidenceScore}
-                        onChange={(e) => setRagPipeline((p) => p ? { ...p, minConfidenceScore: Number(e.target.value) } : p)}
-                        onMouseUp={() => savePipelineConfig({ minConfidenceScore: ragPipeline.minConfidenceScore })}
-                        className="w-full accent-primary"
-                      />
-                      <p className="text-xs text-muted-foreground font-sans">Minimum confidence required before operator learning is considered for collective extraction.</p>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="font-label text-[10px] uppercase tracking-widest text-muted-foreground">
-                        Dedup Threshold — {ragPipeline.deduplicationThreshold}%
-                      </label>
-                      <input
-                        type="range" min={50} max={99} value={ragPipeline.deduplicationThreshold}
-                        onChange={(e) => setRagPipeline((p) => p ? { ...p, deduplicationThreshold: Number(e.target.value) } : p)}
-                        onMouseUp={() => savePipelineConfig({ deduplicationThreshold: ragPipeline.deduplicationThreshold })}
-                        className="w-full accent-primary"
-                      />
-                      <p className="text-xs text-muted-foreground font-sans">Semantic similarity threshold above which an incoming entry is considered a duplicate and skipped.</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Run panel */}
-                <div className="glass-panel p-6 flex items-center justify-between gap-8">
-                  <div>
-                    <div className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-3">Manual Pipeline Run</div>
-                    <div className="flex gap-8 text-sm font-sans text-on-surface-variant">
-                      <span>Last run: <span className="text-on-surface">{ragPipeline.lastRunAt ? new Date(ragPipeline.lastRunAt).toLocaleString() : "Never"}</span></span>
-                      <span>Last extracted: <span className="text-secondary">{ragPipeline.lastRunCount}</span></span>
-                      <span>Total extracted: <span className="text-primary">{ragPipeline.totalExtracted}</span></span>
-                    </div>
-                    {ragRunResult && (
-                      <div className="mt-3 space-y-1.5">
-                        <div className="font-mono text-xs text-secondary">
-                          Run complete — {ragRunResult.extracted} extracted · {ragRunResult.filteredByScreener} blocked by screener · {ragRunResult.filteredByDedup} deduped · {ragRunResult.candidatesScanned} scanned
-                        </div>
-                        {ragRunResult.screenerRejections.length > 0 && (
-                          <details className="mt-1">
-                            <summary className="font-label text-[9px] uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-                              {ragRunResult.screenerRejections.length} diary/context entries blocked — expand to review
-                            </summary>
-                            <div className="mt-2 space-y-1 pl-2 border-l border-destructive/30">
-                              {ragRunResult.screenerRejections.map((r, i) => (
-                                <div key={i} className="text-xs font-sans text-muted-foreground">
-                                  <span className="text-destructive/70 font-mono mr-2">[{r.reason}]</span>
-                                  {r.content}…
-                                </div>
-                              ))}
-                            </div>
-                          </details>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    onClick={runPipeline}
-                    disabled={ragRunning}
-                    className="px-8 py-3 bg-primary/10 border border-primary/30 text-primary font-label text-[10px] uppercase tracking-widest rounded-lg hover:bg-primary/20 disabled:opacity-40 transition-all whitespace-nowrap"
-                  >
-                    {ragRunning ? "Running…" : "Run Now"}
-                  </button>
-                </div>
-
-                {/* Collective entries */}
-                <div className="glass-panel overflow-hidden">
-                  <div className="px-6 py-4 border-b border-border/30">
-                    <span className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                      {ragEntries.filter((e) => e.layer === "collective").length} Collective Entries
-                    </span>
-                  </div>
-                  {ragEntries.filter((e) => e.layer === "collective").map((entry) => (
-                    <div key={entry.id} className={`px-6 py-4 border-b border-border/20 ${!entry.isActive ? "opacity-40" : ""}`}>
-                      <div className="flex items-start justify-between gap-4 mb-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="font-sans text-sm text-on-surface mb-1">{entry.title}</div>
-                          <p className="text-xs text-muted-foreground font-sans line-clamp-2">{entry.content}</p>
-                        </div>
-                        <div className="flex items-center gap-3 flex-shrink-0">
-                          <button onClick={() => toggleRagEntry(entry.id, entry.isActive)} className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">
-                            {entry.isActive ? "Deactivate" : "Activate"}
-                          </button>
-                          <button onClick={() => deleteRagEntry(entry.id)} className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-destructive transition-colors">
-                            Remove
-                          </button>
-                        </div>
-                      </div>
-                      {/* Scope + Tags row */}
-                      <div className="flex flex-wrap items-center gap-2">
-                        {/* dna_scope toggle */}
-                        <button
-                          onClick={() => patchEntryScope(entry.id, { dnaScope: entry.dnaScope === "specialty" ? "general" : "specialty" })}
-                          className={`font-label text-[9px] uppercase tracking-widest px-2 py-0.5 rounded-sm border transition-colors ${
-                            entry.dnaScope === "specialty"
-                              ? "border-amber-500/50 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
-                              : "border-primary/30 text-primary/70 bg-primary/5 hover:bg-primary/10"
-                          }`}
-                        >
-                          {entry.dnaScope === "specialty" ? "specialty" : "general"}
-                        </button>
-
-                        {/* archetype scope chips (general only) */}
-                        {(entry.dnaScope !== "specialty") && (
-                          <div className="flex items-center gap-1 flex-wrap">
-                            {(entry.archetypeScope ?? []).length === 0 && (
-                              <span className="font-label text-[9px] text-muted-foreground/60 italic">universal</span>
-                            )}
-                            {(entry.archetypeScope ?? []).map((a) => (
-                              <span
-                                key={a}
-                                onClick={() => patchEntryScope(entry.id, { archetypeScope: (entry.archetypeScope ?? []).filter((x) => x !== a) })}
-                                className="font-label text-[9px] px-1.5 py-0.5 rounded-sm bg-primary/10 text-primary/80 border border-primary/20 cursor-pointer hover:bg-destructive/10 hover:text-destructive/80 hover:border-destructive/30 transition-colors"
-                                title="Click to remove"
-                              >
-                                {a}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* domain tags chips (specialty) */}
-                        {entry.dnaScope === "specialty" && (
-                          <div className="flex items-center gap-1 flex-wrap">
-                            {(entry.domainTags ?? []).map((t) => (
-                              <span
-                                key={t}
-                                onClick={() => patchEntryScope(entry.id, { domainTags: (entry.domainTags ?? []).filter((x) => x !== t) })}
-                                className="font-label text-[9px] px-1.5 py-0.5 rounded-sm bg-amber-500/10 text-amber-400 border border-amber-500/20 cursor-pointer hover:bg-destructive/10 hover:text-destructive/80 hover:border-destructive/30 transition-colors"
-                                title="Click to remove"
-                              >
-                                {t}
-                              </span>
-                            ))}
-                            {(entry.domainTags ?? []).length === 0 && (
-                              <span className="font-label text-[9px] text-muted-foreground/60 italic">no domain tags</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                  {ragEntries.filter((e) => e.layer === "collective").length === 0 && (
-                    <div className="px-6 py-12 text-center text-muted-foreground text-sm">No collective entries yet. Run the pipeline to extract generalizable knowledge from operator learning.</div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── Source Registry (inside Intelligence tab) ────────────────── */}
-        {tab === "rag" && (
-          <div className="space-y-4">
+            {/* Entry list */}
             <div className="glass-panel overflow-hidden">
-              <div className="px-6 py-4 border-b border-border/30">
-                <span className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Source Registry</span>
-                <p className="font-sans text-xs text-muted-foreground/70 mt-0.5">Curated public knowledge sources — HuggingFace datasets, GitHub files, raw URLs.</p>
-              </div>
-
-              {/* Add source form */}
-              <div className="px-6 py-5 border-b border-border/20 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <input
-                    value={sourceForm.name}
-                    onChange={e => setSourceForm(f => ({ ...f, name: e.target.value }))}
-                    placeholder="Source name"
-                    className="bg-surface/30 border border-border/30 rounded px-3 py-2 text-xs font-sans text-on-surface placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/40"
-                  />
-                  <select
-                    value={sourceForm.sourceType}
-                    onChange={e => setSourceForm(f => ({ ...f, sourceType: e.target.value as any }))}
-                    className="bg-surface/30 border border-border/30 rounded px-3 py-2 text-xs font-sans text-on-surface focus:outline-none focus:border-primary/40"
-                  >
-                    <option value="huggingface">HuggingFace Dataset</option>
-                    <option value="github_file">GitHub File</option>
-                    <option value="github_repo">GitHub Repo</option>
-                    <option value="raw_url">Raw URL</option>
-                  </select>
-                </div>
-                <input
-                  value={sourceForm.url}
-                  onChange={e => setSourceForm(f => ({ ...f, url: e.target.value }))}
-                  placeholder="URL — e.g. https://huggingface.co/datasets/owner/name or https://github.com/owner/repo/blob/main/file.md"
-                  className="w-full bg-surface/30 border border-border/30 rounded px-3 py-2 text-xs font-sans text-on-surface placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/40"
-                />
-                <div className="flex gap-3">
-                  <input
-                    value={sourceForm.notes}
-                    onChange={e => setSourceForm(f => ({ ...f, notes: e.target.value }))}
-                    placeholder="Notes (optional) — e.g. focus area, why it was added"
-                    className="flex-1 bg-surface/30 border border-border/30 rounded px-3 py-2 text-xs font-sans text-on-surface placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/40"
-                  />
-                  <button
-                    onClick={createSource}
-                    disabled={sourceSaving || !sourceForm.name.trim() || !sourceForm.url.trim()}
-                    className="font-label text-[9px] uppercase tracking-widest px-4 py-2 rounded border border-primary/40 text-primary hover:bg-primary/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
-                  >
-                    {sourceSaving ? "Adding…" : "Add Source"}
-                  </button>
+              <div className="px-6 py-4 border-b border-border/30 bg-surface-container-high/30">
+                <div className="grid grid-cols-[1fr_120px_80px_100px_60px] gap-4">
+                  <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">Content</span>
+                  <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">Source</span>
+                  <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">Score</span>
+                  <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">Date</span>
+                  <span />
                 </div>
               </div>
 
-              {/* Source list */}
-              {ragSources.length === 0 ? (
-                <div className="px-6 py-8 text-center text-muted-foreground text-xs font-sans italic">
-                  No sources yet. Add HuggingFace datasets, GitHub files, or raw URLs.
+              {platformKbEntries.length === 0 ? (
+                <div className="px-6 py-16 text-center">
+                  <p className="font-sans text-sm text-muted-foreground mb-4">
+                    No platform knowledge seeded yet.
+                  </p>
+                  <p className="font-label text-[10px] uppercase tracking-widest text-muted-foreground/60">
+                    Click &ldquo;Seed V1&rdquo; to load the 100 core entries.
+                  </p>
                 </div>
               ) : (
                 <div className="divide-y divide-border/10">
-                  {ragSources.map(source => (
-                    <div key={source.id} className={`px-6 py-4 flex items-start gap-4 ${!source.isActive ? "opacity-50" : ""}`}>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-sans text-sm font-medium text-on-surface truncate">{source.name}</span>
-                          <span className="font-label text-[8px] uppercase tracking-widest px-1.5 py-0.5 rounded-sm border border-border/30 text-muted-foreground flex-shrink-0">
-                            {source.sourceType === "huggingface" ? "HF" : source.sourceType === "github_file" ? "GH File" : source.sourceType === "github_repo" ? "GH Repo" : "URL"}
-                          </span>
-                          {source.isActive && <span className="w-1.5 h-1.5 rounded-full bg-secondary flex-shrink-0" />}
-                        </div>
-                        <p className="text-[10px] font-mono text-muted-foreground/60 truncate">{source.url}</p>
-                        {source.notes && <p className="text-[10px] font-sans text-muted-foreground/70 mt-0.5 italic">{source.notes}</p>}
-                        {source.lastFetchAt && (
-                          <p className="text-[9px] font-sans text-muted-foreground/50 mt-1">
-                            Last fetched {new Date(source.lastFetchAt).toLocaleDateString()} · {source.lastFetchCount} entries seeded
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
+                  {platformKbEntries.map((entry) => {
+                    const baseId = entry.id.replace(/^plat-/, "").replace(/-[^-]+$/, "");
+                    return (
+                      <div key={entry.id} className="px-6 py-4 grid grid-cols-[1fr_120px_80px_100px_60px] gap-4 items-start hover:bg-white/2 transition-colors">
+                        <p className="font-sans text-xs text-on-surface leading-relaxed">
+                          {entry.content.length > 120 ? entry.content.slice(0, 120) + "…" : entry.content}
+                        </p>
+                        <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground/70 truncate" title={entry.source_name}>
+                          {entry.source_name?.replace("_platform-kb", "v1").replace(/^_upload:/, "upload:") ?? "—"}
+                        </span>
+                        <span className="font-mono text-xs text-secondary">{entry.confidence_score}</span>
+                        <span className="font-label text-[9px] text-muted-foreground">
+                          {new Date(entry.created_at).toLocaleDateString()}
+                        </span>
                         <button
-                          onClick={() => toggleSource(source.id, !source.isActive)}
-                          className={`font-label text-[9px] uppercase tracking-widest px-2 py-1 rounded border transition-colors ${
-                            source.isActive
-                              ? "border-secondary/40 text-secondary hover:bg-secondary/10"
-                              : "border-border/40 text-muted-foreground hover:text-primary hover:border-primary/40"
-                          }`}
+                          onClick={() => deletePlatformKbEntry(baseId)}
+                          disabled={deletingKbEntry === baseId}
+                          className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-destructive disabled:opacity-40 transition-colors text-right"
                         >
-                          {source.isActive ? "Pause" : "Activate"}
-                        </button>
-                        <button
-                          onClick={() => deleteSource(source.id)}
-                          className="font-label text-[9px] uppercase tracking-widest px-2 py-1 rounded border border-border/30 text-muted-foreground hover:border-destructive/40 hover:text-destructive transition-colors"
-                        >
-                          Remove
+                          {deletingKbEntry === baseId ? "…" : "Delete"}
                         </button>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
