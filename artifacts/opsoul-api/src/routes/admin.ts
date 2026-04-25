@@ -48,7 +48,7 @@ router.get('/owners', async (_req: Request, res: Response): Promise<void> => {
       isSovereignAdmin: ownersTable.isSovereignAdmin,
       createdAt: ownersTable.createdAt,
       operatorCount: sql<number>`(
-        select count(*)::int from operators where owner_id = owners.id
+        select count(*)::int from operators where owner_id = owners.id and deleted_at is null
       )`,
     })
     .from(ownersTable)
