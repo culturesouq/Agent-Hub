@@ -34,4 +34,28 @@ title = "OpSoul v2.4 — Source Code"
 id = "Csf7egpx8ax4Q7j_w0QOe"
 uri = "file://.local/opsoul_patent_brief.md"
 type = "text"
-title = "OpSoul Patent Interview Brief — DED / Dennemeyer"
+title = "Patent Brief"
+
+[[outputs]]
+id = "Bl1ipsD95VuK6hviejPZL"
+uri = "file://attached_assets/OpSoul-Patent-Claims-v3_1776502845336.docx"
+type = "word_document"
+title = "OpSoul Patent Claims v3 (latest — Apr 18)"
+
+[[outputs]]
+id = "BdX5DKnhb0bzEWcVk2vjk"
+uri = "file://attached_assets/Opsoul-v2.4-COMPLETE_1775004219372.pdf"
+type = "pdf"
+title = "OpSoul v2.4 Full Spec PDF"
+
+[[outputs]]
+id = "iPFSojsjyVKpW9RbcHPe4"
+uri = "file://.local/notebook.md"
+type = "text"
+title = "Engineering Notebook"
+
+[[outputs]]
+id = "Y-zAtFmfZhs63VoGbNiHx"
+uri = "file://attached_assets/KNOWLEDGE-blank-discovery_1775574812218.md"
+type = "text"
+title = "Discovery Notes"
