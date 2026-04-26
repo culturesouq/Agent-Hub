@@ -173,6 +173,7 @@ export default function AdminPage() {
       setKbTotal(data.total);
     } catch {
       setPlatformKbEntries([]);
+      setKbTotal(0);
     }
   }, []);
 
@@ -453,7 +454,7 @@ export default function AdminPage() {
     { id: "owners", label: "Owners", count: owners.length },
     { id: "operators", label: "Operators", count: operators.length },
     { id: "drift", label: "Drift Alerts", count: driftAlerts.length },
-    { id: "rag", label: "Platform KB", count: platformKbEntries.length },
+    { id: "rag", label: "Platform KB", count: kbTotal },
   ];
 
   const GROW_LEVELS = ["OPEN", "CONTROLLED", "LOCKED", "FROZEN"] as const;
@@ -964,8 +965,8 @@ export default function AdminPage() {
                     Shared knowledge seeded into every operator. Retrieved during conversations.
                   </p>
                   <div className="flex items-center gap-2 mt-3">
-                    <span className="font-mono text-2xl font-bold text-primary">{platformKbEntries.length}</span>
-                    <span className="font-label text-[10px] uppercase tracking-widest text-muted-foreground">entries</span>
+                    <span className="font-mono text-2xl font-bold text-primary">{kbTotal}</span>
+                    <span className="font-label text-[10px] uppercase tracking-widest text-muted-foreground">entries total</span>
                   </div>
                   {seedResult && (
                     <div className="mt-2 font-mono text-xs text-secondary">
@@ -1247,8 +1248,8 @@ export default function AdminPage() {
                       const isSelected = selectedKbEntries.has(entry.base_id);
                       const displaySource = entry.source_name?.replace("_platform-kb", "v1").replace(/^_upload:/, "upload:").replace(/^_url:/, "url:") ?? "—";
                       const rawSource = entry.source_name ?? "";
-                      const isUrl = rawSource.startsWith("_url:");
-                      const sourceUrl = isUrl ? rawSource.slice(5) : null;
+                      const isUrl = rawSource.startsWith("_url:") || rawSource.startsWith("http");
+                      const sourceUrl = isUrl ? (rawSource.startsWith("_url:") ? rawSource.slice(5) : rawSource) : null;
                       const rowBg = isSelected ? "bg-primary/5" : idx % 2 === 0 ? "hover:bg-white/2" : "bg-white/[0.015] hover:bg-white/3";
                       return (
                         <div key={entry.id} className={`px-6 py-4 grid grid-cols-[24px_1fr_120px_80px_100px_60px] gap-4 items-start transition-colors ${rowBg}`}>
