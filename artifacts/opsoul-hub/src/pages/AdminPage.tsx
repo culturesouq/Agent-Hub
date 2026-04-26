@@ -124,6 +124,9 @@ export default function AdminPage() {
   const [inspectLoading, setInspectLoading] = useState(false);
 
   const [platformKbEntries, setPlatformKbEntries] = useState<PlatformKbEntry[]>([]);
+  const [kbPage, setKbPage] = useState(1);
+  const [kbTotal, setKbTotal] = useState(0);
+  const KB_LIMIT = 20;
   const [seedingKb, setSeedingKb] = useState(false);
   const [seedResult, setSeedResult] = useState<{ inserted: number; skipped: number } | null>(null);
   const [deletingKbEntry, setDeletingKbEntry] = useState<string | null>(null);
@@ -140,17 +143,45 @@ export default function AdminPage() {
   const [bulkUrlOpen, setBulkUrlOpen] = useState(false);
   const [bulkUrlText, setBulkUrlText] = useState("");
   const [bulkUrlProgress, setBulkUrlProgress] = useState<{ current: number; total: number } | null>(null);
-  const [bulkUrlResult, setBulkUrlResult] = useState<{ ingested: number; failed: number } | null>(null);
+  const [bulkUrlResult, setBulkUrlResult] = useState<{
+    ingested: number;
+    failed: number;
+    details: { url: string; ok: boolean; chunks?: number; error?: string }[];
+  } | null>(null);
   const platformFileRef = useRef<HTMLInputElement>(null);
 
-  const loadPlatformKb = useCallback(async () => {
+  function timeAgo(dateStr: string): string {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const s = Math.floor(diff / 1000);
+    if (s < 60) return "just now";
+    const m = Math.floor(s / 60);
+    if (m < 60) return `${m} minute${m === 1 ? "" : "s"} ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h} hour${h === 1 ? "" : "s"} ago`;
+    const d = Math.floor(h / 24);
+    if (d < 30) return `${d} day${d === 1 ? "" : "s"} ago`;
+    const mo = Math.floor(d / 30);
+    if (mo < 12) return `${mo} month${mo === 1 ? "" : "s"} ago`;
+    const yr = Math.floor(mo / 12);
+    return `${yr} year${yr === 1 ? "" : "s"} ago`;
+  }
+
+  const loadPlatformKb = useCallback(async (page = 1) => {
     try {
-      const data = await apiFetch<{ count: number; entries: PlatformKbEntry[] }>("/admin/rag/platform-kb/entries");
+      const data = await apiFetch<{ entries: PlatformKbEntry[]; total: number }>(`/admin/rag/platform-kb/entries?page=${page}&limit=${KB_LIMIT}`);
       setPlatformKbEntries(data.entries);
+      setKbTotal(data.total);
     } catch {
       setPlatformKbEntries([]);
     }
   }, []);
+
+  const kbPageLoaded = useRef(false);
+  useEffect(() => {
+    if (!token) return;
+    if (!kbPageLoaded.current) { kbPageLoaded.current = true; return; }
+    loadPlatformKb(kbPage);
+  }, [kbPage, token, loadPlatformKb]);
 
   useEffect(() => {
     if (!token) return;
@@ -276,7 +307,8 @@ export default function AdminPage() {
         { method: "POST" }
       );
       setSeedResult({ inserted: result.inserted, skipped: result.skipped });
-      await loadPlatformKb();
+      setKbPage(1);
+      await loadPlatformKb(1);
     } finally {
       setSeedingKb(false);
     }
@@ -286,7 +318,7 @@ export default function AdminPage() {
     setDeletingKbEntry(entryId);
     try {
       await apiFetch(`/admin/rag/platform-kb/entries/${entryId}`, { method: "DELETE" });
-      await loadPlatformKb();
+      await loadPlatformKb(kbPage);
     } finally {
       setDeletingKbEntry(null);
     }
@@ -306,7 +338,8 @@ export default function AdminPage() {
           { method: "POST", body: formData }
         );
         setPlatformUpload({ uploading: false, uploadMsg: null, result: { source: result.source, chunks: result.chunks, operators: result.operators }, multiResult: null, error: null });
-        await loadPlatformKb();
+        setKbPage(1);
+        await loadPlatformKb(1);
       } catch (err) {
         setPlatformUpload({ uploading: false, uploadMsg: null, result: null, multiResult: null, error: err instanceof Error ? err.message : "Upload failed" });
       }
@@ -330,7 +363,8 @@ export default function AdminPage() {
         failed++;
       }
     }
-    await loadPlatformKb();
+    setKbPage(1);
+    await loadPlatformKb(1);
     setPlatformUpload({ uploading: false, uploadMsg: null, result: null, multiResult: { files: arr.length, totalChunks, failed }, error: null });
   }
 
@@ -339,13 +373,18 @@ export default function AdminPage() {
     if (!url || !/^https?:\/\//i.test(url)) return;
     setPlatformUpload({ uploading: true, uploadMsg: null, result: null, multiResult: null, error: null });
     try {
-      const result = await apiFetch<{ ok: boolean; source: string; chunks: number; operators: number; total_inserted: number }>(
+      const result = await apiFetch<{ ok: boolean; source: string; chunks: number; operators: number; total_inserted: number; error?: string }>(
         "/admin/rag/platform-kb/ingest-url",
         { method: "POST", body: JSON.stringify({ url }) }
       );
+      if (!result.ok) {
+        setPlatformUpload({ uploading: false, uploadMsg: null, result: null, multiResult: null, error: result.error ?? "Ingest failed" });
+        return;
+      }
       setPlatformUpload({ uploading: false, uploadMsg: null, result: { source: result.source, chunks: result.chunks, operators: result.operators }, multiResult: null, error: null });
       setPlatformUrlInput("");
-      await loadPlatformKb();
+      setKbPage(1);
+      await loadPlatformKb(1);
     } catch (err) {
       setPlatformUpload({ uploading: false, uploadMsg: null, result: null, multiResult: null, error: err instanceof Error ? err.message : "Ingest failed" });
     }
@@ -358,19 +397,31 @@ export default function AdminPage() {
     setBulkUrlProgress({ current: 0, total: urls.length });
     let ingested = 0;
     let failedCount = 0;
+    const details: { url: string; ok: boolean; chunks?: number; error?: string }[] = [];
     for (let i = 0; i < urls.length; i++) {
       setBulkUrlProgress({ current: i + 1, total: urls.length });
       try {
-        await apiFetch("/admin/rag/platform-kb/ingest-url", { method: "POST", body: JSON.stringify({ url: urls[i] }) });
-        ingested++;
-      } catch {
+        const result = await apiFetch<{ ok: boolean; chunks?: number; error?: string }>(
+          "/admin/rag/platform-kb/ingest-url",
+          { method: "POST", body: JSON.stringify({ url: urls[i] }) }
+        );
+        if (result.ok) {
+          ingested++;
+          details.push({ url: urls[i], ok: true, chunks: result.chunks });
+        } else {
+          failedCount++;
+          details.push({ url: urls[i], ok: false, error: result.error ?? "Unknown error" });
+        }
+      } catch (err) {
         failedCount++;
+        details.push({ url: urls[i], ok: false, error: err instanceof Error ? err.message : "Network error" });
       }
     }
     setBulkUrlProgress(null);
-    setBulkUrlResult({ ingested, failed: failedCount });
+    setBulkUrlResult({ ingested, failed: failedCount, details });
     setBulkUrlText("");
-    await loadPlatformKb();
+    setKbPage(1);
+    await loadPlatformKb(1);
   }
 
   async function handleBulkDeleteSelected() {
@@ -381,7 +432,7 @@ export default function AdminPage() {
         await apiFetch(`/admin/rag/platform-kb/entries/${baseId}`, { method: "DELETE" });
       }
       setSelectedKbEntries(new Set());
-      await loadPlatformKb();
+      await loadPlatformKb(kbPage);
     } finally {
       setDeletingSelected(false);
     }
@@ -1019,8 +1070,26 @@ export default function AdminPage() {
                           </div>
                         )}
                         {bulkUrlResult && (
-                          <div className="font-mono text-xs text-secondary">
-                            {bulkUrlResult.ingested} ingested · {bulkUrlResult.failed} failed
+                          <div className="space-y-2">
+                            <div className="font-mono text-xs text-secondary">
+                              {bulkUrlResult.ingested} ingested · {bulkUrlResult.failed} failed
+                            </div>
+                            {bulkUrlResult.details.length > 0 && (
+                              <div className="max-h-48 overflow-y-auto rounded-lg border border-border/20 divide-y divide-border/10">
+                                {bulkUrlResult.details.map((d, i) => {
+                                  const seg = (() => { try { const p = new URL(d.url).pathname; return p.split("/").filter(Boolean).pop() || new URL(d.url).hostname; } catch { return d.url; } })();
+                                  return (
+                                    <div key={i} className="flex items-start gap-2 px-3 py-1.5">
+                                      <span className="text-sm mt-px flex-shrink-0">{d.ok ? "✅" : "❌"}</span>
+                                      <span className="font-mono text-[10px] text-muted-foreground truncate flex-1" title={d.url}>{seg}</span>
+                                      <span className={`font-label text-[9px] whitespace-nowrap ${d.ok ? "text-secondary" : "text-destructive/70"}`}>
+                                        {d.ok ? `${d.chunks} chunks` : d.error}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         )}
                         <button
@@ -1121,6 +1190,9 @@ export default function AdminPage() {
               )}
             </div>
 
+            {/* Divider */}
+            <div className="h-px bg-border/25 mx-1" />
+
             {/* Entry list */}
             <div className="glass-panel overflow-hidden">
               <div className="px-6 py-4 border-b border-border/30 bg-surface-container-high/30">
@@ -1142,15 +1214,20 @@ export default function AdminPage() {
                     <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">Date</span>
                     <span />
                   </div>
-                  {selectedKbEntries.size > 0 && (
-                    <button
-                      onClick={handleBulkDeleteSelected}
-                      disabled={deletingSelected}
-                      className="px-4 py-1.5 bg-destructive/10 border border-destructive/30 text-destructive font-label text-[9px] uppercase tracking-widest rounded-lg hover:bg-destructive/20 disabled:opacity-40 transition-all whitespace-nowrap"
-                    >
-                      {deletingSelected ? "Deleting…" : `Delete Selected (${selectedKbEntries.size})`}
-                    </button>
-                  )}
+                  <div className="flex items-center gap-3">
+                    <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground/50">
+                      {kbTotal} {kbTotal === 1 ? "entry" : "entries"} total
+                    </span>
+                    {selectedKbEntries.size > 0 && (
+                      <button
+                        onClick={handleBulkDeleteSelected}
+                        disabled={deletingSelected}
+                        className="px-4 py-1.5 bg-destructive/10 border border-destructive/30 text-destructive font-label text-[9px] uppercase tracking-widest rounded-lg hover:bg-destructive/20 disabled:opacity-40 transition-all whitespace-nowrap"
+                      >
+                        {deletingSelected ? "Deleting…" : `Delete Selected (${selectedKbEntries.size})`}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1164,45 +1241,79 @@ export default function AdminPage() {
                   </p>
                 </div>
               ) : (
-                <div className="divide-y divide-border/10">
-                  {platformKbEntries.map((entry) => {
-                    const isSelected = selectedKbEntries.has(entry.base_id);
-                    return (
-                      <div key={entry.id} className={`px-6 py-4 grid grid-cols-[24px_1fr_120px_80px_100px_60px] gap-4 items-start transition-colors ${isSelected ? "bg-primary/5" : "hover:bg-white/2"}`}>
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={(e) => {
-                            setSelectedKbEntries(prev => {
-                              const next = new Set(prev);
-                              if (e.target.checked) next.add(entry.base_id);
-                              else next.delete(entry.base_id);
-                              return next;
-                            });
-                          }}
-                          className="accent-primary mt-0.5"
-                        />
-                        <p className="font-sans text-xs text-on-surface leading-relaxed">
-                          {entry.content.length > 120 ? entry.content.slice(0, 120) + "…" : entry.content}
-                        </p>
-                        <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground/70 truncate" title={entry.source_name}>
-                          {entry.source_name?.replace("_platform-kb", "v1").replace(/^_upload:/, "upload:").replace(/^_url:/, "url:") ?? "—"}
-                        </span>
-                        <span className="font-mono text-xs text-secondary">{entry.confidence_score}</span>
-                        <span className="font-label text-[9px] text-muted-foreground">
-                          {new Date(entry.created_at).toLocaleDateString()}
-                        </span>
-                        <button
-                          onClick={() => deletePlatformKbEntry(entry.base_id)}
-                          disabled={deletingKbEntry === entry.base_id}
-                          className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-destructive disabled:opacity-40 transition-colors text-right"
-                        >
-                          {deletingKbEntry === entry.base_id ? "…" : "Delete"}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
+                <>
+                  <div className="divide-y divide-border/10">
+                    {platformKbEntries.map((entry, idx) => {
+                      const isSelected = selectedKbEntries.has(entry.base_id);
+                      const displaySource = entry.source_name?.replace("_platform-kb", "v1").replace(/^_upload:/, "upload:").replace(/^_url:/, "url:") ?? "—";
+                      const rawSource = entry.source_name ?? "";
+                      const isUrl = rawSource.startsWith("_url:");
+                      const sourceUrl = isUrl ? rawSource.slice(5) : null;
+                      const rowBg = isSelected ? "bg-primary/5" : idx % 2 === 0 ? "hover:bg-white/2" : "bg-white/[0.015] hover:bg-white/3";
+                      return (
+                        <div key={entry.id} className={`px-6 py-4 grid grid-cols-[24px_1fr_120px_80px_100px_60px] gap-4 items-start transition-colors ${rowBg}`}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) => {
+                              setSelectedKbEntries(prev => {
+                                const next = new Set(prev);
+                                if (e.target.checked) next.add(entry.base_id);
+                                else next.delete(entry.base_id);
+                                return next;
+                              });
+                            }}
+                            className="accent-primary mt-0.5"
+                          />
+                          <p className="font-sans text-xs text-on-surface leading-relaxed">
+                            {entry.content.length > 100 ? entry.content.slice(0, 100) + "…" : entry.content}
+                          </p>
+                          <span className="font-label text-[9px] uppercase tracking-widest truncate" title={displaySource}>
+                            {sourceUrl ? (
+                              <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="text-primary/70 hover:text-primary transition-colors">
+                                {displaySource}
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground/70">{displaySource}</span>
+                            )}
+                          </span>
+                          <span className="font-mono text-xs text-secondary">{entry.confidence_score}</span>
+                          <span className="font-label text-[9px] text-muted-foreground" title={new Date(entry.created_at).toLocaleString()}>
+                            {timeAgo(entry.created_at)}
+                          </span>
+                          <button
+                            onClick={() => deletePlatformKbEntry(entry.base_id)}
+                            disabled={deletingKbEntry === entry.base_id}
+                            className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-destructive disabled:opacity-40 transition-colors text-right"
+                          >
+                            {deletingKbEntry === entry.base_id ? "…" : "Delete"}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {Math.ceil(kbTotal / KB_LIMIT) > 1 && (
+                    <div className="px-6 py-3 border-t border-border/20 flex items-center justify-center gap-4">
+                      <button
+                        onClick={() => setKbPage(p => Math.max(1, p - 1))}
+                        disabled={kbPage === 1}
+                        className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary disabled:opacity-30 transition-colors"
+                      >
+                        ← Previous
+                      </button>
+                      <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground/60">
+                        Page {kbPage} of {Math.ceil(kbTotal / KB_LIMIT)}
+                      </span>
+                      <button
+                        onClick={() => setKbPage(p => Math.min(Math.ceil(kbTotal / KB_LIMIT), p + 1))}
+                        disabled={kbPage >= Math.ceil(kbTotal / KB_LIMIT)}
+                        className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary disabled:opacity-30 transition-colors"
+                      >
+                        Next →
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>

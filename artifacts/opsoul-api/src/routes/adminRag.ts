@@ -846,25 +846,42 @@ router.post('/platform-kb/seed', requireAuth, requireAdmin, async (req: Request,
   res.json({ ok: true, operators: operators.length, entries: PLATFORM_KB_V1.length, inserted, skipped });
 });
 
-// GET /admin/rag/platform-kb/entries — distinct platform KB entries (deduped by content)
-router.get('/platform-kb/entries', async (_req: Request, res: Response): Promise<void> => {
-  const result = await pool.query<{
-    id: string;
-    base_id: string;
-    content: string;
-    source_name: string;
-    confidence_score: number;
-    created_at: string;
-  }>(
-    `SELECT DISTINCT ON (content)
-       id,
-       REGEXP_REPLACE(id, '^plat-(.+)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', '\\1') AS base_id,
-       content, source_name, confidence_score, created_at
-     FROM operator_kb
-     WHERE is_system = true
-     ORDER BY content, created_at DESC`,
-  );
-  res.json({ count: result.rows.length, entries: result.rows });
+// GET /admin/rag/platform-kb/entries — distinct platform KB entries (deduped by content), paginated
+router.get('/platform-kb/entries', async (req: Request, res: Response): Promise<void> => {
+  const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? '20'), 10) || 20));
+  const offset = (page - 1) * limit;
+
+  const [countResult, pageResult] = await Promise.all([
+    pool.query<{ total: string }>(
+      `SELECT COUNT(DISTINCT content) AS total FROM operator_kb WHERE is_system = true`,
+    ),
+    pool.query<{
+      id: string;
+      base_id: string;
+      content: string;
+      source_name: string;
+      confidence_score: number;
+      created_at: string;
+    }>(
+      `SELECT id, base_id, content, source_name, confidence_score, created_at
+       FROM (
+         SELECT DISTINCT ON (content)
+           id,
+           REGEXP_REPLACE(id, '^plat-(.+)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', '\\1') AS base_id,
+           content, source_name, confidence_score, created_at
+         FROM operator_kb
+         WHERE is_system = true
+         ORDER BY content, created_at DESC
+       ) AS distinct_entries
+       ORDER BY created_at DESC
+       LIMIT $1 OFFSET $2`,
+      [limit, offset],
+    ),
+  ]);
+
+  const total = parseInt(countResult.rows[0]?.total ?? '0', 10);
+  res.json({ entries: pageResult.rows, total, page, limit });
 });
 
 // DELETE /admin/rag/platform-kb/entries/:entryId — remove an entry across all operators
@@ -902,12 +919,12 @@ router.post('/platform-kb/ingest-url', requireAuth, requireAdmin, async (req: Re
     });
     clearTimeout(timeoutId);
   } catch (err: unknown) {
-    res.status(502).json({ error: `Failed to fetch URL: ${err instanceof Error ? err.message : String(err)}` });
+    res.json({ ok: false, error: `Failed to fetch: ${err instanceof Error ? err.message : String(err)}`, source: targetUrl });
     return;
   }
 
   if (!fetchRes.ok) {
-    res.status(502).json({ error: `URL returned HTTP ${fetchRes.status} — ${fetchRes.statusText}` });
+    res.json({ ok: false, error: `HTTP ${fetchRes.status} — ${fetchRes.statusText}`, source: targetUrl });
     return;
   }
 
@@ -927,7 +944,7 @@ router.post('/platform-kb/ingest-url', requireAuth, requireAdmin, async (req: Re
   }
 
   if (!text || text.trim().length < 50) {
-    res.status(422).json({ error: 'Could not extract usable text from this URL' });
+    res.json({ ok: false, error: 'Could not extract usable text from this URL', source: targetUrl });
     return;
   }
 
