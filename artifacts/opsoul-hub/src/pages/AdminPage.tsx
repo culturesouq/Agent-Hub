@@ -127,12 +127,20 @@ export default function AdminPage() {
   const [seedingKb, setSeedingKb] = useState(false);
   const [seedResult, setSeedResult] = useState<{ inserted: number; skipped: number } | null>(null);
   const [deletingKbEntry, setDeletingKbEntry] = useState<string | null>(null);
+  const [selectedKbEntries, setSelectedKbEntries] = useState<Set<string>>(new Set());
+  const [deletingSelected, setDeletingSelected] = useState(false);
   const [platformUpload, setPlatformUpload] = useState<{
     uploading: boolean;
+    uploadMsg: string | null;
     result: { source: string; chunks: number; operators: number } | null;
+    multiResult: { files: number; totalChunks: number; failed: number } | null;
     error: string | null;
-  }>({ uploading: false, result: null, error: null });
+  }>({ uploading: false, uploadMsg: null, result: null, multiResult: null, error: null });
   const [platformUrlInput, setPlatformUrlInput] = useState("");
+  const [bulkUrlOpen, setBulkUrlOpen] = useState(false);
+  const [bulkUrlText, setBulkUrlText] = useState("");
+  const [bulkUrlProgress, setBulkUrlProgress] = useState<{ current: number; total: number } | null>(null);
+  const [bulkUrlResult, setBulkUrlResult] = useState<{ ingested: number; failed: number } | null>(null);
   const platformFileRef = useRef<HTMLInputElement>(null);
 
   const loadPlatformKb = useCallback(async () => {
@@ -284,36 +292,98 @@ export default function AdminPage() {
     }
   }
 
-  async function handlePlatformKbUpload(file: File) {
-    setPlatformUpload({ uploading: true, result: null, error: null });
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const result = await apiFetch<{ ok: boolean; source: string; chunks: number; operators: number; total_inserted: number }>(
-        "/admin/rag/platform-kb/upload",
-        { method: "POST", body: formData }
-      );
-      setPlatformUpload({ uploading: false, result: { source: result.source, chunks: result.chunks, operators: result.operators }, error: null });
-      await loadPlatformKb();
-    } catch (err) {
-      setPlatformUpload({ uploading: false, result: null, error: err instanceof Error ? err.message : "Upload failed" });
+  async function handleFilesSelected(files: FileList | File[]) {
+    const arr = Array.from(files);
+    if (arr.length === 0) return;
+
+    if (arr.length === 1) {
+      setPlatformUpload({ uploading: true, uploadMsg: null, result: null, multiResult: null, error: null });
+      try {
+        const formData = new FormData();
+        formData.append("file", arr[0]);
+        const result = await apiFetch<{ ok: boolean; source: string; chunks: number; operators: number; total_inserted: number }>(
+          "/admin/rag/platform-kb/upload",
+          { method: "POST", body: formData }
+        );
+        setPlatformUpload({ uploading: false, uploadMsg: null, result: { source: result.source, chunks: result.chunks, operators: result.operators }, multiResult: null, error: null });
+        await loadPlatformKb();
+      } catch (err) {
+        setPlatformUpload({ uploading: false, uploadMsg: null, result: null, multiResult: null, error: err instanceof Error ? err.message : "Upload failed" });
+      }
+      return;
     }
+
+    let totalChunks = 0;
+    let failed = 0;
+    setPlatformUpload({ uploading: true, uploadMsg: `Processing file 1 of ${arr.length}…`, result: null, multiResult: null, error: null });
+    for (let i = 0; i < arr.length; i++) {
+      setPlatformUpload(prev => ({ ...prev, uploadMsg: `Processing file ${i + 1} of ${arr.length}…` }));
+      try {
+        const formData = new FormData();
+        formData.append("file", arr[i]);
+        const result = await apiFetch<{ ok: boolean; source: string; chunks: number; operators: number; total_inserted: number }>(
+          "/admin/rag/platform-kb/upload",
+          { method: "POST", body: formData }
+        );
+        totalChunks += result.chunks;
+      } catch {
+        failed++;
+      }
+    }
+    await loadPlatformKb();
+    setPlatformUpload({ uploading: false, uploadMsg: null, result: null, multiResult: { files: arr.length, totalChunks, failed }, error: null });
   }
 
   async function handlePlatformKbIngestUrl() {
     const url = platformUrlInput.trim();
     if (!url || !/^https?:\/\//i.test(url)) return;
-    setPlatformUpload({ uploading: true, result: null, error: null });
+    setPlatformUpload({ uploading: true, uploadMsg: null, result: null, multiResult: null, error: null });
     try {
       const result = await apiFetch<{ ok: boolean; source: string; chunks: number; operators: number; total_inserted: number }>(
         "/admin/rag/platform-kb/ingest-url",
         { method: "POST", body: JSON.stringify({ url }) }
       );
-      setPlatformUpload({ uploading: false, result: { source: result.source, chunks: result.chunks, operators: result.operators }, error: null });
+      setPlatformUpload({ uploading: false, uploadMsg: null, result: { source: result.source, chunks: result.chunks, operators: result.operators }, multiResult: null, error: null });
       setPlatformUrlInput("");
       await loadPlatformKb();
     } catch (err) {
-      setPlatformUpload({ uploading: false, result: null, error: err instanceof Error ? err.message : "Ingest failed" });
+      setPlatformUpload({ uploading: false, uploadMsg: null, result: null, multiResult: null, error: err instanceof Error ? err.message : "Ingest failed" });
+    }
+  }
+
+  async function handleBulkUrlIngest() {
+    const urls = bulkUrlText.split("\n").map(u => u.trim()).filter(u => /^https?:\/\//i.test(u));
+    if (urls.length === 0) return;
+    setBulkUrlResult(null);
+    setBulkUrlProgress({ current: 0, total: urls.length });
+    let ingested = 0;
+    let failedCount = 0;
+    for (let i = 0; i < urls.length; i++) {
+      setBulkUrlProgress({ current: i + 1, total: urls.length });
+      try {
+        await apiFetch("/admin/rag/platform-kb/ingest-url", { method: "POST", body: JSON.stringify({ url: urls[i] }) });
+        ingested++;
+      } catch {
+        failedCount++;
+      }
+    }
+    setBulkUrlProgress(null);
+    setBulkUrlResult({ ingested, failed: failedCount });
+    setBulkUrlText("");
+    await loadPlatformKb();
+  }
+
+  async function handleBulkDeleteSelected() {
+    if (selectedKbEntries.size === 0) return;
+    setDeletingSelected(true);
+    try {
+      for (const baseId of selectedKbEntries) {
+        await apiFetch(`/admin/rag/platform-kb/entries/${baseId}`, { method: "DELETE" });
+      }
+      setSelectedKbEntries(new Set());
+      await loadPlatformKb();
+    } finally {
+      setDeletingSelected(false);
     }
   }
 
@@ -869,7 +939,7 @@ export default function AdminPage() {
                 <p className="font-sans text-xs text-muted-foreground/70">Drop any file or paste a URL — content is chunked, embedded, and seeded into all active operators' knowledge bases.</p>
               </div>
 
-              {!platformUpload.uploading && !platformUpload.result && !platformUpload.error && (
+              {!platformUpload.uploading && !platformUpload.result && !platformUpload.multiResult && !platformUpload.error && (
                 <div className="space-y-4">
                   <div
                     className="border-2 border-dashed border-border/40 rounded-lg p-10 flex flex-col items-center gap-4 cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-all"
@@ -877,8 +947,7 @@ export default function AdminPage() {
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={(e) => {
                       e.preventDefault();
-                      const file = e.dataTransfer.files[0];
-                      if (file) handlePlatformKbUpload(file);
+                      if (e.dataTransfer.files.length > 0) handleFilesSelected(e.dataTransfer.files);
                     }}
                   >
                     <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
@@ -887,16 +956,16 @@ export default function AdminPage() {
                     <div className="text-center">
                       <div className="font-sans text-sm text-on-surface mb-1">Drop any file or click to browse</div>
                       <div className="font-label text-[10px] uppercase tracking-widest text-muted-foreground">PDF · DOCX · TXT · MD · XLSX · CSV · JSON · JSONL · XML · YAML · and more</div>
-                      <div className="font-label text-[9px] text-muted-foreground/50 mt-1">Up to 200 MB</div>
+                      <div className="font-label text-[9px] text-muted-foreground/50 mt-1">Up to 500 MB · Multiple files supported</div>
                     </div>
                     <input
                       ref={platformFileRef}
                       type="file"
                       accept="*"
+                      multiple
                       className="hidden"
                       onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handlePlatformKbUpload(file);
+                        if (e.target.files && e.target.files.length > 0) handleFilesSelected(e.target.files);
                         e.target.value = "";
                       }}
                     />
@@ -925,13 +994,54 @@ export default function AdminPage() {
                       Fetch & Ingest
                     </button>
                   </div>
+
+                  {/* Bulk URL expander */}
+                  <div className="border border-border/20 rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => { setBulkUrlOpen(o => !o); setBulkUrlResult(null); }}
+                      className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-white/3 transition-colors"
+                    >
+                      <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground/70">Bulk ingest — multiple URLs</span>
+                      <span className="font-mono text-muted-foreground/40 text-xs">{bulkUrlOpen ? "▲" : "▼"}</span>
+                    </button>
+                    {bulkUrlOpen && (
+                      <div className="px-4 pb-4 space-y-3 border-t border-border/20 pt-3">
+                        <textarea
+                          rows={5}
+                          placeholder={"https://example.com/page-1\nhttps://example.com/page-2\nhttps://docs.org/guide"}
+                          value={bulkUrlText}
+                          onChange={(e) => setBulkUrlText(e.target.value)}
+                          className="w-full bg-surface-container/50 border border-border/40 rounded-lg px-4 py-2.5 text-xs font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50 resize-y"
+                        />
+                        {bulkUrlProgress && (
+                          <div className="font-label text-[9px] uppercase tracking-widest text-primary animate-pulse">
+                            Processing {bulkUrlProgress.current} of {bulkUrlProgress.total}…
+                          </div>
+                        )}
+                        {bulkUrlResult && (
+                          <div className="font-mono text-xs text-secondary">
+                            {bulkUrlResult.ingested} ingested · {bulkUrlResult.failed} failed
+                          </div>
+                        )}
+                        <button
+                          onClick={handleBulkUrlIngest}
+                          disabled={!!bulkUrlProgress || bulkUrlText.split("\n").filter(u => /^https?:\/\//i.test(u.trim())).length === 0}
+                          className="px-5 py-2 bg-primary/10 border border-primary/30 text-primary font-label text-[9px] uppercase tracking-widest rounded-lg hover:bg-primary/20 disabled:opacity-40 transition-all"
+                        >
+                          {bulkUrlProgress ? `Processing ${bulkUrlProgress.current} of ${bulkUrlProgress.total}…` : "Ingest All URLs"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
               {platformUpload.uploading && (
                 <div className="border border-border/30 rounded-lg p-8 flex flex-col items-center gap-3">
                   <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                  <div className="font-label text-[10px] uppercase tracking-widest text-primary animate-pulse">Processing — embedding chunks…</div>
+                  <div className="font-label text-[10px] uppercase tracking-widest text-primary animate-pulse">
+                    {platformUpload.uploadMsg ?? "Processing — embedding chunks…"}
+                  </div>
                   <p className="font-sans text-xs text-muted-foreground text-center">This may take a moment depending on file size.</p>
                 </div>
               )}
@@ -957,10 +1067,39 @@ export default function AdminPage() {
                     </div>
                   </div>
                   <button
-                    onClick={() => setPlatformUpload({ uploading: false, result: null, error: null })}
+                    onClick={() => setPlatformUpload({ uploading: false, uploadMsg: null, result: null, multiResult: null, error: null })}
                     className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors"
                   >
                     Upload another file
+                  </button>
+                </div>
+              )}
+
+              {platformUpload.multiResult && (
+                <div className="border border-secondary/30 rounded-lg p-6 space-y-4 bg-secondary/5">
+                  <div className="flex items-center gap-3">
+                    <span className="status-beacon" />
+                    <span className="font-label text-[10px] uppercase tracking-widest text-secondary">Batch Upload Complete</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <div className="font-label text-[9px] uppercase tracking-widest text-muted-foreground mb-1">Files</div>
+                      <div className="font-headline text-xl font-bold text-primary">{platformUpload.multiResult.files}</div>
+                    </div>
+                    <div>
+                      <div className="font-label text-[9px] uppercase tracking-widest text-muted-foreground mb-1">Total Chunks</div>
+                      <div className="font-headline text-xl font-bold text-secondary">{platformUpload.multiResult.totalChunks}</div>
+                    </div>
+                    <div>
+                      <div className="font-label text-[9px] uppercase tracking-widest text-muted-foreground mb-1">Failed</div>
+                      <div className={`font-headline text-xl font-bold ${platformUpload.multiResult.failed > 0 ? "text-destructive" : "text-muted-foreground"}`}>{platformUpload.multiResult.failed}</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setPlatformUpload({ uploading: false, uploadMsg: null, result: null, multiResult: null, error: null })}
+                    className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    Upload more files
                   </button>
                 </div>
               )}
@@ -973,7 +1112,7 @@ export default function AdminPage() {
                   </div>
                   <p className="font-sans text-xs text-muted-foreground">{platformUpload.error}</p>
                   <button
-                    onClick={() => setPlatformUpload({ uploading: false, result: null, error: null })}
+                    onClick={() => setPlatformUpload({ uploading: false, uploadMsg: null, result: null, multiResult: null, error: null })}
                     className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors"
                   >
                     Try again
@@ -985,12 +1124,33 @@ export default function AdminPage() {
             {/* Entry list */}
             <div className="glass-panel overflow-hidden">
               <div className="px-6 py-4 border-b border-border/30 bg-surface-container-high/30">
-                <div className="grid grid-cols-[1fr_120px_80px_100px_60px] gap-4">
-                  <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">Content</span>
-                  <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">Source</span>
-                  <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">Score</span>
-                  <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">Date</span>
-                  <span />
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <div className="grid grid-cols-[24px_1fr_120px_80px_100px_60px] gap-4 flex-1">
+                    <input
+                      type="checkbox"
+                      checked={platformKbEntries.length > 0 && selectedKbEntries.size === platformKbEntries.length}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedKbEntries(new Set(platformKbEntries.map(en => en.base_id)));
+                        else setSelectedKbEntries(new Set());
+                      }}
+                      className="accent-primary mt-0.5"
+                      title="Select all"
+                    />
+                    <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">Content</span>
+                    <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">Source</span>
+                    <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">Score</span>
+                    <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">Date</span>
+                    <span />
+                  </div>
+                  {selectedKbEntries.size > 0 && (
+                    <button
+                      onClick={handleBulkDeleteSelected}
+                      disabled={deletingSelected}
+                      className="px-4 py-1.5 bg-destructive/10 border border-destructive/30 text-destructive font-label text-[9px] uppercase tracking-widest rounded-lg hover:bg-destructive/20 disabled:opacity-40 transition-all whitespace-nowrap"
+                    >
+                      {deletingSelected ? "Deleting…" : `Delete Selected (${selectedKbEntries.size})`}
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1006,13 +1166,27 @@ export default function AdminPage() {
               ) : (
                 <div className="divide-y divide-border/10">
                   {platformKbEntries.map((entry) => {
+                    const isSelected = selectedKbEntries.has(entry.base_id);
                     return (
-                      <div key={entry.id} className="px-6 py-4 grid grid-cols-[1fr_120px_80px_100px_60px] gap-4 items-start hover:bg-white/2 transition-colors">
+                      <div key={entry.id} className={`px-6 py-4 grid grid-cols-[24px_1fr_120px_80px_100px_60px] gap-4 items-start transition-colors ${isSelected ? "bg-primary/5" : "hover:bg-white/2"}`}>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => {
+                            setSelectedKbEntries(prev => {
+                              const next = new Set(prev);
+                              if (e.target.checked) next.add(entry.base_id);
+                              else next.delete(entry.base_id);
+                              return next;
+                            });
+                          }}
+                          className="accent-primary mt-0.5"
+                        />
                         <p className="font-sans text-xs text-on-surface leading-relaxed">
                           {entry.content.length > 120 ? entry.content.slice(0, 120) + "…" : entry.content}
                         </p>
                         <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground/70 truncate" title={entry.source_name}>
-                          {entry.source_name?.replace("_platform-kb", "v1").replace(/^_upload:/, "upload:") ?? "—"}
+                          {entry.source_name?.replace("_platform-kb", "v1").replace(/^_upload:/, "upload:").replace(/^_url:/, "url:") ?? "—"}
                         </span>
                         <span className="font-mono text-xs text-secondary">{entry.confidence_score}</span>
                         <span className="font-label text-[9px] text-muted-foreground">

@@ -12,6 +12,7 @@ import { chatCompletion, KB_MODEL } from '../utils/openrouter.js';
 
 import { validateEntry, runDiscoverySweep } from '../utils/vaelEngine.js';
 import multer from 'multer';
+import * as cheerio from 'cheerio';
 
 const INBOX_DIR     = path.resolve(process.cwd(), 'knowledge_inbox');
 const PROCESSED_DIR = path.join(INBOX_DIR, 'processed');
@@ -31,6 +32,28 @@ function stripHtml(html: string): string {
     .replace(/&gt;/g, '>')
     .replace(/\s{2,}/g, ' ')
     .trim();
+}
+
+function scrapeHtml(html: string): string {
+  const $ = cheerio.load(html);
+  $('script, style, noscript, nav, footer, header, aside, [role="navigation"], [role="banner"], [role="contentinfo"]').remove();
+  const text = $('body').text()
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  return text || stripHtml(html);
+}
+
+function chunkText(text: string, chunkWords = 800, overlapWords = 100): string[] {
+  const words = text.split(/\s+/).filter(Boolean);
+  const chunks: string[] = [];
+  let i = 0;
+  while (i < words.length) {
+    chunks.push(words.slice(i, i + chunkWords).join(' '));
+    i += chunkWords - overlapWords;
+    if (i + overlapWords >= words.length) break;
+  }
+  if (chunks.length === 0 && words.length > 0) chunks.push(words.join(' '));
+  return chunks;
 }
 
 async function extractTextFromBuffer(buffer: Buffer, mimetype: string, filename: string): Promise<string | null> {
@@ -86,7 +109,7 @@ async function extractTextFromBuffer(buffer: Buffer, mimetype: string, filename:
 
 const inboxUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 200 * 1024 * 1024 }, // 200 MB
+  limits: { fileSize: 500 * 1024 * 1024 }, // 500 MB
 });
 
 // ── Pipeline content screener ────────────────────────────────────────────────
@@ -867,10 +890,15 @@ router.post('/platform-kb/ingest-url', requireAuth, requireAdmin, async (req: Re
   let fetchRes: globalThis.Response;
   try {
     const ctrl = new AbortController();
-    const timeoutId = setTimeout(() => ctrl.abort(), 30_000);
+    const timeoutId = setTimeout(() => ctrl.abort(), 45_000);
     fetchRes = await fetch(targetUrl, {
       signal: ctrl.signal,
-      headers: { 'User-Agent': 'OpSoul-LoadingBay/1.0' },
+      redirect: 'follow',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+      },
     });
     clearTimeout(timeoutId);
   } catch (err: unknown) {
@@ -879,23 +907,23 @@ router.post('/platform-kb/ingest-url', requireAuth, requireAdmin, async (req: Re
   }
 
   if (!fetchRes.ok) {
-    res.status(502).json({ error: `URL returned HTTP ${fetchRes.status}` });
+    res.status(502).json({ error: `URL returned HTTP ${fetchRes.status} — ${fetchRes.statusText}` });
     return;
   }
 
   const contentType = fetchRes.headers.get('content-type') ?? 'text/plain';
-  const ab = await fetchRes.arrayBuffer();
-  const buffer = Buffer.from(ab);
+  const rawHtml = await fetchRes.text();
 
-  const urlPath = new URL(targetUrl).pathname;
-  const urlExt = path.extname(urlPath);
-  const pseudoFilename = (path.basename(urlPath) || 'content') + (urlExt ? '' : contentType.includes('html') ? '.html' : contentType.includes('json') ? '.json' : '.txt');
-
-  let text = await extractTextFromBuffer(buffer, contentType, pseudoFilename);
-
-  // Strip HTML for web pages
-  if (contentType.includes('html') || pseudoFilename.endsWith('.html') || pseudoFilename.endsWith('.htm')) {
-    text = stripHtml(text ?? '');
+  let text: string;
+  const isHtml = contentType.includes('html') || rawHtml.trimStart().startsWith('<!') || rawHtml.trimStart().startsWith('<html');
+  if (isHtml) {
+    text = scrapeHtml(rawHtml);
+  } else {
+    const urlPath = new URL(targetUrl).pathname;
+    const urlExt = path.extname(urlPath);
+    const pseudoFilename = (path.basename(urlPath) || 'content') + (urlExt ? '' : contentType.includes('json') ? '.json' : '.txt');
+    const buf = Buffer.from(rawHtml, 'utf-8');
+    text = (await extractTextFromBuffer(buf, contentType, pseudoFilename)) ?? rawHtml;
   }
 
   if (!text || text.trim().length < 50) {
@@ -903,13 +931,7 @@ router.post('/platform-kb/ingest-url', requireAuth, requireAdmin, async (req: Re
     return;
   }
 
-  const words = text.split(/\s+/);
-  const CHUNK_SIZE = 400;
-  const chunks: string[] = [];
-  for (let i = 0; i < words.length; i += CHUNK_SIZE) {
-    chunks.push(words.slice(i, i + CHUNK_SIZE).join(' '));
-  }
-
+  const chunks = chunkText(text.trim(), 800, 100);
   const hostname = new URL(targetUrl).hostname;
   const sourceName = `_url:${targetUrl}`.slice(0, 200);
 
