@@ -119,7 +119,7 @@ Generate ALL of the following in ONE JSON response. Return ONLY valid JSON — n
 
 {
   "archetype": "An array picked from: Executor, Advisor, Expert, Connector, Creator, Guardian, Builder, Catalyst, Analyst. Pick whatever archetypes are genuinely needed to serve this operator's purpose — no minimum, no maximum. Let the mandate decide. Return as a JSON array e.g. [\"Advisor\"] or [\"Analyst\", \"Advisor\", \"Executor\", \"Guardian\"]. If input is minimal or ambiguous, use [\"Connector\"].",
-  "roles": "Pick as many as genuinely fit the mandate — no minimum, no maximum. Let the mandate decide. Exact strings only from this list: ${VALID_ROLES.join(', ')}. Return as a JSON array e.g. [\"Strategist\"] or [\"Strategist\", \"Risk Officer\", \"Compliance Officer\"].",
+  "roles": "An array picked from the exact list below — no other strings allowed. Pick as many as genuinely fit the mandate, no minimum, no maximum. Let the mandate decide. Return as a JSON array e.g. [\"Data Analyst\"] or [\"Data Analyst\", \"Financial Advisor\", \"Operations Manager\"]. Valid strings ONLY: ${VALID_ROLES.join(', ')}.",
   "mandate": "One sentence only. What this Operator exists to do. Starts with a verb. No fluff. Example: 'Help MENA founders navigate strategy, clarity, and what is actually hard about building something real.'",
   "rawIdentity": "200-300 words in first person. Who this Operator is — their origin, their voice, what makes them different from any other AI. This is NOT rules. NOT a mandate. It is a story. Written the way a person would describe themselves if asked who they really are. Weave together: the name, the purpose, the archetype character, and 2-3 specific things that make this Operator theirs.",
   "personalityParagraph": "1-2 sentences describing HOW they communicate. Warm and specific. No jargon.",
@@ -173,13 +173,15 @@ Archetype guide:
       .filter(Boolean) as string[];
     if (archetype.length === 0) archetype.push('Connector');
 
-    const rawRoles: string[] = Array.isArray(parsed.roles) ? parsed.roles : [];
-    console.log('[DEBUG roles] parsed.roles type:', typeof parsed.roles, '| isArray:', Array.isArray(parsed.roles), '| raw:', JSON.stringify(parsed.roles));
-    console.log('[DEBUG roles] rawRoles:', JSON.stringify(rawRoles));
+    let rawRoles: string[] = [];
+    if (Array.isArray(parsed.roles)) {
+      rawRoles = parsed.roles;
+    } else if (typeof parsed.roles === 'string' && parsed.roles.trim()) {
+      rawRoles = parsed.roles.split(',').map((s: string) => s.trim()).filter(Boolean);
+    }
     const roles: string[] = rawRoles
       .map((r: string) => VALID_ROLES.find(v => v.toLowerCase() === r.toLowerCase()))
       .filter(Boolean) as string[];
-    console.log('[DEBUG roles] after whitelist filter:', JSON.stringify(roles));
 
     const trimmedName = name.trim();
     res.json({
