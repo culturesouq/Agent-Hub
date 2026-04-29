@@ -41,6 +41,7 @@ function serializeOperator(op: typeof operatorsTable.$inferSelect) {
     slug: op.slug,
     name: op.name,
     archetype: op.archetype,
+    roles: op.roles,
     mandate: op.mandate,
     rawIdentity: op.rawIdentity,
     coreValues: op.coreValues,
@@ -67,6 +68,32 @@ router.post('/bootstrap-preview', async (req: Request, res: Response): Promise<v
 
   const VALID_ARCHETYPES = ['Executor', 'Advisor', 'Expert', 'Connector', 'Creator', 'Guardian', 'Builder', 'Catalyst', 'Analyst'] as const;
 
+  const VALID_ROLES = [
+    // Core
+    'Strategist', 'Researcher', 'Executive Assistant', 'Data Analyst',
+    'Legal Reviewer', 'Content Writer', 'Project Manager', 'Account Advisor',
+    'Risk Officer', 'Coach',
+    // Business & Operations
+    'Chief of Staff', 'Operations Manager', 'Business Analyst',
+    'Financial Advisor', 'Sales Advisor', 'Marketing Strategist',
+    'Brand Manager', 'Product Manager', 'Customer Success Manager',
+    'Procurement Advisor',
+    // Government & Enterprise
+    'Policy Analyst', 'Compliance Officer', 'Public Affairs Advisor',
+    'Regulatory Advisor', 'Governance Advisor', 'Communications Officer',
+    'Intelligence Analyst', 'Program Manager',
+    // Knowledge & Research
+    'Domain Expert', 'Knowledge Manager', 'Technical Advisor',
+    'Scientific Advisor', 'Innovation Advisor',
+    // People & Culture
+    'HR Advisor', 'Training Advisor', 'Wellness Coach', 'Leadership Coach',
+    // Technology
+    'Technology Advisor', 'Cybersecurity Advisor', 'Data Engineer',
+    'Systems Analyst',
+    // Investment & Sustainability
+    'Investment Advisor', 'Sustainability Advisor', 'Cultural Affairs Advisor',
+  ] as const;
+
   const LAYER_0_CORE = [
     'emotionally intelligent and genuinely reads the room',
     'honest — not performatively honest, actually honest',
@@ -92,6 +119,7 @@ Generate ALL of the following in ONE JSON response. Return ONLY valid JSON — n
 
 {
   "archetype": "An array picked from: Executor, Advisor, Expert, Connector, Creator, Guardian, Builder, Catalyst, Analyst. Pick whatever archetypes are genuinely needed to serve this operator's purpose — no minimum, no maximum. Let the mandate decide. Return as a JSON array e.g. [\"Advisor\"] or [\"Analyst\", \"Advisor\", \"Executor\", \"Guardian\"]. If input is minimal or ambiguous, use [\"Connector\"].",
+  "roles": "Pick 1–3 from the VALID_ROLES list, match to the mandate, return as a JSON array. VALID_ROLES is the single source of truth — never hardcode role names anywhere else in the codebase. The list is designed to expand in future tasks.",
   "mandate": "One sentence only. What this Operator exists to do. Starts with a verb. No fluff. Example: 'Help MENA founders navigate strategy, clarity, and what is actually hard about building something real.'",
   "rawIdentity": "200-300 words in first person. Who this Operator is — their origin, their voice, what makes them different from any other AI. This is NOT rules. NOT a mandate. It is a story. Written the way a person would describe themselves if asked who they really are. Weave together: the name, the purpose, the archetype character, and 2-3 specific things that make this Operator theirs.",
   "personalityParagraph": "1-2 sentences describing HOW they communicate. Warm and specific. No jargon.",
@@ -142,13 +170,18 @@ Archetype guide:
       : [parsed.archetype ?? 'Connector'];
     const archetype: string[] = rawArchetypes
       .map((r: string) => VALID_ARCHETYPES.find(a => a.toLowerCase() === r.toLowerCase()))
-      .filter(Boolean)
-      .slice(0, 2) as string[];
+      .filter(Boolean) as string[];
     if (archetype.length === 0) archetype.push('Connector');
+
+    const rawRoles: string[] = Array.isArray(parsed.roles) ? parsed.roles : [];
+    const roles: string[] = rawRoles
+      .map((r: string) => VALID_ROLES.find(v => v.toLowerCase() === r.toLowerCase()))
+      .filter(Boolean) as string[];
 
     const trimmedName = name.trim();
     res.json({
       archetype,
+      roles,
       mandate: parsed.mandate ?? `Help users with ${trimmedName}'s core purpose.`,
       rawIdentity: parsed.rawIdentity ?? null,
       personalityParagraph: parsed.personalityParagraph ?? `${trimmedName} communicates clearly and warmly.`,
@@ -198,6 +231,7 @@ router.post('/blank', async (req: Request, res: Response): Promise<void> => {
     slug,
     name: 'New Operator',
     archetype: ['Connector'],
+    roles: [],
     mandate: '',
     rawIdentity: null,
     coreValues: [],
@@ -261,6 +295,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     slug: data.slug,
     name: data.name,
     archetype: data.archetype,
+    roles: data.roles ?? [],
     mandate: data.mandate,
     rawIdentity: data.rawIdentity ?? null,
     coreValues: data.coreValues,

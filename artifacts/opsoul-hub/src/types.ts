@@ -10,6 +10,7 @@ export interface Operator {
   id: string;
   name: string;
   archetype: string[];
+  roles?: string[];
   mandate: string;
   rawIdentity?: string;
   coreValues: string[];

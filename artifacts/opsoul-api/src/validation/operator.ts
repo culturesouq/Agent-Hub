@@ -27,6 +27,7 @@ export const CreateOperatorSchema = z.object({
     .max(60)
     .regex(/^[a-z0-9-]+$/, 'slug must be lowercase letters, numbers, and hyphens only'),
   archetype: z.array(z.string().min(1).max(100)).min(1, 'At least one archetype required'),
+  roles: z.array(z.string().min(1).max(100)).default([]),
   mandate: z.string().default(''),
   coreValues: z.array(z.string()).default([]),
   ethicalBoundaries: z.array(z.string()).default([]),
@@ -40,6 +41,7 @@ export const UpdateOperatorLayer1Schema = z.object({
   name: z.string().min(1).max(100).optional(),
   rawIdentity: z.string().optional(),
   archetype: z.array(z.string().min(1).max(100)).min(1).optional(),
+  roles: z.array(z.string().min(1).max(100)).optional(),
   mandate: z.string().min(10).optional(),
   coreValues: z.array(z.string().min(1)).min(1).max(10).optional(),
   ethicalBoundaries: z.array(z.string().min(1)).min(1).max(20).optional(),
