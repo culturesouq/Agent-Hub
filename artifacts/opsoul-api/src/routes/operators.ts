@@ -231,7 +231,7 @@ router.post('/blank', async (req: Request, res: Response): Promise<void> => {
     slug,
     name: 'New Operator',
     archetype: ['Connector'],
-    roles: preview?.roles ?? [],
+    roles: [] as string[],
     mandate: '',
     rawIdentity: null,
     coreValues: [],
