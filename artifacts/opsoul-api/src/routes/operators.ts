@@ -180,7 +180,10 @@ Archetype guide:
       rawRoles = parsed.roles.split(',').map((s: string) => s.trim()).filter(Boolean);
     }
     const roles: string[] = rawRoles
-      .map((r: string) => VALID_ROLES.find(v => v.toLowerCase() === r.toLowerCase()))
+      .map((r: string) => {
+        const exact = VALID_ROLES.find(v => v.toLowerCase() === r.toLowerCase());
+        return exact ?? (r.trim().length > 0 && r.trim().length <= 50 ? r.trim() : null);
+      })
       .filter(Boolean) as string[];
 
     const trimmedName = name.trim();
