@@ -13,6 +13,7 @@ import { Loader2 } from "lucide-react";
 
 interface BootstrapPreview {
   archetype: string[];
+  roles: string[];
   mandate: string;
   rawIdentity?: string;
   personalityParagraph: string;
@@ -79,6 +80,7 @@ export default function CreateAgentChat({ open, onClose }: Props) {
           name: trimmedName,
           slug,
           archetype: preview.archetype,
+          roles: preview.roles ?? [],
           mandate: preview.mandate,
           rawIdentity: preview.rawIdentity ?? null,
           coreValues: preview.coreValues,
