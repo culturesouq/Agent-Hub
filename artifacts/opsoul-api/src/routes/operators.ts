@@ -174,12 +174,12 @@ Archetype guide:
     if (archetype.length === 0) archetype.push('Connector');
 
     const rawRoles: string[] = Array.isArray(parsed.roles) ? parsed.roles : [];
-    console.warn('[DEBUG roles] parsed.roles type:', typeof parsed.roles, '| isArray:', Array.isArray(parsed.roles), '| raw:', JSON.stringify(parsed.roles));
-    console.warn('[DEBUG roles] rawRoles:', JSON.stringify(rawRoles));
+    console.log('[DEBUG roles] parsed.roles type:', typeof parsed.roles, '| isArray:', Array.isArray(parsed.roles), '| raw:', JSON.stringify(parsed.roles));
+    console.log('[DEBUG roles] rawRoles:', JSON.stringify(rawRoles));
     const roles: string[] = rawRoles
       .map((r: string) => VALID_ROLES.find(v => v.toLowerCase() === r.toLowerCase()))
       .filter(Boolean) as string[];
-    console.warn('[DEBUG roles] after whitelist filter:', JSON.stringify(roles));
+    console.log('[DEBUG roles] after whitelist filter:', JSON.stringify(roles));
 
     const trimmedName = name.trim();
     res.json({
