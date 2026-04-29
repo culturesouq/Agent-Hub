@@ -119,7 +119,7 @@ Generate ALL of the following in ONE JSON response. Return ONLY valid JSON — n
 
 {
   "archetype": "An array picked from: Executor, Advisor, Expert, Connector, Creator, Guardian, Builder, Catalyst, Analyst. Pick whatever archetypes are genuinely needed to serve this operator's purpose — no minimum, no maximum. Let the mandate decide. Return as a JSON array e.g. [\"Advisor\"] or [\"Analyst\", \"Advisor\", \"Executor\", \"Guardian\"]. If input is minimal or ambiguous, use [\"Connector\"].",
-  "roles": ["Pick as many as genuinely fit the mandate — no minimum, no maximum. Exact strings only from this list: ${VALID_ROLES.join(', ')}"],
+  "roles": "Pick as many as genuinely fit the mandate — no minimum, no maximum. Let the mandate decide. Exact strings only from this list: ${VALID_ROLES.join(', ')}. Return as a JSON array e.g. [\"Strategist\"] or [\"Strategist\", \"Risk Officer\", \"Compliance Officer\"].",
   "mandate": "One sentence only. What this Operator exists to do. Starts with a verb. No fluff. Example: 'Help MENA founders navigate strategy, clarity, and what is actually hard about building something real.'",
   "rawIdentity": "200-300 words in first person. Who this Operator is — their origin, their voice, what makes them different from any other AI. This is NOT rules. NOT a mandate. It is a story. Written the way a person would describe themselves if asked who they really are. Weave together: the name, the purpose, the archetype character, and 2-3 specific things that make this Operator theirs.",
   "personalityParagraph": "1-2 sentences describing HOW they communicate. Warm and specific. No jargon.",
