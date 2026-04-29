@@ -446,11 +446,12 @@ ${transcript}
 Extract exactly:
 - name: what the owner said to call the operator (just the name, cleaned up, no extra text)
 - rawIdentity: a 200-400 word first-person story, written as the operator speaking, based on what the owner described as the purpose
-- archetype: 1 or 2 values only from this exact list: ["Executor", "Advisor", "Expert", "Connector", "Creator", "Guardian", "Builder", "Catalyst", "Analyst"] — choose what best fits the described purpose
+- archetype: pick as many as genuinely fit — no minimum, no maximum. From this exact list only: ["Executor", "Advisor", "Expert", "Connector", "Creator", "Guardian", "Builder", "Catalyst", "Analyst"]
+- roles: pick as many as genuinely fit — no minimum, no maximum. Exact strings only from this list: ["Strategist", "Researcher", "Executive Assistant", "Data Analyst", "Legal Reviewer", "Content Writer", "Project Manager", "Account Advisor", "Risk Officer", "Coach", "Chief of Staff", "Operations Manager", "Business Analyst", "Financial Advisor", "Sales Advisor", "Marketing Strategist", "Brand Manager", "Product Manager", "Customer Success Manager", "Procurement Advisor", "Policy Analyst", "Compliance Officer", "Public Affairs Advisor", "Regulatory Advisor", "Governance Advisor", "Communications Officer", "Intelligence Analyst", "Program Manager", "Domain Expert", "Knowledge Manager", "Technical Advisor", "Scientific Advisor", "Innovation Advisor", "HR Advisor", "Training Advisor", "Wellness Coach", "Leadership Coach", "Technology Advisor", "Cybersecurity Advisor", "Data Engineer", "Systems Analyst", "Investment Advisor", "Sustainability Advisor", "Cultural Affairs Advisor"]
 - mandate: one sentence starting with a verb, stating the operator's core purpose
 
 Return ONLY valid JSON, no markdown, no explanation:
-{"name":"...","rawIdentity":"...","archetype":["..."],"mandate":"..."}`;
+{"name":"...","rawIdentity":"...","archetype":["..."],"roles":["..."],"mandate":"..."}`;
 
   const result = await chatCompletion(
     [
@@ -460,7 +461,7 @@ Return ONLY valid JSON, no markdown, no explanation:
     { model: CHAT_MODEL },
   );
 
-  let extracted: { name: string; rawIdentity: string; archetype: string[]; mandate: string };
+  let extracted: { name: string; rawIdentity: string; archetype: string[]; roles: string[]; mandate: string };
   try {
     const raw = typeof result.content === 'string' ? result.content : '';
     extracted = JSON.parse(raw.replace(/```json\n?|\n?```/g, '').trim());
@@ -475,6 +476,7 @@ Return ONLY valid JSON, no markdown, no explanation:
       name: extracted.name,
       rawIdentity: extracted.rawIdentity,
       archetype: extracted.archetype,
+      roles: extracted.roles ?? [],
       mandate: extracted.mandate,
     })
     .where(eq(operatorsTable.id, operatorId));
