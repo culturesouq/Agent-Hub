@@ -159,7 +159,7 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300 glass-panel rounded-2xl border border-border/30 p-6">
+    <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300 bg-white border border-border rounded-2xl border border-border/30 p-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-border/50 pb-4">
         <div>
           <h2 className="headline-lg text-2xl font-bold text-primary flex items-center gap-2">
@@ -276,7 +276,7 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
 
         {/* Your Facts (Owner KB) */}
         <TabsContent value="owner" className="m-0 space-y-4">
-          <div className="bg-primary/5 border border-primary/20 rounded p-3 mb-4">
+          <div className="bg-accent border border-primary/20 rounded p-3 mb-4">
             <p className="font-mono text-xs text-primary/80">
               These are facts you've provided directly. Your operator treats them as absolute truth.
             </p>
@@ -395,7 +395,7 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
               <div className="space-y-3">
                 {searchResults.map((res, i) => (
                   <div key={i} className="p-4 border border-border/50 rounded-lg bg-card/20 relative overflow-hidden group hover:bg-card/40 transition-colors">
-                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary/50 group-hover:bg-primary transition-colors" />
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-accent0 group-hover:bg-primary transition-colors" />
                     <div className="flex justify-between items-start mb-2">
                       <div className="flex gap-2 items-center">
                         <Badge variant="outline" className="font-mono text-[10px] border-primary/30 text-primary">

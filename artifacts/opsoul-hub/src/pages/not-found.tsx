@@ -12,7 +12,7 @@ export default function NotFound() {
 
       <div className="relative z-10 text-center px-6 max-w-xl">
         <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-2 h-2 rounded-full bg-secondary shadow-[0_0_10px_#40cef3]" />
+          <div className="w-2 h-2 rounded-full bg-secondary shadow-[0_0_10px_#1B4FD8]" />
           <span className="font-label uppercase tracking-[0.2em] text-[10px] text-secondary font-semibold">
             Navigation Error — Signal Lost
           </span>
@@ -31,12 +31,10 @@ export default function NotFound() {
         </p>
 
         <Link href="/" className="mx-auto block w-fit">
-          <div className="iridescent-border">
-            <button className="bg-primary text-on-primary font-label uppercase tracking-[0.2em] font-bold px-10 py-4 hover:opacity-90 active:scale-95 transition-all group flex items-center gap-3">
-              <span className="material-symbols-outlined text-sm group-hover:-translate-x-0.5 transition-transform select-none">arrow_back</span>
-              Return to Base
-            </button>
-          </div>
+          <button className="bg-primary text-on-primary font-label uppercase tracking-[0.2em] font-bold px-10 py-4 hover:opacity-90 active:scale-95 transition-all group flex items-center gap-3">
+            <span className="material-symbols-outlined text-sm group-hover:-translate-x-0.5 transition-transform select-none">arrow_back</span>
+            Return to Base
+          </button>
         </Link>
 
         <div className="mt-16 flex items-center justify-center gap-4 opacity-30">

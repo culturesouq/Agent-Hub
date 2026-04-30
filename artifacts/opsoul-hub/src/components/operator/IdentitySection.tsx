@@ -107,9 +107,9 @@ export default function IdentitySection({ operator, panel }: Props) {
   const showPersonality = !panel || panel === "personality";
 
   return (
-    <div className="space-y-8 animate-in fade-in zoom-in-95 duration-300 glass-panel rounded-2xl border border-border/30 p-6">
+    <div className="space-y-8 animate-in fade-in zoom-in-95 duration-300 bg-white border border-border rounded-2xl border border-border/30 p-6">
       {showIdentity && (
-        <div className={`border rounded-lg p-6 space-y-4 transition-all ${isLocked ? "border-primary/20 bg-primary/5" : "border-border/50 bg-card/30"}`}>
+        <div className={`border rounded-lg p-6 space-y-4 transition-all ${isLocked ? "border-primary/20 bg-accent" : "border-border/50 bg-card/30"}`}>
           <div className="flex items-center justify-between">
             <h3 className="font-headline text-base font-bold flex items-center gap-2">
               <User className="w-4 h-4" /> Identity

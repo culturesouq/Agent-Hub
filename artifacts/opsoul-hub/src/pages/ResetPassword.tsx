@@ -42,7 +42,7 @@ export default function ResetPassword() {
   };
 
   return (
-    <div className="min-h-screen dot-grid flex items-center justify-center p-4 bg-background">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-background">
       <div className="w-full max-w-md space-y-8">
         <div className="text-center">
           <Link href="/">
@@ -64,7 +64,7 @@ export default function ResetPassword() {
           </p>
         </div>
 
-        <div className="glass-panel neon-glow-primary rounded-2xl border border-border/40 p-8">
+        <div className="bg-white border border-border rounded-2xl border border-border/40 p-8">
           {!token ? (
             <p className="text-center text-sm text-destructive font-label">
               Invalid or missing reset token. Please request a new password reset link.

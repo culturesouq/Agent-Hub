@@ -173,7 +173,7 @@ function KeyRevealCard({ slot, onDone }: { slot: ApiSlot & { apiKey: string }; o
   const [copied, setCopied] = useState(false);
   const endpoint = slot.surfaceType === "crud" ? CRUD_ENDPOINT : PUBLIC_ENDPOINT;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
       <div className="bg-card border border-amber-500/40 rounded-xl p-6 max-w-lg w-full mx-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
         <div className="flex items-center gap-2.5 mb-1">
           <div className="w-8 h-8 rounded-full bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0">
@@ -620,7 +620,7 @@ print(response.json()["content"])`;
   const show = (s: "model" | "secrets" | "api" | "evolution" | "danger" | "safemode") => !section || section === s;
 
   return (
-    <div className="space-y-10 animate-in fade-in zoom-in-95 duration-300 max-w-2xl glass-panel rounded-2xl border border-border/30 p-6">
+    <div className="space-y-10 animate-in fade-in zoom-in-95 duration-300 max-w-2xl bg-white border border-border rounded-2xl border border-border/30 p-6">
       {revealSlot && <KeyRevealCard slot={revealSlot} onDone={() => setRevealSlot(null)} />}
 
       {show("model") && (
@@ -684,7 +684,7 @@ print(response.json()["content"])`;
                       key={m.id}
                       onClick={() => { setSelectedModel(m.id); setShowModelDropdown(false); }}
                       className={`w-full flex items-center justify-between px-4 py-3 font-mono text-left hover:bg-card/80 transition-colors border-b border-border/20 last:border-0
-                        ${selectedModel === m.id ? "bg-primary/5" : ""}`}
+                        ${selectedModel === m.id ? "bg-accent" : ""}`}
                     >
                       <div>
                         <div className="text-sm font-bold">{m.label}</div>

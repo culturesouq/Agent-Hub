@@ -189,7 +189,7 @@ export default function Login() {
   if (showForgot) {
     return (
       <div
-        className="min-h-screen dot-grid flex flex-col items-center justify-center p-6 relative overflow-hidden"
+        className="min-h-screen flex flex-col items-center justify-center p-6 relative overflow-hidden"
         style={{ background: "#020203" }}
       >
         <NebulaBackground />
@@ -215,7 +215,7 @@ export default function Login() {
 
             {forgotDone ? (
               <div className="flex flex-col items-center gap-3 py-6 text-center">
-                <CheckCircle2 className="w-10 h-10" style={{ color: "#40cef3" }} />
+                <CheckCircle2 className="w-10 h-10" style={{ color: "#1B4FD8" }} />
                 <p className="font-label font-semibold" style={{ color: "#f3eff5" }}>
                   Check your inbox
                 </p>
@@ -271,7 +271,7 @@ export default function Login() {
 
   return (
     <div
-      className="min-h-screen dot-grid flex flex-col items-center justify-center p-6 relative overflow-hidden"
+      className="min-h-screen flex flex-col items-center justify-center p-6 relative overflow-hidden"
       style={{ background: "#020203" }}
     >
       <NebulaBackground />

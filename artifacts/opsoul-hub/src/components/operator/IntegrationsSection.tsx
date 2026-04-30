@@ -549,7 +549,7 @@ export default function IntegrationsSection({ operatorId }: { operatorId: string
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in zoom-in-95 duration-300 glass-panel rounded-2xl border border-border/30 p-6">
+    <div className="space-y-8 animate-in fade-in zoom-in-95 duration-300 bg-white border border-border rounded-2xl border border-border/30 p-6">
       <div className="flex items-center gap-2 border-b border-border/50 pb-4">
         <Network className="w-5 h-5 text-primary" />
         <div>

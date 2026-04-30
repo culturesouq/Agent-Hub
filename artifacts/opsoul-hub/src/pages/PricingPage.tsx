@@ -80,7 +80,7 @@ export default function PricingPage() {
 
         {/* Founding Banner */}
         <section className="mb-20">
-          <div className="glass-panel p-6 rounded-2xl border border-primary/10 relative overflow-hidden group hover:border-primary/30 transition-all duration-500">
+          <div className="bg-white border border-border p-6 rounded-2xl border border-primary/10 relative overflow-hidden group hover:border-primary/30 transition-all duration-500">
             <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
             <div className="flex flex-col md:flex-row items-center justify-between gap-8 relative z-10">
               <div className="flex-1">
@@ -130,10 +130,10 @@ export default function PricingPage() {
           {tiers.map((t) => (
             <div
               key={t.name}
-              className={`glass-panel p-6 rounded-2xl flex flex-col transition-all duration-300 ${
+              className={`bg-white border border-border p-6 rounded-2xl flex flex-col transition-all duration-300 ${
                 t.highlighted
                   ? "border border-primary/30 relative scale-105 z-10 bg-surface-container/80 shadow-[0_0_40px_rgba(205,150,255,0.05)]"
-                  : "border border-outline-variant/10 hover:bg-white/5"
+                  : "border border-outline-variant/10 hover:bg-muted"
               }`}
             >
               {t.highlighted && (
@@ -211,7 +211,7 @@ export default function PricingPage() {
           <h2 className="font-headline text-4xl font-bold mb-12 text-center md:text-left text-on-surface">Common Questions</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {faqs.map((f) => (
-              <div key={f.q} className={`glass-panel p-6 rounded-2xl ${f.size}`}>
+              <div key={f.q} className={`bg-white border border-border p-6 rounded-2xl ${f.size}`}>
                 <h4 className="font-headline font-bold text-primary mb-4">{f.q}</h4>
                 <p className="text-on-surface-variant text-sm font-light leading-relaxed font-sans">
                   {f.desc}

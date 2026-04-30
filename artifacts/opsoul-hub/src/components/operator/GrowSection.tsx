@@ -148,7 +148,7 @@ function ProposalCard({
       {expanded && (
         <div className="border-t border-border/30 px-4 pb-4 pt-3 space-y-3">
           {/* What would change — plain English */}
-          <div className="rounded-lg bg-primary/5 border border-primary/15 p-3 space-y-1.5">
+          <div className="rounded-lg bg-accent border border-primary/15 p-3 space-y-1.5">
             <p className="font-mono text-[10px] text-primary/60 uppercase tracking-wider flex items-center gap-1.5">
               <Sparkles className="w-2.5 h-2.5" /> What would change
             </p>
@@ -196,7 +196,7 @@ function ProposalCard({
                     <p className="font-mono text-[10px] text-primary/70 uppercase flex items-center gap-1">
                       <ArrowRight className="w-3 h-3" /> After change
                     </p>
-                    <div className="font-mono text-xs bg-primary/5 border border-primary/20 rounded-lg p-3 text-foreground/90 leading-relaxed min-h-16">
+                    <div className="font-mono text-xs bg-accent border border-primary/20 rounded-lg p-3 text-foreground/90 leading-relaxed min-h-16">
                       {result.proposed}
                     </div>
                   </div>
@@ -298,7 +298,7 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
   const rest = (proposals as GrowProposal[]).filter(p => p.status !== "needs_owner_review");
 
   return (
-    <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300 glass-panel rounded-2xl border border-border/30 p-6">
+    <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300 bg-white border border-border rounded-2xl border border-border/30 p-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-border/50 pb-4">
         <div>
           <h2 className="font-headline font-bold text-lg text-primary flex items-center gap-2">

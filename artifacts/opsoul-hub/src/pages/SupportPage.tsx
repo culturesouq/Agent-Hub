@@ -57,7 +57,7 @@ export default function SupportPage() {
 
           {/* Contact Cards */}
           <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-24">
-            <div className="glass-panel p-6 rounded-2xl border border-outline-variant/10 hover:border-primary/20 transition-all group relative overflow-hidden">
+            <div className="bg-white border border-border p-6 rounded-2xl border border-outline-variant/10 hover:border-primary/20 transition-all group relative overflow-hidden">
               <div className="absolute top-4 right-4">
                 <span className="status-beacon beacon-pulse" />
               </div>
@@ -71,7 +71,7 @@ export default function SupportPage() {
               </button>
             </div>
 
-            <div className="glass-panel p-6 rounded-2xl border border-outline-variant/10 hover:border-primary/20 transition-all group">
+            <div className="bg-white border border-border p-6 rounded-2xl border border-outline-variant/10 hover:border-primary/20 transition-all group">
               <div className="bg-secondary-container/20 w-12 h-12 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                 <span className="material-symbols-outlined text-secondary text-3xl select-none">mail</span>
               </div>
@@ -82,7 +82,7 @@ export default function SupportPage() {
               </button>
             </div>
 
-            <div className="glass-panel p-6 rounded-2xl border border-outline-variant/10 hover:border-primary/20 transition-all group">
+            <div className="bg-white border border-border p-6 rounded-2xl border border-outline-variant/10 hover:border-primary/20 transition-all group">
               <div className="bg-[#6200ea]/20 w-12 h-12 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                 <span className="material-symbols-outlined text-[#cfbcff] text-3xl select-none">groups</span>
               </div>

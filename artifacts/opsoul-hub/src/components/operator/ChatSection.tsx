@@ -118,14 +118,14 @@ function ToolOutputBlock({ skillName, output, toolType }: { skillName: string; o
       <div className="max-w-[85%]">
         <button
           onClick={() => setOpen(o => !o)}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-primary/20 bg-primary/5 text-primary/60 hover:bg-primary/10 hover:text-primary transition-colors text-[11px] font-mono"
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-primary/20 bg-accent text-primary/60 hover:bg-primary/10 hover:text-primary transition-colors text-[11px] font-mono"
         >
           {icon}
           <span>{label}</span>
           <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
         </button>
         {open && (
-          <div className="mt-1.5 ml-1 p-4 rounded-xl border border-primary/15 bg-primary/5 text-sm leading-relaxed max-h-80 overflow-y-auto">
+          <div className="mt-1.5 ml-1 p-4 rounded-xl border border-primary/15 bg-accent text-sm leading-relaxed max-h-80 overflow-y-auto">
             <MarkdownMessage content={output} />
           </div>
         )}
@@ -740,7 +740,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
             {/* Streaming or fallback — no flash between stream end and history load */}
             {ranSkill && (showingStream || showingFallback) && (
               <div className="flex justify-start my-1">
-                <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-primary/30 bg-primary/5 text-primary/70 text-[11px] font-mono">
+                <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-primary/30 bg-accent text-primary/70 text-[11px] font-mono">
                   <Zap className="w-3 h-3" />
                   Ran: {ranSkill}
                 </span>
@@ -760,7 +760,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
             {/* Unified live status pill — search or tool running */}
             {(searchingQuery || runningTool) && (
               <div className="flex justify-start">
-                <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-primary/20 bg-primary/5 text-primary/60 text-[11px] font-mono">
+                <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-primary/20 bg-accent text-primary/60 text-[11px] font-mono">
                   {searchingQuery ? `🔍 Searching…` : `⚡ ${runningTool}`}
                 </span>
               </div>

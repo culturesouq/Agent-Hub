@@ -55,7 +55,7 @@ export default function CapabilityRequestsSection({ operatorId }: { operatorId: 
   });
 
   return (
-    <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300 glass-panel rounded-2xl border border-border/30 p-6">
+    <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300 bg-white border border-border rounded-2xl border border-border/30 p-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-border/50 pb-4">
         <div>
           <h2 className="headline-lg text-2xl font-bold text-primary flex items-center gap-2">
@@ -148,7 +148,7 @@ export default function CapabilityRequestsSection({ operatorId }: { operatorId: 
                   </Dialog>
                 </div>
               ) : (
-                <div className="bg-primary/5 p-3 rounded border border-primary/20">
+                <div className="bg-accent p-3 rounded border border-primary/20">
                   <div className="font-mono text-[10px] text-primary uppercase mb-1">Owner Response Transmitted</div>
                   <div className="font-mono text-xs text-primary/90">{req.ownerResponse}</div>
                 </div>

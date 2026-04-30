@@ -100,7 +100,7 @@ export default function FilesSection({ operator }: { operator: Operator }) {
   });
 
   return (
-    <div className="space-y-4 animate-in fade-in zoom-in-95 duration-300 glass-panel rounded-2xl border border-border/30 p-6">
+    <div className="space-y-4 animate-in fade-in zoom-in-95 duration-300 bg-white border border-border rounded-2xl border border-border/30 p-6">
       <input
         ref={uploadInputRef}
         type="file"

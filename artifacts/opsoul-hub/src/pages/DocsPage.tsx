@@ -48,7 +48,7 @@ function DocStubSection({ id, icon, title, description }: { id: string; icon: st
         <span className="material-symbols-outlined text-2xl select-none">{icon}</span>
         {title}
       </h2>
-      <div className="glass-panel p-6 rounded-2xl border border-outline-variant/10 flex items-start gap-4">
+      <div className="bg-white border border-border p-6 rounded-2xl border border-outline-variant/10 flex items-start gap-4">
         <span className="material-symbols-outlined text-on-surface-variant text-3xl mt-0.5 select-none">construction</span>
         <div>
           <p className="text-on-surface-variant font-sans leading-relaxed">{description}</p>
@@ -85,7 +85,7 @@ export default function DocsPage() {
                     className={`flex items-center gap-3 px-4 py-3 font-label uppercase tracking-widest text-[10px] transition-all ${
                       item.active
                         ? "text-primary bg-primary/10 rounded-r-full translate-x-1"
-                        : "text-on-surface-variant hover:text-primary hover:bg-white/5"
+                        : "text-on-surface-variant hover:text-primary hover:bg-muted"
                     }`}
                     href={item.href}
                   >
@@ -147,14 +147,14 @@ export default function DocsPage() {
                   <span className="w-8 h-px bg-primary/30" /> Core Architecture
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="glass-panel p-6 rounded-2xl border border-white/5 hover:border-primary/20 transition-colors">
+                  <div className="bg-white border border-border p-6 rounded-2xl border border-white/5 hover:border-primary/20 transition-colors">
                     <span className="material-symbols-outlined text-primary text-3xl mb-4 block select-none">psychology</span>
                     <h3 className="text-lg font-headline font-medium text-on-surface mb-2">Autonomous Soul</h3>
                     <p className="text-sm text-on-surface-variant leading-relaxed font-sans">
                       Every Operator has a unique Soul — a configuration of identity, personality, mandate, and behavioral constraints that defines who they are and how they act.
                     </p>
                   </div>
-                  <div className="glass-panel p-6 rounded-2xl border border-white/5 hover:border-primary/20 transition-colors">
+                  <div className="bg-white border border-border p-6 rounded-2xl border border-white/5 hover:border-primary/20 transition-colors">
                     <span className="material-symbols-outlined text-secondary text-3xl mb-4 block select-none">memory</span>
                     <h3 className="text-lg font-headline font-medium text-on-surface mb-2">Persistent Memory</h3>
                     <p className="text-sm text-on-surface-variant leading-relaxed font-sans">

@@ -74,7 +74,7 @@ function StatCard({ label, value, color, glow }: {
   glow: string;
 }) {
   return (
-    <div className="glass-panel p-8 relative overflow-hidden">
+    <div className="bg-white border border-border p-8 relative overflow-hidden">
       <div className={`absolute inset-0 ${glow} pointer-events-none`} />
       <div className={`font-headline text-5xl font-bold mb-2 ${color}`} style={{ letterSpacing: "-0.04em" }}>
         {value}
@@ -87,7 +87,7 @@ function StatCard({ label, value, color, glow }: {
 function DriftBar({ score }: { score: number | null }) {
   if (score === null) return <span className="text-muted-foreground text-xs font-mono">—</span>;
   const pct = Math.min(score * 100, 100);
-  const color = score > 0.30 ? "#fbbf24" : "#40cef3";
+  const color = score > 0.30 ? "#fbbf24" : "#1B4FD8";
   return (
     <div className="flex items-center gap-3">
       <div className="w-20 h-1 bg-surface-container-highest rounded-full overflow-hidden">
@@ -468,12 +468,12 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-background text-foreground relative overflow-hidden">
       <NebulaBlobs />
-      <div className="fixed inset-0 dot-grid opacity-10 pointer-events-none z-0" />
+
 
       {/* Inspect modal */}
       {inspectOp && (
         <div className="fixed inset-0 z-50 flex items-start justify-end">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { setInspectOp(null); setInspectConvId(null); }} />
+          <div className="absolute inset-0 bg-black/20" onClick={() => { setInspectOp(null); setInspectConvId(null); }} />
           <div className="relative z-10 w-full max-w-lg h-screen bg-surface-container/95 border-l border-border/40 flex flex-col overflow-hidden">
             <div className="px-6 py-5 border-b border-border/30 flex items-center justify-between flex-shrink-0">
               <div>
@@ -514,7 +514,7 @@ export default function AdminPage() {
                       <button
                         key={conv.id}
                         onClick={() => openConversation(conv.id)}
-                        className="w-full px-6 py-4 flex items-center justify-between hover:bg-white/5 transition-colors text-left"
+                        className="w-full px-6 py-4 flex items-center justify-between hover:bg-muted transition-colors text-left"
                       >
                         <div>
                           <div className="font-sans text-xs text-on-surface mb-0.5 truncate max-w-[280px]">
@@ -564,8 +564,8 @@ export default function AdminPage() {
       {/* Delete operator confirm */}
       {confirmDeleteOp && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setConfirmDeleteOp(null)} />
-          <div className="relative z-10 glass-panel p-8 max-w-sm w-full mx-4">
+          <div className="absolute inset-0 bg-black/20" onClick={() => setConfirmDeleteOp(null)} />
+          <div className="relative z-10 bg-white border border-border p-8 max-w-sm w-full mx-4">
             <h3 className="font-headline text-lg text-on-surface mb-2">Delete Operator?</h3>
             <p className="font-sans text-sm text-muted-foreground mb-6">
               This will soft-delete the operator. Their data is preserved but the operator will be inactive.
@@ -592,8 +592,8 @@ export default function AdminPage() {
       {/* Delete owner confirm */}
       {confirmDeleteOwner && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setConfirmDeleteOwner(null)} />
-          <div className="relative z-10 glass-panel p-8 max-w-sm w-full mx-4">
+          <div className="absolute inset-0 bg-black/20" onClick={() => setConfirmDeleteOwner(null)} />
+          <div className="relative z-10 bg-white border border-border p-8 max-w-sm w-full mx-4">
             <h3 className="font-headline text-lg text-on-surface mb-2">Delete Owner?</h3>
             <p className="font-sans text-sm text-muted-foreground mb-6">
               This will delete the owner and soft-delete all their operators. This cannot be undone.
@@ -680,7 +680,7 @@ export default function AdminPage() {
               className={`px-5 py-2 font-label text-[10px] uppercase tracking-widest transition-all ${
                 tab === t.id
                   ? "bg-primary-container text-on-primary-container shadow-[inset_0_1px_0_rgba(205,150,255,0.20)]"
-                  : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
               }`}
             >
               {t.label}{t.count !== undefined ? ` (${t.count})` : ""}
@@ -691,7 +691,7 @@ export default function AdminPage() {
         {/* Overview tab */}
         {tab === "overview" && (
           <div className="grid md:grid-cols-2 gap-6">
-            <div className="glass-panel p-8">
+            <div className="bg-white border border-border p-8">
               <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-6">
                 Most Active Operators
               </h3>
@@ -716,7 +716,7 @@ export default function AdminPage() {
               </div>
             </div>
 
-            <div className="glass-panel p-8">
+            <div className="bg-white border border-border p-8">
               <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-6">
                 Recent Registrations
               </h3>
@@ -744,7 +744,7 @@ export default function AdminPage() {
             </div>
 
             {driftAlerts.length > 0 && (
-              <div className="glass-panel p-8 md:col-span-2 relative overflow-hidden">
+              <div className="bg-white border border-border p-8 md:col-span-2 relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-1 h-full bg-amber-400/60" />
                 <div className="flex items-center gap-3 mb-6">
                   <span className="status-beacon-warn" />
@@ -770,7 +770,7 @@ export default function AdminPage() {
 
         {/* Owners tab */}
         {tab === "owners" && (
-          <div className="glass-panel overflow-hidden">
+          <div className="bg-white border border-border overflow-hidden">
             <div className="px-8 py-5 flex items-center justify-between">
               <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
                 All Owners — {owners.length} total
@@ -832,7 +832,7 @@ export default function AdminPage() {
 
         {/* Operators tab */}
         {tab === "operators" && (
-          <div className="glass-panel overflow-hidden">
+          <div className="bg-white border border-border overflow-hidden">
             <div className="px-8 py-5">
               <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
                 All Operators — {operators.length} total
@@ -918,7 +918,7 @@ export default function AdminPage() {
         {tab === "drift" && (
           <div className="space-y-4">
             {driftAlerts.length === 0 ? (
-              <div className="glass-panel p-12 text-center">
+              <div className="bg-white border border-border p-12 text-center">
                 <div className="text-secondary mb-4">
                   <span className="status-beacon mx-auto block" />
                 </div>
@@ -929,7 +929,7 @@ export default function AdminPage() {
               driftAlerts.map((alert) => (
                 <div
                   key={alert.id}
-                  className="glass-panel p-8 relative overflow-hidden flex items-center justify-between gap-8"
+                  className="bg-white border border-border p-8 relative overflow-hidden flex items-center justify-between gap-8"
                 >
                   <div className="absolute top-0 left-0 w-1 h-full bg-amber-400/60" />
                   <div className="pl-4">
@@ -957,7 +957,7 @@ export default function AdminPage() {
         {tab === "rag" && (
           <div className="space-y-6">
             {/* Header */}
-            <div className="glass-panel p-6">
+            <div className="bg-white border border-border p-6">
               <div className="flex items-center justify-between gap-6 flex-wrap">
                 <div>
                   <h3 className="font-headline text-xl text-on-surface mb-1">Platform KB</h3>
@@ -985,7 +985,7 @@ export default function AdminPage() {
             </div>
 
             {/* Loading Bay */}
-            <div className="glass-panel p-6 space-y-5">
+            <div className="bg-white border border-border p-6 space-y-5">
               <div>
                 <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Platform KB — Loading Bay</h3>
                 <p className="font-sans text-xs text-muted-foreground/70">Drop any file or paste a URL — content is chunked, embedded, and seeded into all active operators' knowledge bases.</p>
@@ -994,7 +994,7 @@ export default function AdminPage() {
               {!platformUpload.uploading && !platformUpload.result && !platformUpload.multiResult && !platformUpload.error && (
                 <div className="space-y-4">
                   <div
-                    className="border-2 border-dashed border-border/40 rounded-lg p-10 flex flex-col items-center gap-4 cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-all"
+                    className="border-2 border-dashed border-border/40 rounded-lg p-10 flex flex-col items-center gap-4 cursor-pointer hover:border-primary/40 hover:bg-accent transition-all"
                     onClick={() => platformFileRef.current?.click()}
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={(e) => {
@@ -1051,7 +1051,7 @@ export default function AdminPage() {
                   <div className="border border-border/20 rounded-lg overflow-hidden">
                     <button
                       onClick={() => { setBulkUrlOpen(o => !o); setBulkUrlResult(null); }}
-                      className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-white/3 transition-colors"
+                      className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted transition-colors"
                     >
                       <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground/70">Bulk ingest — multiple URLs</span>
                       <span className="font-mono text-muted-foreground/40 text-xs">{bulkUrlOpen ? "▲" : "▼"}</span>
@@ -1195,7 +1195,7 @@ export default function AdminPage() {
             <div className="h-px bg-border/25 mx-1" />
 
             {/* Entry list */}
-            <div className="glass-panel overflow-hidden">
+            <div className="bg-white border border-border overflow-hidden">
               <div className="px-6 py-4 border-b border-border/30 bg-surface-container-high/30">
                 <div className="flex items-center justify-between gap-4 flex-wrap">
                   <div className="grid grid-cols-[24px_1fr_120px_80px_100px_60px] gap-4 flex-1">
@@ -1250,7 +1250,7 @@ export default function AdminPage() {
                       const rawSource = entry.source_name ?? "";
                       const isUrl = rawSource.startsWith("_url:") || rawSource.startsWith("http");
                       const sourceUrl = isUrl ? (rawSource.startsWith("_url:") ? rawSource.slice(5) : rawSource) : null;
-                      const rowBg = isSelected ? "bg-primary/5" : idx % 2 === 0 ? "hover:bg-white/2" : "bg-white/[0.015] hover:bg-white/3";
+                      const rowBg = isSelected ? "bg-accent" : idx % 2 === 0 ? "hover:bg-muted" : "bg-muted/30 hover:bg-muted";
                       return (
                         <div key={entry.id} className={`px-6 py-4 grid grid-cols-[24px_1fr_120px_80px_100px_60px] gap-4 items-start transition-colors ${rowBg}`}>
                           <input

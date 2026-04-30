@@ -416,7 +416,7 @@ export default function OperatorDetail({ id }: { id: string }) {
         </aside>
 
         {/* Content */}
-        <main className={`flex-1 bg-background nebula-bg relative ${activeTab === "chat" ? "overflow-hidden" : "overflow-y-auto"}`}>
+        <main className={`flex-1 bg-background relative ${activeTab === "chat" ? "overflow-hidden" : "overflow-y-auto"}`}>
           <NebulaBlobs />
           <div className={activeTab === "chat"
             ? "h-full w-full flex flex-col"
