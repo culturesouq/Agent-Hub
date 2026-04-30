@@ -64,7 +64,7 @@ export default function DocsPage() {
     <PublicLayout>
       <div className="flex pt-20 min-h-screen">
         {/* Left sidebar */}
-        <aside className="fixed left-0 top-0 h-full w-72 z-40 bg-background/80 backdrop-blur-2xl flex flex-col py-24 shadow-[20px_0_40px_rgba(0,0,0,0.3)] border-r border-outline-variant/10">
+        <aside className="fixed left-0 top-0 h-full w-72 z-40 bg-background flex flex-col py-24 border-r border-outline-variant/10 shadow-sm">
           <div className="px-6 mb-8">
             <div className="relative group">
               <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm select-none">search</span>
@@ -127,13 +127,13 @@ export default function DocsPage() {
             </header>
 
             {/* Hero visual */}
-            <div className="w-full h-64 rounded-2xl mb-12 overflow-hidden relative group bg-gradient-to-br from-primary/20 via-[#6f389b]/20 to-secondary/10 border border-primary/10">
+            <div className="w-full h-64 rounded-2xl mb-12 overflow-hidden relative group bg-gradient-to-br from-primary/20 via-secondary/15 to-secondary/10 border border-primary/10">
               <div className="absolute inset-0 flex items-center justify-center">
                 <span className="material-symbols-outlined text-8xl text-primary/20 select-none">hub</span>
               </div>
-              <div className="absolute inset-0 bg-gradient-to-t from-[#131317] via-transparent to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-background/60 via-transparent to-transparent" />
               <div className="absolute bottom-6 left-6">
-                <div className="flex items-center gap-2 text-secondary bg-secondary/10 backdrop-blur-md px-3 py-1 rounded-full border border-secondary/20">
+                <div className="flex items-center gap-2 text-secondary bg-secondary/10 px-3 py-1 rounded-full border border-secondary/20">
                   <span className="material-symbols-outlined text-sm select-none">verified</span>
                   <span className="text-[9px] font-label uppercase tracking-widest font-bold">Platform Verified</span>
                 </div>

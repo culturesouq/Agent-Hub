@@ -18,7 +18,7 @@ export default function SupportPage() {
     <PublicLayout>
       <main className="relative z-10 pt-20 min-h-screen">
         {/* Status Banner — sits directly below the fixed nav */}
-        <div className="sticky top-16 w-full bg-secondary-container/20 backdrop-blur-sm py-2 px-6 md:px-8 flex justify-center items-center gap-3 z-40 border-b border-outline-variant/5">
+        <div className="sticky top-16 w-full bg-secondary-container/20 py-2 px-6 md:px-8 flex justify-center items-center gap-3 z-40 border-b border-outline-variant/5">
           <span className="status-beacon" />
           <span className="font-label text-[10px] uppercase tracking-[0.2em] text-secondary">All systems operational</span>
         </div>
@@ -31,15 +31,14 @@ export default function SupportPage() {
               Support <span className="text-primary">Center</span>
             </h1>
             <div className="max-w-3xl mx-auto relative group">
-              <div className="absolute -inset-1 bg-gradient-to-r from-primary/20 to-secondary/20 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000" />
-              <div className="relative flex items-center bg-surface-container-highest/60 backdrop-blur-xl rounded-2xl p-2 border border-outline-variant/10 shadow-2xl">
+              <div className="relative flex items-center bg-surface-container-highest rounded-2xl p-2 border border-outline-variant/10 shadow-sm">
                 <span className="material-symbols-outlined ml-4 text-on-surface-variant select-none">search</span>
                 <input
                   className="w-full bg-transparent border-none outline-none text-xl py-4 px-4 text-on-surface placeholder:text-on-surface-variant/50 font-sans"
                   placeholder="What do you need help with?"
                   type="text"
                 />
-                <kbd className="hidden md:inline-flex items-center gap-1 px-3 py-1 mr-4 bg-white/5 rounded-lg border border-outline-variant/20 text-on-surface-variant text-xs font-label">
+                <kbd className="hidden md:inline-flex items-center gap-1 px-3 py-1 mr-4 bg-muted rounded-lg border border-outline-variant/20 text-on-surface-variant text-xs font-label">
                   <span className="text-sm">⌘</span>K
                 </kbd>
               </div>
@@ -83,12 +82,12 @@ export default function SupportPage() {
             </div>
 
             <div className="bg-white border border-border p-6 rounded-2xl border border-outline-variant/10 hover:border-primary/20 transition-all group">
-              <div className="bg-[#6200ea]/20 w-12 h-12 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <span className="material-symbols-outlined text-[#cfbcff] text-3xl select-none">groups</span>
+              <div className="bg-primary/10 w-12 h-12 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                <span className="material-symbols-outlined text-secondary text-3xl select-none">groups</span>
               </div>
               <h3 className="font-headline text-xl font-bold mb-2 text-on-surface">Community forum</h3>
               <p className="text-on-surface-variant text-sm mb-6 leading-relaxed font-sans">Get help from other OpSoul users and share what you've built.</p>
-              <button className="text-[10px] font-label uppercase tracking-widest text-[#cfbcff] flex items-center gap-2 group-hover:translate-x-1 transition-transform">
+              <button className="text-[10px] font-label uppercase tracking-widest text-secondary flex items-center gap-2 group-hover:translate-x-1 transition-transform">
                 Join Community <span className="material-symbols-outlined text-sm select-none">arrow_forward</span>
               </button>
             </div>

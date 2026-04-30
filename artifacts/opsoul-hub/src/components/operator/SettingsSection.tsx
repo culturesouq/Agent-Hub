@@ -820,7 +820,7 @@ print(response.json()["content"])`;
               </div>
 
               {showKeyForm && (
-                <div className="border border-border/50 rounded-xl p-5 bg-card/60 backdrop-blur space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="border border-border/50 rounded-xl p-5 bg-card space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
                   <div className="space-y-1.5">
                     <label className="text-xs font-mono text-muted-foreground">Key Name</label>
                     <input

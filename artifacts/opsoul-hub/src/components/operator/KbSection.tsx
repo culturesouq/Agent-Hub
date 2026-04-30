@@ -175,7 +175,7 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
                 <Plus className="w-4 h-4 mr-2" /> Add Knowledge
               </Button>
             </DialogTrigger>
-            <DialogContent className="border-primary/20 bg-card/95 backdrop-blur">
+            <DialogContent className="border-primary/20 bg-card">
               <DialogHeader>
                 <DialogTitle className="font-mono text-xl">
                   Add to {activeTab === "owner" ? "Your Facts" : "Learned Knowledge"}

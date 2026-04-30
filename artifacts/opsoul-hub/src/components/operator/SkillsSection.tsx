@@ -178,7 +178,7 @@ export default function SkillsSection({ operatorId, archetype }: { operatorId: s
       </div>
 
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="border-primary/20 bg-card/95 backdrop-blur max-w-lg">
+        <DialogContent className="border-primary/20 bg-card max-w-lg">
           <DialogHeader>
             <DialogTitle className="font-mono text-xl text-primary">Create Custom Skill</DialogTitle>
           </DialogHeader>
@@ -240,7 +240,7 @@ export default function SkillsSection({ operatorId, archetype }: { operatorId: s
       </Dialog>
 
       <Dialog open={!!selectedPlatformSkill} onOpenChange={(open) => !open && setSelectedPlatformSkill(null)}>
-        <DialogContent className="border-primary/20 bg-card/95 backdrop-blur">
+        <DialogContent className="border-primary/20 bg-card">
           <DialogHeader>
             <DialogTitle className="font-mono text-xl text-primary">Install {selectedPlatformSkill?.name}</DialogTitle>
           </DialogHeader>

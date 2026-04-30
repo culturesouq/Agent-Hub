@@ -356,19 +356,18 @@ export default function OperatorDetail({ id }: { id: string }) {
       {mobileNavOpen && (
         <div className="md:hidden fixed inset-0 z-30 top-12">
           <div
-            className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+            className="absolute inset-0 bg-background/80"
             onClick={() => setMobileNavOpen(false)}
           />
-          <aside className="absolute left-0 top-0 bottom-0 w-64 bg-sidebar border-r border-sidebar-border flex flex-col overflow-y-auto shadow-2xl shadow-black/40 animate-in slide-in-from-left duration-200">
+          <aside className="absolute left-0 top-0 bottom-0 w-64 bg-sidebar border-r border-sidebar-border flex flex-col overflow-y-auto shadow-xl animate-in slide-in-from-left duration-200">
             <div className="shrink-0">
-              <div className="h-20 relative overflow-hidden bg-[#0a0a0f]">
+              <div className="h-20 relative overflow-hidden bg-muted">
                 <img
                   src={PERSONA_IMAGES[operator.name.charCodeAt(0) % 3]}
                   alt={`${operator.name} portrait`}
-                  className="w-full h-full object-cover object-top opacity-60"
+                  className="w-full h-full object-cover object-top opacity-80"
                 />
-                <div className="absolute inset-0" style={{ background: `radial-gradient(ellipse at 50% 120%, ${PERSONA_GLOWS[operator.name.charCodeAt(0) % 3]} 0%, transparent 65%)`, mixBlendMode: "screen" }} />
-                <div className="absolute inset-0 bg-gradient-to-t from-sidebar/90 from-[5%] via-sidebar/20 via-[30%] to-transparent to-[60%]" />
+                <div className="absolute inset-0 bg-gradient-to-t from-sidebar/80 from-[5%] via-sidebar/10 via-[30%] to-transparent to-[60%]" />
               </div>
               <div className="px-4 py-3 border-b border-sidebar-border flex items-center gap-3">
                 <OperatorAvatar name={operator.name} />
@@ -391,14 +390,13 @@ export default function OperatorDetail({ id }: { id: string }) {
         {/* Desktop Sidebar */}
         <aside className="w-56 border-r border-sidebar-border bg-sidebar flex-col shrink-0 overflow-y-auto hidden md:flex">
           <div className="shrink-0">
-            <div className="h-20 relative overflow-hidden bg-[#0a0a0f]">
+            <div className="h-20 relative overflow-hidden bg-muted">
               <img
                 src={PERSONA_IMAGES[operator.name.charCodeAt(0) % 3]}
                 alt={`${operator.name} portrait`}
-                className="w-full h-full object-cover object-top opacity-60"
+                className="w-full h-full object-cover object-top opacity-80"
               />
-              <div className="absolute inset-0" style={{ background: `radial-gradient(ellipse at 50% 120%, ${PERSONA_GLOWS[operator.name.charCodeAt(0) % 3]} 0%, transparent 65%)`, mixBlendMode: "screen" }} />
-              <div className="absolute inset-0 bg-gradient-to-t from-sidebar/90 from-[5%] via-sidebar/20 via-[30%] to-transparent to-[60%]" />
+              <div className="absolute inset-0 bg-gradient-to-t from-sidebar/80 from-[5%] via-sidebar/10 via-[30%] to-transparent to-[60%]" />
             </div>
             <div className="px-4 py-3 border-b border-sidebar-border flex items-center gap-3">
               <OperatorAvatar name={operator.name} />

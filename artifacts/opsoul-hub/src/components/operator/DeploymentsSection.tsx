@@ -262,7 +262,7 @@ export default function DeploymentsSection({ operatorId }: { operatorId: string 
       </div>
 
       {showCreate && (
-        <div className="border border-border/50 rounded-xl p-5 bg-card/60 backdrop-blur space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="border border-border/50 rounded-xl p-5 bg-card space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
           <h3 className="font-headline font-semibold text-sm">Create Deployment Slot</h3>
 
           <div className="space-y-1">

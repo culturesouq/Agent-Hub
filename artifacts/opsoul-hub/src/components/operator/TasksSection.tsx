@@ -94,7 +94,7 @@ export default function TasksSection({ operatorId }: { operatorId: string }) {
               <Plus className="w-4 h-4 mr-2" /> Add automation
             </Button>
           </DialogTrigger>
-          <DialogContent className="border-primary/20 bg-card/95 backdrop-blur">
+          <DialogContent className="border-primary/20 bg-card">
             <DialogHeader>
               <DialogTitle className="font-mono text-xl">New automation</DialogTitle>
             </DialogHeader>

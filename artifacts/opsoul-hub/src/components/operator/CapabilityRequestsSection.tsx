@@ -70,7 +70,7 @@ export default function CapabilityRequestsSection({ operatorId }: { operatorId: 
               <Plus className="w-4 h-4 mr-2" /> SIMULATE REQUEST
             </Button>
           </DialogTrigger>
-          <DialogContent className="border-amber-500/30 bg-card/95 backdrop-blur">
+          <DialogContent className="border-amber-500/30 bg-card">
             <DialogHeader>
               <DialogTitle className="font-mono text-xl text-amber-500">Inject Fake Request</DialogTitle>
             </DialogHeader>
@@ -131,7 +131,7 @@ export default function CapabilityRequestsSection({ operatorId }: { operatorId: 
                         <Reply className="w-3 h-3 mr-2" /> PROVIDE DECISION
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="border-primary/20 bg-card/95 backdrop-blur">
+                    <DialogContent className="border-primary/20 bg-card">
                       <DialogHeader>
                         <DialogTitle className="font-mono text-xl">Respond to Request</DialogTitle>
                       </DialogHeader>

@@ -67,15 +67,13 @@ interface AdminMessage {
 
 type Tab = "overview" | "owners" | "operators" | "drift" | "rag";
 
-function StatCard({ label, value, color, glow }: {
+function StatCard({ label, value, color }: {
   label: string;
   value: number | string;
   color: string;
-  glow: string;
 }) {
   return (
     <div className="bg-white border border-border p-8 relative overflow-hidden">
-      <div className={`absolute inset-0 ${glow} pointer-events-none`} />
       <div className={`font-headline text-5xl font-bold mb-2 ${color}`} style={{ letterSpacing: "-0.04em" }}>
         {value}
       </div>
@@ -651,19 +649,13 @@ export default function AdminPage() {
         {/* Stats row */}
         {stats && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
-            <StatCard label="Total Owners" value={stats.totalOwners} color="text-primary"
-              glow="bg-[radial-gradient(circle_at_top-left,rgba(205,150,255,0.06),transparent_60%)]" />
-            <StatCard label="Total Operators" value={stats.totalOperators} color="text-secondary"
-              glow="bg-[radial-gradient(circle_at_top-left,rgba(64,206,243,0.06),transparent_60%)]" />
-            <StatCard label="Messages (24h)" value={stats.messagesLast24h.toLocaleString()} color="text-primary"
-              glow="bg-[radial-gradient(circle_at_top-left,rgba(205,150,255,0.06),transparent_60%)]" />
+            <StatCard label="Total Owners" value={stats.totalOwners} color="text-primary" />
+            <StatCard label="Total Operators" value={stats.totalOperators} color="text-secondary" />
+            <StatCard label="Messages (24h)" value={stats.messagesLast24h.toLocaleString()} color="text-primary" />
             <StatCard
               label="Drift Alerts"
               value={stats.driftAlerts}
-              color={stats.driftAlerts > 0 ? "text-amber-400" : "text-secondary"}
-              glow={stats.driftAlerts > 0
-                ? "bg-[radial-gradient(circle_at_top-left,rgba(251,191,36,0.08),transparent_60%)]"
-                : "bg-[radial-gradient(circle_at_top-left,rgba(64,206,243,0.06),transparent_60%)]"}
+              color={stats.driftAlerts > 0 ? "text-amber-500" : "text-secondary"}
             />
           </div>
         )}

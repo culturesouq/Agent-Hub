@@ -88,15 +88,14 @@ function OperatorCard({ operator, onClick }: { operator: Operator; onClick: () =
       onClick={onClick}
       data-testid={`card-operator-${operator.id}`}
     >
-      <div className="h-36 relative overflow-hidden bg-[#0a0a0f] shrink-0">
+      <div className="h-36 relative overflow-hidden bg-muted shrink-0">
         <img
           src={PERSONA_IMAGES[idx]}
           alt={`${operator.name} portrait`}
-          className="w-full h-full object-cover object-[center_20%] opacity-60 group-hover:opacity-90 scale-100 group-hover:scale-105 transition-all duration-500"
+          className="w-full h-full object-cover object-[center_20%] opacity-80 group-hover:opacity-100 scale-100 group-hover:scale-105 transition-all duration-500"
           onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
         />
-        <div className="absolute inset-0" style={{ background: `radial-gradient(ellipse at 50% 120%, ${PERSONA_GLOWS[idx]} 0%, transparent 65%)`, mixBlendMode: "screen" }} />
-        <div className="absolute inset-0 bg-gradient-to-t from-card/90 from-[5%] via-card/20 via-[30%] to-transparent to-[60%]" />
+        <div className="absolute inset-0 bg-gradient-to-t from-card/80 from-[5%] via-card/10 via-[30%] to-transparent to-[60%]" />
         <div className="absolute top-2 right-2 z-10"><HealthBadge operatorId={operator.id} /></div>
       </div>
       <div className="px-4 pt-3 pb-2 flex items-center gap-3">
@@ -331,7 +330,6 @@ function AccountPanel() {
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
     <div className="bg-white border border-border rounded-xl border border-border/30 p-5 relative overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top-left,rgba(205,150,255,0.05),transparent_60%)] pointer-events-none" />
       <div className="font-headline text-4xl font-bold text-primary mb-1" style={{ letterSpacing: "-0.04em" }}>{value}</div>
       <div className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">{label}</div>
       {sub && <div className="font-mono text-[11px] text-muted-foreground/60 mt-1">{sub}</div>}
@@ -420,7 +418,6 @@ function BillingPanel() {
       </div>
 
       <div className="bg-white border border-border rounded-2xl border border-primary/20 p-6 space-y-5 relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top-left,rgba(205,150,255,0.06),transparent_60%)] pointer-events-none" />
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -629,8 +626,8 @@ export default function Dashboard() {
       {/* Mobile nav overlay */}
       {mobileNavOpen && (
         <div className="md:hidden fixed inset-0 z-30 top-12">
-          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={() => setMobileNavOpen(false)} />
-          <aside className="absolute left-0 top-0 bottom-0 w-64 bg-sidebar border-r border-sidebar-border flex flex-col overflow-y-auto shadow-2xl shadow-black/40 animate-in slide-in-from-left duration-200">
+          <div className="absolute inset-0 bg-background/80" onClick={() => setMobileNavOpen(false)} />
+          <aside className="absolute left-0 top-0 bottom-0 w-64 bg-sidebar border-r border-sidebar-border flex flex-col overflow-y-auto shadow-xl animate-in slide-in-from-left duration-200">
             <SidebarContent />
           </aside>
         </div>
