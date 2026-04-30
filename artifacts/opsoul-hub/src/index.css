@@ -5,81 +5,62 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  /* ── Stitch Nebula Glass — corrected color tokens ── */
-  --color-background:  #0e0e11;
-  --color-foreground:  #e6e3e8;
-  --color-border:      #4a4658;
-  --color-input:       #1f1f23;
-  --color-ring:        #cd96ff;
+  --color-background:  #F8F7F5;
+  --color-foreground:  #1A1A1A;
+  --color-border:      #E2E0DC;
+  --color-input:       #FFFFFF;
+  --color-ring:        #1B4FD8;
 
-  --color-primary:             #cd96ff;
-  --color-primary-foreground:  #2c0d54;
+  --color-primary:             #1B4FD8;
+  --color-primary-foreground:  #FFFFFF;
 
-  --color-secondary:             #40cef3;
-  --color-secondary-foreground:  #003a4a;
+  --color-secondary:             #F2F1EF;
+  --color-secondary-foreground:  #1A1A1A;
 
-  --color-muted:             #28272c;
-  --color-muted-foreground:  #b8b3c0;
+  --color-muted:             #F2F1EF;
+  --color-muted-foreground:  #6B7280;
 
-  --color-accent:             #6b2ea8;
-  --color-accent-foreground:  #cd96ff;
+  --color-accent:             #EEF2FF;
+  --color-accent-foreground:  #1B4FD8;
 
-  --color-destructive:             #ffb4ab;
-  --color-destructive-foreground:  #690005;
+  --color-destructive:             #DC2626;
+  --color-destructive-foreground:  #FFFFFF;
 
-  --color-card:             #1a1a1e;
-  --color-card-foreground:  #e6e3e8;
-  --color-card-border:      #4a4658;
+  --color-card:             #FFFFFF;
+  --color-card-foreground:  #1A1A1A;
+  --color-card-border:      #E2E0DC;
 
-  --color-popover:             #1a1a1e;
-  --color-popover-foreground:  #e6e3e8;
-  --color-popover-border:      #4a4658;
+  --color-popover:             #FFFFFF;
+  --color-popover-foreground:  #1A1A1A;
+  --color-popover-border:      #E2E0DC;
 
-  /* MD3 surface hierarchy — charcoal-based */
-  --color-surface:                    #131317;
-  --color-surface-dim:                #0e0e11;
-  --color-surface-container-lowest:   #0f0f12;
-  --color-surface-container-low:      #18181c;
-  --color-surface-container:          #1d1d21;
-  --color-surface-container-high:     #262529;
-  --color-surface-container-highest:  #323036;
-  --color-on-surface:                 #e6e3e8;
-  --color-on-surface-variant:         #cac4cf;
+  --color-surface:                    #F8F7F5;
+  --color-surface-dim:                #F2F1EF;
+  --color-surface-container-lowest:   #FFFFFF;
+  --color-surface-container-low:      #F8F7F5;
+  --color-surface-container:          #F2F1EF;
+  --color-surface-container-high:     #E8E6E2;
+  --color-surface-container-highest:  #E2E0DC;
+  --color-on-surface:                 #1A1A1A;
+  --color-on-surface-variant:         #6B7280;
 
-  /* Full MD3 Stitch palette — remaining role tokens */
-  --color-primary-container:    #6b2ea8;
-  --color-on-primary-container: #cd96ff;
-  --color-on-primary:           #2c0d54;
-  --color-secondary-container:  #00495e;
-  --color-on-secondary:         #003a4a;
-  --color-tertiary:             #ff6a9f;
-  --color-tertiary-container:   #6200ea;
-  --color-on-tertiary:          #3a0092;
-  --color-on-secondary-container: #a6eeff;
-  --color-outline:              #958da2;
-  --color-outline-variant:      #494456;
-  --color-surface-variant:      #323036;
-  --color-surface-bright:       #37363b;
-  --color-inverse-surface:      #e5e1e7;
-  --color-inverse-on-surface:   #303034;
-  --color-inverse-primary:      #6b2ea8;
-  --color-error-container:      #93000a;
+  --color-outline:         #D1CEC9;
+  --color-outline-variant: #E2E0DC;
+  --color-surface-variant: #F2F1EF;
 
-  /* Sidebar — slightly lighter than background */
-  --color-sidebar:                     #141418;
-  --color-sidebar-foreground:          #e6e3e8;
-  --color-sidebar-border:              #252330;
-  --color-sidebar-primary:             #cd96ff;
-  --color-sidebar-primary-foreground:  #2c0d54;
-  --color-sidebar-accent:              #1d1d21;
-  --color-sidebar-accent-foreground:   #e6e3e8;
-  --color-sidebar-ring:                #cd96ff;
+  --color-sidebar:                     #F2F1EF;
+  --color-sidebar-foreground:          #1A1A1A;
+  --color-sidebar-border:              #E2E0DC;
+  --color-sidebar-primary:             #1B4FD8;
+  --color-sidebar-primary-foreground:  #FFFFFF;
+  --color-sidebar-accent:              #EEF2FF;
+  --color-sidebar-accent-foreground:   #1B4FD8;
+  --color-sidebar-ring:                #1B4FD8;
 
   --font-sans:  var(--app-font-body);
   --font-serif: var(--app-font-headline);
   --font-mono:  'Space Mono', monospace;
 
-  /* Stitch radius scale */
   --radius-xs:  0.125rem;
   --radius-sm:  0.25rem;
   --radius-md:  0.5rem;
@@ -90,24 +71,21 @@
 }
 
 :root {
-  /* Stitch Design System — runtime non-color tokens */
   --app-font-headline: 'Space Grotesk', sans-serif;
   --app-font-body:     'Manrope', sans-serif;
   --app-font-label:    'Manrope', sans-serif;
 
-  /* --radius: canonical shorthand used by shadcn/ui components */
   --radius: 0.5rem;
 
-  /* Elevation / overlay helpers */
-  --button-outline: rgba(255,255,255,.10);
-  --badge-outline:  rgba(255,255,255,.05);
-  --elevate-1:      rgba(255,255,255,.04);
-  --elevate-2:      rgba(255,255,255,.09);
+  --button-outline: rgba(0,0,0,.06);
+  --badge-outline:  rgba(0,0,0,.04);
+  --elevate-1:      rgba(0,0,0,.02);
+  --elevate-2:      rgba(0,0,0,.04);
 }
 
 @layer base {
   html {
-    background-color: #0e0e11;
+    background-color: #F8F7F5;
   }
 
   body {
@@ -116,7 +94,6 @@
     overflow-x: hidden;
   }
 
-  /* Thin styled scrollbar — 6px with rounded thumb */
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -125,256 +102,89 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: rgba(74, 70, 88, 0.7);
+    background: rgba(209,206,201,0.7);
     border-radius: 10px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(205, 150, 255, 0.4);
+    background: rgba(27,79,216,0.3);
   }
   * {
     scrollbar-width: thin;
-    scrollbar-color: rgba(74, 70, 88, 0.7) transparent;
+    scrollbar-color: rgba(209,206,201,0.7) transparent;
   }
 
-  /* Text selection */
   ::selection {
-    background-color: rgba(205, 150, 255, 0.30);
-    color: #e6e3e8;
+    background-color: rgba(27,79,216,0.15);
+    color: #1A1A1A;
   }
 }
 
-/* =============================================
-   Stitch Nebula Glass — Utility Classes
-   ============================================= */
+.nebula-bg { background: #F8F7F5; }
 
-/* Radial dot grid — 32px spacing, hair-thin white dots */
-.dot-grid {
-  background-image: radial-gradient(rgba(255,255,255,0.05) 0.5px, transparent 0.5px);
-  background-size: 32px 32px;
-}
-
-/* Nebula radial glow — warm visible blobs (opacity ~0.15) */
-.nebula-bg {
-  background-image:
-    radial-gradient(circle at 20% 20%, rgba(205, 150, 255, 0.15) 0%, transparent 45%),
-    radial-gradient(circle at 80% 75%, rgba(64, 206, 243, 0.12) 0%, transparent 40%),
-    radial-gradient(circle at 50% 50%, rgba(107, 46, 168, 0.10) 0%, transparent 60%);
-}
-
-/* Frosted glass panel — semi-transparent 0.40 */
 .glass-panel {
-  background: rgba(20, 20, 24, 0.40);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: #FFFFFF;
+  border: 1px solid #E2E0DC;
 }
 
-/* Iridescent gradient border — Stitch Nebula Glass signature edge */
-.iridescent-border {
-  position: relative;
-}
-.iridescent-border::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  background: linear-gradient(
-    135deg,
-    rgba(205, 150, 255, 0.35),
-    rgba(64, 206, 243, 0.30),
-    rgba(255, 106, 159, 0.25)
-  );
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  pointer-events: none;
-}
+.neon-glow-primary { box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+.neon-glow-secondary { box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
 
-/* Tricolor text gradient — OpSoul brand mark (corrected spec colors) */
-.text-gradient {
-  background-clip: text;
-  -webkit-background-clip: text;
-  color: transparent;
-  background-image: linear-gradient(to right, #cd96ff, #40cef3, #ff6a9f);
-}
+.card-ambient { box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
 
-/* Primary text gradient */
-.text-gradient-primary {
-  background-clip: text;
-  -webkit-background-clip: text;
-  color: transparent;
-  background-image: linear-gradient(135deg, #cd96ff 0%, #ff6a9f 100%);
-}
-
-/* ── Iridescent text & bg utility classes ── */
-.iridescent-text {
-  background-clip: text;
-  -webkit-background-clip: text;
-  color: transparent;
-  background-image: linear-gradient(90deg, #cd96ff 0%, #40cef3 50%, #ff6a9f 100%);
-}
-
-.iridescent-bg {
-  background-image: linear-gradient(135deg, rgba(205,150,255,0.15) 0%, rgba(64,206,243,0.12) 50%, rgba(255,106,159,0.10) 100%);
-}
-
-/* ── Glow utilities ── */
-.luminous-edge {
-  box-shadow:
-    0 0 0 1px rgba(205, 150, 255, 0.25),
-    0 0 20px rgba(205, 150, 255, 0.12),
-    inset 0 1px 0 rgba(205, 150, 255, 0.15);
-}
-
-.luminous-edge-cyan {
-  box-shadow:
-    0 0 0 1px rgba(64, 206, 243, 0.25),
-    0 0 20px rgba(64, 206, 243, 0.12),
-    inset 0 1px 0 rgba(64, 206, 243, 0.15);
-}
-
-.glass-edge {
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-
-.soul-glow {
-  box-shadow:
-    0 0 60px rgba(205, 150, 255, 0.20),
-    0 0 120px rgba(205, 150, 255, 0.08);
-}
-
-.node-glow {
-  box-shadow:
-    0 0 20px rgba(64, 206, 243, 0.18),
-    0 0 40px rgba(64, 206, 243, 0.08);
-}
-
-/* ── Command gradient ── */
-.command-gradient {
-  background: linear-gradient(135deg, rgba(107,46,168,0.30) 0%, rgba(0,73,94,0.25) 100%);
-}
-
-/* ── Beacon pulse animation ── */
-@keyframes beacon-pulse-anim {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50%       { opacity: 0.4; transform: scale(1.6); }
-}
-.beacon-pulse {
-  animation: beacon-pulse-anim 2s ease-in-out infinite;
-}
-
-/* ── Star field (white dot variant) ── */
-.star-field {
-  background-image:
-    radial-gradient(rgba(255,255,255,0.8) 1px, transparent 1px),
-    radial-gradient(rgba(255,255,255,0.4) 1px, transparent 1px);
-  background-size: 80px 80px, 40px 40px;
-  background-position: 0 0, 20px 20px;
-}
-
-/* Purple neon glow */
-.neon-glow-primary {
-  box-shadow: 0 0 40px rgba(205, 150, 255, 0.12);
-}
-
-/* Cyan neon glow */
-.neon-glow-secondary {
-  box-shadow: 0 0 20px rgba(64, 206, 243, 0.15);
-}
-
-/* Ambient card shadow */
-.card-ambient {
-  box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.45),
-    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
-}
-
-/* Live status indicator — 4px per Stitch spec, cyan glow */
 .status-beacon {
-  width: 4px;
-  height: 4px;
+  width: 6px; height: 6px;
   border-radius: 50%;
-  background-color: #40cef3;
-  box-shadow: 0 0 10px #40cef3;
+  background-color: #16A34A;
   display: inline-block;
   flex-shrink: 0;
 }
 
-/* Amber drift-alert beacon */
 .status-beacon-warn {
-  width: 4px;
-  height: 4px;
+  width: 6px; height: 6px;
   border-radius: 50%;
-  background-color: #fbbf24;
-  box-shadow: 0 0 10px #fbbf24;
+  background-color: #D97706;
   display: inline-block;
   flex-shrink: 0;
 }
 
-/* Space Grotesk headline style */
-.headline-lg {
-  font-family: 'Space Grotesk', sans-serif;
-  letter-spacing: -0.04em;
-  line-height: 1.1;
-}
-
-/* Font family utilities */
-.font-headline {
-  font-family: 'Space Grotesk', sans-serif;
-}
-
-.font-label {
-  font-family: 'Manrope', sans-serif;
-}
-
-/* Frosted nav bar — slightly deeper than sidebar */
-.frosted-nav {
-  background: rgba(10, 10, 13, 0.75);
-  backdrop-filter: blur(32px);
-  -webkit-backdrop-filter: blur(32px);
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.04),
-    0 0 40px rgba(205, 150, 255, 0.04);
-}
-
-/* Sidebar surface — noticeably lighter than main background */
-.sidebar-surface {
-  background: #141418;
-  border-right: 1px solid #252330;
-}
-
-/* Sidebar active nav item — left border + gradient fade */
 .sidebar-nav-active {
   position: relative;
-  background: linear-gradient(90deg, rgba(205,150,255,0.12) 0%, rgba(205,150,255,0.04) 60%, transparent 100%);
-  color: #cd96ff;
+  background: #EEF2FF;
+  color: #1B4FD8;
 }
 .sidebar-nav-active::before {
   content: "";
   position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
+  left: 0; top: 0; bottom: 0;
   width: 2px;
   border-radius: 0 2px 2px 0;
-  background: #cd96ff;
-  box-shadow: 0 0 8px rgba(205, 150, 255, 0.6);
+  background: #1B4FD8;
 }
 
-/* Chat area — full dark, no competing texture */
-.chat-surface {
-  background: #0e0e11;
+.frosted-nav {
+  background: #FFFFFF;
+  border-bottom: 1px solid #E2E0DC;
 }
 
-/* Operator section panels */
-.section-panel {
-  background: rgba(20, 20, 24, 0.40);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-radius: var(--radius-2xl);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  padding: 1.5rem;
+.sidebar-surface {
+  background: #F2F1EF;
+  border-right: 1px solid #E2E0DC;
+}
+
+.text-gradient {
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  background-image: linear-gradient(to right, #1B4FD8, #3B82F6);
+}
+
+.font-headline { font-family: 'Space Grotesk', sans-serif; }
+.font-label { font-family: 'Manrope', sans-serif; }
+
+.beacon-pulse {
+  animation: beacon-pulse-anim 2s ease-in-out infinite;
+}
+@keyframes beacon-pulse-anim {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(1.6); }
 }
