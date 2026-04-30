@@ -77,7 +77,7 @@ const PERSONA_IMAGES = [
   "/images/persona-consultant.png",
 ];
 const PERSONA_GLOWS   = ["rgba(205,150,255,0.30)", "rgba(64,206,243,0.25)", "rgba(255,106,159,0.22)"];
-const PERSONA_ACCENTS = ["#cd96ff", "#1B4FD8", "#ff6a9f"];
+const PERSONA_ACCENTS = ["#1B4FD8", "#3B82F6", "#6366F1"];
 
 function OperatorCard({ operator, onClick }: { operator: Operator; onClick: () => void }) {
   const initial = operator.name.charAt(0).toUpperCase();
