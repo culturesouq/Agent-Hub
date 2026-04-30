@@ -1499,6 +1499,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
               continue;
             } catch (err: any) {
               finalContent = soulFailureResponse(operator, 'http_request', httpArgs.url, err.message);
+              fullContent += finalContent;
+              res.write(`data: ${JSON.stringify({ delta: finalContent })}\n\n`);
               break; // never goes back to LLM
             }
           }
@@ -1519,6 +1521,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       // Soul-based fallback — if loop produced no user-facing text, respond in operator's voice
       if (!finalContent || finalContent.trim().length < 5) {
         finalContent = soulFailureResponse(operator, 'execution', 'tool loop', 'No result was produced.');
+        fullContent += finalContent;
+        res.write(`data: ${JSON.stringify({ delta: finalContent })}\n\n`);
       }
 
       finalTokens = completionTokens;
