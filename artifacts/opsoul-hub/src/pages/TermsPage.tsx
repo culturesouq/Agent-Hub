@@ -77,7 +77,7 @@ export default function TermsPage() {
           </p>
         </header>
 
-        <div className="bg-white border border-border p-8 md:p-12 rounded-2xl shadow-[0_0_80px_rgba(0,0,0,0.4)] space-y-10">
+        <div className="bg-white border border-border p-8 md:p-12 rounded-2xl shadow-sm space-y-10">
           {sections.map((section) => (
             <section key={section.title}>
               <h2 className="font-headline text-xl font-semibold text-primary mb-3 tracking-tight">

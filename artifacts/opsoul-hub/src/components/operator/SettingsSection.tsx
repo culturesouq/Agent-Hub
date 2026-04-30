@@ -159,7 +159,7 @@ function ApiCopyButton({ text, title }: { text: string; title?: string }) {
 function PublicEndpointBlock() {
   return (
     <div className="relative group">
-      <pre className="bg-black/40 border border-border/30 rounded-xl p-4 text-xs font-mono text-slate-300 overflow-x-auto whitespace-pre leading-relaxed">
+      <pre className="bg-muted border border-border rounded-xl p-4 text-xs font-mono text-foreground overflow-x-auto whitespace-pre leading-relaxed">
         {PUBLIC_ENDPOINT_BLOCK}
       </pre>
       <div className="absolute top-2 right-2">
@@ -185,7 +185,7 @@ function KeyRevealCard({ slot, onDone }: { slot: ApiSlot & { apiKey: string }; o
           It will <span className="text-amber-500 font-bold">never be shown again</span>. We do not store it.
         </p>
         <div className="relative group mb-3">
-          <div className="bg-black/50 border border-amber-500/30 rounded-lg px-3 py-2.5 font-mono text-xs text-amber-300 break-all leading-relaxed pr-10">
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2.5 font-mono text-xs text-amber-700 break-all leading-relaxed pr-10">
             {slot.apiKey}
           </div>
           <button

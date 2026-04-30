@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
 import PublicNav from "@/components/public/PublicNav";
 import PublicFooter from "@/components/public/PublicFooter";
-import NebulaBlobs from "@/components/ui/NebulaBlobs";
+
 
 interface PublicLayoutProps {
   children: ReactNode;
@@ -13,8 +13,6 @@ export default function PublicLayout({ children, className = "" }: PublicLayoutP
     <div
       className={`min-h-screen bg-background text-on-surface selection:bg-primary-container selection:text-on-primary-container relative overflow-hidden ${className}`}
     >
-      <NebulaBlobs />
-
       <div className="fixed inset-0 bg-gradient-to-b from-transparent via-transparent to-background pointer-events-none z-0" />
       <PublicNav />
       {children}

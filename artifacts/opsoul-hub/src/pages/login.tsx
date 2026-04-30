@@ -16,74 +16,31 @@ function GoogleIcon() {
   );
 }
 
-function NebulaBackground() {
-  return (
-    <>
-      <div
-        className="fixed pointer-events-none"
-        style={{
-          top: "-10%", left: "-10%", width: "60%", height: "60%",
-          background: "radial-gradient(circle at center, rgba(205,150,255,0.15) 0%, transparent 70%)",
-        }}
-      />
-      <div
-        className="fixed pointer-events-none"
-        style={{
-          bottom: "-10%", right: "-10%", width: "60%", height: "60%",
-          background: "radial-gradient(circle at center, rgba(64,206,243,0.10) 0%, transparent 70%)",
-        }}
-      />
-    </>
-  );
-}
-
 function PageHeader({ heading, subtitle }: { heading: string; subtitle: string }) {
   return (
     <div className="flex flex-col items-center text-center mb-8">
-      <div
-        className="w-16 h-16 rounded-full p-[2px] flex items-center justify-center mb-3"
-        style={{
-          background: "linear-gradient(135deg, #cd96ff, #40cef3)",
-          boxShadow: "0 0 24px rgba(205,150,255,0.45)",
-        }}
-      >
-        <div
-          className="w-full h-full rounded-full flex items-center justify-center"
-          style={{ background: "#0e0e11" }}
+      <div className="w-16 h-16 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mb-3">
+        <span
+          className="material-symbols-outlined text-3xl text-primary"
+          style={{ fontVariationSettings: "'FILL' 1" }}
         >
-          <span
-            className="material-symbols-outlined text-3xl"
-            style={{ color: "#cd96ff", fontVariationSettings: "'FILL' 1" }}
-          >
-            deployed_code
-          </span>
-        </div>
+          deployed_code
+        </span>
       </div>
-      <span
-        className="font-headline text-lg font-bold tracking-tight mb-2"
-        style={{
-          background: "linear-gradient(90deg, #cd96ff, #40cef3)",
-          WebkitBackgroundClip: "text",
-          WebkitTextFillColor: "transparent",
-          backgroundClip: "text",
-        }}
-      >
+      <span className="font-headline text-lg font-bold tracking-tight mb-2 text-primary">
         OpSoul
       </span>
-      <h2
-        className="font-headline text-2xl md:text-3xl font-medium tracking-tight mb-2"
-        style={{ color: "#f3eff5" }}
-      >
+      <h2 className="font-headline text-2xl md:text-3xl font-medium tracking-tight mb-2 text-foreground">
         {heading}
       </h2>
-      <p className="text-sm leading-relaxed font-body max-w-[280px]" style={{ color: "#adaaaf" }}>
+      <p className="text-sm leading-relaxed font-body max-w-[280px] text-muted-foreground">
         {subtitle}
       </p>
     </div>
   );
 }
 
-function NebulaInput({
+function LightInput({
   id, type = "text", label, placeholder, value, onChange, required, autoComplete, "data-testid": testId,
 }: {
   id: string;
@@ -100,8 +57,7 @@ function NebulaInput({
     <div className="space-y-1.5">
       <label
         htmlFor={id}
-        className="block font-label text-[10px] font-bold uppercase tracking-[0.22em] px-1"
-        style={{ color: "#adaaaf" }}
+        className="block font-label text-[10px] font-bold uppercase tracking-[0.22em] px-1 text-muted-foreground"
       >
         {label}
       </label>
@@ -114,21 +70,7 @@ function NebulaInput({
         required={required}
         autoComplete={autoComplete}
         data-testid={testId}
-        className="w-full h-14 rounded-xl px-5 text-sm outline-none transition-all duration-200"
-        style={{
-          background: "rgba(0,0,0,0.5)",
-          border: "1px solid rgba(255,255,255,0.06)",
-          color: "#f3eff5",
-          caretColor: "#cd96ff",
-        }}
-        onFocus={(e) => {
-          e.currentTarget.style.background = "rgba(31,31,36,0.8)";
-          e.currentTarget.style.boxShadow = "0 0 0 2px rgba(64,206,243,0.25), 0 0 12px rgba(64,206,243,0.10)";
-        }}
-        onBlur={(e) => {
-          e.currentTarget.style.background = "rgba(0,0,0,0.5)";
-          e.currentTarget.style.boxShadow = "none";
-        }}
+        className="w-full h-14 rounded-xl px-5 text-sm outline-none transition-all duration-200 bg-muted/40 border border-border text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20"
       />
     </div>
   );
@@ -178,36 +120,19 @@ export default function Login() {
     }
   };
 
-  const cardStyle: React.CSSProperties = {
-    background: "rgba(31, 31, 36, 0.45)",
-    backdropFilter: "blur(40px)",
-    WebkitBackdropFilter: "blur(40px)",
-    boxShadow: "0 0 0 1px rgba(255,255,255,0.06) inset, 0 20px 60px rgba(0,0,0,0.5)",
-    borderRadius: "2rem",
-  };
-
   if (showForgot) {
     return (
-      <div
-        className="min-h-screen flex flex-col items-center justify-center p-6 relative overflow-hidden"
-        style={{ background: "#020203" }}
-      >
-        <NebulaBackground />
+      <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-background relative overflow-hidden">
         <main className="w-full max-w-[460px] z-10">
           <div className="mb-5 text-center">
             <Link href="/">
-              <span
-                className="inline-flex items-center gap-1.5 text-xs font-label font-medium transition-colors cursor-pointer"
-                style={{ color: "#767579" }}
-                onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "#f3eff5")}
-                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "#767579")}
-              >
+              <span className="inline-flex items-center gap-1.5 text-xs font-label font-medium transition-colors cursor-pointer text-muted-foreground hover:text-foreground">
                 ← OpSoul
               </span>
             </Link>
           </div>
 
-          <div style={cardStyle} className="p-10 flex flex-col items-center">
+          <div className="bg-white border border-border rounded-[2rem] p-10 flex flex-col items-center shadow-sm">
             <PageHeader
               heading="Forgot your password?"
               subtitle="We'll send a reset link to your email."
@@ -215,17 +140,17 @@ export default function Login() {
 
             {forgotDone ? (
               <div className="flex flex-col items-center gap-3 py-6 text-center">
-                <CheckCircle2 className="w-10 h-10" style={{ color: "#1B4FD8" }} />
-                <p className="font-label font-semibold" style={{ color: "#f3eff5" }}>
+                <CheckCircle2 className="w-10 h-10 text-primary" />
+                <p className="font-label font-semibold text-foreground">
                   Check your inbox
                 </p>
-                <p className="text-sm font-body" style={{ color: "#adaaaf" }}>
+                <p className="text-sm font-body text-muted-foreground">
                   If that email has a password-based account, a reset link has been sent.
                 </p>
               </div>
             ) : (
               <form onSubmit={handleForgotPassword} className="w-full flex flex-col gap-6">
-                <NebulaInput
+                <LightInput
                   id="forgot-email"
                   type="email"
                   label="Email"
@@ -238,12 +163,7 @@ export default function Login() {
                 <button
                   type="submit"
                   disabled={forgotLoading}
-                  className="w-full h-14 rounded-full font-label font-bold tracking-tight text-base flex items-center justify-center gap-2 transition-transform duration-200 hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{
-                    background: "linear-gradient(90deg, #cd96ff, #c280ff)",
-                    color: "#1a0033",
-                    boxShadow: "0 8px 24px rgba(205,150,255,0.25)",
-                  }}
+                  className="w-full h-14 rounded-full font-label font-bold tracking-tight text-base flex items-center justify-center gap-2 transition-transform duration-200 hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed bg-primary text-primary-foreground hover:bg-primary/90"
                 >
                   {forgotLoading && <Loader2 className="w-4 h-4 animate-spin" />}
                   {forgotLoading ? "Sending…" : "Send reset link"}
@@ -256,10 +176,7 @@ export default function Login() {
             <button
               type="button"
               onClick={() => setShowForgot(false)}
-              className="text-sm font-label transition-colors"
-              style={{ color: "#adaaaf" }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "#f3eff5")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "#adaaaf")}
+              className="text-sm font-label transition-colors text-muted-foreground hover:text-foreground"
             >
               ← Back to sign in
             </button>
@@ -270,41 +187,24 @@ export default function Login() {
   }
 
   return (
-    <div
-      className="min-h-screen flex flex-col items-center justify-center p-6 relative overflow-hidden"
-      style={{ background: "#020203" }}
-    >
-      <NebulaBackground />
-
+    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-background relative overflow-hidden">
       <main className="w-full max-w-[480px] z-10">
         <div className="mb-5 text-center">
           <Link href="/">
-            <span
-              className="inline-flex items-center gap-1.5 text-xs font-label font-medium transition-colors cursor-pointer"
-              style={{ color: "#767579" }}
-              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "#f3eff5")}
-              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "#767579")}
-            >
+            <span className="inline-flex items-center gap-1.5 text-xs font-label font-medium transition-colors cursor-pointer text-muted-foreground hover:text-foreground">
               ← OpSoul
             </span>
           </Link>
         </div>
 
-        <div style={cardStyle} className="p-10 md:p-12 flex flex-col items-center">
+        <div className="bg-white border border-border rounded-[2rem] p-10 md:p-12 flex flex-col items-center shadow-sm">
           <PageHeader
             heading="Sign in"
             subtitle="Sign in to your OpSoul workspace."
           />
 
           {urlError && (
-            <div
-              className="w-full rounded-xl px-4 py-3 text-sm font-label text-center mb-6"
-              style={{
-                background: "rgba(167,0,56,0.15)",
-                border: "1px solid rgba(167,0,56,0.30)",
-                color: "#ffb4ab",
-              }}
-            >
+            <div className="w-full rounded-xl px-4 py-3 text-sm font-label text-center mb-6 bg-destructive/10 border border-destructive/30 text-destructive">
               {urlError === "google_cancelled"
                 ? "Google sign-in was cancelled."
                 : urlError === "registration_closed"
@@ -317,14 +217,7 @@ export default function Login() {
           <button
             type="button"
             onClick={handleGoogleSignIn}
-            className="w-full flex items-center justify-center gap-3 h-14 rounded-xl font-label font-medium text-sm transition-all duration-200 mb-6"
-            style={{
-              background: "#18181c",
-              border: "1px solid rgba(255,255,255,0.07)",
-              color: "#f3eff5",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "#262529")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "#18181c")}
+            className="w-full flex items-center justify-center gap-3 h-14 rounded-xl font-label font-medium text-sm transition-all duration-200 mb-6 bg-muted border border-border text-foreground hover:bg-muted/80"
           >
             <GoogleIcon />
             Continue with Google
@@ -332,19 +225,16 @@ export default function Login() {
 
           {/* Divider */}
           <div className="w-full flex items-center gap-4 mb-6">
-            <div className="h-px flex-1" style={{ background: "rgba(72,71,76,0.40)" }} />
-            <span
-              className="font-label font-bold uppercase tracking-[0.22em]"
-              style={{ fontSize: "10px", color: "#767579" }}
-            >
+            <div className="h-px flex-1 bg-border" />
+            <span className="font-label font-bold uppercase tracking-[0.22em] text-[10px] text-muted-foreground">
               or continue with email
             </span>
-            <div className="h-px flex-1" style={{ background: "rgba(72,71,76,0.40)" }} />
+            <div className="h-px flex-1 bg-border" />
           </div>
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="w-full flex flex-col gap-5">
-            <NebulaInput
+            <LightInput
               id="email"
               type="email"
               label="Email"
@@ -360,18 +250,14 @@ export default function Login() {
               <div className="flex items-center justify-between px-1">
                 <label
                   htmlFor="password"
-                  className="font-label text-[10px] font-bold uppercase tracking-[0.22em]"
-                  style={{ color: "#adaaaf" }}
+                  className="font-label text-[10px] font-bold uppercase tracking-[0.22em] text-muted-foreground"
                 >
                   Password
                 </label>
                 <button
                   type="button"
                   onClick={() => setShowForgot(true)}
-                  className="font-label text-[11px] transition-colors"
-                  style={{ color: "#767579" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = "#f3eff5")}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = "#767579")}
+                  className="font-label text-[11px] transition-colors text-muted-foreground hover:text-foreground"
                 >
                   Forgot your password?
                 </button>
@@ -384,21 +270,7 @@ export default function Login() {
                 required
                 autoComplete="current-password"
                 data-testid="input-password"
-                className="w-full h-14 rounded-xl px-5 text-sm outline-none transition-all duration-200"
-                style={{
-                  background: "rgba(0,0,0,0.5)",
-                  border: "1px solid rgba(255,255,255,0.06)",
-                  color: "#f3eff5",
-                  caretColor: "#cd96ff",
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.background = "rgba(31,31,36,0.8)";
-                  e.currentTarget.style.boxShadow = "0 0 0 2px rgba(64,206,243,0.25), 0 0 12px rgba(64,206,243,0.10)";
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.background = "rgba(0,0,0,0.5)";
-                  e.currentTarget.style.boxShadow = "none";
-                }}
+                className="w-full h-14 rounded-xl px-5 text-sm outline-none transition-all duration-200 bg-muted/40 border border-border text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
             </div>
 
@@ -406,12 +278,7 @@ export default function Login() {
               type="submit"
               disabled={loading}
               data-testid="button-submit"
-              className="w-full h-14 rounded-full font-label font-bold tracking-tight text-base flex items-center justify-center gap-2 transition-transform duration-300 hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed mt-1"
-              style={{
-                background: "linear-gradient(90deg, #cd96ff, #c280ff)",
-                color: "#1a0033",
-                boxShadow: "0 8px 28px rgba(205,150,255,0.25)",
-              }}
+              className="w-full h-14 rounded-full font-label font-bold tracking-tight text-base flex items-center justify-center gap-2 transition-transform duration-300 hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed mt-1 bg-primary text-primary-foreground hover:bg-primary/90"
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
               {loading ? "Please wait…" : "Sign in"}
@@ -425,25 +292,14 @@ export default function Login() {
             <a
               key={label}
               href={`https://opsoul.io/${label.toLowerCase()}`}
-              className="font-label font-bold uppercase transition-colors"
-              style={{ fontSize: "11px", letterSpacing: "0.2em", color: "rgba(118,117,121,0.6)" }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "#cd96ff")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(118,117,121,0.6)")}
+              className="font-label font-bold uppercase transition-colors text-muted-foreground/60 hover:text-primary"
+              style={{ fontSize: "11px", letterSpacing: "0.2em" }}
             >
               {label}
             </a>
           ))}
         </footer>
       </main>
-
-      <div
-        className="absolute bottom-0 left-0 w-full pointer-events-none"
-        style={{
-          height: "307px",
-          background: "linear-gradient(to top, #020203, transparent)",
-          opacity: 0.5,
-        }}
-      />
     </div>
   );
 }

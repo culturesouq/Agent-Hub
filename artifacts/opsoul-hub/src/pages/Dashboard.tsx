@@ -12,7 +12,7 @@ import {
   AlertTriangle, ChevronRight, BarChart3, Lock,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import NebulaBlobs from "@/components/ui/NebulaBlobs";
+
 
 type Section = "operators" | "account" | "analytics" | "billing" | "platform";
 
@@ -644,7 +644,6 @@ export default function Dashboard() {
 
         {/* Content */}
         <main className="flex-1 overflow-y-auto bg-background relative">
-          <NebulaBlobs />
           <div className="relative z-10 p-4 md:p-8 max-w-5xl mx-auto">
             {renderContent()}
           </div>

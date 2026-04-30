@@ -50,7 +50,7 @@ function CodeBlock({ code }: { code: string }) {
   };
   return (
     <div className="relative group">
-      <pre className="bg-black/40 border border-border/30 rounded-lg p-4 text-xs font-mono text-slate-300 overflow-x-auto whitespace-pre-wrap leading-relaxed">
+      <pre className="bg-muted border border-border rounded-lg p-4 text-xs font-mono text-foreground overflow-x-auto whitespace-pre-wrap leading-relaxed">
         {code}
       </pre>
       <button
@@ -146,7 +146,7 @@ function KeyRevealModal({
           This is shown <span className="text-amber-500 font-bold">once only</span>. Copy it now — we do not store it.
         </p>
         <div className="relative group mb-4">
-          <div className="bg-black/50 border border-amber-500/30 rounded-lg p-3 font-mono text-xs text-amber-300 break-all leading-relaxed">
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 font-mono text-xs text-amber-700 break-all leading-relaxed">
             {slot.apiKey}
           </div>
           <button

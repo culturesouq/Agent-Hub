@@ -78,7 +78,7 @@ export default function ContactPage() {
 
         {/* Form */}
         <section className="lg:col-span-7">
-          <div className="bg-white border border-border p-6 shadow-[0_0_80px_rgba(0,0,0,0.5)] relative overflow-hidden rounded-2xl">
+          <div className="bg-white border border-border p-6 shadow-sm relative overflow-hidden rounded-2xl">
             <div className="absolute -top-24 -right-24 w-64 h-64 bg-primary/10 blur-[100px] rounded-full" />
             {submitted ? (
               <div className="relative z-10 flex flex-col items-center justify-center py-20 gap-6">

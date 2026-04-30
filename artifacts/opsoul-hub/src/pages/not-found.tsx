@@ -1,14 +1,7 @@
 import { Link } from "wouter";
-import NebulaBlobs from "@/components/ui/NebulaBlobs";
-
 export default function NotFound() {
   return (
     <div className="min-h-screen bg-background text-on-surface flex items-center justify-center relative overflow-hidden">
-      <NebulaBlobs />
-      <div
-        className="fixed inset-0 pointer-events-none z-0"
-        style={{ backgroundImage: "radial-gradient(rgba(205,150,255,0.03) 1px, transparent 0)", backgroundSize: "24px 24px" }}
-      />
 
       <div className="relative z-10 text-center px-6 max-w-xl">
         <div className="flex items-center justify-center gap-3 mb-8">
@@ -18,8 +11,7 @@ export default function NotFound() {
           </span>
         </div>
 
-        <h1 className="font-headline text-[10rem] leading-none font-black tracking-tighter text-primary mb-2"
-          style={{ textShadow: "0 0 80px rgba(205,150,255,0.3)" }}>
+        <h1 className="font-headline text-[10rem] leading-none font-black tracking-tighter text-primary mb-2">
           404
         </h1>
 

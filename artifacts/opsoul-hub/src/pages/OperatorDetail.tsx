@@ -26,7 +26,7 @@ import KbSection from "@/components/operator/KbSection";
 import FilesSection from "@/components/operator/FilesSection";
 import TelegramChannelSection from "@/components/operator/TelegramChannelSection";
 import WhatsAppChannelSection from "@/components/operator/WhatsAppChannelSection";
-import NebulaBlobs from "@/components/ui/NebulaBlobs";
+
 
 const PERSONA_IMAGES = [
   "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=400&q=80",
@@ -417,7 +417,6 @@ export default function OperatorDetail({ id }: { id: string }) {
 
         {/* Content */}
         <main className={`flex-1 bg-background relative ${activeTab === "chat" ? "overflow-hidden" : "overflow-y-auto"}`}>
-          <NebulaBlobs />
           <div className={activeTab === "chat"
             ? "h-full w-full flex flex-col"
             : "p-4 md:p-8 max-w-5xl mx-auto"

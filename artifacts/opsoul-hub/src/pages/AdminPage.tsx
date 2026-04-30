@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
 import { apiFetch } from "@/lib/api";
-import NebulaBlobs from "@/components/ui/NebulaBlobs";
+
 
 interface PlatformStats {
   totalOwners: number;
@@ -467,9 +467,6 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground relative overflow-hidden">
-      <NebulaBlobs />
-
-
       {/* Inspect modal */}
       {inspectOp && (
         <div className="fixed inset-0 z-50 flex items-start justify-end">

@@ -395,7 +395,7 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
               <div className="space-y-3">
                 {searchResults.map((res, i) => (
                   <div key={i} className="p-4 border border-border/50 rounded-lg bg-card/20 relative overflow-hidden group hover:bg-card/40 transition-colors">
-                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-accent0 group-hover:bg-primary transition-colors" />
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary/50 group-hover:bg-primary transition-colors" />
                     <div className="flex justify-between items-start mb-2">
                       <div className="flex gap-2 items-center">
                         <Badge variant="outline" className="font-mono text-[10px] border-primary/30 text-primary">
