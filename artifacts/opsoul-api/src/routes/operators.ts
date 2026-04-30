@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import crypto from 'crypto';
 import { db } from '@workspace/db';
-import { operatorsTable, conversationsTable, messagesTable } from '@workspace/db';
+import { operatorsTable, conversationsTable, messagesTable, operatorKbTable } from '@workspace/db';
 import { resolveScope } from '../utils/scopeResolver.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import {
@@ -269,11 +269,19 @@ router.post('/blank', async (req: Request, res: Response): Promise<void> => {
     tokenCount: 15,
   });
 
+  // Full compensating cleanup — deletes all rows created for this operator in dependency-safe order
+  const rollbackAll = async (label: string, err: unknown): Promise<void> => {
+    console.error(`[blank] ${label} — rolling back all created rows for operator ${op.id}:`, err);
+    await db.delete(operatorKbTable).where(eq(operatorKbTable.operatorId, op.id));
+    await db.delete(messagesTable).where(eq(messagesTable.operatorId, op.id));
+    await db.delete(conversationsTable).where(eq(conversationsTable.operatorId, op.id));
+    await db.delete(operatorsTable).where(eq(operatorsTable.id, op.id));
+  };
+
   try {
     await seedAgencyCore(op.id, ownerId);
   } catch (err) {
-    console.error('[agency-core] seed failed — rolling back operator:', err);
-    await db.delete(operatorsTable).where(eq(operatorsTable.id, op.id));
+    await rollbackAll('seedAgencyCore failed', err);
     res.status(500).json({ error: 'Operator creation failed during agency seed. No record created.' });
     return;
   }
@@ -281,8 +289,7 @@ router.post('/blank', async (req: Request, res: Response): Promise<void> => {
   try {
     await seedPlatformKb(op.id, ownerId);
   } catch (err) {
-    console.warn('[platformKbSeed] failed — rolling back operator:', err);
-    await db.delete(operatorsTable).where(eq(operatorsTable.id, op.id));
+    await rollbackAll('seedPlatformKb failed', err);
     res.status(500).json({ error: 'Operator creation failed during KB seed. No record created.' });
     return;
   }
