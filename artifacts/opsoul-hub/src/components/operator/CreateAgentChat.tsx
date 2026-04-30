@@ -37,7 +37,8 @@ export default function CreateAgentChat({ open, onClose }: Props) {
       });
 
       queryClient.invalidateQueries({ queryKey: ["operators"] });
-      handleClose();
+      setPurpose("");
+      onClose();
       setLocation(`/operators/${result.operatorId}`);
     } catch (err: any) {
       toast({ title: "Something went wrong", description: err.message, variant: "destructive" });
