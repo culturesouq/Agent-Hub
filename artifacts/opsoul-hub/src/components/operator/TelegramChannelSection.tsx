@@ -129,7 +129,7 @@ export default function TelegramChannelSection({ operatorId }: { operatorId: str
   const webhookError = connected?.appSchema?.webhookError as string | undefined;
 
   return (
-    <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300 bg-white border border-border rounded-2xl border border-border/30 p-6">
+    <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300 bg-white rounded-2xl border border-border/30 p-6">
       {/* Header */}
       <div className="flex items-center gap-3 border-b border-border/50 pb-4">
         <TelegramLogo />

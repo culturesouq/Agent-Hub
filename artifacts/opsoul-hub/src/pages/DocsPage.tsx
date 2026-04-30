@@ -172,7 +172,7 @@ export default function DocsPage() {
                   Getting started is done entirely through the dashboard — no CLI or installation required. Sign in, create a new Operator, define its Soul, and it's ready to work with you immediately.
                 </p>
                 <div className="bg-surface-container-lowest rounded-2xl overflow-hidden border border-outline-variant/10 shadow-2xl">
-                  <div className="flex items-center justify-between px-6 py-3 bg-white/5 border-b border-outline-variant/10">
+                  <div className="flex items-center justify-between px-6 py-3 bg-muted border-b border-outline-variant/10">
                     <div className="flex gap-1.5">
                       <div className="w-2 h-2 rounded-full bg-red-500/50" />
                       <div className="w-2 h-2 rounded-full bg-yellow-500/50" />

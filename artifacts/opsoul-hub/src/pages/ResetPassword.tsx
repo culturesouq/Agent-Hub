@@ -64,7 +64,7 @@ export default function ResetPassword() {
           </p>
         </div>
 
-        <div className="bg-white border border-border rounded-2xl border border-border/40 p-8">
+        <div className="bg-white rounded-2xl border border-border/40 p-8">
           {!token ? (
             <p className="text-center text-sm text-destructive font-label">
               Invalid or missing reset token. Please request a new password reset link.

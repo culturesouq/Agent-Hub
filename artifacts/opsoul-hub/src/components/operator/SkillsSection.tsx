@@ -80,7 +80,7 @@ export default function SkillsSection({ operatorId, archetype }: { operatorId: s
   const isInstalled = (platformId: string) => opSkills?.some((s: OperatorSkill) => s.skillId === platformId);
 
   return (
-    <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300 bg-white border border-border rounded-2xl border border-border/30 p-6">
+    <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300 bg-white rounded-2xl border border-border/30 p-6">
       <div className="flex items-center gap-2 border-b border-border/50 pb-4">
         <Download className="w-5 h-5 text-primary" />
         <div>

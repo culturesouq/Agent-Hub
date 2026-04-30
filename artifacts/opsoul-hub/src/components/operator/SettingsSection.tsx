@@ -620,7 +620,7 @@ print(response.json()["content"])`;
   const show = (s: "model" | "secrets" | "api" | "evolution" | "danger" | "safemode") => !section || section === s;
 
   return (
-    <div className="space-y-10 animate-in fade-in zoom-in-95 duration-300 max-w-2xl bg-white border border-border rounded-2xl border border-border/30 p-6">
+    <div className="space-y-10 animate-in fade-in zoom-in-95 duration-300 max-w-2xl bg-white rounded-2xl border border-border/30 p-6">
       {revealSlot && <KeyRevealCard slot={revealSlot} onDone={() => setRevealSlot(null)} />}
 
       {show("model") && (

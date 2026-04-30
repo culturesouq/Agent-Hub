@@ -220,7 +220,7 @@ function ConnectorCard({
   return (
     <div className={`rounded-xl border bg-gradient-to-br ${connector.color} ${connector.border} p-5 flex flex-col gap-4 transition-all duration-200`}>
       <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center shrink-0 border border-border/20">
+        <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0 border border-border/20">
           {connector.logo}
         </div>
         <div className="min-w-0 flex-1">
@@ -549,7 +549,7 @@ export default function IntegrationsSection({ operatorId }: { operatorId: string
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in zoom-in-95 duration-300 bg-white border border-border rounded-2xl border border-border/30 p-6">
+    <div className="space-y-8 animate-in fade-in zoom-in-95 duration-300 bg-white rounded-2xl border border-border/30 p-6">
       <div className="flex items-center gap-2 border-b border-border/50 pb-4">
         <Network className="w-5 h-5 text-primary" />
         <div>
@@ -581,7 +581,7 @@ export default function IntegrationsSection({ operatorId }: { operatorId: string
                 return (
                   <div className="rounded-xl border border-sky-500/20 bg-gradient-to-br from-sky-500/10 to-sky-500/5 hover:border-sky-500/40 p-5 flex flex-col gap-4 transition-all duration-200">
                     <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center shrink-0 border border-border/20">
+                      <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0 border border-border/20">
                         <TelegramLogo />
                       </div>
                       <div className="min-w-0 flex-1">
@@ -662,7 +662,7 @@ export default function IntegrationsSection({ operatorId }: { operatorId: string
                 return (
                   <div className="rounded-xl border border-green-500/20 bg-gradient-to-br from-green-500/10 to-green-500/5 hover:border-green-500/40 p-5 flex flex-col gap-4 transition-all duration-200">
                     <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center shrink-0 border border-border/20">
+                      <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0 border border-border/20">
                         <WhatsAppLogo />
                       </div>
                       <div className="min-w-0 flex-1">

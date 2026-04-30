@@ -84,7 +84,7 @@ function OperatorCard({ operator, onClick }: { operator: Operator; onClick: () =
   const idx     = operator.name.charCodeAt(0) % 3;
   return (
     <div
-      className="group relative overflow-hidden rounded-2xl border border-border/30 bg-white border border-border hover:border-primary/40 transition-all duration-500 cursor-pointer flex flex-col"
+      className="group relative overflow-hidden rounded-2xl border border-border/30 bg-white hover:border-primary/40 transition-all duration-500 cursor-pointer flex flex-col"
       onClick={onClick}
       data-testid={`card-operator-${operator.id}`}
     >
@@ -229,7 +229,7 @@ function AccountPanel() {
       </div>
 
       {/* Profile card */}
-      <div className="bg-white border border-border rounded-2xl border border-border/30 p-6 space-y-5">
+      <div className="bg-white rounded-2xl border border-border/30 p-6 space-y-5">
         <div className="flex items-center gap-2 border-b border-border/40 pb-4">
           <User className="w-4 h-4 text-muted-foreground" />
           <h3 className="font-headline font-bold text-base">Profile</h3>
@@ -267,7 +267,7 @@ function AccountPanel() {
       </div>
 
       {/* Change password card */}
-      <div className="bg-white border border-border rounded-2xl border border-border/30 p-6 space-y-5">
+      <div className="bg-white rounded-2xl border border-border/30 p-6 space-y-5">
         <div className="flex items-center gap-2 border-b border-border/40 pb-4">
           <Lock className="w-4 h-4 text-muted-foreground" />
           <h3 className="font-headline font-bold text-base">Change Password</h3>
@@ -329,7 +329,7 @@ function AccountPanel() {
 
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
-    <div className="bg-white border border-border rounded-xl border border-border/30 p-5 relative overflow-hidden">
+    <div className="bg-white rounded-xl border border-border/30 p-5 relative overflow-hidden">
       <div className="font-headline text-4xl font-bold text-primary mb-1" style={{ letterSpacing: "-0.04em" }}>{value}</div>
       <div className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">{label}</div>
       {sub && <div className="font-mono text-[11px] text-muted-foreground/60 mt-1">{sub}</div>}
@@ -375,7 +375,7 @@ function AnalyticsPanel({ operators }: { operators: Operator[] | undefined }) {
         <StatCard label="Member since" value={joined.split(" ").slice(-1)[0] ?? "—"} sub={joined} />
       </div>
 
-      <div className="bg-white border border-border rounded-2xl border border-border/30 p-6 space-y-4">
+      <div className="bg-white rounded-2xl border border-border/30 p-6 space-y-4">
         <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Operator Roster</h3>
         {count === 0 ? (
           <p className="font-mono text-sm text-muted-foreground">No operators yet.</p>
@@ -417,7 +417,7 @@ function BillingPanel() {
         <p className="text-muted-foreground mt-1 text-sm font-label">Your current subscription and usage limits</p>
       </div>
 
-      <div className="bg-white border border-border rounded-2xl border border-primary/20 p-6 space-y-5 relative overflow-hidden">
+      <div className="bg-white rounded-2xl border border-primary/20 p-6 space-y-5 relative overflow-hidden">
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -450,7 +450,7 @@ function BillingPanel() {
         </Button>
       </div>
 
-      <div className="bg-white border border-border rounded-2xl border border-border/30 p-5">
+      <div className="bg-white rounded-2xl border border-border/30 p-5">
         <p className="font-mono text-xs text-muted-foreground leading-relaxed">
           Founding operator pricing locks in at <span className="text-primary font-bold">$29/mo for life</span> when Pro launches. Your early access is reserved.
         </p>
@@ -467,7 +467,7 @@ function PlatformPanel() {
         <p className="text-muted-foreground mt-1 text-sm font-label">Advanced account configuration</p>
       </div>
 
-      <div className="bg-white border border-border rounded-2xl border border-border/30 p-6 space-y-4">
+      <div className="bg-white rounded-2xl border border-border/30 p-6 space-y-4">
         <div className="flex items-center gap-2 border-b border-border/40 pb-4">
           <Settings2 className="w-4 h-4 text-muted-foreground" />
           <h3 className="font-headline font-bold text-base">Preferences</h3>
@@ -477,7 +477,7 @@ function PlatformPanel() {
         </p>
       </div>
 
-      <div className="bg-white border border-border rounded-2xl border border-destructive/20 p-6 space-y-4 relative overflow-hidden">
+      <div className="bg-white rounded-2xl border border-destructive/20 p-6 space-y-4 relative overflow-hidden">
         <div className="absolute top-0 left-0 w-1 h-full bg-destructive/40" />
         <div className="flex items-center gap-2 border-b border-border/40 pb-4">
           <AlertTriangle className="w-4 h-4 text-destructive" />
