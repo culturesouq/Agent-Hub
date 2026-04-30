@@ -711,6 +711,17 @@ function buildSkillSecondPassMessages(
   ];
 }
 
+// ─── Soul-based failure response helper ──────────────────────────────────────
+
+function soulFailureResponse(operator: { rawIdentity?: string | null; name?: string | null }, tool: string, target: string, error: string): string {
+  const soul = operator.rawIdentity ?? '';
+  const isBrief = soul.length < 300 || /brief|concise|direct|short/i.test(soul);
+  if (isBrief) {
+    return `${tool} call to ${target} failed — ${error}. Waiting for your direction.`;
+  }
+  return `I attempted a ${tool} call to ${target}. It failed with: ${error}. I won't guess or retry blindly — let me know how you want to proceed.`;
+}
+
 // ─── Main route handler ──────────────────────────────────────────────────────
 
 router.post('/', async (req: Request, res: Response): Promise<void> => {
@@ -1470,25 +1481,26 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             let toolResultText: string;
             try {
               toolResultText = await executeHttpRequest(operator.id, httpArgs);
+              await db.insert(messagesTable).values({
+                id: crypto.randomUUID(),
+                conversationId: conv.id,
+                operatorId: operator.id,
+                role: 'system',
+                content: `[HTTP Response]\n${toolResultText}`,
+              });
+              loopMessages.push(
+                {
+                  role: 'assistant',
+                  content: iterContent || '',
+                  tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'http_request', arguments: iterToolCall.args } }],
+                },
+                { role: 'tool', content: `[HTTP Response]\n${toolResultText}`, tool_call_id: iterToolCall.id },
+              );
+              continue;
             } catch (err: any) {
-              toolResultText = `HTTP request failed: ${err.message}`;
+              finalContent = soulFailureResponse(operator, 'http_request', httpArgs.url, err.message);
+              break; // never goes back to LLM
             }
-            await db.insert(messagesTable).values({
-              id: crypto.randomUUID(),
-              conversationId: conv.id,
-              operatorId: operator.id,
-              role: 'system',
-              content: `[HTTP Response]\n${toolResultText}`,
-            });
-            loopMessages.push(
-              {
-                role: 'assistant',
-                content: iterContent || '',
-                tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'http_request', arguments: iterToolCall.args } }],
-              },
-              { role: 'tool', content: `[HTTP Response]\n${toolResultText}`, tool_call_id: iterToolCall.id },
-            );
-            continue;
           }
 
           finalContent = iterContent;
@@ -1504,18 +1516,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       // Hit max iterations without a clean final — use everything streamed
       if (!finalContent) finalContent = fullContent;
 
-      // Silence guard — force a summary pass if tool loop produced no user-facing text
+      // Soul-based fallback — if loop produced no user-facing text, respond in operator's voice
       if (!finalContent || finalContent.trim().length < 5) {
-        loopMessages.push({ role: 'user', content: 'Summarize what you just did and share the result.' });
-        for await (const chunk of streamChat(loopMessages, { ...chatOpts, tools: undefined })) {
-          if (chunk.delta) {
-            finalContent += chunk.delta;
-            res.write(`data: ${JSON.stringify({ delta: chunk.delta })}\n\n`);
-          }
-          if (chunk.done && chunk.usage) {
-            completionTokens += chunk.usage.completionTokens;
-          }
-        }
+        finalContent = soulFailureResponse(operator, 'execution', 'tool loop', 'No result was produced.');
       }
 
       finalTokens = completionTokens;
@@ -1554,6 +1557,15 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
     } catch (err) {
       cleanupKeepalive();
+      if (fullContent.trim().length > 0 && !messageSaved) {
+        await db.insert(messagesTable).values({
+          id: crypto.randomUUID(),
+          conversationId: conv.id,
+          operatorId: operator.id,
+          role: 'assistant',
+          content: fullContent + '\n\n[Response incomplete — connection dropped]',
+        }).catch(() => {});
+      }
       res.write(`data: ${JSON.stringify({ error: (err as Error).message })}\n\n`);
       res.end();
     }
