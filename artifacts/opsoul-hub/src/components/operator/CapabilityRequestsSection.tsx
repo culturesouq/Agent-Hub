@@ -100,7 +100,7 @@ export default function CapabilityRequestsSection({ operatorId }: { operatorId: 
       ) : (
         <div className="space-y-4">
           {requests?.map(req => (
-            <div key={req.id} className={`border rounded-lg p-4 flex flex-col gap-4 bg-card/30 ${!req.ownerResponse ? 'border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.05)]' : 'border-border/50 opacity-70'}`}>
+            <div key={req.id} className={`border rounded-lg p-4 flex flex-col gap-4 bg-card/30 ${!req.ownerResponse ? 'border-amber-500/50' : 'border-border/50 opacity-70'}`}>
               <div className="flex justify-between items-start">
                 <div className="flex items-center gap-3">
                   {!req.ownerResponse ? (

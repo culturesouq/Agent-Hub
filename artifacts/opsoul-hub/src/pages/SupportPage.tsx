@@ -124,14 +124,13 @@ export default function SupportPage() {
 
           {/* Still need help CTA */}
           <section className="mt-32 p-12 rounded-2xl bg-gradient-to-br from-primary/10 to-transparent border border-outline-variant/10 relative overflow-hidden">
-            <div className="absolute -right-20 -bottom-20 w-80 h-80 bg-primary/20 rounded-full blur-[100px]" />
             <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
               <div>
                 <h2 className="font-headline text-3xl font-bold mb-2 text-on-surface">Still need help?</h2>
                 <p className="text-on-surface-variant font-sans">Our support team is ready to assist with anything.</p>
               </div>
               <Link href="/contact">
-                <button className="bg-primary-container text-on-primary-container px-10 py-4 font-bold font-label hover:shadow-[0_0_30px_rgba(205,150,255,0.3)] transition-all whitespace-nowrap uppercase tracking-widest text-[10px]">
+                <button className="bg-primary-container text-on-primary-container px-10 py-4 font-bold font-label hover:opacity-90 transition-all whitespace-nowrap uppercase tracking-widest text-[10px]">
                   Contact Support
                 </button>
               </Link>

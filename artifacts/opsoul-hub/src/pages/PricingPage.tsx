@@ -60,10 +60,6 @@ export default function PricingPage() {
   return (
     <PublicLayout>
       <main className="relative z-10 pt-32 pb-24 px-6 md:px-8 max-w-7xl mx-auto">
-        {/* Ambient glows */}
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
-        <div className="absolute top-1/2 -left-40 w-96 h-96 bg-secondary/5 rounded-full blur-[120px] pointer-events-none" />
-
         {/* Hero */}
         <header className="mb-20 text-center md:text-left">
           <div className="flex items-center gap-3 mb-4 justify-center md:justify-start">
@@ -132,7 +128,7 @@ export default function PricingPage() {
               key={t.name}
               className={`bg-white border border-border p-6 rounded-2xl flex flex-col transition-all duration-300 ${
                 t.highlighted
-                  ? "border border-primary/30 relative scale-105 z-10 bg-surface-container/80 shadow-[0_0_40px_rgba(205,150,255,0.05)]"
+                  ? "border border-primary/30 relative scale-105 z-10 bg-surface-container/80 shadow-md"
                   : "border border-outline-variant/10 hover:bg-muted"
               }`}
             >

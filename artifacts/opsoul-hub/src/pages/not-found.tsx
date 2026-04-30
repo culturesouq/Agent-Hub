@@ -5,7 +5,7 @@ export default function NotFound() {
 
       <div className="relative z-10 text-center px-6 max-w-xl">
         <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-2 h-2 rounded-full bg-secondary shadow-[0_0_10px_#1B4FD8]" />
+          <div className="w-2 h-2 rounded-full bg-secondary" />
           <span className="font-label uppercase tracking-[0.2em] text-[10px] text-secondary font-semibold">
             Navigation Error — Signal Lost
           </span>

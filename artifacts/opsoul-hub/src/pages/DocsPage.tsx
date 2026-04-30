@@ -147,14 +147,14 @@ export default function DocsPage() {
                   <span className="w-8 h-px bg-primary/30" /> Core Architecture
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-white border border-border p-6 rounded-2xl border border-white/5 hover:border-primary/20 transition-colors">
+                  <div className="bg-white border border-border p-6 rounded-2xl hover:border-primary/20 transition-colors">
                     <span className="material-symbols-outlined text-primary text-3xl mb-4 block select-none">psychology</span>
                     <h3 className="text-lg font-headline font-medium text-on-surface mb-2">Autonomous Soul</h3>
                     <p className="text-sm text-on-surface-variant leading-relaxed font-sans">
                       Every Operator has a unique Soul — a configuration of identity, personality, mandate, and behavioral constraints that defines who they are and how they act.
                     </p>
                   </div>
-                  <div className="bg-white border border-border p-6 rounded-2xl border border-white/5 hover:border-primary/20 transition-colors">
+                  <div className="bg-white border border-border p-6 rounded-2xl hover:border-primary/20 transition-colors">
                     <span className="material-symbols-outlined text-secondary text-3xl mb-4 block select-none">memory</span>
                     <h3 className="text-lg font-headline font-medium text-on-surface mb-2">Persistent Memory</h3>
                     <p className="text-sm text-on-surface-variant leading-relaxed font-sans">
@@ -222,7 +222,7 @@ export default function DocsPage() {
                       Learn how to configure your Operator's Soul parameters to specialize in specific domains and high-level reasoning tasks.
                     </p>
                   </div>
-                  <a href="#doc-soul" className="bg-primary text-on-primary px-8 py-4 font-label uppercase tracking-widest text-xs font-black flex items-center gap-3 whitespace-nowrap hover:shadow-[0_0_30px_rgba(205,150,255,0.4)] transition-all">
+                  <a href="#doc-soul" className="bg-primary text-on-primary px-8 py-4 font-label uppercase tracking-widest text-xs font-black flex items-center gap-3 whitespace-nowrap hover:opacity-90 transition-all">
                     Configure Soul
                     <span className="material-symbols-outlined select-none">arrow_forward</span>
                   </a>
