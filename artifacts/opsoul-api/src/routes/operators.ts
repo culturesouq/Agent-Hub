@@ -269,8 +269,23 @@ router.post('/blank', async (req: Request, res: Response): Promise<void> => {
     tokenCount: 15,
   });
 
-  seedAgencyCore(op.id, ownerId).catch((err) => console.error('[agency-core] seed failed:', err));
-  seedPlatformKb(op.id, ownerId).catch((err) => console.warn('[platformKbSeed]', err?.message));
+  try {
+    await seedAgencyCore(op.id, ownerId);
+  } catch (err) {
+    console.error('[agency-core] seed failed — rolling back operator:', err);
+    await db.delete(operatorsTable).where(eq(operatorsTable.id, op.id));
+    res.status(500).json({ error: 'Operator creation failed during agency seed. No record created.' });
+    return;
+  }
+
+  try {
+    await seedPlatformKb(op.id, ownerId);
+  } catch (err) {
+    console.warn('[platformKbSeed] failed — rolling back operator:', err);
+    await db.delete(operatorsTable).where(eq(operatorsTable.id, op.id));
+    res.status(500).json({ error: 'Operator creation failed during KB seed. No record created.' });
+    return;
+  }
 
   res.status(201).json({ operatorId: op.id, conversationId: convId });
 });

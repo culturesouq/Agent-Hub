@@ -213,7 +213,7 @@ router.delete('/:chunkId', async (req: Request, res: Response): Promise<void> =>
   if (!operatorId) return;
 
   const [row] = await db
-    .select({ id: operatorKbTable.id })
+    .select({ id: operatorKbTable.id, isSystem: operatorKbTable.isSystem })
     .from(operatorKbTable)
     .where(
       and(
@@ -222,6 +222,11 @@ router.delete('/:chunkId', async (req: Request, res: Response): Promise<void> =>
       ),
     );
   if (!row) { res.status(404).json({ error: 'Chunk not found' }); return; }
+
+  if (row.isSystem) {
+    res.status(403).json({ error: 'Platform KB entries are read-only and cannot be deleted.' });
+    return;
+  }
 
   await db.delete(operatorKbTable).where(eq(operatorKbTable.id, row.id));
   res.json({ ok: true, deleted: row.id });
