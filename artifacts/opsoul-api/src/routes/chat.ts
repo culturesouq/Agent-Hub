@@ -717,7 +717,7 @@ function soulFailureResponse(operator: { rawIdentity?: string | null; name?: str
   const soul = operator.rawIdentity ?? '';
   const isBrief = soul.length < 300 || /brief|concise|direct|short/i.test(soul);
   if (isBrief) {
-    return `${tool} call to ${target} failed — ${error}. Waiting for your direction.`;
+    return `I tried a ${tool} call to ${target} — it failed with: ${error}. Waiting for your direction.`;
   }
   return `I attempted a ${tool} call to ${target}. It failed with: ${error}. I won't guess or retry blindly — let me know how you want to proceed.`;
 }
@@ -1481,28 +1481,29 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             let toolResultText: string;
             try {
               toolResultText = await executeHttpRequest(operator.id, httpArgs);
-              await db.insert(messagesTable).values({
-                id: crypto.randomUUID(),
-                conversationId: conv.id,
-                operatorId: operator.id,
-                role: 'system',
-                content: `[HTTP Response]\n${toolResultText}`,
-              });
-              loopMessages.push(
-                {
-                  role: 'assistant',
-                  content: iterContent || '',
-                  tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'http_request', arguments: iterToolCall.args } }],
-                },
-                { role: 'tool', content: `[HTTP Response]\n${toolResultText}`, tool_call_id: iterToolCall.id },
-              );
-              continue;
             } catch (err: any) {
               finalContent = soulFailureResponse(operator, 'http_request', httpArgs.url, err.message);
               fullContent += finalContent;
               res.write(`data: ${JSON.stringify({ delta: finalContent })}\n\n`);
               break; // never goes back to LLM
             }
+            // HTTP succeeded — persist and feed back into the loop
+            await db.insert(messagesTable).values({
+              id: crypto.randomUUID(),
+              conversationId: conv.id,
+              operatorId: operator.id,
+              role: 'system',
+              content: `[HTTP Response]\n${toolResultText}`,
+            });
+            loopMessages.push(
+              {
+                role: 'assistant',
+                content: iterContent || '',
+                tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'http_request', arguments: iterToolCall.args } }],
+              },
+              { role: 'tool', content: `[HTTP Response]\n${toolResultText}`, tool_call_id: iterToolCall.id },
+            );
+            continue;
           }
 
           finalContent = iterContent;
