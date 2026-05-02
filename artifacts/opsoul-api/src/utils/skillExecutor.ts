@@ -473,7 +473,14 @@ export async function executeSkill(
       }
     }
 
-    const hasLiveData = !!apiContext;
+    if (!apiContext) {
+      return {
+        skillName: trigger.name,
+        output: `Skill "${trigger.name}" could not run — the integration returned no data. The connection may not be active or the credentials may have expired.`,
+        success: false,
+        error: 'No live data returned from integration',
+      };
+    }
 
     const prompt = `You are executing a skill on behalf of an AI Operator. Your output will be used by the operator to report findings back to their owner.
 
@@ -483,10 +490,7 @@ Instructions: ${instructions}${outputFormatLine}
 Context from the Operator's response (what triggered this skill):
 ${trigger.extractedParams}${apiContext}
 
-${hasLiveData
-  ? `The live API data above contains raw information. Interpret it. Extract what matters. Return a clear, human-readable findings report — specific facts, key items, important numbers, relevant names. No raw JSON, no raw URLs, no API field names. Write as if you are an agent reporting back after completing research.`
-  : `You have no live data for this task. The integration is either not connected or did not return results. Execute this skill using your reasoning and general knowledge only.`
-}`;
+The live API data above contains raw information. Interpret it. Extract what matters. Return a clear, human-readable findings report — specific facts, key items, important numbers, relevant names. No raw JSON, no raw URLs, no API field names. Report results only. Be direct and specific.`;
 
     const result = await chatCompletion([{ role: 'user', content: prompt }], model);
     return { skillName: trigger.name, output: result.content, success: true };

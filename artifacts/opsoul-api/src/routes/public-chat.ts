@@ -40,19 +40,6 @@ const PublicChatSchema = z.object({
   })).optional(),
 });
 
-function buildSkillSecondPassMessages(
-  _systemPrompt: string,
-  messages: ChatMessage[],
-  firstResponse: string,
-  skillOutput: string,
-): ChatMessage[] {
-  return [
-    ...messages,
-    { role: 'assistant', content: firstResponse },
-    { role: 'system', content: `[Task completed — findings below]\n${skillOutput}` },
-    { role: 'user', content: `You just completed a task. Report back to the owner directly — as if you did the work yourself and are now sharing what you found.\n\nBe specific. Highlight what matters. Be conversational.\n\nNever mention tool names, skill names, raw JSON, raw URLs, or API responses. Just speak naturally as their operator who got something done.` },
-  ];
-}
 
 router.post('/', async (req: Request, res: Response): Promise<void> => {
   const slot = req.slot!;

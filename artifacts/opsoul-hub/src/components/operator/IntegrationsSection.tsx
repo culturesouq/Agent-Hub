@@ -107,6 +107,22 @@ function SlackLogo() {
 }
 
 
+function HubSpotLogo() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M18.164 7.932V5.768a1.69 1.69 0 0 0 .976-1.527V4.19A1.69 1.69 0 0 0 17.45 2.5h-.052a1.69 1.69 0 0 0-1.69 1.69v.051a1.69 1.69 0 0 0 .976 1.527v2.164a4.798 4.798 0 0 0-2.285.999L7.694 4.132a1.91 1.91 0 1 0-.898 1.217l6.574 4.724a4.816 4.816 0 0 0-.648 2.434 4.816 4.816 0 0 0 .842 2.718l-2.001 2.001a1.596 1.596 0 0 0-.428-.062 1.62 1.62 0 1 0 1.62 1.62 1.596 1.596 0 0 0-.062-.428l1.977-1.977A4.837 4.837 0 1 0 18.164 7.932z" fill="#FF7A59"/>
+    </svg>
+  );
+}
+
+function LinearLogo() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M3.2 14.338L9.71 20.8a9.608 9.608 0 0 1-6.51-6.462zM3 12.608l8.437 8.38a9.61 9.61 0 0 1-1.35.012L3.012 13.96A9.613 9.613 0 0 1 3 12.608zM3.372 10.555l10.123 10.063a9.653 9.653 0 0 1-1.218-.31L3.68 11.772a9.61 9.61 0 0 1-.308-1.217zm.79-1.842 11.175 11.11a9.628 9.628 0 0 1-.928-.536L4.699 9.248a9.626 9.626 0 0 1-.537-.935zm1.556-1.603 11.704 11.635a9.675 9.675 0 0 1-.661-.748L5.719 7.771a9.667 9.667 0 0 1-.748-.661zm2.098-1.434 10.79 10.722a9.608 9.608 0 0 1-6.466 2.504L3.993 10.35a9.609 9.609 0 0 1 3.823-8.674zM9.49 3.206l11.348 11.278a9.608 9.608 0 0 1-1.012 1.617L8.084 4.22A9.612 9.612 0 0 1 9.49 3.206zm2.437-.966 9.882 9.817a9.608 9.608 0 0 1-.509 1.871L11.5 3.6a9.61 9.61 0 0 1 .428-1.36zm2.68-.234 5.432 5.398a9.61 9.61 0 0 1 .23 6.566L12.9 2.4a9.61 9.61 0 0 1 1.707.606z" fill="currentColor" className="text-[#5E6AD2]"/>
+    </svg>
+  );
+}
+
 function TelegramLogo() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -192,10 +208,33 @@ const OTHER_CONNECTORS: ConnectorDef[] = [
     tokenHint: "xoxb-xxxxxxxxxxxxxxxxxxxx",
     tokenDocsUrl: "https://api.slack.com/apps",
   },
+  {
+    id: "hubspot",
+    name: "HubSpot",
+    description: "CRM — contacts, deals, and companies",
+    logo: <HubSpotLogo />,
+    color: "from-orange-500/10 to-orange-500/5",
+    border: "border-orange-500/20 hover:border-orange-500/40",
+    googleOAuth: false,
+    tokenLabel: "Private App Token",
+    tokenHint: "pat-na1-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+    tokenDocsUrl: "https://developers.hubspot.com/docs/api/private-apps",
+  },
+  {
+    id: "linear",
+    name: "Linear",
+    description: "Issues, projects, and team workflows",
+    logo: <LinearLogo />,
+    color: "from-indigo-500/10 to-indigo-500/5",
+    border: "border-indigo-500/20 hover:border-indigo-500/40",
+    googleOAuth: false,
+    tokenLabel: "API Key",
+    tokenHint: "lin_api_xxxxxxxxxxxxxxxxxxxx",
+    tokenDocsUrl: "https://linear.app/settings/api",
+  },
 ];
 
 const COMING_SOON = [
-  { id: "hubspot",    name: "HubSpot",    description: "CRM and contact management",       icon: "🟠" },
   { id: "salesforce", name: "Salesforce", description: "Enterprise CRM",                   icon: "☁️" },
   { id: "jira",       name: "Jira",       description: "Project and issue tracking",        icon: "🔵" },
   { id: "zapier",     name: "Zapier",     description: "Automation bridge",                 icon: "⚡" },

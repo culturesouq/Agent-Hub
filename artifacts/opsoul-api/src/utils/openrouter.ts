@@ -10,7 +10,7 @@ export const MODEL_OPTIONS = [
   { id: 'anthropic/claude-haiku-4-5', label: 'Claude Haiku', description: 'Fast and balanced — great for most conversations' },
 ] as const;
 
-const MAX_TOKENS = 2048;
+const MAX_TOKENS = 8192;
 
 let _defaultClient: OpenAI | null = null;
 

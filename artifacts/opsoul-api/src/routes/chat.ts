@@ -17,6 +17,8 @@ import {
   ragDnaTable,
 } from '@workspace/db';
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
+import { detectSkillTrigger } from '../utils/skillTriggerEngine.js';
+import { executeSkill } from '../utils/skillExecutor.js';
 import { executeHttpRequest } from '../utils/httpExecutor.js';
 import { embed, semanticDistance } from '@workspace/opsoul-utils/ai';
 import { requireAuth } from '../middleware/requireAuth.js';
@@ -29,7 +31,7 @@ import { searchMemory, buildMemoryContext, distillMemoriesFromConversations, sto
 import type { MemoryHit } from '../utils/memoryEngine.js';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
-import { decryptToken } from '@workspace/opsoul-utils/crypto';
+import { decryptToken, encryptToken } from '@workspace/opsoul-utils/crypto';
 import type { ChatMessage, ToolDefinition } from '../utils/openrouter.js';
 import type { Layer2Soul } from '../validation/operator.js';
 import { resolveScope } from '../utils/scopeResolver.js';
@@ -146,7 +148,7 @@ Tagging for retrieval: domain (specific, not "general"), source, confidence, cre
 
 const INTEGRATION_HOW_TO: Record<string, string> = {
   gmail: `Base URL: https://gmail.googleapis.com/gmail/v1/users/me
-Auth: Authorization: Bearer {token} (injected automatically)
+Auth: injected automatically — do not set manually
 GET /messages?q={query}&maxResults=20 | GET /messages/{id} | POST /messages/send
 Send format: {"raw": "<base64url-encoded RFC 2822 message>"}
 Build RFC 2822: "From: me\r\nTo: {to}\r\nSubject: {subject}\r\nContent-Type: text/plain\r\n\r\n{body}"
@@ -156,7 +158,7 @@ Decode message bodies: parts[].body.data is base64url — decode to read content
 Search operators: from:, to:, subject:, is:unread, after:YYYY/MM/DD, label:inbox`,
 
   github: `Base URL: https://api.github.com
-Auth: Authorization: Bearer {token} (injected automatically)
+Auth: injected automatically — do not set manually
 GET /user | GET /repos/{owner}/{repo}/issues?state=open&per_page=50&page=1
 POST /repos/{owner}/{repo}/issues {"title","body","labels":[]}
 GET /repos/{owner}/{repo}/pulls?state=open
@@ -165,7 +167,7 @@ Pagination: use page param (per_page max 100) or Link header rel="next".
 Rate limit: 5000 req/hr with token. Check X-RateLimit-Remaining header.`,
 
   notion: `Base URL: https://api.notion.com/v1
-Auth: Authorization: Bearer {token}, Notion-Version: 2022-06-28 (both injected automatically)
+Auth: injected automatically — do not set manually. System also injects Notion-Version: 2022-06-28.
 POST /search {"query":"...","filter":{"property":"object","value":"page"}}
 GET /pages/{id} | PATCH /pages/{id} {"properties":{...}}
 POST /pages {"parent":{"database_id":"..."},"properties":{...}}
@@ -174,7 +176,7 @@ POST /blocks/{id}/children {"children":[{"type":"paragraph","paragraph":{"rich_t
 Pagination: use start_cursor from response in next request.`,
 
   slack: `Base URL: https://slack.com/api
-Auth: Authorization: Bearer {token} (injected automatically)
+Auth: injected automatically — do not set manually
 POST /chat.postMessage {"channel":"#general","text":"...","blocks":[...]}
 GET /conversations.list?limit=100 | GET /conversations.history?channel={id}&limit=50
 GET /users.list | POST /reactions.add {"channel":"...","name":"thumbsup","timestamp":"..."}
@@ -182,7 +184,7 @@ Pagination: use response_metadata.next_cursor in cursor param.
 Blocks: use for rich messages — section, divider, button. Fallback text always required.`,
 
   google_calendar: `Base URL: https://www.googleapis.com/calendar/v3/calendars/primary
-Auth: Authorization: Bearer {token} (injected automatically)
+Auth: injected automatically — do not set manually
 GET /events?timeMin={ISO}&timeMax={ISO}&maxResults=20&singleEvents=true&orderBy=startTime
 POST /events {"summary":"...","start":{"dateTime":"2026-01-01T10:00:00+04:00"},"end":{"dateTime":"..."}}
 PATCH /events/{id} | DELETE /events/{id}
@@ -190,48 +192,33 @@ Timezone: always include timezone in dateTime. Dubai = Asia/Dubai (UTC+4).
 Pagination: use nextPageToken.`,
 
   linear: `Base URL: https://api.linear.app/graphql (GraphQL — all calls are POST)
-Auth: Authorization: Bearer {token} (injected automatically)
+Auth: injected automatically — do not set manually
 List issues: {"query":"{issues(filter:{state:{name:{eq:\\"Todo\\"}}}){nodes{id title priority state{name}}}}"}
 Create issue: {"query":"mutation{issueCreate(input:{title:\\"...\\" teamId:\\"...\\" description:\\"...\\"}) {success issue{id}}}"}
 Update issue: {"query":"mutation{issueUpdate(id:\\"...\\" input:{stateId:\\"...\\"}) {success}}"}
 Get teams: {"query":"{teams{nodes{id name}}}"}
 Pagination: use pageInfo.endCursor in after param.`,
 
-  airtable: `Base URL: https://api.airtable.com/v0/{baseId}/{tableId}
-Auth: Authorization: Bearer {token} (injected automatically)
-GET /?filterByFormula={formula}&maxRecords=100&pageSize=100 | GET /{recordId}
-POST / {"fields":{"Name":"...","Status":"Active"}}
-PATCH /{recordId} {"fields":{"Status":"Done"}} | DELETE /{recordId}
-Pagination: use offset from response in next request.
-Formula examples: filterByFormula=({Status}="Active") | filterByFormula=AND({Due}<TODAY(),{Done}=0)
-Find baseId and tableId from Airtable URL: airtable.com/{baseId}/{tableId}`,
-
-  google_sheets: `Base URL: https://sheets.googleapis.com/v4/spreadsheets/{spreadsheetId}
-Auth: Authorization: Bearer {token} (injected automatically)
-GET /values/{range} — e.g. range = Sheet1!A1:Z100
-PUT /values/{range}?valueInputOption=USER_ENTERED {"values":[["row1col1","row1col2"],...]}
-POST /values/{range}:append?valueInputOption=USER_ENTERED {"values":[[...]]}
-Clear: POST /values/{range}:clear
-Get spreadsheet metadata: GET / (no path suffix)
-Range format: SheetName!A1:Z1000. Use A:Z for full columns.`,
+  hubspot: `Base URL: https://api.hubapi.com
+Auth: injected automatically — do not set manually
+GET /crm/v3/objects/contacts?limit=100&properties=firstname,lastname,email,company
+GET /crm/v3/objects/contacts/{id}?properties=firstname,lastname,email,phone,company
+POST /crm/v3/objects/contacts {"properties":{"firstname":"...","lastname":"...","email":"..."}}
+PATCH /crm/v3/objects/contacts/{id} {"properties":{"email":"new@example.com"}}
+GET /crm/v3/objects/deals?limit=50&properties=dealname,amount,dealstage,closedate
+POST /crm/v3/objects/deals {"properties":{"dealname":"...","amount":"5000","pipeline":"default","dealstage":"appointmentscheduled"}}
+GET /crm/v3/objects/companies?limit=50&properties=name,domain,industry
+Search: POST /crm/v3/objects/{objectType}/search {"filterGroups":[{"filters":[{"propertyName":"email","operator":"EQ","value":"..."}]}]}
+Pagination: use paging.next.after token.`,
 
   google_drive: `Base URL: https://www.googleapis.com/drive/v3
-Auth: Authorization: Bearer {token} (injected automatically)
+Auth: injected automatically — do not set manually
 GET /files?q={query}&fields=files(id,name,mimeType,modifiedTime)&pageSize=50
 Query examples: name contains 'report' | mimeType='application/pdf' | '1abc...' in parents
 GET /files/{id}?alt=media — download file content
 POST /files (multipart upload for new files)
 PATCH /files/{id} {"name":"new name"} — rename/move
 Pagination: use nextPageToken in pageToken param.`,
-
-  one_drive: `Base URL: https://graph.microsoft.com/v1.0/me/drive
-Auth: Authorization: Bearer {token} (injected automatically)
-GET /root/children | GET /items/{id}/children
-GET /root:/{path}:/content — download by path
-PUT /root:/{path}:/content — upload by path (body = file content)
-POST /items/{id}/copy {"name":"...","parentReference":{"id":"..."}}
-Search: GET /root/search(q='{query}')
-Pagination: use @odata.nextLink.`,
 };
 
 const BEHAVIOR_HOW_TO: Record<string, string> = {
@@ -698,20 +685,144 @@ function runPostResponseTasks(
 }
 
 // Second-pass prompt used after a skill executes — same wording for both paths.
-function buildSkillSecondPassMessages(
-  messages: ChatMessage[],
-  firstResponse: string,
-  skillOutput: string,
-): ChatMessage[] {
-  return [
-    ...messages,
-    { role: 'assistant', content: firstResponse },
-    { role: 'system', content: `[Task completed — findings below]\n${skillOutput}` },
-    { role: 'user', content: `You just ran a skill and received the output above. Report back to the owner directly and conversationally.\n\nIf the output says no live data was available or the connection failed — be honest. Tell the owner clearly what didn't work and what they need to set up. Do not pretend you completed work you couldn't do.\n\nIf the output has real findings — report them specifically. Highlight what matters. Be direct.\n\nNever mention tool names, skill names, raw JSON, raw URLs, or API field names. Just speak naturally as their operator.` },
-  ];
-}
 
 // ─── Soul-based failure response helper ──────────────────────────────────────
+
+// ─── OAuth auto-injection for http_request tool ──────────────────────────────
+
+const OAUTH_DOMAIN_MAP: Record<string, string> = {
+  'gmail.googleapis.com':       'gmail',
+  'api.github.com':             'github',
+  'www.googleapis.com/calendar': 'google_calendar',
+  'www.googleapis.com/drive':   'google_drive',
+  'api.notion.com':             'notion',
+  'slack.com/api':              'slack',
+  'api.hubapi.com':             'hubspot',
+  'api.linear.app':             'linear',
+};
+
+const GOOGLE_TYPES = new Set(['gmail', 'google_calendar', 'google_drive']);
+
+function detectOAuthType(url: string): string | null {
+  for (const [domain, type] of Object.entries(OAUTH_DOMAIN_MAP)) {
+    if (url.includes(domain)) return type;
+  }
+  return null;
+}
+
+type IntegrationRow = typeof operatorIntegrationsTable.$inferSelect;
+
+function extractTokenFromRow(row: IntegrationRow): string | null {
+  if (!row.tokenEncrypted) return null;
+  try {
+    const raw = decryptToken(row.tokenEncrypted);
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      if (typeof parsed?.access_token === 'string') return parsed.access_token;
+    } catch { /* plain token, not JSON */ }
+    return raw;
+  } catch {
+    return null;
+  }
+}
+
+async function refreshGoogleAccessToken(row: IntegrationRow): Promise<string | null> {
+  try {
+    let refreshToken: string | null = null;
+    if (row.tokenEncrypted) {
+      try {
+        const raw = decryptToken(row.tokenEncrypted);
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
+        if (typeof parsed?.refresh_token === 'string') refreshToken = parsed.refresh_token;
+      } catch { /* skip */ }
+    }
+    if (!refreshToken && row.refreshTokenEncrypted) {
+      try { refreshToken = decryptToken(row.refreshTokenEncrypted); } catch { /* skip */ }
+    }
+    if (!refreshToken) return null;
+
+    const resp = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: process.env.GOOGLE_CLIENT_ID!,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token',
+      }),
+    });
+    const data = await resp.json() as { access_token?: string };
+    if (!data.access_token) return null;
+
+    const raw = decryptToken(row.tokenEncrypted!);
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    await db.update(operatorIntegrationsTable)
+      .set({ tokenEncrypted: encryptToken(JSON.stringify({ ...parsed, access_token: data.access_token })) })
+      .where(eq(operatorIntegrationsTable.id, row.id));
+
+    return data.access_token;
+  } catch {
+    return null;
+  }
+}
+
+async function executeHttpWithOAuth(
+  operatorId: string,
+  httpArgs: { method: string; url: string; headers?: Record<string, string>; body?: string },
+): Promise<string> {
+  const integrationType = detectOAuthType(httpArgs.url);
+
+  if (!integrationType) {
+    return executeHttpRequest(operatorId, httpArgs);
+  }
+
+  const [integrationRow] = await db
+    .select()
+    .from(operatorIntegrationsTable)
+    .where(and(
+      eq(operatorIntegrationsTable.operatorId, operatorId),
+      eq(operatorIntegrationsTable.integrationType, integrationType),
+    ))
+    .limit(1);
+
+  if (!integrationRow) {
+    return `HTTP 401 Unauthorized\nIntegration "${integrationType}" is not connected. Go to Integrations and connect it first.`;
+  }
+
+  const token = extractTokenFromRow(integrationRow);
+  if (!token) {
+    return `HTTP 401 Unauthorized\nIntegration "${integrationType}" has no valid token. Reconnect it in the Integrations tab.`;
+  }
+
+  const extraHeaders: Record<string, string> = integrationType === 'notion'
+    ? { 'Notion-Version': '2022-06-28' }
+    : {};
+
+  const argsWithAuth = {
+    ...httpArgs,
+    headers: { ...httpArgs.headers, ...extraHeaders, Authorization: `Bearer ${token}` },
+  };
+
+  const result = await executeHttpRequest(operatorId, argsWithAuth);
+
+  if (result.startsWith('HTTP 401') && GOOGLE_TYPES.has(integrationType)) {
+    const newToken = await refreshGoogleAccessToken(integrationRow);
+    if (!newToken) {
+      return `HTTP 401 Unauthorized\nGoogle access token for "${integrationType}" expired and could not be refreshed. Reconnect it in the Integrations tab.`;
+    }
+    const argsRetry = {
+      ...httpArgs,
+      headers: { ...httpArgs.headers, ...extraHeaders, Authorization: `Bearer ${newToken}` },
+    };
+    return executeHttpRequest(operatorId, argsRetry);
+  }
+
+  if (result.startsWith('HTTP 401')) {
+    return `HTTP 401 Unauthorized\nToken for "${integrationType}" was rejected. It may have expired or been revoked. Reconnect it in the Integrations tab.`;
+  }
+
+  return result;
+}
 
 function soulFailureResponse(operator: { rawIdentity?: string | null; name?: string | null }, tool: string, target: string, error: string): string {
   const soul = operator.rawIdentity ?? '';
@@ -1207,9 +1318,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     },
   };
 
-  // Agency skills — built once, shared by both paths
-  const agencySkills = buildAgencySkills(skills, archetypeDefaultSkills, installedNames, operator);
-
   // http_request tool — only offered when the operator has stored secrets
   const httpRequestTool: ToolDefinition | null = liveSecrets.length > 0 ? {
     type: 'function',
@@ -1480,7 +1588,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             res.write(`data: ${JSON.stringify({ calling: httpArgs.url })}\n\n`);
             let toolResultText: string;
             try {
-              toolResultText = await executeHttpRequest(operator.id, httpArgs);
+              toolResultText = await executeHttpWithOAuth(operator.id, httpArgs);
             } catch (err: any) {
               finalContent = soulFailureResponse(operator, 'http_request', httpArgs.url, err.message);
               fullContent += finalContent;
@@ -1527,6 +1635,35 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       }
 
       finalTokens = completionTokens;
+
+      // ── Skill detection (streaming path) — fires after tool loop, before DB commit ──
+      if (!httpRequestFired && finalContent && finalContent.trim().length > 10) {
+        const installedSkills = buildAgencySkills(skills, archetypeDefaultSkills, installedNames, operator);
+        if (installedSkills.length > 0) {
+          const trigger = await detectSkillTrigger(message, installedSkills, finalContent).catch(() => null);
+          if (trigger) {
+            trigger.operatorId = operator.id;
+            trigger.operatorOwnerId = operator.ownerId;
+            console.log(`[agency] stream — skill triggered: ${trigger.name}`);
+            const skillResult = await executeSkill(trigger, chatModel);
+            if (skillResult.success) {
+              const secondMsgs: ChatMessage[] = [
+                ...(loopMessages.length > 0 ? loopMessages : messages),
+                { role: 'assistant', content: finalContent },
+                { role: 'system', content: `[Skill result — ${trigger.name}]\n${skillResult.output}` },
+                { role: 'user', content: 'Report results only. The operator\'s soul controls the format. Be direct, specific, no filler, no questions, no narration about process.' },
+              ];
+              const secondResult = await chatCompletion(secondMsgs, chatOpts).catch(() => null);
+              if (secondResult?.content && secondResult.content.trim().length > 0) {
+                res.write(`data: ${JSON.stringify({ clear: true })}\n\n`);
+                res.write(`data: ${JSON.stringify({ delta: secondResult.content })}\n\n`);
+                finalContent = secondResult.content;
+              }
+              await persistSkillResult(operator.id, operator.ownerId, conv.id, trigger, skillResult).catch(() => {});
+            }
+          }
+        }
+      }
 
       // Signal to frontend that response is complete, DB write happening
       res.write(`data: ${JSON.stringify({ processing: true })}\n\n`);
@@ -1689,7 +1826,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           capabilityFired = true;
           let httpResult: string;
           try {
-            httpResult = await executeHttpRequest(operator.id, httpArgs);
+            httpResult = await executeHttpWithOAuth(operator.id, httpArgs);
           } catch (err: any) {
             httpResult = `HTTP request failed: ${err.message}`;
           }
@@ -1708,6 +1845,36 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           finalContent = secondResult.content;
           finalPromptTokens = secondResult.promptTokens;
           finalCompletionTokens = secondResult.completionTokens;
+        }
+      }
+
+      // ── Skill detection (sync path) ───────────────────────────────────────────
+      if (!capabilityFired && finalContent && finalContent.trim().length > 10) {
+        const installedSkills = buildAgencySkills(skills, archetypeDefaultSkills, installedNames, operator);
+        if (installedSkills.length > 0) {
+          const trigger = await detectSkillTrigger(message, installedSkills, finalContent).catch(() => null);
+          if (trigger) {
+            trigger.operatorId = operator.id;
+            trigger.operatorOwnerId = operator.ownerId;
+            console.log(`[agency] sync — skill triggered: ${trigger.name}`);
+            const skillResult = await executeSkill(trigger, chatModel);
+            if (skillResult.success) {
+              const secondMsgs: ChatMessage[] = [
+                ...messages,
+                { role: 'assistant', content: finalContent },
+                { role: 'system', content: `[Skill result — ${trigger.name}]\n${skillResult.output}` },
+                { role: 'user', content: 'Report results only. The operator\'s soul controls the format. Be direct, specific, no filler, no questions, no narration about process.' },
+              ];
+              const secondResult = await chatCompletion(secondMsgs, chatOpts).catch(() => null);
+              if (secondResult?.content && secondResult.content.trim().length > 0) {
+                finalContent = secondResult.content;
+                finalPromptTokens = secondResult.promptTokens;
+                finalCompletionTokens = secondResult.completionTokens;
+              }
+              capabilityFired = true;
+              await persistSkillResult(operator.id, operator.ownerId, conv.id, trigger, skillResult).catch(() => {});
+            }
+          }
         }
       }
 

@@ -229,20 +229,10 @@ const INTEGRATION_CAPABILITIES: Record<string, { what: string; read: string; wri
     read: 'check availability and list upcoming events',
     write: 'create events, send invites, and manage bookings',
   },
-  outlook: {
-    what: 'Microsoft Outlook',
-    read: 'read emails and calendar events',
-    write: 'send emails and create calendar events',
-  },
-  onedrive: {
-    what: 'OneDrive file storage',
-    read: 'list and read files and folders',
-    write: 'upload files, create folders, and share documents',
-  },
-  linkedin: {
-    what: 'LinkedIn',
-    read: 'view profiles and connection activity',
-    write: 'send messages and post updates',
+  google_drive: {
+    what: 'Google Drive',
+    read: 'list, search, and download files',
+    write: 'upload files, rename, move, and share documents',
   },
   notion: {
     what: 'Notion workspace',
@@ -259,15 +249,15 @@ const INTEGRATION_CAPABILITIES: Record<string, { what: string; read: string; wri
     read: 'read repositories, issues, and pull requests',
     write: 'create issues, comment, and open pull requests',
   },
-  airtable: {
-    what: 'Airtable',
-    read: 'read tables and records',
-    write: 'create and update records in bases',
-  },
   hubspot: {
     what: 'HubSpot CRM',
     read: 'read contacts, companies, and deals',
     write: 'create and update CRM records and log activities',
+  },
+  linear: {
+    what: 'Linear',
+    read: 'read issues, teams, and project status',
+    write: 'create issues, update status, and assign work',
   },
 };
 
@@ -290,7 +280,8 @@ const LAYER_4_OPERATIONAL_RULES = `## Layer 4 — Operational Rules (Hardcoded)
 - Format responses to match the conversational context — concise for simple queries, detailed for complex ones.
 - If the conversation reaches a topic outside your mandate, redirect professionally and without judgment.
 - Never use bullet points or numbered lists unless the user explicitly asks for a list.
-- Never ask more than one question at a time.
+- When executing tasks or using tools — act without narrating. Do not announce what you are about to do. Do not explain your process. Just do it and report the result.
+- Never ask a question unless you genuinely cannot proceed without the answer. Default is to act, not to ask.
 - Never end a response with a generic invitation like "What would you like to discuss?" or "How can I help you with that?"
 - Never use emojis unless the user uses them first.
 - Match response length to message length — a short question gets 1-2 sentences maximum.
