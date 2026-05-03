@@ -218,7 +218,7 @@ async function setupDatabase(): Promise<void> {
 async function start(): Promise<void> {
   await setupDatabase();
 
-  app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`[opsoul-api] Phase 8 running on port ${PORT}`);
     console.log(`[opsoul-api] Auth: /api/auth/{register,login,refresh,logout,change-password,me}`);
     console.log(`[opsoul-api] Operators: /api/operators — CRUD, lock-layer1, soul, soul/reset, grow-lock`);
@@ -253,6 +253,9 @@ async function start(): Promise<void> {
   startTasksCron();
   startTelegramWebhookRetryCron();
   startVaelCron();
+  server.setTimeout(0);
+  server.keepAliveTimeout = 65000;
+  server.headersTimeout = 66000;
 }
 
 start().catch((err) => {
