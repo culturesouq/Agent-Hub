@@ -60,10 +60,10 @@ export async function backfillTelegramWebhookSecrets(): Promise<BackfillResult> 
     }
 
     try {
-      const apiBaseUrl = process.env.API_BASE_URL;
+      const apiBaseUrl = process.env.API_BASE_URL ?? process.env.APP_URL;
       if (!apiBaseUrl) {
-        result.failed++;
-        result.details.push({ integrationId, operatorId, status: 'failed', reason: 'API_BASE_URL environment variable is not set' });
+        result.skipped++;
+        result.details.push({ integrationId, operatorId, status: 'skipped', reason: 'No API_BASE_URL or APP_URL configured' });
         continue;
       }
       const botToken = decryptToken(tokenEncrypted!);

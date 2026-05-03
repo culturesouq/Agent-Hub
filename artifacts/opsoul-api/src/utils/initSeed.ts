@@ -190,7 +190,7 @@ export async function runInitSeed(): Promise<void> {
   const blankExists = await db
     .select({ id: operatorsTable.id })
     .from(operatorsTable)
-    .where(eq(operatorsTable.name, 'Blank'))
+    .where(eq(operatorsTable.slug, 'blank'))
     .limit(1);
 
   if (blankExists.length === 0) {

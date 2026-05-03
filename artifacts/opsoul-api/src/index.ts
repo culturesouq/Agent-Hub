@@ -51,6 +51,7 @@ import { backfillWhatsAppAppSecrets } from './utils/backfillWhatsAppSecrets.js';
 import { sweepStuckPendingIntegrations } from './utils/sweepStuckPendingIntegrations.js';
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
 
 app.use(express.json({

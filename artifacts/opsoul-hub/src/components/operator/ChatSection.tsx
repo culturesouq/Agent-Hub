@@ -192,27 +192,29 @@ const MarkdownMessage = memo(function MarkdownMessage({ content }: { content: st
 
 function ToolOutputBlock({ skillName, output, toolType }: { skillName: string; output: string; toolType?: "skill" | "search" | "url" | "http" }) {
   const [open, setOpen] = useState(false);
-  const icon = toolType === "search" ? <Search className="w-3 h-3" />
-    : toolType === "url" ? <Link className="w-3 h-3" />
-    : toolType === "http" ? <Globe className="w-3 h-3" />
-    : <Zap className="w-3 h-3" />;
+  const icon = toolType === "search" ? <Search className="w-3.5 h-3.5" />
+    : toolType === "url" ? <Link className="w-3.5 h-3.5" />
+    : toolType === "http" ? <Globe className="w-3.5 h-3.5" />
+    : <Zap className="w-3.5 h-3.5" />;
   const label = toolType === "search" ? `Searched: ${skillName}`
     : toolType === "url" ? `Read: ${skillName}`
     : toolType === "http" ? `Called: ${skillName}`
-    : `Ran: ${skillName}`;
+    : `Executed: ${skillName}`;
   return (
-    <div className="flex justify-start my-1">
-      <div className="max-w-[85%]">
+    <div className="flex justify-start my-2">
+      <div className="w-full max-w-[85%]">
         <button
           onClick={() => setOpen(o => !o)}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-primary/20 bg-accent text-primary/60 hover:bg-primary/10 hover:text-primary transition-colors text-[11px] font-mono"
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-primary/25 bg-accent text-primary/80 hover:bg-primary/10 hover:text-primary transition-colors text-xs font-mono text-left"
         >
-          {icon}
-          <span>{label}</span>
-          <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+          <div className="flex items-center gap-1.5 flex-1 min-w-0">
+            {icon}
+            <span className="truncate">{label}</span>
+          </div>
+          <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
         </button>
         {open && (
-          <div className="mt-1.5 ml-1 p-4 rounded-xl border border-primary/15 bg-accent text-sm leading-relaxed max-h-80 overflow-y-auto">
+          <div className="mt-1 px-4 py-3 rounded-lg border border-primary/15 bg-accent/50 text-sm leading-relaxed max-h-80 overflow-y-auto">
             <MarkdownMessage content={output} />
           </div>
         )}
@@ -702,8 +704,8 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
               {/* Skill badge — shown alongside streaming content */}
               {status.ranSkill && showStream && (
                 <div className="flex justify-start my-1">
-                  <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-primary/30 bg-accent text-primary/70 text-[11px] font-mono">
-                    <Zap className="w-3 h-3" /> Ran: {status.ranSkill}
+                  <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 bg-accent text-primary text-xs font-mono">
+                    <Zap className="w-3.5 h-3.5" /> Executed: {status.ranSkill}
                   </span>
                 </div>
               )}
@@ -719,17 +721,18 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                 </div>
               )}
 
-              {/* Live status indicators */}
+              {/* Live execution block */}
               {(status.searching || status.running || status.calling || status.writing || status.seeding || status.reading) && (
                 <div className="flex justify-start">
-                  <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-primary/20 bg-accent text-primary/60 text-[11px] font-mono">
-                    {status.searching && <><Search className="w-3 h-3" /> Searching…</>}
-                    {status.calling && <><Globe className="w-3 h-3" /> {status.calling}</>}
-                    {status.running && <><Zap className="w-3 h-3" /> {status.running}</>}
-                    {status.writing && <>Writing {status.writing}…</>}
-                    {status.seeding && <>Learning…</>}
-                    {status.reading && <>Reading…</>}
-                  </span>
+                  <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-primary/25 bg-accent text-primary/80 text-xs font-mono">
+                    <span className="w-3.5 h-3.5 rounded-full border-2 border-primary/30 border-t-primary animate-spin shrink-0" />
+                    {status.searching && <span>Searching: <span className="font-semibold text-primary">{status.searching}</span></span>}
+                    {status.calling && <span>Calling: <span className="font-semibold text-primary">{status.calling}</span></span>}
+                    {status.running && <span>Running: <span className="font-semibold text-primary">{status.running}</span></span>}
+                    {status.writing && <span>Writing: <span className="font-semibold text-primary">{status.writing}</span></span>}
+                    {status.seeding && <span>Learning: <span className="font-semibold text-primary">{status.seeding}</span></span>}
+                    {status.reading && <span>Reading URL…</span>}
+                  </div>
                 </div>
               )}
 
