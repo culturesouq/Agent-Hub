@@ -371,7 +371,7 @@ function AnalyticsPanel({ operators }: { operators: Operator[] | undefined }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Operators" value={count} sub={count === 1 ? "1 active operator" : `${count} active operators`} />
         <StatCard label="Last Active" value={lastActiveDate} sub="Most recent operator activity" />
-        <StatCard label="Messages" value="—" sub="Message tracking coming soon" />
+        <StatCard label="Messages" value="—" sub="Across all operators" />
         <StatCard label="Member since" value={joined.split(" ").slice(-1)[0] ?? "—"} sub={joined} />
       </div>
 
@@ -473,7 +473,7 @@ function PlatformPanel() {
           <h3 className="font-headline font-bold text-base">Preferences</h3>
         </div>
         <p className="font-mono text-xs text-muted-foreground">
-          Additional platform settings and customization options are coming soon.
+          Contact support to configure advanced platform options.
         </p>
       </div>
 

@@ -52,7 +52,6 @@ function DocStubSection({ id, icon, title, description }: { id: string; icon: st
         <span className="material-symbols-outlined text-on-surface-variant text-3xl mt-0.5 select-none">construction</span>
         <div>
           <p className="text-on-surface-variant font-sans leading-relaxed">{description}</p>
-          <p className="text-[10px] font-label uppercase tracking-widest text-on-surface-variant mt-3">Full documentation coming soon</p>
         </div>
       </div>
     </section>
