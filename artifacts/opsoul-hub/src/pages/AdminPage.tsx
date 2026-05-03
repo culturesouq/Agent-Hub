@@ -65,7 +65,61 @@ interface AdminMessage {
   createdAt: string;
 }
 
-type Tab = "overview" | "owners" | "operators" | "drift" | "rag";
+type Tab = "overview" | "owners" | "operators" | "drift" | "rag" | "vael";
+
+interface VaelRunState {
+  isRunning: boolean;
+  lastRunType: "full" | "validate" | null;
+  lastRunAt: string | null;
+  lastRunDurationSec: number | null;
+  lastRunSummary: string | null;
+  sweepSchedule: string;
+  validateSchedule: string;
+}
+
+interface DnaEntry {
+  id: string;
+  layer: string;
+  archetype: string | null;
+  title: string;
+  content: string;
+  tags: string[];
+  sourceName: string | null;
+  confidence: number | null;
+  knowledgeStatus: "current" | "upgraded" | "deprecated" | "draft";
+  isActive: boolean;
+  hasEmbedding: boolean;
+  dnaScope: string;
+  archetypeScope: string[];
+  domainTags: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface RagSource {
+  id: string;
+  name: string;
+  sourceType: string;
+  url: string;
+  notes: string | null;
+  isActive: boolean;
+  lastFetchAt: string | null;
+  lastFetchCount: number | null;
+  createdAt: string;
+}
+
+interface VaelVerificationRun {
+  id: string;
+  operatorId: string;
+  entryId: string;
+  runNumber: number;
+  sourceFound: boolean;
+  sourceUrl: string | null;
+  scoreBefore: number | null;
+  scoreAfter: number | null;
+  actionTaken: string | null;
+  createdAt: string;
+}
 
 function StatCard({ label, value, color }: {
   label: string;
@@ -147,6 +201,47 @@ export default function AdminPage() {
     details: { url: string; ok: boolean; chunks?: number; error?: string }[];
   } | null>(null);
   const platformFileRef = useRef<HTMLInputElement>(null);
+
+  // ── VAEL Desk state ────────────────────────────────────────────────────────
+  type VaelPanel = "drop" | "inbox" | "library" | "sources" | "runs";
+  const [vaelPanel, setVaelPanel] = useState<VaelPanel>("drop");
+  const [vaelStatus, setVaelStatus] = useState<VaelRunState | null>(null);
+  const [vaelTriggerLoading, setVaelTriggerLoading] = useState(false);
+  const [vaelTriggerMsg, setVaelTriggerMsg] = useState<string | null>(null);
+
+  // Drop Zone
+  const [vaelUrlInput, setVaelUrlInput] = useState("");
+  const [vaelTextInput, setVaelTextInput] = useState("");
+  const [vaelLabel, setVaelLabel] = useState("");
+  const [vaelDropLoading, setVaelDropLoading] = useState(false);
+  const [vaelDropResult, setVaelDropResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  // Pending Inbox
+  const [vaelInbox, setVaelInbox] = useState<{ pending: string[]; processed: string[] }>({ pending: [], processed: [] });
+  const [vaelInboxLoading, setVaelInboxLoading] = useState(false);
+
+  // DNA Library
+  const [dnaEntries, setDnaEntries] = useState<DnaEntry[]>([]);
+  const [dnaLoading, setDnaLoading] = useState(false);
+  const [dnaStatusFilter, setDnaStatusFilter] = useState<string>("all");
+  const [dnaSearch, setDnaSearch] = useState("");
+  const [dnaExpanded, setDnaExpanded] = useState<string | null>(null);
+  const [dnaDeprecating, setDnaDeprecating] = useState<string | null>(null);
+  const [dnaDeleting, setDnaDeleting] = useState<string | null>(null);
+
+  // Sources
+  const [ragSources, setRagSources] = useState<RagSource[]>([]);
+  const [sourcesLoading, setSourcesLoading] = useState(false);
+  const [newSourceName, setNewSourceName] = useState("");
+  const [newSourceUrl, setNewSourceUrl] = useState("");
+  const [newSourceType, setNewSourceType] = useState("raw_url");
+  const [addingSource, setAddingSource] = useState(false);
+  const [togglingSource, setTogglingSource] = useState<string | null>(null);
+  const [deletingSource, setDeletingSource] = useState<string | null>(null);
+
+  // Verification Runs
+  const [vaelRuns, setVaelRuns] = useState<VaelVerificationRun[]>([]);
+  const [runsLoading, setRunsLoading] = useState(false);
 
   function timeAgo(dateStr: string): string {
     const diff = Date.now() - new Date(dateStr).getTime();
@@ -437,6 +532,213 @@ export default function AdminPage() {
     }
   }
 
+  // ── VAEL Desk functions ────────────────────────────────────────────────────
+
+  async function loadVaelStatus() {
+    try {
+      const s = await apiFetch<VaelRunState>("/admin/rag/vael/status");
+      setVaelStatus(s);
+    } catch { /* silent */ }
+  }
+
+  async function loadVaelInbox() {
+    setVaelInboxLoading(true);
+    try {
+      const data = await apiFetch<{ pending: string[]; processed: string[] }>("/admin/rag/inbox");
+      setVaelInbox(data);
+    } catch {
+      setVaelInbox({ pending: [], processed: [] });
+    } finally {
+      setVaelInboxLoading(false);
+    }
+  }
+
+  async function loadDnaEntries() {
+    setDnaLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (dnaStatusFilter !== "all") params.set("status", dnaStatusFilter);
+      const entries = await apiFetch<DnaEntry[]>(`/admin/rag/entries?${params.toString()}`);
+      setDnaEntries(entries);
+    } catch {
+      setDnaEntries([]);
+    } finally {
+      setDnaLoading(false);
+    }
+  }
+
+  async function loadRagSources() {
+    setSourcesLoading(true);
+    try {
+      const sources = await apiFetch<RagSource[]>("/admin/rag/sources");
+      setRagSources(sources);
+    } catch {
+      setRagSources([]);
+    } finally {
+      setSourcesLoading(false);
+    }
+  }
+
+  async function loadVaelRuns() {
+    setRunsLoading(true);
+    try {
+      const runs = await apiFetch<VaelVerificationRun[]>("/admin/rag/vael/runs");
+      setVaelRuns(runs);
+    } catch {
+      setVaelRuns([]);
+    } finally {
+      setRunsLoading(false);
+    }
+  }
+
+  async function triggerVael(mode: "full" | "validate" = "full") {
+    setVaelTriggerLoading(true);
+    setVaelTriggerMsg(null);
+    try {
+      const r = await apiFetch<{ ok: boolean; message: string }>("/admin/rag/vael/trigger", {
+        method: "POST",
+        body: JSON.stringify({ mode }),
+      });
+      setVaelTriggerMsg(r.message);
+      setTimeout(() => loadVaelStatus(), 2000);
+    } catch (err) {
+      setVaelTriggerMsg(err instanceof Error ? err.message : "Trigger failed");
+    } finally {
+      setVaelTriggerLoading(false);
+    }
+  }
+
+  async function submitVaelUrl() {
+    if (!vaelUrlInput.trim() || !vaelLabel.trim()) return;
+    setVaelDropLoading(true);
+    setVaelDropResult(null);
+    try {
+      const r = await apiFetch<{ ok: boolean; filename?: string; error?: string }>("/admin/rag/vael/inbox-url", {
+        method: "POST",
+        body: JSON.stringify({ url: vaelUrlInput.trim(), label: vaelLabel.trim() }),
+      });
+      if (r.ok) {
+        setVaelDropResult({ ok: true, msg: `Queued as ${r.filename} — VAEL will verify on next sweep` });
+        setVaelUrlInput("");
+        setVaelLabel("");
+        await loadVaelInbox();
+      } else {
+        setVaelDropResult({ ok: false, msg: r.error ?? "Failed" });
+      }
+    } catch (err) {
+      setVaelDropResult({ ok: false, msg: err instanceof Error ? err.message : "Failed" });
+    } finally {
+      setVaelDropLoading(false);
+    }
+  }
+
+  async function submitVaelText() {
+    if (!vaelTextInput.trim() || !vaelLabel.trim()) return;
+    setVaelDropLoading(true);
+    setVaelDropResult(null);
+    try {
+      const r = await apiFetch<{ ok: boolean; filename?: string; error?: string }>("/admin/rag/vael/inbox-text", {
+        method: "POST",
+        body: JSON.stringify({ content: vaelTextInput.trim(), label: vaelLabel.trim() }),
+      });
+      if (r.ok) {
+        setVaelDropResult({ ok: true, msg: `Queued as ${r.filename} — VAEL will verify on next sweep` });
+        setVaelTextInput("");
+        setVaelLabel("");
+        await loadVaelInbox();
+      } else {
+        setVaelDropResult({ ok: false, msg: r.error ?? "Failed" });
+      }
+    } catch (err) {
+      setVaelDropResult({ ok: false, msg: err instanceof Error ? err.message : "Failed" });
+    } finally {
+      setVaelDropLoading(false);
+    }
+  }
+
+  async function deprecateDna(id: string) {
+    setDnaDeprecating(id);
+    try {
+      await apiFetch(`/admin/rag/entries/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ knowledgeStatus: "deprecated", isActive: false }),
+      });
+      await loadDnaEntries();
+    } finally {
+      setDnaDeprecating(null);
+    }
+  }
+
+  async function deleteDna(id: string) {
+    setDnaDeleting(id);
+    try {
+      await apiFetch(`/admin/rag/entries/${id}`, { method: "DELETE" });
+      setDnaEntries(prev => prev.filter(e => e.id !== id));
+    } finally {
+      setDnaDeleting(null);
+    }
+  }
+
+  async function toggleSource(source: RagSource) {
+    setTogglingSource(source.id);
+    try {
+      const updated = await apiFetch<RagSource>(`/admin/rag/sources/${source.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ isActive: !source.isActive }),
+      });
+      setRagSources(prev => prev.map(s => s.id === updated.id ? updated : s));
+    } finally {
+      setTogglingSource(null);
+    }
+  }
+
+  async function deleteSource(id: string) {
+    setDeletingSource(id);
+    try {
+      await apiFetch(`/admin/rag/sources/${id}`, { method: "DELETE" });
+      setRagSources(prev => prev.filter(s => s.id !== id));
+    } finally {
+      setDeletingSource(null);
+    }
+  }
+
+  async function addSource() {
+    if (!newSourceName.trim() || !newSourceUrl.trim()) return;
+    setAddingSource(true);
+    try {
+      const created = await apiFetch<RagSource>("/admin/rag/sources", {
+        method: "POST",
+        body: JSON.stringify({ name: newSourceName.trim(), url: newSourceUrl.trim(), sourceType: newSourceType }),
+      });
+      setRagSources(prev => [...prev, created]);
+      setNewSourceName("");
+      setNewSourceUrl("");
+    } catch { /* show error */ } finally {
+      setAddingSource(false);
+    }
+  }
+
+  // Load VAEL data when tab is opened
+  const vaelLoaded = useRef(false);
+  useEffect(() => {
+    if (tab !== "vael") return;
+    if (vaelLoaded.current) return;
+    vaelLoaded.current = true;
+    loadVaelStatus();
+    loadVaelInbox();
+    loadDnaEntries();
+    loadRagSources();
+    loadVaelRuns();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+
+  // Reload DNA when filter changes
+  useEffect(() => {
+    if (tab !== "vael") return;
+    loadDnaEntries();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dnaStatusFilter]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -453,6 +755,7 @@ export default function AdminPage() {
     { id: "operators", label: "Operators", count: operators.length },
     { id: "drift", label: "Drift Alerts", count: driftAlerts.length },
     { id: "rag", label: "Platform KB", count: kbTotal },
+    { id: "vael", label: "VAEL Desk" },
   ];
 
   const GROW_LEVELS = ["OPEN", "CONTROLLED", "LOCKED", "FROZEN"] as const;
@@ -1308,6 +1611,545 @@ export default function AdminPage() {
             </div>
           </div>
         )}
+
+
+        {/* VAEL Desk tab */}
+        {tab === "vael" && (() => {
+          const dnaFiltered = dnaEntries.filter(e =>
+            dnaSearch.trim()
+              ? e.title.toLowerCase().includes(dnaSearch.toLowerCase()) ||
+                e.content.toLowerCase().includes(dnaSearch.toLowerCase())
+              : true
+          );
+
+          const confidenceBar = (conf: number | null) => {
+            const pct = conf != null ? Math.round(conf * 100) : 0;
+            const color = pct >= 80 ? "#22c55e" : pct >= 60 ? "#f59e0b" : "#ef4444";
+            return (
+              <div className="flex items-center gap-2">
+                <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
+                </div>
+                <span className="font-mono text-xs" style={{ color }}>{pct}%</span>
+              </div>
+            );
+          };
+
+          const statusBadge = (status: string) => {
+            const map: Record<string, string> = {
+              current: "bg-secondary/10 text-secondary border-secondary/30",
+              upgraded: "bg-primary/10 text-primary border-primary/30",
+              deprecated: "bg-muted text-muted-foreground border-border/40",
+              draft: "bg-amber-500/10 text-amber-400 border-amber-400/30",
+            };
+            return (
+              <span className={`inline-block px-2 py-0.5 rounded border font-label text-[9px] uppercase tracking-widest ${map[status] ?? map.draft}`}>
+                {status}
+              </span>
+            );
+          };
+
+          const VAEL_PANELS: { id: VaelPanel; label: string; count?: number }[] = [
+            { id: "drop", label: "Submit to VAEL" },
+            { id: "inbox", label: "Pending Inbox", count: vaelInbox.pending.length },
+            { id: "library", label: "DNA Library", count: dnaEntries.length },
+            { id: "sources", label: "Discovery Sources", count: ragSources.length },
+            { id: "runs", label: "Pipeline Runs", count: vaelRuns.length },
+          ];
+
+          return (
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="bg-white border border-border p-6">
+                <div className="flex items-center justify-between gap-6 flex-wrap">
+                  <div>
+                    <h3 className="font-headline text-xl text-on-surface mb-1">VAEL Intelligence Desk</h3>
+                    <p className="font-sans text-xs text-muted-foreground/80">
+                      All knowledge enters through VAEL. She verifies, classifies, and assigns confidence before it reaches operators.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    {vaelStatus && (
+                      <div className="text-right">
+                        <div className={`font-label text-[10px] uppercase tracking-widest ${vaelStatus.isRunning ? "text-amber-400 animate-pulse" : "text-secondary"}`}>
+                          {vaelStatus.isRunning ? "Running now" : vaelStatus.lastRunAt ? `Last run ${timeAgo(vaelStatus.lastRunAt)}` : "Never run"}
+                        </div>
+                        {vaelStatus.lastRunSummary && (
+                          <div className="font-mono text-[9px] text-muted-foreground mt-0.5 max-w-xs truncate" title={vaelStatus.lastRunSummary}>
+                            {vaelStatus.lastRunSummary}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => triggerVael("validate")}
+                        disabled={vaelTriggerLoading || vaelStatus?.isRunning}
+                        className="px-4 py-2 bg-muted border border-border text-muted-foreground font-label text-[9px] uppercase tracking-widest rounded-lg hover:text-primary hover:border-primary/30 disabled:opacity-40 transition-all whitespace-nowrap"
+                      >
+                        {vaelTriggerLoading ? "Triggering…" : "Validate Only"}
+                      </button>
+                      <button
+                        onClick={() => triggerVael("full")}
+                        disabled={vaelTriggerLoading || vaelStatus?.isRunning}
+                        className="px-4 py-2 bg-primary/10 border border-primary/30 text-primary font-label text-[9px] uppercase tracking-widest rounded-lg hover:bg-primary/20 disabled:opacity-40 transition-all whitespace-nowrap"
+                      >
+                        {vaelTriggerLoading ? "Triggering…" : "Trigger Full Sweep"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                {vaelTriggerMsg && (
+                  <div className="mt-3 font-mono text-xs text-secondary border border-secondary/20 bg-secondary/5 px-4 py-2 rounded">
+                    {vaelTriggerMsg}
+                  </div>
+                )}
+              </div>
+
+              {/* Panel tabs */}
+              <div className="flex gap-1 flex-wrap">
+                {VAEL_PANELS.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => setVaelPanel(p.id)}
+                    className={`px-4 py-1.5 font-label text-[9px] uppercase tracking-widest transition-all ${
+                      vaelPanel === p.id
+                        ? "bg-primary-container text-on-primary-container border border-primary/20"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted border border-transparent"
+                    }`}
+                  >
+                    {p.label}{p.count !== undefined ? ` (${p.count})` : ""}
+                  </button>
+                ))}
+              </div>
+
+              {/* Panel 1: Drop Zone */}
+              {vaelPanel === "drop" && (
+                <div className="bg-white border border-border p-6 space-y-6">
+                  <div>
+                    <h4 className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Submit Content to VAEL</h4>
+                    <p className="font-sans text-xs text-muted-foreground/70">VAEL will verify, classify, and assign confidence. Approved entries enter the DNA library as &ldquo;current&rdquo;.</p>
+                  </div>
+
+                  {/* Source label — shared */}
+                  <div className="space-y-1.5">
+                    <label className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">Source Label (required)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. OpSoul operator lifecycle guide"
+                      value={vaelLabel}
+                      onChange={(e) => setVaelLabel(e.target.value)}
+                      className="w-full bg-surface-container/50 border border-border/40 rounded-lg px-4 py-2.5 text-sm font-sans text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50"
+                    />
+                  </div>
+
+                  {/* URL input */}
+                  <div className="space-y-2">
+                    <label className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">Ingest from URL</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="url"
+                        placeholder="https://docs.example.com/page"
+                        value={vaelUrlInput}
+                        onChange={(e) => setVaelUrlInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") submitVaelUrl(); }}
+                        className="flex-1 bg-surface-container/50 border border-border/40 rounded-lg px-4 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50"
+                      />
+                      <button
+                        onClick={submitVaelUrl}
+                        disabled={vaelDropLoading || !vaelUrlInput.trim() || !vaelLabel.trim()}
+                        className="px-5 py-2.5 bg-primary/10 border border-primary/30 text-primary font-label text-[10px] uppercase tracking-widest rounded-lg hover:bg-primary/20 disabled:opacity-40 transition-all whitespace-nowrap"
+                      >
+                        {vaelDropLoading ? "Fetching…" : "Queue URL"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 h-px bg-border/30" />
+                    <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground/50">or submit text directly</span>
+                    <div className="flex-1 h-px bg-border/30" />
+                  </div>
+
+                  {/* Text input */}
+                  <div className="space-y-2">
+                    <label className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">Submit Raw Text</label>
+                    <textarea
+                      rows={6}
+                      placeholder="Paste content for VAEL to verify and classify…"
+                      value={vaelTextInput}
+                      onChange={(e) => setVaelTextInput(e.target.value)}
+                      className="w-full bg-surface-container/50 border border-border/40 rounded-lg px-4 py-2.5 text-sm font-sans text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50 resize-y"
+                    />
+                    <button
+                      onClick={submitVaelText}
+                      disabled={vaelDropLoading || !vaelTextInput.trim() || !vaelLabel.trim()}
+                      className="px-5 py-2.5 bg-primary/10 border border-primary/30 text-primary font-label text-[10px] uppercase tracking-widest rounded-lg hover:bg-primary/20 disabled:opacity-40 transition-all whitespace-nowrap"
+                    >
+                      {vaelDropLoading ? "Submitting…" : "Submit Text to VAEL"}
+                    </button>
+                  </div>
+
+                  {/* Result */}
+                  {vaelDropResult && (
+                    <div className={`border rounded-lg px-5 py-3 flex items-center gap-3 ${vaelDropResult.ok ? "border-secondary/30 bg-secondary/5" : "border-destructive/30 bg-destructive/5"}`}>
+                      <span className={`font-label text-[10px] uppercase tracking-widest ${vaelDropResult.ok ? "text-secondary" : "text-destructive"}`}>
+                        {vaelDropResult.ok ? "Queued" : "Error"}
+                      </span>
+                      <span className="font-mono text-xs text-muted-foreground">{vaelDropResult.msg}</span>
+                      <button
+                        onClick={() => setVaelDropResult(null)}
+                        className="ml-auto font-label text-[9px] text-muted-foreground hover:text-foreground"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Panel 2: Pending Inbox */}
+              {vaelPanel === "inbox" && (
+                <div className="bg-white border border-border overflow-hidden">
+                  <div className="px-6 py-4 border-b border-border/30 bg-surface-container-high/30 flex items-center justify-between">
+                    <div>
+                      <span className="font-label text-[10px] uppercase tracking-widest text-muted-foreground">
+                        VAEL Inbox — {vaelInbox.pending.length} file{vaelInbox.pending.length !== 1 ? "s" : ""} waiting
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={loadVaelInbox}
+                        disabled={vaelInboxLoading}
+                        className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors disabled:opacity-40"
+                      >
+                        {vaelInboxLoading ? "Loading…" : "Refresh"}
+                      </button>
+                      <button
+                        onClick={() => triggerVael("full")}
+                        disabled={vaelTriggerLoading || vaelStatus?.isRunning}
+                        className="px-4 py-1.5 bg-primary/10 border border-primary/30 text-primary font-label text-[9px] uppercase tracking-widest rounded-lg hover:bg-primary/20 disabled:opacity-40 transition-all"
+                      >
+                        {vaelStatus?.isRunning ? "VAEL Running…" : "Trigger VAEL Now"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {vaelInbox.pending.length === 0 ? (
+                    <div className="px-6 py-16 text-center">
+                      <p className="font-sans text-sm text-secondary mb-2">Inbox is clear</p>
+                      <p className="font-label text-[10px] uppercase tracking-widest text-muted-foreground/60">No files waiting for VAEL</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-border/10">
+                      {vaelInbox.pending.map((file, i) => (
+                        <div key={i} className={`px-6 py-4 flex items-center justify-between gap-4 ${i % 2 === 0 ? "" : "bg-muted/20"}`}>
+                          <div className="flex items-center gap-3">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+                            <span className="font-mono text-sm text-on-surface">{file}</span>
+                          </div>
+                          <span className="font-label text-[9px] uppercase tracking-widest text-amber-400">Pending</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {vaelInbox.processed.length > 0 && (
+                    <>
+                      <div className="px-6 py-3 border-t border-border/20 bg-surface-container/30">
+                        <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground/60">
+                          Recently Processed ({vaelInbox.processed.length})
+                        </span>
+                      </div>
+                      <div className="divide-y divide-border/10">
+                        {vaelInbox.processed.slice(0, 10).map((file, i) => (
+                          <div key={i} className="px-6 py-3 flex items-center justify-between gap-4">
+                            <span className="font-mono text-xs text-muted-foreground">{file}</span>
+                            <span className="font-label text-[9px] uppercase tracking-widest text-secondary">Done</span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Panel 3: DNA Library */}
+              {vaelPanel === "library" && (
+                <div className="bg-white border border-border overflow-hidden">
+                  <div className="px-6 py-4 border-b border-border/30 bg-surface-container-high/30">
+                    <div className="flex items-center justify-between gap-4 flex-wrap">
+                      <div className="flex items-center gap-3">
+                        <span className="font-label text-[10px] uppercase tracking-widest text-muted-foreground">
+                          DNA Library — {dnaFiltered.length} {dnaStatusFilter !== "all" ? dnaStatusFilter : "total"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <input
+                          type="search"
+                          placeholder="Search content…"
+                          value={dnaSearch}
+                          onChange={(e) => setDnaSearch(e.target.value)}
+                          className="bg-surface-container/50 border border-border/40 rounded px-3 py-1.5 text-xs font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 w-48"
+                        />
+                        <select
+                          value={dnaStatusFilter}
+                          onChange={(e) => setDnaStatusFilter(e.target.value)}
+                          className="bg-surface-container/50 border border-border/40 rounded px-3 py-1.5 text-[10px] font-label uppercase tracking-widest text-foreground focus:outline-none focus:border-primary/50 cursor-pointer"
+                        >
+                          <option value="all">All</option>
+                          <option value="current">Current</option>
+                          <option value="draft">Draft</option>
+                          <option value="upgraded">Upgraded</option>
+                          <option value="deprecated">Deprecated</option>
+                        </select>
+                        <button
+                          onClick={loadDnaEntries}
+                          disabled={dnaLoading}
+                          className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors disabled:opacity-40"
+                        >
+                          {dnaLoading ? "Loading…" : "Refresh"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {dnaFiltered.length === 0 ? (
+                    <div className="px-6 py-16 text-center">
+                      <p className="font-sans text-sm text-muted-foreground">
+                        {dnaLoading ? "Loading…" : "No DNA entries found"}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-border/10">
+                      {dnaFiltered.map((entry, i) => {
+                        const isExpanded = dnaExpanded === entry.id;
+                        return (
+                          <div key={entry.id} className={i % 2 === 0 ? "hover:bg-muted/30" : "bg-muted/10 hover:bg-muted/30"}>
+                            <div className="px-6 py-4 grid grid-cols-[1fr_80px_100px_120px_100px] gap-4 items-center">
+                              <div>
+                                <button
+                                  onClick={() => setDnaExpanded(isExpanded ? null : entry.id)}
+                                  className="text-left"
+                                >
+                                  <div className="font-sans text-sm text-on-surface">{entry.title}</div>
+                                  <div className="font-label text-[9px] text-muted-foreground mt-0.5 uppercase tracking-widest">
+                                    {entry.layer}{entry.archetype ? ` · ${entry.archetype}` : ""}
+                                    {entry.sourceName ? ` · ${entry.sourceName.slice(0, 40)}` : ""}
+                                  </div>
+                                </button>
+                              </div>
+                              <div>{confidenceBar(entry.confidence)}</div>
+                              <div>{statusBadge(entry.knowledgeStatus)}</div>
+                              <div className="font-label text-[9px] text-muted-foreground" title={new Date(entry.createdAt).toLocaleString()}>
+                                {timeAgo(entry.createdAt)}
+                              </div>
+                              <div className="flex items-center gap-3 justify-end">
+                                {entry.knowledgeStatus !== "deprecated" && (
+                                  <button
+                                    onClick={() => deprecateDna(entry.id)}
+                                    disabled={dnaDeprecating === entry.id}
+                                    className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-amber-400 disabled:opacity-40 transition-colors"
+                                  >
+                                    {dnaDeprecating === entry.id ? "…" : "Deprecate"}
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => deleteDna(entry.id)}
+                                  disabled={dnaDeleting === entry.id}
+                                  className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-destructive disabled:opacity-40 transition-colors"
+                                >
+                                  {dnaDeleting === entry.id ? "…" : "Delete"}
+                                </button>
+                              </div>
+                            </div>
+                            {isExpanded && (
+                              <div className="px-6 pb-5 space-y-3 bg-surface-container/30 border-t border-border/10">
+                                <p className="font-sans text-xs text-on-surface leading-relaxed whitespace-pre-wrap">{entry.content}</p>
+                                {entry.tags?.length > 0 && (
+                                  <div className="flex gap-2 flex-wrap">
+                                    {entry.tags.map(tag => (
+                                      <span key={tag} className="px-2 py-0.5 bg-primary/5 border border-primary/20 rounded text-[9px] font-label text-primary/70 uppercase tracking-widest">{tag}</span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Panel 4: Discovery Sources */}
+              {vaelPanel === "sources" && (
+                <div className="space-y-4">
+                  {/* Add source form */}
+                  <div className="bg-white border border-border p-6 space-y-4">
+                    <h4 className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Add Discovery Source</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_140px_120px] gap-3">
+                      <input
+                        type="text"
+                        placeholder="Source name"
+                        value={newSourceName}
+                        onChange={(e) => setNewSourceName(e.target.value)}
+                        className="bg-surface-container/50 border border-border/40 rounded-lg px-4 py-2.5 text-sm font-sans text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50"
+                      />
+                      <input
+                        type="url"
+                        placeholder="https://…"
+                        value={newSourceUrl}
+                        onChange={(e) => setNewSourceUrl(e.target.value)}
+                        className="bg-surface-container/50 border border-border/40 rounded-lg px-4 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50"
+                      />
+                      <select
+                        value={newSourceType}
+                        onChange={(e) => setNewSourceType(e.target.value)}
+                        className="bg-surface-container/50 border border-border/40 rounded-lg px-3 py-2.5 text-[10px] font-label uppercase tracking-widest text-foreground focus:outline-none focus:border-primary/50 cursor-pointer"
+                      >
+                        <option value="raw_url">Raw URL</option>
+                        <option value="github_file">GitHub File</option>
+                        <option value="github_repo">GitHub Repo</option>
+                        <option value="huggingface">HuggingFace</option>
+                      </select>
+                      <button
+                        onClick={addSource}
+                        disabled={addingSource || !newSourceName.trim() || !newSourceUrl.trim()}
+                        className="px-5 py-2.5 bg-primary/10 border border-primary/30 text-primary font-label text-[10px] uppercase tracking-widest rounded-lg hover:bg-primary/20 disabled:opacity-40 transition-all"
+                      >
+                        {addingSource ? "Adding…" : "Add Source"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Sources table */}
+                  <div className="bg-white border border-border overflow-hidden">
+                    <div className="px-6 py-4 border-b border-border/30 bg-surface-container-high/30">
+                      <span className="font-label text-[10px] uppercase tracking-widest text-muted-foreground">
+                        {ragSources.length} source{ragSources.length !== 1 ? "s" : ""} registered
+                      </span>
+                    </div>
+
+                    {ragSources.length === 0 ? (
+                      <div className="px-6 py-12 text-center">
+                        <p className="font-sans text-sm text-muted-foreground">{sourcesLoading ? "Loading…" : "No discovery sources yet"}</p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="bg-surface-container-high/50">
+                              {["Name", "URL", "Type", "Active", "Last Crawled", "Actions"].map(h => (
+                                <th key={h} className="pl-6 pr-4 py-3 text-left font-label text-[9px] uppercase tracking-widest text-muted-foreground">{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {ragSources.map((src, i) => (
+                              <tr key={src.id} className={i % 2 === 0 ? "" : "bg-muted/20"}>
+                                <td className="pl-6 pr-4 py-3 font-sans text-sm text-on-surface">{src.name}</td>
+                                <td className="pl-6 pr-4 py-3 font-mono text-xs text-muted-foreground max-w-[200px] truncate" title={src.url}>
+                                  <a href={src.url} target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">{src.url}</a>
+                                </td>
+                                <td className="pl-6 pr-4 py-3 font-label text-[9px] uppercase tracking-widest text-muted-foreground">{src.sourceType}</td>
+                                <td className="pl-6 pr-4 py-3">
+                                  <button
+                                    onClick={() => toggleSource(src)}
+                                    disabled={togglingSource === src.id}
+                                    className={`font-label text-[9px] uppercase tracking-widest transition-colors disabled:opacity-40 ${src.isActive ? "text-secondary" : "text-muted-foreground hover:text-secondary"}`}
+                                  >
+                                    {togglingSource === src.id ? "…" : src.isActive ? "Active" : "Inactive"}
+                                  </button>
+                                </td>
+                                <td className="pl-6 pr-4 py-3 font-label text-[9px] text-muted-foreground">
+                                  {src.lastFetchAt ? timeAgo(src.lastFetchAt) : "—"}
+                                  {src.lastFetchCount != null ? ` (${src.lastFetchCount} seeded)` : ""}
+                                </td>
+                                <td className="pl-6 pr-4 py-3">
+                                  <button
+                                    onClick={() => deleteSource(src.id)}
+                                    disabled={deletingSource === src.id}
+                                    className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-destructive disabled:opacity-40 transition-colors"
+                                  >
+                                    {deletingSource === src.id ? "…" : "Delete"}
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Panel 5: Pipeline Runs */}
+              {vaelPanel === "runs" && (
+                <div className="bg-white border border-border overflow-hidden">
+                  <div className="px-6 py-4 border-b border-border/30 bg-surface-container-high/30 flex items-center justify-between">
+                    <span className="font-label text-[10px] uppercase tracking-widest text-muted-foreground">
+                      Verification Runs — {vaelRuns.length} recent
+                    </span>
+                    <button
+                      onClick={loadVaelRuns}
+                      disabled={runsLoading}
+                      className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors disabled:opacity-40"
+                    >
+                      {runsLoading ? "Loading…" : "Refresh"}
+                    </button>
+                  </div>
+
+                  {vaelRuns.length === 0 ? (
+                    <div className="px-6 py-16 text-center">
+                      <p className="font-sans text-sm text-muted-foreground">{runsLoading ? "Loading…" : "No verification runs recorded yet"}</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="bg-surface-container-high/50">
+                            {["Run #", "Entry ID", "Action", "Score Before", "Score After", "Source Found", "Date"].map(h => (
+                              <th key={h} className="pl-6 pr-4 py-3 text-left font-label text-[9px] uppercase tracking-widest text-muted-foreground">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {vaelRuns.map((run, i) => (
+                            <tr key={run.id} className={i % 2 === 0 ? "" : "bg-muted/20"}>
+                              <td className="pl-6 pr-4 py-3 font-mono text-xs text-muted-foreground">{run.runNumber}</td>
+                              <td className="pl-6 pr-4 py-3 font-mono text-xs text-muted-foreground max-w-[120px] truncate" title={run.entryId}>{run.entryId.slice(0, 12)}…</td>
+                              <td className="pl-6 pr-4 py-3 font-label text-[9px] uppercase tracking-widest text-on-surface">{run.actionTaken ?? "—"}</td>
+                              <td className="pl-6 pr-4 py-3 font-mono text-xs text-muted-foreground">{run.scoreBefore ?? "—"}</td>
+                              <td className="pl-6 pr-4 py-3">
+                                {run.scoreAfter != null ? (
+                                  <span className={`font-mono text-xs ${(run.scoreAfter ?? 0) >= (run.scoreBefore ?? 0) ? "text-secondary" : "text-destructive"}`}>
+                                    {run.scoreAfter}
+                                  </span>
+                                ) : <span className="text-muted-foreground font-mono text-xs">—</span>}
+                              </td>
+                              <td className="pl-6 pr-4 py-3">
+                                <span className={`font-label text-[9px] uppercase tracking-widest ${run.sourceFound ? "text-secondary" : "text-muted-foreground"}`}>
+                                  {run.sourceFound ? "Yes" : "No"}
+                                </span>
+                              </td>
+                              <td className="pl-6 pr-4 py-3 font-label text-[9px] text-muted-foreground" title={new Date(run.createdAt).toLocaleString()}>
+                                {timeAgo(run.createdAt)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+            </div>
+          );
+        })()}
 
       </main>
     </div>

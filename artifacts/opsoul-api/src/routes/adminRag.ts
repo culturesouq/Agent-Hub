@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import { db, pool, ragDnaTable, ragPipelineConfigTable, operatorKbTable, ragSourcesTable, operatorsTable } from '@workspace/db';
+import { db, pool, ragDnaTable, ragPipelineConfigTable, operatorKbTable, ragSourcesTable, operatorsTable, kbVerificationRunsTable } from "@workspace/db";
 import type { RagSourceType } from '@workspace/db';
 import { eq, and, sql, desc, isNull, or, notInArray } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
@@ -11,6 +11,7 @@ import { embed } from '@workspace/opsoul-utils/ai';
 import { chatCompletion, KB_MODEL } from '../utils/openrouter.js';
 
 import { validateEntry, runDiscoverySweep } from '../utils/vaelEngine.js';
+import { runVaelFullSweep, runVaelValidationOnly, getVaelRunState } from '../cron/vaelCron.js';
 import multer from 'multer';
 import * as cheerio from 'cheerio';
 
@@ -977,6 +978,129 @@ router.post('/platform-kb/ingest-url', requireAuth, requireAdmin, async (req: Re
   }
 
   res.json({ ok: true, source: targetUrl, chunks: chunks.length, operators: operators.length, total_inserted: seeded });
+});
+
+// ── VAEL Status & Trigger ──────────────────────────────────────────────────
+
+router.get('/vael/status', (_req: Request, res: Response): void => {
+  res.json(getVaelRunState());
+});
+
+router.post('/vael/trigger', async (req: Request, res: Response): Promise<void> => {
+  const { mode } = req.body as { mode?: 'full' | 'validate' };
+  const st = getVaelRunState();
+  if (st.isRunning) {
+    res.status(409).json({ ok: false, message: 'VAEL sweep already in progress' });
+    return;
+  }
+  const sweep = mode === 'validate' ? runVaelValidationOnly : runVaelFullSweep;
+  sweep().catch((err) => console.error('[VAEL] Trigger error:', err));
+  res.json({ ok: true, mode: mode ?? 'full', message: 'VAEL sweep triggered' });
+});
+
+// POST /admin/rag/vael/inbox-url — scrape URL and drop into VAEL inbox
+router.post('/vael/inbox-url', async (req: Request, res: Response): Promise<void> => {
+  const { url, label } = req.body as { url?: string; label?: string };
+  if (!url?.trim() || !/^https?:\/\//i.test(url.trim())) {
+    res.status(400).json({ error: 'A valid http/https URL is required' });
+    return;
+  }
+  const targetUrl = url.trim();
+  const sourceLabel = label?.trim() || new URL(targetUrl).hostname;
+
+  let fetchRes: globalThis.Response;
+  try {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 30_000);
+    fetchRes = await fetch(targetUrl, {
+      signal: ctrl.signal,
+      redirect: 'follow',
+      headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'text/html,*/*;q=0.8' },
+    });
+    clearTimeout(tid);
+  } catch (err) {
+    res.json({ ok: false, error: 'Fetch failed: ' + (err as Error).message });
+    return;
+  }
+
+  if (!fetchRes.ok) {
+    res.json({ ok: false, error: 'HTTP ' + fetchRes.status });
+    return;
+  }
+
+  const rawHtml = await fetchRes.text();
+  const text = scrapeHtml(rawHtml);
+  if (!text || text.trim().length < 50) {
+    res.json({ ok: false, error: 'Could not extract usable text from URL' });
+    return;
+  }
+
+  try {
+    await fs.mkdir(INBOX_DIR, { recursive: true });
+    const safe = sourceLabel.replace(/[^a-zA-Z0-9_\- ]/g, '_').slice(0, 60);
+    const filename = `${safe}.md`;
+    const filePath = path.join(INBOX_DIR, filename);
+    await fs.writeFile(filePath, `# ${safe}\n\nSource: ${targetUrl}\n\n${text.trim().slice(0, 20000)}`, 'utf-8');
+    res.status(201).json({ ok: true, filename, chars: text.length });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not write to inbox', detail: (e as Error).message });
+  }
+});
+
+// POST /admin/rag/vael/inbox-text — submit raw text to VAEL inbox
+router.post('/vael/inbox-text', async (req: Request, res: Response): Promise<void> => {
+  const { content: textContent, label } = req.body as { content?: string; label?: string };
+  if (!textContent?.trim() || !label?.trim()) {
+    res.status(400).json({ error: 'content and label are required' });
+    return;
+  }
+  try {
+    await fs.mkdir(INBOX_DIR, { recursive: true });
+    const safe = label.trim().replace(/[^a-zA-Z0-9_\- ]/g, '_').slice(0, 60);
+    const filename = `${safe}.md`;
+    const filePath = path.join(INBOX_DIR, filename);
+    await fs.writeFile(filePath, `# ${safe}\n\n${textContent.trim()}`, 'utf-8');
+    res.status(201).json({ ok: true, filename });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not write to inbox', detail: (e as Error).message });
+  }
+});
+
+// GET /admin/rag/vael/runs — kb_verification_runs history
+router.get('/vael/runs', async (req: Request, res: Response): Promise<void> => {
+  const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? '50'), 10) || 50));
+  const runs = await db
+    .select()
+    .from(kbVerificationRunsTable)
+    .orderBy(desc(kbVerificationRunsTable.createdAt))
+    .limit(limit);
+  res.json(runs);
+});
+
+// PATCH /admin/rag/entries/:id — quick patch status, confidence, isActive
+router.patch('/entries/:id', async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params as Record<string, string>;
+  const { knowledgeStatus, confidence, isActive } = req.body as {
+    knowledgeStatus?: 'current' | 'upgraded' | 'deprecated' | 'draft';
+    confidence?: number;
+    isActive?: boolean;
+  };
+
+  const [existing] = await db.select({ id: ragDnaTable.id }).from(ragDnaTable).where(eq(ragDnaTable.id, id));
+  if (!existing) { res.status(404).json({ error: 'Entry not found' }); return; }
+
+  const updates: Partial<typeof ragDnaTable.$inferInsert> = { updatedAt: new Date() };
+  if (knowledgeStatus !== undefined) updates.knowledgeStatus = knowledgeStatus;
+  if (confidence !== undefined) updates.confidence = confidence;
+  if (isActive !== undefined) updates.isActive = isActive;
+
+  const [updated] = await db.update(ragDnaTable).set(updates).where(eq(ragDnaTable.id, id)).returning({
+    id: ragDnaTable.id,
+    knowledgeStatus: ragDnaTable.knowledgeStatus,
+    confidence: ragDnaTable.confidence,
+    isActive: ragDnaTable.isActive,
+  });
+  res.json(updated);
 });
 
 export default router;
