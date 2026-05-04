@@ -66,9 +66,10 @@ function CodeBlock({ code }: { code: string }) {
 
 function codeExample(slot: DeploymentSlot, key: string): string {
   const displayKey = key || `${slot.apiKeyPreview}...`;
+  const base = typeof window !== "undefined" ? window.location.origin : "";
   if (slot.surfaceType === "guest") {
     return `// Guest chat — ephemeral, no userId needed
-const res = await fetch("https://api.opsoul.io/v1/chat", {
+const res = await fetch("${base}/v1/chat", {
   method: "POST",
   headers: {
     "Authorization": "Bearer ${displayKey}",
@@ -85,7 +86,7 @@ console.log(data.message.content);
   }
   if (slot.surfaceType === "authenticated") {
     return `// Authenticated chat — persistent memory per userId
-const res = await fetch("https://api.opsoul.io/v1/chat", {
+const res = await fetch("${base}/v1/chat", {
   method: "POST",
   headers: {
     "Authorization": "Bearer ${displayKey}",
@@ -102,7 +103,7 @@ console.log(data.message.content);`;
   }
   if (slot.surfaceType === "crud") {
     return `// CRUD action — operator executes and returns result, no chat
-const res = await fetch("https://api.opsoul.io/v1/action", {
+const res = await fetch("${base}/v1/action", {
   method: "POST",
   headers: {
     "Authorization": "Bearer ${displayKey}",
@@ -231,9 +232,10 @@ export default function DeploymentsSection({ operatorId }: { operatorId: string 
   });
 
   const copyEndpoint = (slot: DeploymentSlot) => {
+    const base = window.location.origin;
     const url = slot.surfaceType === "crud"
-      ? "https://api.opsoul.io/v1/action"
-      : "https://api.opsoul.io/v1/chat";
+      ? `${base}/v1/action`
+      : `${base}/v1/chat`;
     navigator.clipboard.writeText(url);
     toast({ title: "Endpoint URL copied" });
   };

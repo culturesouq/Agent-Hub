@@ -291,7 +291,7 @@ export default function Login() {
           {["Legal", "Privacy", "Security"].map((label) => (
             <a
               key={label}
-              href={`https://opsoul.io/${label.toLowerCase()}`}
+              href={`/${label.toLowerCase()}`}
               className="font-label font-bold uppercase transition-colors text-muted-foreground/60 hover:text-primary"
               style={{ fontSize: "11px", letterSpacing: "0.2em" }}
             >

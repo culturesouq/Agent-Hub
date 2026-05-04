@@ -90,7 +90,7 @@ function CodeBlock({ code, onCopy }: { code: string; onCopy: () => void }) {
   );
 }
 
-const PUBLIC_ENDPOINT = "https://opsoul.io/v1/chat";
+const PUBLIC_ENDPOINT = `${typeof window !== "undefined" ? window.location.origin : ""}/v1/chat`;
 
 const PUBLIC_ENDPOINT_BLOCK = `POST ${PUBLIC_ENDPOINT}
 
@@ -116,7 +116,7 @@ interface ApiSlot {
   revokedAt: string | null;
 }
 
-const CRUD_ENDPOINT = "https://opsoul.io/v1/action";
+const CRUD_ENDPOINT = `${typeof window !== "undefined" ? window.location.origin : ""}/v1/action`;
 
 const API_SLOT_META = {
   guest: {
