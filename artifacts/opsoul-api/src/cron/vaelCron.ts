@@ -9,7 +9,24 @@ import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 
-const VAEL_OPERATOR_ID = 'a826164f-3111-4cc9-8f3c-856ecc589d77';
+const VAEL_OPERATOR_ID = '8668f6c9-f7cf-4c65-a36e-7dd278005950';
+
+// ── Knowledge taxonomy ────────────────────────────────────────────────────────
+// L0: AI builder skills — HTTP, APIs, scraping, LLM control, tool chaining, code reading
+// L1: Foundation — how operators think, reason, communicate, ethical principles
+// L2: Behavioral — per-archetype behavior patterns and decision frameworks
+// L3: Domain — specialty domain knowledge (agriculture, finance, legal, etc.)
+// L4: Platform — Opsoul platform docs and procedures
+
+const TAXONOMY_LAYERS = {
+  L0: 'l0_ai_builder',
+  L1: 'l1_foundation',
+  L2: 'l2_behavioral',
+  L3: 'l3_domain',
+  L4: 'l4_platform',
+} as const;
+
+type TaxonomyLayer = typeof TAXONOMY_LAYERS[keyof typeof TAXONOMY_LAYERS];
 
 async function recordVaelRun(taskType: 'full_sweep' | 'validation', summary: string, durationSec: number): Promise<void> {
   try {
@@ -35,12 +52,11 @@ async function recordVaelRun(taskType: 'full_sweep' | 'validation', summary: str
 }
 
 // ── Budget timer ──────────────────────────────────────────────────────────────
-// Vael races the clock — she does as much as she can before the budget runs out.
 
 const FULL_BUDGET_MS  = 270_000; // 4.5 min — full sweep (validate + discover)
 const FAST_BUDGET_MS  =  55_000; // 55 sec  — validate-only cycle
 
-const VALID_ARCHETYPES = ['Advisor', 'Analyst', 'Executor', 'Catalyst', 'Expert', 'Mentor', 'Connector', 'Creator', 'Guardian'];
+const VALID_ARCHETYPES = ['Advisor', 'Analyst', 'Executor', 'Catalyst', 'Expert', 'Mentor', 'Connector', 'Creator', 'Guardian', 'Builder'];
 
 class BudgetTimer {
   private startedAt = Date.now();
@@ -50,22 +66,32 @@ class BudgetTimer {
   elapsedSec  = ()  => ((Date.now() - this.startedAt) / 1000).toFixed(1);
 }
 
-// ── Scope classifier (Vael classifies her own discoveries) ───────────────────
+// ── Taxonomy classifier ───────────────────────────────────────────────────────
+// Vael classifies each entry by layer, scope, archetypes, and domain tags.
 
-const SCOPE_PROMPT = `Classify this knowledge entry for the collective DNA corpus.
+const TAXONOMY_PROMPT = `Classify this knowledge entry for the Opsoul platform DNA corpus.
 
 Return JSON only:
 {
+  "layer": "l0_ai_builder" | "l1_foundation" | "l2_behavioral" | "l3_domain" | "l4_platform",
   "dna_scope": "general" | "specialty",
   "archetype_scope": ["Analyst"],
   "domain_tags": ["agriculture"]
 }
 
-Rules:
-- "general": knowledge about how to think, operate, or communicate — target archetypes from [${VALID_ARCHETYPES.join(', ')}], empty [] if universal
-- "specialty": domain-specific — set domain_tags (e.g. agriculture, finance, legal, medical, engineering, hr, sales, marketing, education, technology)`;
+Layer rules:
+- "l0_ai_builder": HTTP requests, REST/GraphQL APIs, web scraping (allowed and blocked patterns), data formats (JSON/XML/CSV), LLM prompting and control, tool chaining, code reading and understanding
+- "l1_foundation": How operators think, reason, communicate — core operating principles, ethics, universal guidelines that apply to all archetypes
+- "l2_behavioral": Per-archetype behavior patterns, communication styles, decision frameworks specific to a named archetype
+- "l3_domain": Specialty domain knowledge (e.g. agriculture, finance, legal, medical, engineering, hr, sales, marketing, education, technology)
+- "l4_platform": Opsoul platform documentation, platform-specific procedures, feature explanations, platform APIs
 
-async function classifyScope(content: string): Promise<{
+DNA scope rules:
+- "general": universal knowledge applicable across operators — set archetype_scope from [${VALID_ARCHETYPES.join(', ')}], or empty [] if truly universal
+- "specialty": domain-specific — set domain_tags (e.g. agriculture, finance, legal, medical)`;
+
+async function classifyTaxonomy(content: string): Promise<{
+  layer: TaxonomyLayer;
   dnaScope: 'general' | 'specialty';
   archetypeScope: string[];
   domainTags: string[];
@@ -73,13 +99,15 @@ async function classifyScope(content: string): Promise<{
   try {
     const res = await chatCompletion(
       [
-        { role: 'system', content: SCOPE_PROMPT },
+        { role: 'system', content: TAXONOMY_PROMPT },
         { role: 'user', content: content.slice(0, 600) },
       ],
       { model: KB_MODEL },
     );
     const parsed = JSON.parse(res.content.trim());
+    const validLayers: TaxonomyLayer[] = Object.values(TAXONOMY_LAYERS);
     return {
+      layer: validLayers.includes(parsed.layer) ? parsed.layer : TAXONOMY_LAYERS.L1,
       dnaScope: parsed.dna_scope === 'specialty' ? 'specialty' : 'general',
       archetypeScope: Array.isArray(parsed.archetype_scope)
         ? parsed.archetype_scope.filter((a: string) => VALID_ARCHETYPES.includes(a))
@@ -87,7 +115,7 @@ async function classifyScope(content: string): Promise<{
       domainTags: Array.isArray(parsed.domain_tags) ? parsed.domain_tags : [],
     };
   } catch {
-    return { dnaScope: 'general', archetypeScope: [], domainTags: [] };
+    return { layer: TAXONOMY_LAYERS.L1, dnaScope: 'general', archetypeScope: [], domainTags: [] };
   }
 }
 
@@ -177,7 +205,7 @@ async function seedProposal(proposal: DiscoveryProposal): Promise<boolean> {
   const validation = await validateEntry({
     title: proposal.title,
     content: proposal.content,
-    layer: 'collective',
+    layer: TAXONOMY_LAYERS.L1,
     tags: proposal.suggested_tags ?? [],
     sourceName: proposal.suggested_source_name,
     confidence: proposal.suggested_confidence,
@@ -192,8 +220,8 @@ async function seedProposal(proposal: DiscoveryProposal): Promise<boolean> {
     ? validation.revised_content
     : proposal.content;
 
-  const [scope, embedding] = await Promise.all([
-    classifyScope(finalContent),
+  const [taxonomy, embedding] = await Promise.all([
+    classifyTaxonomy(finalContent),
     embed(finalContent).catch(() => undefined),
   ]);
 
@@ -212,7 +240,7 @@ async function seedProposal(proposal: DiscoveryProposal): Promise<boolean> {
 
   await db.insert(ragDnaTable).values({
     id: randomUUID(),
-    layer: 'collective',
+    layer: taxonomy.layer,
     title: proposal.title,
     content: finalContent,
     embedding: embedding ?? null,
@@ -221,9 +249,9 @@ async function seedProposal(proposal: DiscoveryProposal): Promise<boolean> {
     sourceHash: hash,
     confidence: validation.confidence_suggested ?? proposal.suggested_confidence,
     knowledgeStatus: 'current',
-    dnaScope: scope.dnaScope,
-    archetypeScope: scope.archetypeScope,
-    domainTags: scope.domainTags,
+    dnaScope: taxonomy.dnaScope,
+    archetypeScope: taxonomy.archetypeScope,
+    domainTags: taxonomy.domainTags,
     isActive: true,
   });
 
@@ -298,8 +326,6 @@ async function runDiscoveryPhase(timer: BudgetTimer): Promise<{
 }
 
 // ── Phase 3: Source-guided discovery ──────────────────────────────────────────
-// Vael visits active curated sources (HuggingFace, GitHub, etc.),
-// extracts knowledge candidates, validates them, and seeds what passes.
 
 async function runSourceGuidedPhase(timer: BudgetTimer): Promise<{
   sourcesVisited: number; candidatesExtracted: number; seeded: number;
@@ -330,7 +356,6 @@ async function runSourceGuidedPhase(timer: BudgetTimer): Promise<{
       continue;
     }
 
-    // Combine chunks into batches for Vael to extract from
     const batched = chunks.slice(0, 8).map(c => `## ${c.title}\n${c.rawContent}`).join('\n\n---\n\n');
     let candidates;
     try {
@@ -351,7 +376,7 @@ async function runSourceGuidedPhase(timer: BudgetTimer): Promise<{
         const validation = await validateEntry({
           title: candidate.title,
           content: candidate.content,
-          layer: 'collective',
+          layer: TAXONOMY_LAYERS.L1,
           tags: candidate.suggested_tags ?? [],
           sourceName: source.name,
           confidence: candidate.suggested_confidence,
@@ -375,11 +400,14 @@ async function runSourceGuidedPhase(timer: BudgetTimer): Promise<{
 
         if (existing) continue;
 
-        const embedding = await embed(finalContent).catch(() => undefined);
+        const [taxonomy, embedding] = await Promise.all([
+          classifyTaxonomy(finalContent),
+          embed(finalContent).catch(() => undefined),
+        ]);
 
         await db.insert(ragDnaTable).values({
           id: randomUUID(),
-          layer: 'collective',
+          layer: taxonomy.layer,
           title: candidate.title,
           content: finalContent,
           embedding: embedding ?? null,
@@ -388,20 +416,19 @@ async function runSourceGuidedPhase(timer: BudgetTimer): Promise<{
           sourceHash: hash,
           confidence: validation.confidence_suggested ?? candidate.suggested_confidence,
           knowledgeStatus: 'current',
-          dnaScope: 'general',
-          archetypeScope: [],
-          domainTags: candidate.suggested_tags ?? [],
+          dnaScope: taxonomy.dnaScope,
+          archetypeScope: taxonomy.archetypeScope,
+          domainTags: taxonomy.domainTags,
           isActive: true,
         });
 
         stats.seeded++;
-        console.log(`[VAEL] ✓ Seeded from source: "${candidate.title}"`);
+        console.log(`[VAEL] ✓ Seeded from source: "${candidate.title}" [${taxonomy.layer}]`);
       } catch (err) {
         console.error(`[VAEL] Source candidate error: "${candidate.title}":`, (err as Error).message);
       }
     }
 
-    // Record last fetch on source
     await db
       .update(ragSourcesTable)
       .set({ lastFetchAt: new Date(), lastFetchCount: stats.seeded })
@@ -412,8 +439,8 @@ async function runSourceGuidedPhase(timer: BudgetTimer): Promise<{
 }
 
 // ── Knowledge Inbox ───────────────────────────────────────────────────────────
-// Vael reads every file dropped into knowledge_inbox/, decides what is worth
-// learning, validates each candidate, and seeds what passes. No admin gate.
+// Vael reads every file dropped into knowledge_inbox/, validates each candidate,
+// classifies it into the L0-L4 taxonomy, and seeds what passes.
 
 const INBOX_DIR = path.resolve(process.cwd(), 'knowledge_inbox');
 const PROCESSED_DIR = path.join(INBOX_DIR, 'processed');
@@ -443,6 +470,10 @@ async function processKnowledgeInbox(timer: BudgetTimer): Promise<{ filesRead: n
       continue;
     }
 
+    // Check for layer hint in frontmatter: <!-- layer: l0_ai_builder -->
+    const layerHintMatch = raw.match(/<!--\s*layer:\s*(l[0-4]_\w+)\s*-->/i);
+    const hintedLayer = layerHintMatch ? layerHintMatch[1] as TaxonomyLayer : null;
+
     const content = raw.slice(0, 8_000);
     stats.filesRead++;
 
@@ -462,7 +493,7 @@ async function processKnowledgeInbox(timer: BudgetTimer): Promise<{ filesRead: n
           title: candidate.title,
           content: candidate.content,
           tags: candidate.suggested_tags ?? [],
-          layer: 'collective',
+          layer: hintedLayer ?? TAXONOMY_LAYERS.L1,
           confidence: candidate.suggested_confidence ?? 0.7,
         });
 
@@ -472,11 +503,16 @@ async function processKnowledgeInbox(timer: BudgetTimer): Promise<{ filesRead: n
           ? validation.revised_content
           : candidate.content;
 
+        // Use layer hint from file if present, otherwise classify
+        const taxonomy = hintedLayer
+          ? { layer: hintedLayer, dnaScope: 'general' as const, archetypeScope: [] as string[], domainTags: candidate.suggested_tags ?? [] }
+          : await classifyTaxonomy(finalContent);
+
         const embedding = await embed(finalContent).catch(() => null);
 
         await db.insert(ragDnaTable).values({
           id: randomUUID(),
-          layer: 'collective',
+          layer: taxonomy.layer,
           title: candidate.title,
           content: finalContent,
           embedding: embedding ?? null,
@@ -484,20 +520,19 @@ async function processKnowledgeInbox(timer: BudgetTimer): Promise<{ filesRead: n
           sourceName: `inbox:${file}`,
           confidence: validation.confidence_suggested ?? candidate.suggested_confidence ?? 0.75,
           knowledgeStatus: 'current',
-          dnaScope: 'general',
-          archetypeScope: [],
-          domainTags: candidate.suggested_tags ?? [],
+          dnaScope: taxonomy.dnaScope,
+          archetypeScope: taxonomy.archetypeScope,
+          domainTags: taxonomy.domainTags,
           isActive: true,
         }).onConflictDoNothing();
 
         stats.seeded++;
-        console.log(`[VAEL] ✓ Inbox seeded: "${candidate.title}"`);
+        console.log(`[VAEL] ✓ Inbox seeded: "${candidate.title}" [${taxonomy.layer}]`);
       } catch (err) {
         console.error(`[VAEL] Inbox candidate error: "${candidate.title}":`, (err as Error).message);
       }
     }
 
-    // Move file to processed/
     try {
       const stamp = new Date().toISOString().replace(/[:.]/g, '-');
       await fs.rename(filePath, path.join(PROCESSED_DIR, `${stamp}_${file}`));
@@ -615,9 +650,7 @@ export async function runVaelValidationOnly(): Promise<void> {
 // ── Cron registration ─────────────────────────────────────────────────────────
 
 export function startVaelCron(): void {
-  // Full sweep twice daily — validate + discover + seed
   const SWEEP_SCHEDULE    = process.env.VAEL_SWEEP_SCHEDULE    ?? '0 1,13 * * *';
-  // Validation-only every 6 hours — keep drafts clean between sweeps
   const VALIDATE_SCHEDULE = process.env.VAEL_VALIDATE_SCHEDULE ?? '0 */6 * * *';
 
   console.log(`[VAEL] Full sweep cron scheduled: "${SWEEP_SCHEDULE}" (UTC) — validate + discover + seed`);
