@@ -115,38 +115,23 @@ const inboxUpload = multer({
 
 // ── Pipeline content screener ────────────────────────────────────────────────
 
-const VALID_ARCHETYPES_LIST = ['Advisor', 'Analyst', 'Executor', 'Catalyst', 'Expert', 'Mentor', 'Connector', 'Creator', 'Guardian'];
+const VALID_ARCHETYPES_LIST = ['Advisor', 'Analyst', 'Executor', 'Catalyst', 'Expert', 'Mentor', 'Connector', 'Creator', 'Guardian', 'Builder'];
 
 // ── Operators permanently excluded from collective pipeline extraction ─────────
-// These operators absorb knowledge from all layers but never contribute to
-// the collective corpus — their learning stays private to them.
 const PIPELINE_EXCLUDED_OPERATORS = [
-  'a826164f-3111-4cc9-8f3c-856ecc589d77', // Vael — internal validator/discoverer
+  '8668f6c9-f7cf-4c65-a36e-7dd278005950', // Vael — internal validator, does not contribute to collective
 ];
 
-const SCREENER_SYSTEM = `You are Vael, the intelligence guardian for OpSoul. Your job is to validate entries for the OpSoul DNA corpus — the platform's identity layer.
+const SCREENER_SYSTEM = `You are Vael, the knowledge gatekeeper for Opsoul. Your job is to validate entries for the platform DNA corpus.
 
-DNA entries must be exclusively about OpSoul: how the platform works, what operators are, the 6-layer stack (Human Core → Identity → Self-Awareness → GROW → Agency → Senses), the 9 archetypes, Vael's role, GROW system, collective intelligence, operator lifecycle, and platform principles.
+The corpus is organized into 5 taxonomy layers:
+- l0_ai_builder: HTTP, REST/GraphQL APIs, web scraping (allowed + blocked), data formats (JSON/XML/CSV), LLM prompting and control, tool chaining, code reading
+- l1_foundation: How operators think, reason, communicate — core operating principles, ethics, universal guidelines
+- l2_behavioral: Per-archetype behavior patterns, communication styles, decision frameworks
+- l3_domain: Specialty domain knowledge (agriculture, finance, legal, medical, engineering, etc.)
+- l4_platform: Opsoul platform docs, operator lifecycle, GROW system, self-awareness engine, archetype principles
 
-DNA is NOT for general agentic knowledge, external domain facts, or how-to guides about third-party APIs. That belongs in platform KB or operator KB.
-
-ELIGIBLE DNA:
-- How OpSoul operators think, evolve, and behave on the platform
-- Archetype-specific behavioral principles (how an Executor vs Advisor approaches tasks on OpSoul)
-- Platform mechanics: GROW, self-awareness engine, curiosity engine, operator maturity lifecycle
-- OpSoul values: identity-first, adapt-never-adopt, operator sovereignty
-- Collective intelligence patterns observed across operators on the platform
-- Vael's role and validation mandate
-
-NOT ELIGIBLE:
-- General API usage guides
-- External domain knowledge (finance, legal, medical, etc.)
-- Generic agentic AI patterns not specific to OpSoul
-- User preference notes or session observations
-
-For eligible entries, classify scope:
-- "general": Applies across all operators or multiple archetypes. Set archetype_scope to relevant archetypes from: [Advisor, Analyst, Executor, Catalyst, Expert, Mentor, Connector, Creator, Guardian]. Empty [] = applies to all.
-- "specialty": Specific to one archetype or one platform subsystem.
+For each entry, determine if it is eligible for the DNA corpus and classify its layer.
 
 Return only valid JSON. No preamble.
 
@@ -154,9 +139,10 @@ Schema:
 {
   "eligible": true | false,
   "reason": "<only if not eligible>",
+  "layer": "l0_ai_builder" | "l1_foundation" | "l2_behavioral" | "l3_domain" | "l4_platform",
   "dna_scope": "general" | "specialty",
   "archetype_scope": ["Analyst", "Expert"],
-  "domain_tags": ["grow", "self-awareness", "archetype"]
+  "domain_tags": ["agriculture", "finance"]
 }`;
 
 async function screenForCollective(content: string): Promise<{
@@ -193,7 +179,7 @@ const router = Router();
 router.use(requireAuth);
 router.use(requireAdmin);
 
-const VALID_LAYERS = ['builder', 'archetype', 'collective'] as const;
+const VALID_LAYERS = ['l0_ai_builder', 'l1_foundation', 'l2_behavioral', 'l3_domain', 'l4_platform'] as const;
 const VALID_ARCHETYPES = [
   'Advisor', 'Executor', 'Expert', 'Connector', 'Creator',
   'Guardian', 'Builder', 'Catalyst', 'Analyst',
@@ -202,13 +188,17 @@ const VALID_ARCHETYPES = [
 // ── Stats ──────────────────────────────────────────────────────────────────
 
 router.get('/stats', async (_req: Request, res: Response): Promise<void> => {
-  const [[builderCount], [archetypeCount], [collectiveCount], [totalActive]] = await Promise.all([
+  const [[l0], [l1], [l2], [l3], [l4], [totalActive]] = await Promise.all([
     db.select({ count: sql<number>`count(*)::int` }).from(ragDnaTable)
-      .where(and(eq(ragDnaTable.layer, 'builder'), eq(ragDnaTable.isActive, true))),
+      .where(and(eq(ragDnaTable.layer, 'l0_ai_builder'), eq(ragDnaTable.isActive, true))),
     db.select({ count: sql<number>`count(*)::int` }).from(ragDnaTable)
-      .where(and(eq(ragDnaTable.layer, 'archetype'), eq(ragDnaTable.isActive, true))),
+      .where(and(eq(ragDnaTable.layer, 'l1_foundation'), eq(ragDnaTable.isActive, true))),
     db.select({ count: sql<number>`count(*)::int` }).from(ragDnaTable)
-      .where(and(eq(ragDnaTable.layer, 'collective'), eq(ragDnaTable.isActive, true))),
+      .where(and(eq(ragDnaTable.layer, 'l2_behavioral'), eq(ragDnaTable.isActive, true))),
+    db.select({ count: sql<number>`count(*)::int` }).from(ragDnaTable)
+      .where(and(eq(ragDnaTable.layer, 'l3_domain'), eq(ragDnaTable.isActive, true))),
+    db.select({ count: sql<number>`count(*)::int` }).from(ragDnaTable)
+      .where(and(eq(ragDnaTable.layer, 'l4_platform'), eq(ragDnaTable.isActive, true))),
     db.select({ count: sql<number>`count(*)::int` }).from(ragDnaTable)
       .where(eq(ragDnaTable.isActive, true)),
   ]);
@@ -216,9 +206,11 @@ router.get('/stats', async (_req: Request, res: Response): Promise<void> => {
   const [config] = await db.select().from(ragPipelineConfigTable).limit(1);
 
   res.json({
-    builderCount: builderCount.count,
-    archetypeCount: archetypeCount.count,
-    collectiveCount: collectiveCount.count,
+    l0Count: l0.count,
+    l1Count: l1.count,
+    l2Count: l2.count,
+    l3Count: l3.count,
+    l4Count: l4.count,
     totalActive: totalActive.count,
     pipelineEnabled: config?.enabled ?? false,
     lastRunAt: config?.lastRunAt ?? null,
@@ -757,229 +749,6 @@ router.post('/inbox/upload', inboxUpload.array('files', 50), async (req: Request
   res.status(added > 0 ? 201 : 400).json({ added, results });
 });
 
-// POST /admin/rag/platform-kb/upload
-router.post('/platform-kb/upload', inboxUpload.single('file'), async (req: Request, res: Response): Promise<void> => {
-  if (!req.file) { res.status(400).json({ error: 'No file provided' }); return; }
-
-  const { buffer, mimetype, originalname } = req.file;
-  const text = await extractTextFromBuffer(buffer, mimetype, originalname);
-  if (!text || text.trim().length < 50) { res.status(422).json({ error: 'Could not extract usable text from this file' }); return; }
-
-  const words = text.split(/\s+/);
-  const CHUNK_SIZE = 400;
-  const chunks: string[] = [];
-  for (let i = 0; i < words.length; i += CHUNK_SIZE) {
-    chunks.push(words.slice(i, i + CHUNK_SIZE).join(' '));
-  }
-
-  const operators = await db
-    .select({ id: operatorsTable.id, ownerId: operatorsTable.ownerId })
-    .from(operatorsTable)
-    .where(isNull(operatorsTable.deletedAt));
-
-  let seeded = 0;
-  for (const op of operators) {
-    for (let idx = 0; idx < chunks.length; idx++) {
-      const embedding = await embed(chunks[idx]);
-      const vecStr = `[${embedding.join(',')}]`;
-      const id = `plat-upload-${originalname.replace(/\W/g, '-')}-${idx}-${op.id}`.slice(0, 120);
-      const insertResult = await pool.query(
-        `INSERT INTO operator_kb
-           (id, operator_id, owner_id, content, embedding, source_name,
-            source_trust_level, confidence_score, intake_tags, is_pipeline_intake,
-            privacy_cleared, content_cleared, is_system, verification_status, chunk_index, created_at)
-         VALUES ($1,$2,$3,$4,$5::vector,$6,'platform',90,'{}',false,true,true,true,'active',$7,NOW())
-         ON CONFLICT (id) DO NOTHING`,
-        [id, op.id, op.ownerId, chunks[idx], vecStr, `_upload:${originalname}`, idx],
-      );
-      seeded += insertResult.rowCount ?? 0;
-    }
-  }
-
-  res.json({ ok: true, source: originalname, chunks: chunks.length, operators: operators.length, total_inserted: seeded });
-});
-
-// POST /admin/rag/platform-kb/seed  — seed V1 corpus into all active operators
-router.post('/platform-kb/seed', requireAuth, requireAdmin, async (req: Request, res: Response): Promise<void> => {
-  const { PLATFORM_KB_V1 } = await import('../scripts/platformKbV1Data.js');
-
-  const operators = await db
-    .select({ id: operatorsTable.id, ownerId: operatorsTable.ownerId })
-    .from(operatorsTable)
-    .where(isNull(operatorsTable.deletedAt));
-
-  if (operators.length === 0) {
-    res.json({ ok: true, operators: 0, entries: PLATFORM_KB_V1.length, inserted: 0, skipped: 0 });
-    return;
-  }
-
-  // Compute embeddings once for all entries
-  const embeddings: number[][] = [];
-  for (const entry of PLATFORM_KB_V1) {
-    embeddings.push(await embed(entry.content));
-  }
-
-  let inserted = 0;
-  let skipped = 0;
-
-  for (const op of operators) {
-    for (let idx = 0; idx < PLATFORM_KB_V1.length; idx++) {
-      const entry = PLATFORM_KB_V1[idx];
-      const vecStr = `[${embeddings[idx].join(',')}]`;
-      const id = entry.id
-        ? `plat-${entry.id.toLowerCase()}-${op.id}`
-        : `plat-${String(idx).padStart(3, '0')}-${op.id}`;
-
-      const result = await pool.query(
-        `INSERT INTO operator_kb
-           (id, operator_id, owner_id, content, embedding, source_name,
-            source_trust_level, confidence_score, intake_tags, is_pipeline_intake,
-            privacy_cleared, content_cleared, is_system, verification_status, chunk_index, created_at)
-         VALUES ($1,$2,$3,$4,$5::vector,$6,'platform',95,'{}',false,true,true,true,'active',$7,NOW())
-         ON CONFLICT (id) DO NOTHING`,
-        [id, op.id, op.ownerId, entry.content, vecStr, '_platform-kb', idx],
-      );
-      if ((result.rowCount ?? 0) > 0) inserted++;
-      else skipped++;
-    }
-  }
-
-  res.json({ ok: true, operators: operators.length, entries: PLATFORM_KB_V1.length, inserted, skipped });
-});
-
-// GET /admin/rag/platform-kb/entries — distinct platform KB entries (deduped by content), paginated
-router.get('/platform-kb/entries', async (req: Request, res: Response): Promise<void> => {
-  const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10) || 1);
-  const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? '20'), 10) || 20));
-  const offset = (page - 1) * limit;
-
-  const [countResult, pageResult] = await Promise.all([
-    pool.query<{ total: string }>(
-      `SELECT COUNT(DISTINCT content) AS total FROM operator_kb WHERE is_system = true`,
-    ),
-    pool.query<{
-      id: string;
-      base_id: string;
-      content: string;
-      source_name: string;
-      confidence_score: number;
-      created_at: string;
-    }>(
-      `SELECT id, base_id, content, source_name, confidence_score, created_at
-       FROM (
-         SELECT DISTINCT ON (content)
-           id,
-           REGEXP_REPLACE(id, '^plat-(.+)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', '\\1') AS base_id,
-           content, source_name, confidence_score, created_at
-         FROM operator_kb
-         WHERE is_system = true
-         ORDER BY content, created_at DESC
-       ) AS distinct_entries
-       ORDER BY created_at DESC
-       LIMIT $1 OFFSET $2`,
-      [limit, offset],
-    ),
-  ]);
-
-  const total = parseInt(countResult.rows[0]?.total ?? '0', 10);
-  res.json({ entries: pageResult.rows, total, page, limit });
-});
-
-// DELETE /admin/rag/platform-kb/entries/:entryId — remove an entry across all operators
-router.delete('/platform-kb/entries/:entryId', async (req: Request, res: Response): Promise<void> => {
-  const { entryId } = req.params as Record<string, string>;
-  if (!entryId?.trim()) { res.status(400).json({ error: 'entryId is required' }); return; }
-  const result = await pool.query(
-    `DELETE FROM operator_kb WHERE id LIKE $1`,
-    [`plat-${entryId}-%`],
-  );
-  res.json({ ok: true, deleted: result.rowCount ?? 0 });
-});
-
-// POST /admin/rag/platform-kb/ingest-url
-router.post('/platform-kb/ingest-url', requireAuth, requireAdmin, async (req: Request, res: Response): Promise<void> => {
-  const { url } = req.body as { url?: string };
-  if (!url?.trim() || !/^https?:\/\//i.test(url.trim())) {
-    res.status(400).json({ error: 'A valid http/https URL is required' });
-    return;
-  }
-  const targetUrl = url.trim();
-
-  let fetchRes: globalThis.Response;
-  try {
-    const ctrl = new AbortController();
-    const timeoutId = setTimeout(() => ctrl.abort(), 45_000);
-    fetchRes = await fetch(targetUrl, {
-      signal: ctrl.signal,
-      redirect: 'follow',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-      },
-    });
-    clearTimeout(timeoutId);
-  } catch (err: unknown) {
-    res.json({ ok: false, error: `Failed to fetch: ${err instanceof Error ? err.message : String(err)}`, source: targetUrl });
-    return;
-  }
-
-  if (!fetchRes.ok) {
-    res.json({ ok: false, error: `HTTP ${fetchRes.status} — ${fetchRes.statusText}`, source: targetUrl });
-    return;
-  }
-
-  const contentType = fetchRes.headers.get('content-type') ?? 'text/plain';
-  const rawHtml = await fetchRes.text();
-
-  let text: string;
-  const isHtml = contentType.includes('html') || rawHtml.trimStart().startsWith('<!') || rawHtml.trimStart().startsWith('<html');
-  if (isHtml) {
-    text = scrapeHtml(rawHtml);
-  } else {
-    const urlPath = new URL(targetUrl).pathname;
-    const urlExt = path.extname(urlPath);
-    const pseudoFilename = (path.basename(urlPath) || 'content') + (urlExt ? '' : contentType.includes('json') ? '.json' : '.txt');
-    const buf = Buffer.from(rawHtml, 'utf-8');
-    text = (await extractTextFromBuffer(buf, contentType, pseudoFilename)) ?? rawHtml;
-  }
-
-  if (!text || text.trim().length < 50) {
-    res.json({ ok: false, error: 'Could not extract usable text from this URL', source: targetUrl });
-    return;
-  }
-
-  const chunks = chunkText(text.trim(), 800, 100);
-  const hostname = new URL(targetUrl).hostname;
-  const sourceName = `_url:${targetUrl}`.slice(0, 200);
-
-  const operators = await db
-    .select({ id: operatorsTable.id, ownerId: operatorsTable.ownerId })
-    .from(operatorsTable)
-    .where(isNull(operatorsTable.deletedAt));
-
-  let seeded = 0;
-  for (const op of operators) {
-    for (let idx = 0; idx < chunks.length; idx++) {
-      const embedding = await embed(chunks[idx]);
-      const vecStr = `[${embedding.join(',')}]`;
-      const id = `plat-url-${hostname.replace(/\W/g, '-')}-${idx}-${op.id}`.slice(0, 120);
-      const insertResult = await pool.query(
-        `INSERT INTO operator_kb
-           (id, operator_id, owner_id, content, embedding, source_name,
-            source_trust_level, confidence_score, intake_tags, is_pipeline_intake,
-            privacy_cleared, content_cleared, is_system, verification_status, chunk_index, created_at)
-         VALUES ($1,$2,$3,$4,$5::vector,$6,'platform',90,'{}',false,true,true,true,'active',$7,NOW())
-         ON CONFLICT (id) DO NOTHING`,
-        [id, op.id, op.ownerId, chunks[idx], vecStr, sourceName, idx],
-      );
-      seeded += insertResult.rowCount ?? 0;
-    }
-  }
-
-  res.json({ ok: true, source: targetUrl, chunks: chunks.length, operators: operators.length, total_inserted: seeded });
-});
-
 // ── VAEL Status & Trigger ──────────────────────────────────────────────────
 
 router.get('/vael/status', (_req: Request, res: Response): void => {
@@ -1064,6 +833,113 @@ router.post('/vael/inbox-text', async (req: Request, res: Response): Promise<voi
   } catch (e) {
     res.status(500).json({ error: 'Could not write to inbox', detail: (e as Error).message });
   }
+});
+
+// POST /admin/rag/vael/inbox-bulk-url — queue multiple URLs at once
+router.post('/vael/inbox-bulk-url', async (req: Request, res: Response): Promise<void> => {
+  const { urls, label } = req.body as { urls?: string[]; label?: string };
+  if (!Array.isArray(urls) || urls.length === 0) {
+    res.status(400).json({ error: 'urls array is required' });
+    return;
+  }
+  const validUrls = urls.map(u => u?.trim()).filter(u => u && /^https?:\/\//i.test(u));
+  if (validUrls.length === 0) {
+    res.status(400).json({ error: 'No valid http/https URLs provided' });
+    return;
+  }
+  await fs.mkdir(INBOX_DIR, { recursive: true });
+
+  const CONCURRENCY = 5;
+  const results: { url: string; ok: boolean; filename?: string; error?: string }[] = [];
+
+  for (let i = 0; i < validUrls.length; i += CONCURRENCY) {
+    const batch = validUrls.slice(i, i + CONCURRENCY);
+    const batchResults = await Promise.all(batch.map(async (targetUrl) => {
+      try {
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), 30_000);
+        const fetchRes = await fetch(targetUrl, {
+          signal: ctrl.signal,
+          redirect: 'follow',
+          headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'text/html,*/*;q=0.8' },
+        });
+        clearTimeout(tid);
+        if (!fetchRes.ok) return { url: targetUrl, ok: false, error: `HTTP ${fetchRes.status}` };
+        const rawHtml = await fetchRes.text();
+        const text = scrapeHtml(rawHtml);
+        if (!text || text.trim().length < 50) return { url: targetUrl, ok: false, error: 'Too little text extracted' };
+        const hostname = new URL(targetUrl).hostname;
+        const sourceLabel = (label?.trim() || hostname).replace(/[^a-zA-Z0-9_\- ]/g, '_').slice(0, 40);
+        const suffix = Date.now().toString(36);
+        const filename = `${sourceLabel}_${suffix}.md`;
+        await fs.writeFile(path.join(INBOX_DIR, filename), `# ${sourceLabel}\n\nSource: ${targetUrl}\n\n${text.trim().slice(0, 20000)}`, 'utf-8');
+        return { url: targetUrl, ok: true, filename };
+      } catch (err) {
+        return { url: targetUrl, ok: false, error: (err as Error).message };
+      }
+    }));
+    results.push(...batchResults);
+  }
+
+  const queued = results.filter(r => r.ok).length;
+  res.status(queued > 0 ? 201 : 400).json({ queued, total: validUrls.length, results });
+});
+
+// POST /admin/rag/vael/inbox-insights — extract structured insights from long text via LLM
+router.post('/vael/inbox-insights', async (req: Request, res: Response): Promise<void> => {
+  const { content: textContent, label } = req.body as { content?: string; label?: string };
+  if (!textContent?.trim() || !label?.trim()) {
+    res.status(400).json({ error: 'content and label are required' });
+    return;
+  }
+  if (textContent.trim().length < 100) {
+    res.status(400).json({ error: 'Text too short to extract insights from' });
+    return;
+  }
+
+  const systemPrompt = `You are an insight extractor. Given a piece of text, extract discrete, self-contained knowledge insights.
+Each insight must be:
+- A complete, standalone fact or principle (not a fragment)
+- Useful for an AI operator as background knowledge
+- 2-5 sentences maximum
+
+Return a JSON array of objects: [{"title": "short title", "insight": "the full insight text"}, ...]
+Extract between 3 and 15 insights. Do not include fluff, introductions, or meta-commentary.`;
+
+  let insights: { title: string; insight: string }[] = [];
+  try {
+    const llmResponse = await chatCompletion([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: `Source label: ${label.trim()}\n\nText:\n${textContent.trim().slice(0, 15000)}` },
+    ]);
+    const raw = llmResponse.content.trim().replace(/^```json\s*/i, '').replace(/```\s*$/, '');
+    insights = JSON.parse(raw);
+    if (!Array.isArray(insights)) throw new Error('Not an array');
+  } catch (err) {
+    res.status(500).json({ error: 'LLM insight extraction failed', detail: (err as Error).message });
+    return;
+  }
+
+  await fs.mkdir(INBOX_DIR, { recursive: true });
+  const results: { title: string; filename: string; ok: boolean; error?: string }[] = [];
+  const baseLabel = label.trim().replace(/[^a-zA-Z0-9_\- ]/g, '_').slice(0, 40);
+
+  for (let i = 0; i < insights.length; i++) {
+    const item = insights[i];
+    if (!item?.title || !item?.insight) continue;
+    try {
+      const titleSafe = item.title.replace(/[^a-zA-Z0-9_\- ]/g, '_').slice(0, 50);
+      const filename = `${baseLabel}_insight_${i + 1}_${titleSafe}.md`;
+      const body = `# ${item.title}\n\nSource: ${label.trim()} (insight ${i + 1}/${insights.length})\n\n${item.insight.trim()}`;
+      await fs.writeFile(path.join(INBOX_DIR, filename), body, 'utf-8');
+      results.push({ title: item.title, filename, ok: true });
+    } catch (err) {
+      results.push({ title: item.title || `insight_${i}`, filename: '', ok: false, error: (err as Error).message });
+    }
+  }
+
+  const written = results.filter(r => r.ok).length;
+  res.status(written > 0 ? 201 : 400).json({ extracted: insights.length, written, results });
 });
 
 // GET /admin/rag/vael/runs — kb_verification_runs history

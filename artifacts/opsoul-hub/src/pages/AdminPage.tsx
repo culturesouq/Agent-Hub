@@ -43,15 +43,6 @@ interface DriftAlert {
   resolvedAt: string | null;
 }
 
-interface PlatformKbEntry {
-  id: string;
-  base_id: string;
-  content: string;
-  source_name: string;
-  confidence_score: number;
-  created_at: string;
-}
-
 interface AdminConversation {
   id: string;
   createdAt: string;
@@ -65,7 +56,15 @@ interface AdminMessage {
   createdAt: string;
 }
 
-type Tab = "overview" | "owners" | "operators" | "drift" | "rag" | "vael";
+type Tab = "overview" | "owners" | "operators" | "drift" | "vael";
+
+const LAYER_LABELS: Record<string, string> = {
+  l0_ai_builder: "L0 · AI Builder",
+  l1_foundation: "L1 · Foundation",
+  l2_behavioral: "L2 · Behavioral",
+  l3_domain:     "L3 · Domain",
+  l4_platform:   "L4 · Platform",
+};
 
 interface VaelRunState {
   isRunning: boolean;
@@ -175,32 +174,6 @@ export default function AdminPage() {
   const [inspectMessages, setInspectMessages] = useState<AdminMessage[]>([]);
   const [inspectLoading, setInspectLoading] = useState(false);
 
-  const [platformKbEntries, setPlatformKbEntries] = useState<PlatformKbEntry[]>([]);
-  const [kbPage, setKbPage] = useState(1);
-  const [kbTotal, setKbTotal] = useState(0);
-  const KB_LIMIT = 20;
-  const [seedingKb, setSeedingKb] = useState(false);
-  const [seedResult, setSeedResult] = useState<{ inserted: number; skipped: number } | null>(null);
-  const [deletingKbEntry, setDeletingKbEntry] = useState<string | null>(null);
-  const [selectedKbEntries, setSelectedKbEntries] = useState<Set<string>>(new Set());
-  const [deletingSelected, setDeletingSelected] = useState(false);
-  const [platformUpload, setPlatformUpload] = useState<{
-    uploading: boolean;
-    uploadMsg: string | null;
-    result: { source: string; chunks: number; operators: number } | null;
-    multiResult: { files: number; totalChunks: number; failed: number } | null;
-    error: string | null;
-  }>({ uploading: false, uploadMsg: null, result: null, multiResult: null, error: null });
-  const [platformUrlInput, setPlatformUrlInput] = useState("");
-  const [bulkUrlOpen, setBulkUrlOpen] = useState(false);
-  const [bulkUrlText, setBulkUrlText] = useState("");
-  const [bulkUrlProgress, setBulkUrlProgress] = useState<{ current: number; total: number } | null>(null);
-  const [bulkUrlResult, setBulkUrlResult] = useState<{
-    ingested: number;
-    failed: number;
-    details: { url: string; ok: boolean; chunks?: number; error?: string }[];
-  } | null>(null);
-  const platformFileRef = useRef<HTMLInputElement>(null);
 
   // ── VAEL Desk state ────────────────────────────────────────────────────────
   type VaelPanel = "drop" | "inbox" | "library" | "sources" | "runs";
@@ -210,11 +183,15 @@ export default function AdminPage() {
   const [vaelTriggerMsg, setVaelTriggerMsg] = useState<string | null>(null);
 
   // Drop Zone
-  const [vaelUrlInput, setVaelUrlInput] = useState("");
+  const [vaelDropMode, setVaelDropMode] = useState<"urls" | "files" | "text">("urls");
+  const [vaelUrlInput, setVaelUrlInput] = useState(""); // bulk: one URL per line
   const [vaelTextInput, setVaelTextInput] = useState("");
+  const [vaelTextMode, setVaelTextMode] = useState<"raw" | "insights">("raw");
   const [vaelLabel, setVaelLabel] = useState("");
   const [vaelDropLoading, setVaelDropLoading] = useState(false);
   const [vaelDropResult, setVaelDropResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [vaelBulkResults, setVaelBulkResults] = useState<{ item: string; ok: boolean; msg: string }[]>([]);
+  const vaelFileRef = useRef<HTMLInputElement>(null);
 
   // Pending Inbox
   const [vaelInbox, setVaelInbox] = useState<{ pending: string[]; processed: string[] }>({ pending: [], processed: [] });
@@ -224,6 +201,7 @@ export default function AdminPage() {
   const [dnaEntries, setDnaEntries] = useState<DnaEntry[]>([]);
   const [dnaLoading, setDnaLoading] = useState(false);
   const [dnaStatusFilter, setDnaStatusFilter] = useState<string>("all");
+  const [dnaLayerFilter, setDnaLayerFilter] = useState<string>("all");
   const [dnaSearch, setDnaSearch] = useState("");
   const [dnaExpanded, setDnaExpanded] = useState<string | null>(null);
   const [dnaDeprecating, setDnaDeprecating] = useState<string | null>(null);
@@ -259,23 +237,7 @@ export default function AdminPage() {
     return `${yr} year${yr === 1 ? "" : "s"} ago`;
   }
 
-  const loadPlatformKb = useCallback(async (page = 1) => {
-    try {
-      const data = await apiFetch<{ entries: PlatformKbEntry[]; total: number }>(`/admin/rag/platform-kb/entries?page=${page}&limit=${KB_LIMIT}`);
-      setPlatformKbEntries(data.entries);
-      setKbTotal(data.total);
-    } catch {
-      setPlatformKbEntries([]);
-      setKbTotal(0);
-    }
-  }, []);
 
-  const kbPageLoaded = useRef(false);
-  useEffect(() => {
-    if (!token) return;
-    if (!kbPageLoaded.current) { kbPageLoaded.current = true; return; }
-    loadPlatformKb(kbPage);
-  }, [kbPage, token, loadPlatformKb]);
 
   useEffect(() => {
     if (!token) return;
@@ -296,13 +258,12 @@ export default function AdminPage() {
         setOwners(o);
         setOperators(ops);
         setDriftAlerts(drift);
-        await loadPlatformKb();
       } finally {
         setLoading(false);
       }
     }
     load();
-  }, [token, owner, setLocation, loadPlatformKb]);
+  }, [token, owner, setLocation]);
 
   async function toggleAdmin(id: string) {
     setTogglingId(id);
@@ -391,147 +352,6 @@ export default function AdminPage() {
       setInspectLoading(false);
     }
   }
-
-  async function seedPlatformKb() {
-    setSeedingKb(true);
-    setSeedResult(null);
-    try {
-      const result = await apiFetch<{ ok: boolean; inserted: number; skipped: number }>(
-        "/admin/rag/platform-kb/seed",
-        { method: "POST" }
-      );
-      setSeedResult({ inserted: result.inserted, skipped: result.skipped });
-      setKbPage(1);
-      await loadPlatformKb(1);
-    } finally {
-      setSeedingKb(false);
-    }
-  }
-
-  async function deletePlatformKbEntry(entryId: string) {
-    setDeletingKbEntry(entryId);
-    try {
-      await apiFetch(`/admin/rag/platform-kb/entries/${entryId}`, { method: "DELETE" });
-      await loadPlatformKb(kbPage);
-    } finally {
-      setDeletingKbEntry(null);
-    }
-  }
-
-  async function handleFilesSelected(files: FileList | File[]) {
-    const arr = Array.from(files);
-    if (arr.length === 0) return;
-
-    if (arr.length === 1) {
-      setPlatformUpload({ uploading: true, uploadMsg: null, result: null, multiResult: null, error: null });
-      try {
-        const formData = new FormData();
-        formData.append("file", arr[0]);
-        const result = await apiFetch<{ ok: boolean; source: string; chunks: number; operators: number; total_inserted: number }>(
-          "/admin/rag/platform-kb/upload",
-          { method: "POST", body: formData }
-        );
-        setPlatformUpload({ uploading: false, uploadMsg: null, result: { source: result.source, chunks: result.chunks, operators: result.operators }, multiResult: null, error: null });
-        setKbPage(1);
-        await loadPlatformKb(1);
-      } catch (err) {
-        setPlatformUpload({ uploading: false, uploadMsg: null, result: null, multiResult: null, error: err instanceof Error ? err.message : "Upload failed" });
-      }
-      return;
-    }
-
-    let totalChunks = 0;
-    let failed = 0;
-    setPlatformUpload({ uploading: true, uploadMsg: `Processing file 1 of ${arr.length}…`, result: null, multiResult: null, error: null });
-    for (let i = 0; i < arr.length; i++) {
-      setPlatformUpload(prev => ({ ...prev, uploadMsg: `Processing file ${i + 1} of ${arr.length}…` }));
-      try {
-        const formData = new FormData();
-        formData.append("file", arr[i]);
-        const result = await apiFetch<{ ok: boolean; source: string; chunks: number; operators: number; total_inserted: number }>(
-          "/admin/rag/platform-kb/upload",
-          { method: "POST", body: formData }
-        );
-        totalChunks += result.chunks;
-      } catch {
-        failed++;
-      }
-    }
-    setKbPage(1);
-    await loadPlatformKb(1);
-    setPlatformUpload({ uploading: false, uploadMsg: null, result: null, multiResult: { files: arr.length, totalChunks, failed }, error: null });
-  }
-
-  async function handlePlatformKbIngestUrl() {
-    const url = platformUrlInput.trim();
-    if (!url || !/^https?:\/\//i.test(url)) return;
-    setPlatformUpload({ uploading: true, uploadMsg: null, result: null, multiResult: null, error: null });
-    try {
-      const result = await apiFetch<{ ok: boolean; source: string; chunks: number; operators: number; total_inserted: number; error?: string }>(
-        "/admin/rag/platform-kb/ingest-url",
-        { method: "POST", body: JSON.stringify({ url }) }
-      );
-      if (!result.ok) {
-        setPlatformUpload({ uploading: false, uploadMsg: null, result: null, multiResult: null, error: result.error ?? "Ingest failed" });
-        return;
-      }
-      setPlatformUpload({ uploading: false, uploadMsg: null, result: { source: result.source, chunks: result.chunks, operators: result.operators }, multiResult: null, error: null });
-      setPlatformUrlInput("");
-      setKbPage(1);
-      await loadPlatformKb(1);
-    } catch (err) {
-      setPlatformUpload({ uploading: false, uploadMsg: null, result: null, multiResult: null, error: err instanceof Error ? err.message : "Ingest failed" });
-    }
-  }
-
-  async function handleBulkUrlIngest() {
-    const urls = bulkUrlText.split("\n").map(u => u.trim()).filter(u => /^https?:\/\//i.test(u));
-    if (urls.length === 0) return;
-    setBulkUrlResult(null);
-    setBulkUrlProgress({ current: 0, total: urls.length });
-    let ingested = 0;
-    let failedCount = 0;
-    const details: { url: string; ok: boolean; chunks?: number; error?: string }[] = [];
-    for (let i = 0; i < urls.length; i++) {
-      setBulkUrlProgress({ current: i + 1, total: urls.length });
-      try {
-        const result = await apiFetch<{ ok: boolean; chunks?: number; error?: string }>(
-          "/admin/rag/platform-kb/ingest-url",
-          { method: "POST", body: JSON.stringify({ url: urls[i] }) }
-        );
-        if (result.ok) {
-          ingested++;
-          details.push({ url: urls[i], ok: true, chunks: result.chunks });
-        } else {
-          failedCount++;
-          details.push({ url: urls[i], ok: false, error: result.error ?? "Unknown error" });
-        }
-      } catch (err) {
-        failedCount++;
-        details.push({ url: urls[i], ok: false, error: err instanceof Error ? err.message : "Network error" });
-      }
-    }
-    setBulkUrlProgress(null);
-    setBulkUrlResult({ ingested, failed: failedCount, details });
-    setBulkUrlText("");
-    setKbPage(1);
-    await loadPlatformKb(1);
-  }
-
-  async function handleBulkDeleteSelected() {
-    if (selectedKbEntries.size === 0) return;
-    setDeletingSelected(true);
-    try {
-      for (const baseId of selectedKbEntries) {
-        await apiFetch(`/admin/rag/platform-kb/entries/${baseId}`, { method: "DELETE" });
-      }
-      setSelectedKbEntries(new Set());
-      await loadPlatformKb(kbPage);
-    } finally {
-      setDeletingSelected(false);
-    }
-  }
-
   // ── VAEL Desk functions ────────────────────────────────────────────────────
 
   async function loadVaelStatus() {
@@ -608,23 +428,60 @@ export default function AdminPage() {
     }
   }
 
-  async function submitVaelUrl() {
-    if (!vaelUrlInput.trim() || !vaelLabel.trim()) return;
+  async function submitVaelUrls() {
+    const urls = vaelUrlInput.split("\n").map(l => l.trim()).filter(l => /^https?:\/\//i.test(l));
+    if (urls.length === 0 || !vaelLabel.trim()) return;
     setVaelDropLoading(true);
     setVaelDropResult(null);
+    setVaelBulkResults([]);
     try {
-      const r = await apiFetch<{ ok: boolean; filename?: string; error?: string }>("/admin/rag/vael/inbox-url", {
-        method: "POST",
-        body: JSON.stringify({ url: vaelUrlInput.trim(), label: vaelLabel.trim() }),
-      });
-      if (r.ok) {
-        setVaelDropResult({ ok: true, msg: `Queued as ${r.filename} — VAEL will verify on next sweep` });
-        setVaelUrlInput("");
-        setVaelLabel("");
-        await loadVaelInbox();
+      if (urls.length === 1) {
+        const r = await apiFetch<{ ok: boolean; filename?: string; error?: string }>("/admin/rag/vael/inbox-url", {
+          method: "POST",
+          body: JSON.stringify({ url: urls[0], label: vaelLabel.trim() }),
+        });
+        if (r.ok) {
+          setVaelDropResult({ ok: true, msg: `Queued as ${r.filename} — VAEL will verify on next sweep` });
+          setVaelBulkResults([{ item: urls[0], ok: true, msg: r.filename ?? "" }]);
+          setVaelUrlInput(""); setVaelLabel("");
+          await loadVaelInbox();
+        } else {
+          setVaelDropResult({ ok: false, msg: r.error ?? "Failed" });
+        }
       } else {
-        setVaelDropResult({ ok: false, msg: r.error ?? "Failed" });
+        const r = await apiFetch<{ queued: number; total: number; results: { url: string; ok: boolean; filename?: string; error?: string }[] }>("/admin/rag/vael/inbox-bulk-url", {
+          method: "POST",
+          body: JSON.stringify({ urls, label: vaelLabel.trim() }),
+        });
+        const batchResults = (r.results ?? []).map(item => ({ item: item.url, ok: item.ok, msg: item.ok ? (item.filename ?? "queued") : (item.error ?? "failed") }));
+        setVaelBulkResults(batchResults);
+        setVaelDropResult({ ok: r.queued > 0, msg: `${r.queued} of ${r.total} URLs queued for VAEL` });
+        if (r.queued > 0) { setVaelUrlInput(""); setVaelLabel(""); await loadVaelInbox(); }
       }
+    } catch (err) {
+      setVaelDropResult({ ok: false, msg: err instanceof Error ? err.message : "Failed" });
+    } finally {
+      setVaelDropLoading(false);
+    }
+  }
+
+  async function submitVaelFiles() {
+    const files = vaelFileRef.current?.files;
+    if (!files || files.length === 0) return;
+    setVaelDropLoading(true);
+    setVaelDropResult(null);
+    setVaelBulkResults([]);
+    try {
+      const fd = new FormData();
+      for (let i = 0; i < files.length; i++) fd.append("files", files[i]);
+      const r = await apiFetch<{ added: number; results: { filename: string; ok: boolean; reason?: string }[] }>("/admin/rag/inbox/upload", {
+        method: "POST",
+        body: fd,
+      });
+      const batchResults = (r.results ?? []).map(item => ({ item: item.filename, ok: item.ok, msg: item.ok ? "queued" : (item.reason ?? "failed") }));
+      setVaelBulkResults(batchResults);
+      setVaelDropResult({ ok: r.added > 0, msg: `${r.added} of ${files.length} files queued for VAEL` });
+      if (r.added > 0) { if (vaelFileRef.current) vaelFileRef.current.value = ""; await loadVaelInbox(); }
     } catch (err) {
       setVaelDropResult({ ok: false, msg: err instanceof Error ? err.message : "Failed" });
     } finally {
@@ -636,18 +493,30 @@ export default function AdminPage() {
     if (!vaelTextInput.trim() || !vaelLabel.trim()) return;
     setVaelDropLoading(true);
     setVaelDropResult(null);
+    setVaelBulkResults([]);
+    const endpoint = vaelTextMode === "insights" ? "/admin/rag/vael/inbox-insights" : "/admin/rag/vael/inbox-text";
     try {
-      const r = await apiFetch<{ ok: boolean; filename?: string; error?: string }>("/admin/rag/vael/inbox-text", {
-        method: "POST",
-        body: JSON.stringify({ content: vaelTextInput.trim(), label: vaelLabel.trim() }),
-      });
-      if (r.ok) {
-        setVaelDropResult({ ok: true, msg: `Queued as ${r.filename} — VAEL will verify on next sweep` });
-        setVaelTextInput("");
-        setVaelLabel("");
-        await loadVaelInbox();
+      if (vaelTextMode === "insights") {
+        const r = await apiFetch<{ extracted: number; written: number; results: { title: string; filename: string; ok: boolean; error?: string }[] }>(endpoint, {
+          method: "POST",
+          body: JSON.stringify({ content: vaelTextInput.trim(), label: vaelLabel.trim() }),
+        });
+        const batchResults = (r.results ?? []).map(item => ({ item: item.title, ok: item.ok, msg: item.ok ? item.filename : (item.error ?? "failed") }));
+        setVaelBulkResults(batchResults);
+        setVaelDropResult({ ok: r.written > 0, msg: `${r.extracted} insights extracted, ${r.written} queued for VAEL` });
+        if (r.written > 0) { setVaelTextInput(""); setVaelLabel(""); await loadVaelInbox(); }
       } else {
-        setVaelDropResult({ ok: false, msg: r.error ?? "Failed" });
+        const r = await apiFetch<{ ok: boolean; filename?: string; error?: string }>(endpoint, {
+          method: "POST",
+          body: JSON.stringify({ content: vaelTextInput.trim(), label: vaelLabel.trim() }),
+        });
+        if (r.ok) {
+          setVaelDropResult({ ok: true, msg: `Queued as ${r.filename} — VAEL will verify on next sweep` });
+          setVaelTextInput(""); setVaelLabel("");
+          await loadVaelInbox();
+        } else {
+          setVaelDropResult({ ok: false, msg: r.error ?? "Failed" });
+        }
       }
     } catch (err) {
       setVaelDropResult({ ok: false, msg: err instanceof Error ? err.message : "Failed" });
@@ -754,7 +623,6 @@ export default function AdminPage() {
     { id: "owners", label: "Owners", count: owners.length },
     { id: "operators", label: "Operators", count: operators.length },
     { id: "drift", label: "Drift Alerts", count: driftAlerts.length },
-    { id: "rag", label: "Platform KB", count: kbTotal },
     { id: "vael", label: "VAEL Desk" },
   ];
 
@@ -1245,382 +1113,17 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Platform KB tab */}
-        {tab === "rag" && (
-          <div className="space-y-6">
-            {/* Header */}
-            <div className="bg-white border border-border p-6">
-              <div className="flex items-center justify-between gap-6 flex-wrap">
-                <div>
-                  <h3 className="font-headline text-xl text-on-surface mb-1">Platform KB</h3>
-                  <p className="font-sans text-xs text-muted-foreground/80">
-                    Shared knowledge seeded into every operator. Retrieved during conversations.
-                  </p>
-                  <div className="flex items-center gap-2 mt-3">
-                    <span className="font-mono text-2xl font-bold text-primary">{kbTotal}</span>
-                    <span className="font-label text-[10px] uppercase tracking-widest text-muted-foreground">entries total</span>
-                  </div>
-                  {seedResult && (
-                    <div className="mt-2 font-mono text-xs text-secondary">
-                      Seed complete — {seedResult.inserted} inserted · {seedResult.skipped} skipped
-                    </div>
-                  )}
-                </div>
-                <button
-                  onClick={seedPlatformKb}
-                  disabled={seedingKb}
-                  className="px-5 py-2.5 bg-primary/10 border border-primary/30 text-primary font-label text-[10px] uppercase tracking-widest rounded-lg hover:bg-primary/20 disabled:opacity-40 transition-all whitespace-nowrap"
-                >
-                  {seedingKb ? "Seeding…" : "Seed V1 (100 entries)"}
-                </button>
-              </div>
-            </div>
-
-            {/* Loading Bay */}
-            <div className="bg-white border border-border p-6 space-y-5">
-              <div>
-                <h3 className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Platform KB — Loading Bay</h3>
-                <p className="font-sans text-xs text-muted-foreground/70">Drop any file or paste a URL — content is chunked, embedded, and seeded into all active operators' knowledge bases.</p>
-              </div>
-
-              {!platformUpload.uploading && !platformUpload.result && !platformUpload.multiResult && !platformUpload.error && (
-                <div className="space-y-4">
-                  <div
-                    className="border-2 border-dashed border-border/40 rounded-lg p-10 flex flex-col items-center gap-4 cursor-pointer hover:border-primary/40 hover:bg-accent transition-all"
-                    onClick={() => platformFileRef.current?.click()}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      if (e.dataTransfer.files.length > 0) handleFilesSelected(e.dataTransfer.files);
-                    }}
-                  >
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      <span className="text-primary text-lg">↑</span>
-                    </div>
-                    <div className="text-center">
-                      <div className="font-sans text-sm text-on-surface mb-1">Drop any file or click to browse</div>
-                      <div className="font-label text-[10px] uppercase tracking-widest text-muted-foreground">PDF · DOCX · TXT · MD · XLSX · CSV · JSON · JSONL · XML · YAML · and more</div>
-                      <div className="font-label text-[9px] text-muted-foreground/50 mt-1">Up to 500 MB · Multiple files supported</div>
-                    </div>
-                    <input
-                      ref={platformFileRef}
-                      type="file"
-                      accept="*"
-                      multiple
-                      className="hidden"
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files.length > 0) handleFilesSelected(e.target.files);
-                        e.target.value = "";
-                      }}
-                    />
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 h-px bg-border/30" />
-                    <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground/50">or ingest a URL</span>
-                    <div className="flex-1 h-px bg-border/30" />
-                  </div>
-
-                  <div className="flex gap-2">
-                    <input
-                      type="url"
-                      placeholder="https://docs.example.com/page"
-                      value={platformUrlInput}
-                      onChange={(e) => setPlatformUrlInput(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") handlePlatformKbIngestUrl(); }}
-                      className="flex-1 bg-surface-container/50 border border-border/40 rounded-lg px-4 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50"
-                    />
-                    <button
-                      onClick={handlePlatformKbIngestUrl}
-                      disabled={!platformUrlInput.trim() || !/^https?:\/\//i.test(platformUrlInput)}
-                      className="px-5 py-2.5 bg-primary/10 border border-primary/30 text-primary font-label text-[10px] uppercase tracking-widest rounded-lg hover:bg-primary/20 disabled:opacity-40 transition-all whitespace-nowrap"
-                    >
-                      Fetch & Ingest
-                    </button>
-                  </div>
-
-                  {/* Bulk URL expander */}
-                  <div className="border border-border/20 rounded-lg overflow-hidden">
-                    <button
-                      onClick={() => { setBulkUrlOpen(o => !o); setBulkUrlResult(null); }}
-                      className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted transition-colors"
-                    >
-                      <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground/70">Bulk ingest — multiple URLs</span>
-                      <span className="font-mono text-muted-foreground/40 text-xs">{bulkUrlOpen ? "▲" : "▼"}</span>
-                    </button>
-                    {bulkUrlOpen && (
-                      <div className="px-4 pb-4 space-y-3 border-t border-border/20 pt-3">
-                        <textarea
-                          rows={5}
-                          placeholder={"https://example.com/page-1\nhttps://example.com/page-2\nhttps://docs.org/guide"}
-                          value={bulkUrlText}
-                          onChange={(e) => setBulkUrlText(e.target.value)}
-                          className="w-full bg-surface-container/50 border border-border/40 rounded-lg px-4 py-2.5 text-xs font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50 resize-y"
-                        />
-                        {bulkUrlProgress && (
-                          <div className="font-label text-[9px] uppercase tracking-widest text-primary animate-pulse">
-                            Processing {bulkUrlProgress.current} of {bulkUrlProgress.total}…
-                          </div>
-                        )}
-                        {bulkUrlResult && (
-                          <div className="space-y-2">
-                            <div className="font-mono text-xs text-secondary">
-                              {bulkUrlResult.ingested} ingested · {bulkUrlResult.failed} failed
-                            </div>
-                            {bulkUrlResult.details.length > 0 && (
-                              <div className="max-h-48 overflow-y-auto rounded-lg border border-border/20 divide-y divide-border/10">
-                                {bulkUrlResult.details.map((d, i) => {
-                                  const seg = (() => { try { const p = new URL(d.url).pathname; return p.split("/").filter(Boolean).pop() || new URL(d.url).hostname; } catch { return d.url; } })();
-                                  return (
-                                    <div key={i} className="flex items-start gap-2 px-3 py-1.5">
-                                      <span className="text-sm mt-px flex-shrink-0">{d.ok ? "✅" : "❌"}</span>
-                                      <span className="font-mono text-[10px] text-muted-foreground truncate flex-1" title={d.url}>{seg}</span>
-                                      <span className={`font-label text-[9px] whitespace-nowrap ${d.ok ? "text-secondary" : "text-destructive/70"}`}>
-                                        {d.ok ? `${d.chunks} chunks` : d.error}
-                                      </span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        <button
-                          onClick={handleBulkUrlIngest}
-                          disabled={!!bulkUrlProgress || bulkUrlText.split("\n").filter(u => /^https?:\/\//i.test(u.trim())).length === 0}
-                          className="px-5 py-2 bg-primary/10 border border-primary/30 text-primary font-label text-[9px] uppercase tracking-widest rounded-lg hover:bg-primary/20 disabled:opacity-40 transition-all"
-                        >
-                          {bulkUrlProgress ? `Processing ${bulkUrlProgress.current} of ${bulkUrlProgress.total}…` : "Ingest All URLs"}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {platformUpload.uploading && (
-                <div className="border border-border/30 rounded-lg p-8 flex flex-col items-center gap-3">
-                  <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                  <div className="font-label text-[10px] uppercase tracking-widest text-primary animate-pulse">
-                    {platformUpload.uploadMsg ?? "Processing — embedding chunks…"}
-                  </div>
-                  <p className="font-sans text-xs text-muted-foreground text-center">This may take a moment depending on file size.</p>
-                </div>
-              )}
-
-              {platformUpload.result && (
-                <div className="border border-secondary/30 rounded-lg p-6 space-y-4 bg-secondary/5">
-                  <div className="flex items-center gap-3">
-                    <span className="status-beacon" />
-                    <span className="font-label text-[10px] uppercase tracking-widest text-secondary">Upload Complete</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <div className="font-label text-[9px] uppercase tracking-widest text-muted-foreground mb-1">Source</div>
-                      <div className="font-mono text-xs text-on-surface truncate" title={platformUpload.result.source}>{platformUpload.result.source}</div>
-                    </div>
-                    <div>
-                      <div className="font-label text-[9px] uppercase tracking-widest text-muted-foreground mb-1">Chunks</div>
-                      <div className="font-headline text-xl font-bold text-secondary">{platformUpload.result.chunks}</div>
-                    </div>
-                    <div>
-                      <div className="font-label text-[9px] uppercase tracking-widest text-muted-foreground mb-1">Operators Seeded</div>
-                      <div className="font-headline text-xl font-bold text-primary">{platformUpload.result.operators}</div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setPlatformUpload({ uploading: false, uploadMsg: null, result: null, multiResult: null, error: null })}
-                    className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors"
-                  >
-                    Upload another file
-                  </button>
-                </div>
-              )}
-
-              {platformUpload.multiResult && (
-                <div className="border border-secondary/30 rounded-lg p-6 space-y-4 bg-secondary/5">
-                  <div className="flex items-center gap-3">
-                    <span className="status-beacon" />
-                    <span className="font-label text-[10px] uppercase tracking-widest text-secondary">Batch Upload Complete</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <div className="font-label text-[9px] uppercase tracking-widest text-muted-foreground mb-1">Files</div>
-                      <div className="font-headline text-xl font-bold text-primary">{platformUpload.multiResult.files}</div>
-                    </div>
-                    <div>
-                      <div className="font-label text-[9px] uppercase tracking-widest text-muted-foreground mb-1">Total Chunks</div>
-                      <div className="font-headline text-xl font-bold text-secondary">{platformUpload.multiResult.totalChunks}</div>
-                    </div>
-                    <div>
-                      <div className="font-label text-[9px] uppercase tracking-widest text-muted-foreground mb-1">Failed</div>
-                      <div className={`font-headline text-xl font-bold ${platformUpload.multiResult.failed > 0 ? "text-destructive" : "text-muted-foreground"}`}>{platformUpload.multiResult.failed}</div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setPlatformUpload({ uploading: false, uploadMsg: null, result: null, multiResult: null, error: null })}
-                    className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors"
-                  >
-                    Upload more files
-                  </button>
-                </div>
-              )}
-
-              {platformUpload.error && (
-                <div className="border border-destructive/30 rounded-lg p-6 space-y-3 bg-destructive/5">
-                  <div className="flex items-center gap-3">
-                    <span className="status-beacon-warn" />
-                    <span className="font-label text-[10px] uppercase tracking-widest text-destructive">Upload Failed</span>
-                  </div>
-                  <p className="font-sans text-xs text-muted-foreground">{platformUpload.error}</p>
-                  <button
-                    onClick={() => setPlatformUpload({ uploading: false, uploadMsg: null, result: null, multiResult: null, error: null })}
-                    className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors"
-                  >
-                    Try again
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Divider */}
-            <div className="h-px bg-border/25 mx-1" />
-
-            {/* Entry list */}
-            <div className="bg-white border border-border overflow-hidden">
-              <div className="px-6 py-4 border-b border-border/30 bg-surface-container-high/30">
-                <div className="flex items-center justify-between gap-4 flex-wrap">
-                  <div className="grid grid-cols-[24px_1fr_120px_80px_100px_60px] gap-4 flex-1">
-                    <input
-                      type="checkbox"
-                      checked={platformKbEntries.length > 0 && selectedKbEntries.size === platformKbEntries.length}
-                      onChange={(e) => {
-                        if (e.target.checked) setSelectedKbEntries(new Set(platformKbEntries.map(en => en.base_id)));
-                        else setSelectedKbEntries(new Set());
-                      }}
-                      className="accent-primary mt-0.5"
-                      title="Select all"
-                    />
-                    <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">Content</span>
-                    <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">Source</span>
-                    <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">Score</span>
-                    <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">Date</span>
-                    <span />
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground/50">
-                      {kbTotal} {kbTotal === 1 ? "entry" : "entries"} total
-                    </span>
-                    {selectedKbEntries.size > 0 && (
-                      <button
-                        onClick={handleBulkDeleteSelected}
-                        disabled={deletingSelected}
-                        className="px-4 py-1.5 bg-destructive/10 border border-destructive/30 text-destructive font-label text-[9px] uppercase tracking-widest rounded-lg hover:bg-destructive/20 disabled:opacity-40 transition-all whitespace-nowrap"
-                      >
-                        {deletingSelected ? "Deleting…" : `Delete Selected (${selectedKbEntries.size})`}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {platformKbEntries.length === 0 ? (
-                <div className="px-6 py-16 text-center">
-                  <p className="font-sans text-sm text-muted-foreground mb-4">
-                    No platform knowledge seeded yet.
-                  </p>
-                  <p className="font-label text-[10px] uppercase tracking-widest text-muted-foreground/60">
-                    Click &ldquo;Seed V1&rdquo; to load the 100 core entries.
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <div className="divide-y divide-border/10">
-                    {platformKbEntries.map((entry, idx) => {
-                      const isSelected = selectedKbEntries.has(entry.base_id);
-                      const displaySource = entry.source_name?.replace("_platform-kb", "v1").replace(/^_upload:/, "upload:").replace(/^_url:/, "url:") ?? "—";
-                      const rawSource = entry.source_name ?? "";
-                      const isUrl = rawSource.startsWith("_url:") || rawSource.startsWith("http");
-                      const sourceUrl = isUrl ? (rawSource.startsWith("_url:") ? rawSource.slice(5) : rawSource) : null;
-                      const rowBg = isSelected ? "bg-accent" : idx % 2 === 0 ? "hover:bg-muted" : "bg-muted/30 hover:bg-muted";
-                      return (
-                        <div key={entry.id} className={`px-6 py-4 grid grid-cols-[24px_1fr_120px_80px_100px_60px] gap-4 items-start transition-colors ${rowBg}`}>
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={(e) => {
-                              setSelectedKbEntries(prev => {
-                                const next = new Set(prev);
-                                if (e.target.checked) next.add(entry.base_id);
-                                else next.delete(entry.base_id);
-                                return next;
-                              });
-                            }}
-                            className="accent-primary mt-0.5"
-                          />
-                          <p className="font-sans text-xs text-on-surface leading-relaxed">
-                            {entry.content.length > 100 ? entry.content.slice(0, 100) + "…" : entry.content}
-                          </p>
-                          <span className="font-label text-[9px] uppercase tracking-widest truncate" title={displaySource}>
-                            {sourceUrl ? (
-                              <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="text-primary/70 hover:text-primary transition-colors">
-                                {displaySource}
-                              </a>
-                            ) : (
-                              <span className="text-muted-foreground/70">{displaySource}</span>
-                            )}
-                          </span>
-                          <span className="font-mono text-xs text-secondary">{entry.confidence_score}</span>
-                          <span className="font-label text-[9px] text-muted-foreground" title={new Date(entry.created_at).toLocaleString()}>
-                            {timeAgo(entry.created_at)}
-                          </span>
-                          <button
-                            onClick={() => deletePlatformKbEntry(entry.base_id)}
-                            disabled={deletingKbEntry === entry.base_id}
-                            className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-destructive disabled:opacity-40 transition-colors text-right"
-                          >
-                            {deletingKbEntry === entry.base_id ? "…" : "Delete"}
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {Math.ceil(kbTotal / KB_LIMIT) > 1 && (
-                    <div className="px-6 py-3 border-t border-border/20 flex items-center justify-center gap-4">
-                      <button
-                        onClick={() => setKbPage(p => Math.max(1, p - 1))}
-                        disabled={kbPage === 1}
-                        className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary disabled:opacity-30 transition-colors"
-                      >
-                        ← Previous
-                      </button>
-                      <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground/60">
-                        Page {kbPage} of {Math.ceil(kbTotal / KB_LIMIT)}
-                      </span>
-                      <button
-                        onClick={() => setKbPage(p => Math.min(Math.ceil(kbTotal / KB_LIMIT), p + 1))}
-                        disabled={kbPage >= Math.ceil(kbTotal / KB_LIMIT)}
-                        className="font-label text-[9px] uppercase tracking-widest text-muted-foreground hover:text-primary disabled:opacity-30 transition-colors"
-                      >
-                        Next →
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
 
         {/* VAEL Desk tab */}
         {tab === "vael" && (() => {
-          const dnaFiltered = dnaEntries.filter(e =>
-            dnaSearch.trim()
-              ? e.title.toLowerCase().includes(dnaSearch.toLowerCase()) ||
-                e.content.toLowerCase().includes(dnaSearch.toLowerCase())
-              : true
-          );
+          const dnaFiltered = dnaEntries.filter(e => {
+            if (dnaLayerFilter !== "all" && e.layer !== dnaLayerFilter) return false;
+            if (dnaSearch.trim()) {
+              return e.title.toLowerCase().includes(dnaSearch.toLowerCase()) ||
+                e.content.toLowerCase().includes(dnaSearch.toLowerCase());
+            }
+            return true;
+          });
 
           const confidenceBar = (conf: number | null) => {
             const pct = conf != null ? Math.round(conf * 100) : 0;
@@ -1725,10 +1228,23 @@ export default function AdminPage() {
 
               {/* Panel 1: Drop Zone */}
               {vaelPanel === "drop" && (
-                <div className="bg-white border border-border p-6 space-y-6">
+                <div className="bg-white border border-border p-6 space-y-5">
                   <div>
                     <h4 className="font-label text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Submit Content to VAEL</h4>
                     <p className="font-sans text-xs text-muted-foreground/70">VAEL will verify, classify, and assign confidence. Approved entries enter the DNA library as &ldquo;current&rdquo;.</p>
+                  </div>
+
+                  {/* Mode tabs */}
+                  <div className="flex gap-1 border border-border/40 rounded-lg p-1 bg-surface-container/30 w-fit">
+                    {(["urls", "files", "text"] as const).map(mode => (
+                      <button
+                        key={mode}
+                        onClick={() => { setVaelDropMode(mode); setVaelDropResult(null); setVaelBulkResults([]); }}
+                        className={`px-4 py-1.5 rounded-md font-label text-[9px] uppercase tracking-widest transition-all ${vaelDropMode === mode ? "bg-white shadow-sm text-primary border border-border/40" : "text-muted-foreground hover:text-foreground"}`}
+                      >
+                        {mode === "urls" ? "URLs" : mode === "files" ? "Documents" : "Text"}
+                      </button>
+                    ))}
                   </div>
 
                   {/* Source label — shared */}
@@ -1743,66 +1259,147 @@ export default function AdminPage() {
                     />
                   </div>
 
-                  {/* URL input */}
-                  <div className="space-y-2">
-                    <label className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">Ingest from URL</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="url"
-                        placeholder="https://docs.example.com/page"
+                  {/* URLs mode */}
+                  {vaelDropMode === "urls" && (
+                    <div className="space-y-2">
+                      <label className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">URLs — one per line</label>
+                      <textarea
+                        rows={6}
+                        placeholder={"https://docs.example.com/page-1\nhttps://docs.example.com/page-2\nhttps://docs.example.com/page-3"}
                         value={vaelUrlInput}
                         onChange={(e) => setVaelUrlInput(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") submitVaelUrl(); }}
-                        className="flex-1 bg-surface-container/50 border border-border/40 rounded-lg px-4 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50"
+                        className="w-full bg-surface-container/50 border border-border/40 rounded-lg px-4 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50 resize-y"
+                      />
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={submitVaelUrls}
+                          disabled={vaelDropLoading || !vaelUrlInput.split("\n").some(l => /^https?:\/\//i.test(l.trim())) || !vaelLabel.trim()}
+                          className="px-5 py-2.5 bg-primary/10 border border-primary/30 text-primary font-label text-[10px] uppercase tracking-widest rounded-lg hover:bg-primary/20 disabled:opacity-40 transition-all whitespace-nowrap"
+                        >
+                          {vaelDropLoading ? "Fetching…" : `Queue ${vaelUrlInput.split("\n").filter(l => /^https?:\/\//i.test(l.trim())).length || ""} URL${vaelUrlInput.split("\n").filter(l => /^https?:\/\//i.test(l.trim())).length === 1 ? "" : "s"}`}
+                        </button>
+                        <span className="font-mono text-[10px] text-muted-foreground/50">
+                          {vaelUrlInput.split("\n").filter(l => /^https?:\/\//i.test(l.trim())).length} valid URL{vaelUrlInput.split("\n").filter(l => /^https?:\/\//i.test(l.trim())).length !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Documents mode */}
+                  {vaelDropMode === "files" && (
+                    <div className="space-y-3">
+                      <label className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">Upload Documents (txt, md, pdf, xlsx, docx, csv, json…)</label>
+                      <div
+                        className="border-2 border-dashed border-border/40 rounded-xl p-8 text-center cursor-pointer hover:border-primary/40 hover:bg-primary/2 transition-all"
+                        onClick={() => vaelFileRef.current?.click()}
+                        onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("border-primary/60"); }}
+                        onDragLeave={(e) => e.currentTarget.classList.remove("border-primary/60")}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          e.currentTarget.classList.remove("border-primary/60");
+                          if (vaelFileRef.current && e.dataTransfer.files.length > 0) {
+                            const dt = new DataTransfer();
+                            Array.from(e.dataTransfer.files).forEach(f => dt.items.add(f));
+                            vaelFileRef.current.files = dt.files;
+                            vaelFileRef.current.dispatchEvent(new Event("change", { bubbles: true }));
+                          }
+                        }}
+                      >
+                        <div className="font-label text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Drop files here or click to browse</div>
+                        <div className="font-mono text-[10px] text-muted-foreground/50">
+                          {vaelFileRef.current?.files && vaelFileRef.current.files.length > 0
+                            ? `${vaelFileRef.current.files.length} file${vaelFileRef.current.files.length !== 1 ? "s" : ""} selected`
+                            : "Up to 50 files · 500 MB total"}
+                        </div>
+                      </div>
+                      <input
+                        ref={vaelFileRef}
+                        type="file"
+                        multiple
+                        className="hidden"
+                        accept=".txt,.md,.markdown,.csv,.json,.log,.yaml,.yml,.html,.htm,.xml,.xlsx,.xls,.jsonl,.tsv,.pdf,.docx,.doc"
+                        onChange={() => setVaelDropResult(null)}
                       />
                       <button
-                        onClick={submitVaelUrl}
-                        disabled={vaelDropLoading || !vaelUrlInput.trim() || !vaelLabel.trim()}
+                        onClick={submitVaelFiles}
+                        disabled={vaelDropLoading || !vaelLabel.trim()}
                         className="px-5 py-2.5 bg-primary/10 border border-primary/30 text-primary font-label text-[10px] uppercase tracking-widest rounded-lg hover:bg-primary/20 disabled:opacity-40 transition-all whitespace-nowrap"
                       >
-                        {vaelDropLoading ? "Fetching…" : "Queue URL"}
+                        {vaelDropLoading ? "Uploading…" : "Upload to VAEL Inbox"}
                       </button>
                     </div>
-                  </div>
+                  )}
 
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 h-px bg-border/30" />
-                    <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground/50">or submit text directly</span>
-                    <div className="flex-1 h-px bg-border/30" />
-                  </div>
+                  {/* Text mode */}
+                  {vaelDropMode === "text" && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">
+                          {vaelTextMode === "raw" ? "Raw Text" : "Long Text → Extract Insights"}
+                        </label>
+                        <div className="flex gap-1 border border-border/40 rounded-md p-0.5 bg-surface-container/30">
+                          <button
+                            onClick={() => setVaelTextMode("raw")}
+                            className={`px-3 py-1 rounded font-label text-[9px] uppercase tracking-widest transition-all ${vaelTextMode === "raw" ? "bg-white shadow-sm text-primary border border-border/30" : "text-muted-foreground hover:text-foreground"}`}
+                          >
+                            Raw
+                          </button>
+                          <button
+                            onClick={() => setVaelTextMode("insights")}
+                            className={`px-3 py-1 rounded font-label text-[9px] uppercase tracking-widest transition-all ${vaelTextMode === "insights" ? "bg-white shadow-sm text-primary border border-border/30" : "text-muted-foreground hover:text-foreground"}`}
+                          >
+                            Insights
+                          </button>
+                        </div>
+                      </div>
+                      {vaelTextMode === "insights" && (
+                        <p className="font-sans text-[11px] text-muted-foreground/60 border border-border/30 rounded-lg px-3 py-2 bg-surface-container/20">
+                          VAEL will use AI to extract 3–15 discrete, self-contained insights from your text. Each becomes a separate inbox file.
+                        </p>
+                      )}
+                      <textarea
+                        rows={8}
+                        placeholder={vaelTextMode === "raw" ? "Paste content for VAEL to verify and classify…" : "Paste a long article, doc, or notes — VAEL will extract individual insights from it…"}
+                        value={vaelTextInput}
+                        onChange={(e) => setVaelTextInput(e.target.value)}
+                        className="w-full bg-surface-container/50 border border-border/40 rounded-lg px-4 py-2.5 text-sm font-sans text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50 resize-y"
+                      />
+                      <button
+                        onClick={submitVaelText}
+                        disabled={vaelDropLoading || !vaelTextInput.trim() || !vaelLabel.trim()}
+                        className="px-5 py-2.5 bg-primary/10 border border-primary/30 text-primary font-label text-[10px] uppercase tracking-widest rounded-lg hover:bg-primary/20 disabled:opacity-40 transition-all whitespace-nowrap"
+                      >
+                        {vaelDropLoading ? (vaelTextMode === "insights" ? "Extracting…" : "Submitting…") : (vaelTextMode === "insights" ? "Extract Insights via VAEL" : "Submit Text to VAEL")}
+                      </button>
+                    </div>
+                  )}
 
-                  {/* Text input */}
-                  <div className="space-y-2">
-                    <label className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">Submit Raw Text</label>
-                    <textarea
-                      rows={6}
-                      placeholder="Paste content for VAEL to verify and classify…"
-                      value={vaelTextInput}
-                      onChange={(e) => setVaelTextInput(e.target.value)}
-                      className="w-full bg-surface-container/50 border border-border/40 rounded-lg px-4 py-2.5 text-sm font-sans text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50 resize-y"
-                    />
-                    <button
-                      onClick={submitVaelText}
-                      disabled={vaelDropLoading || !vaelTextInput.trim() || !vaelLabel.trim()}
-                      className="px-5 py-2.5 bg-primary/10 border border-primary/30 text-primary font-label text-[10px] uppercase tracking-widest rounded-lg hover:bg-primary/20 disabled:opacity-40 transition-all whitespace-nowrap"
-                    >
-                      {vaelDropLoading ? "Submitting…" : "Submit Text to VAEL"}
-                    </button>
-                  </div>
-
-                  {/* Result */}
+                  {/* Result banner */}
                   {vaelDropResult && (
                     <div className={`border rounded-lg px-5 py-3 flex items-center gap-3 ${vaelDropResult.ok ? "border-secondary/30 bg-secondary/5" : "border-destructive/30 bg-destructive/5"}`}>
                       <span className={`font-label text-[10px] uppercase tracking-widest ${vaelDropResult.ok ? "text-secondary" : "text-destructive"}`}>
                         {vaelDropResult.ok ? "Queued" : "Error"}
                       </span>
                       <span className="font-mono text-xs text-muted-foreground">{vaelDropResult.msg}</span>
-                      <button
-                        onClick={() => setVaelDropResult(null)}
-                        className="ml-auto font-label text-[9px] text-muted-foreground hover:text-foreground"
-                      >
-                        Dismiss
-                      </button>
+                      <button onClick={() => { setVaelDropResult(null); setVaelBulkResults([]); }} className="ml-auto font-label text-[9px] text-muted-foreground hover:text-foreground">Dismiss</button>
+                    </div>
+                  )}
+
+                  {/* Per-item bulk results */}
+                  {vaelBulkResults.length > 1 && (
+                    <div className="border border-border/30 rounded-lg overflow-hidden">
+                      <div className="px-4 py-2 bg-surface-container-high/30 border-b border-border/30">
+                        <span className="font-label text-[9px] uppercase tracking-widest text-muted-foreground">Batch Results</span>
+                      </div>
+                      <div className="divide-y divide-border/20 max-h-48 overflow-y-auto">
+                        {vaelBulkResults.map((r, i) => (
+                          <div key={i} className="px-4 py-2 flex items-center gap-3">
+                            <span className={`font-label text-[9px] uppercase tracking-widest ${r.ok ? "text-secondary" : "text-destructive"}`}>{r.ok ? "OK" : "ERR"}</span>
+                            <span className="font-mono text-[10px] text-muted-foreground truncate flex-1">{r.item}</span>
+                            {!r.ok && <span className="font-mono text-[10px] text-destructive/70">{r.msg}</span>}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1893,11 +1490,23 @@ export default function AdminPage() {
                           className="bg-surface-container/50 border border-border/40 rounded px-3 py-1.5 text-xs font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 w-48"
                         />
                         <select
+                          value={dnaLayerFilter}
+                          onChange={(e) => setDnaLayerFilter(e.target.value)}
+                          className="bg-surface-container/50 border border-border/40 rounded px-3 py-1.5 text-[10px] font-label uppercase tracking-widest text-foreground focus:outline-none focus:border-primary/50 cursor-pointer"
+                        >
+                          <option value="all">All Layers</option>
+                          <option value="l0_ai_builder">L0 · AI Builder</option>
+                          <option value="l1_foundation">L1 · Foundation</option>
+                          <option value="l2_behavioral">L2 · Behavioral</option>
+                          <option value="l3_domain">L3 · Domain</option>
+                          <option value="l4_platform">L4 · Platform</option>
+                        </select>
+                        <select
                           value={dnaStatusFilter}
                           onChange={(e) => setDnaStatusFilter(e.target.value)}
                           className="bg-surface-container/50 border border-border/40 rounded px-3 py-1.5 text-[10px] font-label uppercase tracking-widest text-foreground focus:outline-none focus:border-primary/50 cursor-pointer"
                         >
-                          <option value="all">All</option>
+                          <option value="all">All Status</option>
                           <option value="current">Current</option>
                           <option value="draft">Draft</option>
                           <option value="upgraded">Upgraded</option>
@@ -1934,7 +1543,7 @@ export default function AdminPage() {
                                 >
                                   <div className="font-sans text-sm text-on-surface">{entry.title}</div>
                                   <div className="font-label text-[9px] text-muted-foreground mt-0.5 uppercase tracking-widest">
-                                    {entry.layer}{entry.archetype ? ` · ${entry.archetype}` : ""}
+                                    {LAYER_LABELS[entry.layer] ?? entry.layer}{entry.archetype ? ` · ${entry.archetype}` : ""}
                                     {entry.sourceName ? ` · ${entry.sourceName.slice(0, 40)}` : ""}
                                   </div>
                                 </button>
@@ -2155,3 +1764,4 @@ export default function AdminPage() {
     </div>
   );
 }
+
