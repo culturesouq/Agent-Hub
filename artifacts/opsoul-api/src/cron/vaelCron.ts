@@ -489,11 +489,17 @@ async function processKnowledgeInbox(timer: BudgetTimer): Promise<{ filesRead: n
     for (const candidate of candidates) {
       if (!timer.hasTime(10_000)) break;
       try {
+        // Layer priority: file hint > candidate suggestion > classify
+        const candidateLayer = (candidate.suggested_layer && Object.values(TAXONOMY_LAYERS).includes(candidate.suggested_layer as TaxonomyLayer))
+          ? candidate.suggested_layer as TaxonomyLayer
+          : null;
+        const resolvedLayer = hintedLayer ?? candidateLayer;
+
         const validation = await validateEntry({
           title: candidate.title,
           content: candidate.content,
           tags: candidate.suggested_tags ?? [],
-          layer: hintedLayer ?? TAXONOMY_LAYERS.L1,
+          layer: resolvedLayer ?? TAXONOMY_LAYERS.L0,
           confidence: candidate.suggested_confidence ?? 0.7,
         });
 
@@ -503,9 +509,8 @@ async function processKnowledgeInbox(timer: BudgetTimer): Promise<{ filesRead: n
           ? validation.revised_content
           : candidate.content;
 
-        // Use layer hint from file if present, otherwise classify
-        const taxonomy = hintedLayer
-          ? { layer: hintedLayer, dnaScope: 'general' as const, archetypeScope: [] as string[], domainTags: candidate.suggested_tags ?? [] }
+        const taxonomy = resolvedLayer
+          ? { layer: resolvedLayer, dnaScope: 'general' as const, archetypeScope: [] as string[], domainTags: candidate.suggested_tags ?? [] }
           : await classifyTaxonomy(finalContent);
 
         const embedding = await embed(finalContent).catch(() => null);
