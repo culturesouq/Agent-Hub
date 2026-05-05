@@ -237,11 +237,8 @@ export async function runInitSeed(): Promise<void> {
     .where(eq(ownersTable.email, OWNER_EMAIL))
     .limit(1);
 
-  if (ownerRows.length === 0) {
-    console.log(`[initSeed] Owner ${OWNER_EMAIL} not yet registered — skipping operator seed.`);
-  } else {
-    await seedOwnerOperators(ownerRows[0].id);
-  }
+  // Operator seeding is manual — operators are built one by one intentionally.
+  // Do NOT auto-seed operators on startup.
 }
 
 // ── Exported: call this after login/register for instant operator seeding ──
