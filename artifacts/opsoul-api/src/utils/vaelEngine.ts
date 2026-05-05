@@ -2,42 +2,39 @@ import { db } from '@workspace/db';
 import { ragDnaTable } from '@workspace/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { chatCompletion, CHAT_MODEL } from './openrouter.js';
-import { webSearch } from './webSearch.js';
 
-// Strip markdown code fences and extract the first JSON object/array
 function extractJson(raw: string): string {
   const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fenced) return fenced[1].trim();
-  const start = raw.indexOf('{');
-  const end   = raw.lastIndexOf('}');
-  if (start !== -1 && end !== -1) return raw.slice(start, end + 1);
+  const objStart = raw.indexOf('{');
+  const arrStart = raw.indexOf('[');
+  const isArr = arrStart !== -1 && (objStart === -1 || arrStart < objStart);
+  const start = isArr ? arrStart : objStart;
+  const end   = isArr ? raw.lastIndexOf(']') : raw.lastIndexOf('}');
+  if (start !== -1 && end > start) return raw.slice(start, end + 1);
   return raw.trim();
 }
 
-const VAEL_SYSTEM = `You are Vael, the knowledge guardian for OpSoul. Your job is to validate, curate, and evolve the DNA library — a shared knowledge corpus that all OpSoul operators query at runtime to handle their domains competently.
+// ── Vael's core identity and judgment ────────────────────────────────────────
 
-The DNA library is organized into five layers. Each layer has its own scope:
+const VAEL_SYSTEM = `You are Vael, knowledge guardian for OpSoul. You curate the DNA library — a shared corpus that all OpSoul operators draw from at runtime.
 
-L0 · AI Builder — How to call APIs, HTTP patterns, web scraping rules, data formats (JSON/CSV/XML/YAML), LLM control (prompting, tokens, temperature, tool use), tool chaining, reading code and error outputs. This is technical craft knowledge.
+The library has five layers:
+L0 · AI Builder — API calls, HTTP patterns, web scraping, data formats (JSON/CSV/XML/YAML), LLM control and prompting, tool chaining, reading code and error outputs. Technical craft knowledge.
+L1 · Foundation — How operators reason, communicate, and handle hard situations. Ethics, identity stability, universal principles that apply across all archetypes.
+L2 · Behavioral — How specific archetypes think differently. Builder vs Advisor vs Analyst patterns. Tone, framing, judgment by archetype.
+L3 · Domain — Real-world knowledge: UAE business environment, Arabic communication norms, startup ecosystems, legal and regulatory context, industry-specific facts.
+L4 · Platform — OpSoul mechanics: GROW stages and lock levels, operator lifecycle, drift detection, archetype soul signatures, deployment slots, core values.
 
-L1 · Foundation — Operator reasoning principles, ethical decision frameworks, how to handle sensitive topics, identity stability under pressure, communication principles that apply across all archetypes.
+Your job is quality control. You read what was submitted and decide if it belongs.
 
-L2 · Behavioral — Per-archetype behavioral patterns. How a Builder thinks differently from an Advisor. How an Analyst structures responses. Archetype-specific tone, framing, and judgment patterns.
+Approve: specific, factual, useful knowledge an active operator would actually draw on. Tone should feel absorbed and internalized — not a rule-list, not commands.
+Revise: content that is accurate but poorly worded, over-procedural, or assigned the wrong layer. Fix it rather than discard it.
+Reject: vague platitudes, advertising, personal data, things that serve no operator, clear duplicates of existing entries.
 
-L3 · Domain — Specialty domain knowledge: UAE business environment, Arabic cultural communication norms, startup ecosystems, legal frameworks, industry-specific facts an operator in that domain would need.
+Be direct. Name exactly what is wrong, or pass it cleanly.`;
 
-L4 · Platform — OpSoul platform mechanics: operator lifecycle, GROW framework stages and lock levels, self-awareness and drift detection, Vael's validation role, operator onboarding, deployment slots, archetype soul signatures, OpSoul core values.
-
-VALIDATION MODE: You review incoming DNA entries for:
-1. Layer fit — does the content match the claimed layer? An HTTP API guide belongs in L0, not L4. A GROW framework description belongs in L4, not L1.
-2. Operator utility — would an active operator actually benefit from knowing this? Reject advertising content, promotional fluff, vague platitudes, or personal data.
-3. Tone — entries must read as absorbed, internalized knowledge. Not rule-lists ("I must not...", "Critical rule:"), not commands, not numbered procedures.
-4. Accuracy — is the content factually sound and specific? Reject vague, unverifiable, or contradictory claims.
-5. Consistency — does it conflict with or duplicate an existing entry?
-
-DISCOVERY MODE: You identify knowledge gaps across all five layers, propose new entries, and flag outdated ones. You think in terms of what operators are missing that would make them more capable.
-
-Your verdicts are direct and specific. Name the exact problem or pass without ceremony.`;
+// ── Validation ────────────────────────────────────────────────────────────────
 
 export interface ValidationResult {
   verdict: 'approve' | 'revise' | 'reject';
@@ -49,59 +46,33 @@ export interface ValidationResult {
   reasoning: string;
 }
 
-export interface DiscoveryProposal {
-  action: 'new_entry' | 'flag_upgraded' | 'flag_deprecated';
-  title: string;
-  content?: string;
-  affected_entry_title?: string;
-  reason: string;
-  suggested_source_name: string;
-  suggested_confidence: number;
-  suggested_tags: string[];
-}
-
-export interface DiscoveryResult {
-  proposals: DiscoveryProposal[];
-  summary: string;
-  search_queries_used: string[];
-}
-
-async function getExistingTitlesContext(layer?: string): Promise<string> {
-  const conditions = [];
-  if (layer) conditions.push(eq(ragDnaTable.layer, layer));
-  conditions.push(eq(ragDnaTable.isActive, true));
-
+async function getExistingIndex(): Promise<string> {
   const entries = await db
     .select({
       title: ragDnaTable.title,
       layer: ragDnaTable.layer,
-      archetype: ragDnaTable.archetype,
       sourceName: ragDnaTable.sourceName,
       knowledgeStatus: ragDnaTable.knowledgeStatus,
     })
     .from(ragDnaTable)
-    .where(and(...conditions));
+    .where(eq(ragDnaTable.isActive, true));
 
+  if (entries.length === 0) return 'DNA library is currently empty.';
   return entries
-    .map(e => `[${e.layer}${e.archetype ? `/${e.archetype}` : ''}] "${e.title}" — source: ${e.sourceName ?? 'unset'}, status: ${e.knowledgeStatus}`)
+    .map(e => `[${e.layer}] "${e.title}" — ${e.sourceName ?? 'no source'}, ${e.knowledgeStatus}`)
     .join('\n');
 }
 
-async function getRelatedEntries(tags: string[], limit = 5): Promise<string> {
-  const allEntries = await db
+async function getRelatedEntries(tags: string[]): Promise<string> {
+  if (tags.length === 0) return 'No tags provided.';
+  const all = await db
     .select({ title: ragDnaTable.title, content: ragDnaTable.content, tags: ragDnaTable.tags })
     .from(ragDnaTable)
-    .where(eq(ragDnaTable.isActive, true));
+    .where(and(eq(ragDnaTable.isActive, true)));
 
-  const related = allEntries
-    .filter(e => e.tags?.some(t => tags.includes(t)))
-    .slice(0, limit);
-
-  if (related.length === 0) return 'No closely related entries found.';
-
-  return related
-    .map(e => `Title: "${e.title}"\n${e.content}`)
-    .join('\n\n---\n\n');
+  const related = all.filter(e => e.tags?.some(t => tags.includes(t))).slice(0, 4);
+  if (related.length === 0) return 'No related entries found.';
+  return related.map(e => `"${e.title}": ${e.content}`).join('\n\n');
 }
 
 export async function validateEntry(entry: {
@@ -113,18 +84,17 @@ export async function validateEntry(entry: {
   sourceName?: string;
   confidence?: number;
 }): Promise<ValidationResult> {
-  const [existingIndex, relatedEntries] = await Promise.all([
-    getExistingTitlesContext(),
+  const [index, related] = await Promise.all([
+    getExistingIndex(),
     getRelatedEntries(entry.tags),
   ]);
 
-  const userPrompt = `VALIDATION REQUEST
+  const prompt = `VALIDATION REQUEST
 
-Entry to validate:
+Entry:
 - Title: "${entry.title}"
 - Layer: ${entry.layer}${entry.archetype ? ` / Archetype: ${entry.archetype}` : ''}
 - Source: ${entry.sourceName ?? 'not set'}
-- Proposed confidence: ${entry.confidence ?? 'not set'}
 - Tags: ${entry.tags.join(', ')}
 
 Content:
@@ -132,94 +102,74 @@ Content:
 ${entry.content}
 """
 
----
+EXISTING DNA INDEX:
+${index}
 
-EXISTING DNA INDEX (for conflict/gap detection):
-${existingIndex}
+RELATED ENTRIES:
+${related}
 
----
+Review against:
+1. Layer fit — does the content match its claimed layer? (L0=builder skills, L1=reasoning/ethics, L2=archetype behavior, L3=domain knowledge, L4=platform mechanics)
+2. Operator utility — would an active operator actually use this?
+3. Tone — absorbed knowledge, not rule-lists or commands
+4. Accuracy — specific and factually sound
+5. Consistency — not a duplicate or direct conflict with existing entries
 
-RELATED ENTRIES (for consistency check):
-${relatedEntries}
-
----
-
-Review this entry against:
-1. Layer fit — does the content match the claimed layer? L0=AI builder skills (HTTP/APIs/scraping/LLM/data formats), L1=reasoning/ethics foundations, L2=archetype behavioral patterns, L3=domain/specialty knowledge, L4=OpSoul platform mechanics. Reject if the content clearly belongs in a different layer than claimed, or if it has no operator utility at all (advertising, spam, personal data, vague platitudes).
-2. Factual accuracy — is the content factually sound and specific?
-3. Tone — does it read as absorbed knowledge? Or does it slip into rule-list / command style ("I must...", "I should NOT...", numbered procedure lists)?
-4. Consistency — does it conflict with or duplicate any existing entry?
-5. Confidence calibration — is the proposed confidence appropriate for the claim strength?
-
-Return a JSON object with this exact shape:
+Return JSON only:
 {
   "verdict": "approve" | "revise" | "reject",
-  "confidence_suggested": <number 0.0-1.0>,
+  "confidence_suggested": <0.0-1.0>,
   "status_suggested": "current" | "upgraded" | "deprecated" | "draft",
-  "issues": ["specific issue 1", "specific issue 2"],
-  "strengths": ["specific strength 1"],
-  "revised_content": "<only include if verdict is 'revise' — provide the corrected content>",
-  "reasoning": "<2-3 sentence summary of your verdict>"
-}
-
-Return only valid JSON. No preamble.`;
+  "issues": ["issue 1"],
+  "strengths": ["strength 1"],
+  "revised_content": "<corrected content — only if verdict is revise>",
+  "reasoning": "<2 sentences max>"
+}`;
 
   const result = await chatCompletion(
-    [
-      { role: 'system', content: VAEL_SYSTEM },
-      { role: 'user', content: userPrompt },
-    ],
+    [{ role: 'system', content: VAEL_SYSTEM }, { role: 'user', content: prompt }],
     { model: CHAT_MODEL },
   );
 
   try {
-    const parsed = JSON.parse(extractJson(result.content));
-    return parsed as ValidationResult;
+    return JSON.parse(extractJson(result.content)) as ValidationResult;
   } catch {
     return {
       verdict: 'revise',
-      confidence_suggested: entry.confidence ?? 0.8,
+      confidence_suggested: entry.confidence ?? 0.75,
       status_suggested: 'draft',
-      issues: ['Vael returned unparseable output — manual review required'],
+      issues: ['Vael returned unparseable output — needs manual review'],
       strengths: [],
-      reasoning: result.content.slice(0, 300),
+      reasoning: result.content.slice(0, 200),
     };
   }
 }
 
-// ── Source-guided extraction ──────────────────────────────────────────────────
-// Vael reads raw content fetched from a curated source and extracts
-// structured DNA candidates for her validation pipeline.
+// ── Extraction from raw content ───────────────────────────────────────────────
+// Vael reads raw text and extracts discrete knowledge candidates.
+// Used by both inbox processing and source-guided scans.
 
-const SOURCE_EXTRACT_SYSTEM = `You are Vael, OpSoul's knowledge guardian.
-You have been given raw content from a curated source submitted to the DNA library.
-Your task: extract 3 to 8 high-quality knowledge entries that an OpSoul operator would benefit from knowing at runtime.
+const EXTRACT_SYSTEM = `You are Vael, reading content that was submitted to the OpSoul DNA library.
+Extract discrete, self-contained knowledge entries an operator would actually use at runtime.
 
-The DNA library has five layers — extract entries appropriate to whichever layer fits the content:
-- L0: AI builder skills (HTTP, APIs, scraping, data formats, LLM control, tool chaining, code reading)
-- L1: Reasoning and ethics foundations applicable to any operator
-- L2: Archetype-specific behavioral patterns (Builder, Advisor, Analyst, etc.)
-- L3: Domain/specialty knowledge (UAE business, Arabic communication, startups, legal, etc.)
-- L4: OpSoul platform mechanics (GROW, operator lifecycle, archetypes, drift detection)
+Each entry must:
+- Stand alone — make sense without the surrounding document
+- Be specific and factual — no vague generalizations
+- Read as absorbed knowledge — not a procedure list or command
+- Fit one of the five layers: L0 (builder/technical), L1 (reasoning/ethics), L2 (archetype behavior), L3 (domain), L4 (platform)
 
-Each entry must be:
-- A standalone, reusable piece of knowledge — factual, clear, absorbed-voice (not rule-list style)
-- Specific and useful — not vague, promotional, or procedural
-- Under 400 characters for content
-- Given a concise descriptive title
-
-Return only valid JSON — an array of objects:
+Return JSON array only:
 [
   {
-    "title": "<concise title>",
-    "content": "<absorbed knowledge, max 400 chars>",
+    "title": "<concise descriptive title>",
+    "content": "<the knowledge, max 500 chars, absorbed tone>",
     "suggested_layer": "l0_ai_builder" | "l1_foundation" | "l2_behavioral" | "l3_domain" | "l4_platform",
     "suggested_tags": ["tag1", "tag2"],
     "suggested_confidence": <0.6-1.0>
   }
 ]
 
-If the content has nothing worth extracting, return an empty array: []`;
+Extract 3 to 10 entries. If the content has nothing worth keeping, return [].`;
 
 export interface SourceCandidate {
   title: string;
@@ -233,111 +183,17 @@ export async function extractEntriesFromSource(
   rawContent: string,
   sourceTitle: string,
 ): Promise<SourceCandidate[]> {
-  const prompt = `Source: "${sourceTitle}"\n\nContent:\n${rawContent.slice(0, 3000)}`;
+  const prompt = `Source: "${sourceTitle}"\n\nContent:\n${rawContent.slice(0, 8000)}`;
 
   const result = await chatCompletion(
-    [
-      { role: 'system', content: SOURCE_EXTRACT_SYSTEM },
-      { role: 'user', content: prompt },
-    ],
-    { model: CHAT_MODEL },
-  );
-
-  try {
-    const raw = extractJson(result.content);
-    const start = raw.indexOf('[');
-    const end = raw.lastIndexOf(']');
-    const parsed = JSON.parse(start !== -1 ? raw.slice(start, end + 1) : raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-export async function runDiscoverySweep(focus?: string): Promise<DiscoveryResult> {
-  const existingIndex = await getExistingTitlesContext();
-
-  const searchQueries = focus
-    ? [
-        `AI operator ${focus} best practices 2025`,
-        `${focus} API integration patterns for AI agents`,
-      ]
-    : [
-        'REST API authentication patterns Bearer token OAuth 2025',
-        'web scraping best practices rate limiting robots.txt 2025',
-        'LLM tool use function calling patterns 2025',
-      ];
-
-  const searchResults: string[] = [];
-  for (const query of searchQueries) {
-    try {
-      const results = await webSearch(query);
-      if (results.length > 0) {
-        searchResults.push(
-          `Query: "${query}"\n` +
-          results.map(r => `- ${r.title}: ${r.snippet ?? r.url}`).join('\n'),
-        );
-      }
-    } catch {
-      searchResults.push(`Query: "${query}" — search failed`);
-    }
-  }
-
-  const userPrompt = `DISCOVERY SWEEP REQUEST
-${focus ? `Focus area: ${focus}` : 'Full platform sweep'}
-
-CURRENT DNA INDEX:
-${existingIndex}
-
----
-
-WEB SEARCH RESULTS:
-${searchResults.join('\n\n') || 'No search results available.'}
-
----
-
-Analyze the current DNA index and search results. Identify:
-1. Knowledge gaps — what should every operator know that isn't covered?
-2. Upgraded entries — existing entries that may now be incomplete due to platform changes
-3. Deprecated entries — existing entries that may no longer be accurate
-
-For each finding, propose an action. Return JSON with this shape:
-{
-  "proposals": [
-    {
-      "action": "new_entry" | "flag_upgraded" | "flag_deprecated",
-      "title": "<proposed title or affected title>",
-      "content": "<entry content — only for new_entry — max 400 chars, concise>",
-      "affected_entry_title": "<existing title — only for flag_upgraded / flag_deprecated>",
-      "reason": "<why this action is needed>",
-      "suggested_source_name": "<source label>",
-      "suggested_confidence": <0.0-1.0>,
-      "suggested_tags": ["tag1", "tag2"]
-    }
-  ],
-  "summary": "<2-3 sentence sweep summary>",
-  "search_queries_used": ["query1", "query2"]
-}
-
-Return only valid JSON. No preamble.`;
-
-  const result = await chatCompletion(
-    [
-      { role: 'system', content: VAEL_SYSTEM },
-      { role: 'user', content: userPrompt },
-    ],
+    [{ role: 'system', content: EXTRACT_SYSTEM }, { role: 'user', content: prompt }],
     { model: CHAT_MODEL },
   );
 
   try {
     const parsed = JSON.parse(extractJson(result.content));
-    parsed.search_queries_used = searchQueries;
-    return parsed as DiscoveryResult;
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return {
-      proposals: [],
-      summary: `Parse failed — raw: ${result.content.slice(0, 200)}`,
-      search_queries_used: searchQueries,
-    };
+    return [];
   }
 }

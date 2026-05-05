@@ -10,7 +10,7 @@ import { requireAdmin } from '../middleware/requireAdmin.js';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { chatCompletion, KB_MODEL } from '../utils/openrouter.js';
 
-import { validateEntry, runDiscoverySweep } from '../utils/vaelEngine.js';
+import { validateEntry } from '../utils/vaelEngine.js';
 import { runVaelFullSweep, runVaelValidationOnly, getVaelRunState } from '../cron/vaelCron.js';
 import multer from 'multer';
 import * as cheerio from 'cheerio';
@@ -231,8 +231,8 @@ router.get('/entries', async (req: Request, res: Response): Promise<void> => {
   if (archetype) {
     conditions.push(eq(ragDnaTable.archetype, archetype));
   }
-  if (active === 'true') conditions.push(eq(ragDnaTable.isActive, true));
   if (active === 'false') conditions.push(eq(ragDnaTable.isActive, false));
+  else conditions.push(eq(ragDnaTable.isActive, true)); // default: active only
   if (status && ['current', 'upgraded', 'deprecated', 'draft'].includes(status)) {
     conditions.push(eq(ragDnaTable.knowledgeStatus, status as 'current' | 'upgraded' | 'deprecated' | 'draft'));
   }
@@ -392,13 +392,10 @@ router.patch('/entries/:id/scope', async (req: Request, res: Response): Promise<
 
 router.delete('/entries/:id', async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params as Record<string, string>;
-  const [existing] = await db.select().from(ragDnaTable).where(eq(ragDnaTable.id, id));
-  if (!existing) {
-    res.status(404).json({ error: 'Entry not found' });
-    return;
-  }
-  await db.update(ragDnaTable).set({ isActive: false, updatedAt: new Date() }).where(eq(ragDnaTable.id, id));
-  res.json({ ok: true });
+  const [existing] = await db.select({ id: ragDnaTable.id }).from(ragDnaTable).where(eq(ragDnaTable.id, id));
+  if (!existing) { res.status(404).json({ error: 'Entry not found' }); return; }
+  await db.delete(ragDnaTable).where(eq(ragDnaTable.id, id));
+  res.json({ ok: true, deleted: id });
 });
 
 // ── Pipeline Config ────────────────────────────────────────────────────────
@@ -588,18 +585,6 @@ router.post('/vael/validate', async (req: Request, res: Response): Promise<void>
   }
 });
 
-// ── Vael — Discovery sweep ────────────────────────────────────────────────
-
-router.post('/vael/discover', async (req: Request, res: Response): Promise<void> => {
-  const { focus } = req.body as { focus?: string };
-
-  try {
-    const result = await runDiscoverySweep(focus);
-    res.json(result);
-  } catch (e) {
-    res.status(500).json({ error: 'Vael discovery sweep failed', detail: (e as Error).message });
-  }
-});
 
 // ── Source Registry — CRUD ─────────────────────────────────────────────────
 
