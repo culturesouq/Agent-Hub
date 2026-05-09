@@ -1,7 +1,7 @@
 import { db } from '@workspace/db';
 import { ragDnaTable, ragSourcesTable, tasksTable, operatorMainMemoryTable } from '@workspace/db/schema';
 import { eq, and, inArray, sql, isNull, ne } from 'drizzle-orm';
-import { validateEntry, runDiscoverySweep, extractEntriesFromSource, type DiscoveryProposal } from '../utils/vaelEngine.js';
+import { validateEntry, extractEntriesFromSource } from '../utils/vaelEngine.js';
 import { fetchSource } from '../utils/ragSourceFetcher.js';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { chatCompletion, KB_MODEL } from '../utils/openrouter.js';
@@ -278,134 +278,6 @@ async function runValidationPhase(timer: BudgetTimer): Promise<{
   return stats;
 }
 
-// ── Phase 2: Discovery sweep + auto-seed ─────────────────────────────────────
-
-async function seedProposal(proposal: DiscoveryProposal): Promise<boolean> {
-  if (!proposal.content) return false;
-
-  const validation = await validateEntry({
-    title: proposal.title,
-    content: proposal.content,
-    layer: 'collective',
-    tags: proposal.suggested_tags ?? [],
-    sourceName: proposal.suggested_source_name,
-    confidence: proposal.suggested_confidence,
-  });
-
-  if (validation.verdict === 'reject') {
-    console.log(`[VAEL] Proposal rejected by self-validation: "${proposal.title}"`);
-    return false;
-  }
-
-  const finalContent = (validation.verdict === 'revise' && validation.revised_content)
-    ? validation.revised_content
-    : proposal.content;
-
-  const [scope, embedding] = await Promise.all([
-    classifyScope(finalContent),
-    embed(finalContent).catch(() => undefined),
-  ]);
-
-  const hash = Buffer.from(finalContent.slice(0, 200)).toString('base64').slice(0, 64);
-
-  const [existing] = await db
-    .select({ id: ragDnaTable.id })
-    .from(ragDnaTable)
-    .where(eq(ragDnaTable.sourceHash, hash))
-    .limit(1);
-
-  if (existing) {
-    console.log(`[VAEL] Duplicate detected — skipping: "${proposal.title}"`);
-    return false;
-  }
-
-  await db.insert(ragDnaTable).values({
-    id: randomUUID(),
-    layer: 'collective',
-    title: proposal.title,
-    content: finalContent,
-    embedding: embedding ?? null,
-    tags: proposal.suggested_tags ?? [],
-    sourceName: proposal.suggested_source_name ?? 'Vael Discovery',
-    sourceHash: hash,
-    confidence: validation.confidence_suggested ?? proposal.suggested_confidence,
-    knowledgeStatus: 'current',
-    dnaScope: scope.dnaScope,
-    archetypeScope: scope.archetypeScope,
-    domainTags: scope.domainTags,
-    isActive: true,
-  });
-
-  return true;
-}
-
-async function applyFlagProposal(proposal: DiscoveryProposal): Promise<void> {
-  if (!proposal.affected_entry_title) return;
-
-  const [entry] = await db
-    .select({ id: ragDnaTable.id })
-    .from(ragDnaTable)
-    .where(and(
-      eq(ragDnaTable.title, proposal.affected_entry_title),
-      eq(ragDnaTable.isActive, true),
-    ))
-    .limit(1);
-
-  if (!entry) return;
-
-  await db.update(ragDnaTable)
-    .set({
-      knowledgeStatus: proposal.action === 'flag_deprecated' ? 'deprecated' : 'upgraded',
-      updatedAt: new Date(),
-    })
-    .where(eq(ragDnaTable.id, entry.id));
-
-  console.log(`[VAEL] Flagged "${proposal.affected_entry_title}" as ${proposal.action === 'flag_deprecated' ? 'deprecated' : 'upgraded'}`);
-}
-
-async function runDiscoveryPhase(timer: BudgetTimer): Promise<{
-  proposed: number; seeded: number; flagged: number;
-}> {
-  const stats = { proposed: 0, seeded: 0, flagged: 0 };
-
-  console.log('[VAEL] Discovery phase starting...');
-
-  let sweep;
-  try {
-    sweep = await runDiscoverySweep();
-  } catch (err) {
-    console.error('[VAEL] Discovery sweep failed:', (err as Error).message);
-    return stats;
-  }
-
-  stats.proposed = sweep.proposals.length;
-  console.log(`[VAEL] Discovery found ${stats.proposed} proposals — ${sweep.summary}`);
-
-  for (const proposal of sweep.proposals) {
-    if (!timer.hasTime(30_000)) {
-      console.log('[VAEL] Budget low — stopping discovery seeding early');
-      break;
-    }
-
-    try {
-      if (proposal.action === 'new_entry') {
-        const seeded = await seedProposal(proposal);
-        if (seeded) {
-          stats.seeded++;
-          console.log(`[VAEL] ✓ Seeded: "${proposal.title}"`);
-        }
-      } else if (proposal.action === 'flag_upgraded' || proposal.action === 'flag_deprecated') {
-        await applyFlagProposal(proposal);
-        stats.flagged++;
-      }
-    } catch (err) {
-      console.error(`[VAEL] Error processing proposal "${proposal.title}":`, (err as Error).message);
-    }
-  }
-
-  return stats;
-}
-
 // ── Phase 3: Source-guided discovery ──────────────────────────────────────────
 // Vael visits active curated sources (HuggingFace, GitHub, etc.),
 // extracts knowledge candidates, validates them, and seeds what passes.
@@ -659,13 +531,6 @@ export async function runVaelFullSweep(): Promise<void> {
 
     const validation = await runValidationPhase(timer);
 
-    let discovery = { proposed: 0, seeded: 0, flagged: 0 };
-    if (timer.hasTime(60_000)) {
-      discovery = await runDiscoveryPhase(timer);
-    } else {
-      console.log('[VAEL] Budget too low after validation — skipping discovery');
-    }
-
     let sources = { sourcesVisited: 0, candidatesExtracted: 0, seeded: 0 };
     if (timer.hasTime(50_000)) {
       sources = await runSourceGuidedPhase(timer);
@@ -682,7 +547,7 @@ export async function runVaelFullSweep(): Promise<void> {
     const summary =
       `intake_reviewed=${intake.reviewed} intake_approved=${intake.approved} intake_rejected=${intake.rejected} | ` +
       `validated=${validation.validated} approved=${validation.approved} revised=${validation.revised} rejected=${validation.rejected} | ` +
-      `proposed=${discovery.proposed} seeded=${discovery.seeded} flagged=${discovery.flagged} | ` +
+      `sources=${sources.sourcesVisited} seeded=${sources.seeded} | ` +
       `inbox_files=${inbox.filesRead} inbox_seeded=${inbox.seeded}`;
 
     console.log(`[VAEL] Full sweep done in ${timer.elapsedSec()}s — ${summary}`);

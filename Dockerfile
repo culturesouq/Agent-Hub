@@ -24,7 +24,7 @@ COPY artifacts/opsoul-hub ./artifacts/opsoul-hub
 # ── Build frontend ────────────────────────────────────────────────
 RUN npm_config_user_agent="pnpm/10.0.0 npm/? node/v20.0.0 linux x64" \
     PORT=5000 BASE_PATH=/ \
-    pnpm --filter opsoul-hub run build
+    pnpm --filter @workspace/opsoul-hub run build
 
 EXPOSE 3001
 ENV PORT=3001
