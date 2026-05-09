@@ -536,6 +536,8 @@ async function persistUrlScrapedResult(
   convId: string,
   url: string,
   content: string,
+  scopeId?: string,
+  scopeTrust?: string,
 ): Promise<void> {
   let domain = url;
   try { domain = new URL(url).hostname; } catch { /* use full url */ }
@@ -553,6 +555,9 @@ async function persistUrlScrapedResult(
     'fact',
     'ai_distilled',
     0.6,
+    false,
+    scopeId,
+    scopeTrust,
   ).catch(() => {});
 }
 
@@ -563,6 +568,8 @@ async function persistWebSearchResult(
   searchQuery: string,
   capResult: { output: string },
   mandate: string,
+  scopeId?: string,
+  scopeTrust?: string,
 ): Promise<void> {
   await db.insert(messagesTable).values({
     id:             crypto.randomUUID(),
@@ -588,6 +595,9 @@ async function persistWebSearchResult(
     'fact',
     'ai_distilled',
     0.65,
+    false,
+    scopeId,
+    scopeTrust,
   ).catch(() => {});
 }
 
@@ -1390,7 +1400,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         const scraped = await scrapeUrl(url).catch(() => null);
         if (scraped && scraped.length > 200) {
           messages.push({ role: 'system', content: `[URL Content: ${url}]\n${scraped}` });
-          await persistUrlScrapedResult(operator.id, operator.ownerId, conv.id, url, scraped);
+          await persistUrlScrapedResult(operator.id, operator.ownerId, conv.id, url, scraped, scope.scopeId, scope.scopeTrust);
         }
       }
 
@@ -1447,7 +1457,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             const capResult = await executeWebSearch(searchQuery);
 
             if (capResult.success) {
-              await persistWebSearchResult(operator.id, operator.ownerId, conv.id, searchQuery, capResult, operator.mandate ?? '');
+              await persistWebSearchResult(operator.id, operator.ownerId, conv.id, searchQuery, capResult, operator.mandate ?? '', scope.scopeId, scope.scopeTrust);
               webSearchCount++;
 
               // Inject the assistant turn + tool result so the model has full context
@@ -1713,7 +1723,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         const scraped = await scrapeUrl(url).catch(() => null);
         if (scraped && scraped.length > 200) {
           messages.push({ role: 'system', content: `[URL Content: ${url}]\n${scraped}` });
-          await persistUrlScrapedResult(operator.id, operator.ownerId, conv.id, url, scraped);
+          await persistUrlScrapedResult(operator.id, operator.ownerId, conv.id, url, scraped, scope.scopeId, scope.scopeTrust);
         }
       }
 
@@ -1739,7 +1749,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           console.log(`[agency] operator-initiated web search (sync): "${searchQuery}"`);
           const capResult = await executeWebSearch(searchQuery);
           if (capResult.success) {
-            await persistWebSearchResult(operator.id, operator.ownerId, conv.id, searchQuery, capResult, operator.mandate ?? '');
+            await persistWebSearchResult(operator.id, operator.ownerId, conv.id, searchQuery, capResult, operator.mandate ?? '', scope.scopeId, scope.scopeTrust);
             capabilityFired = true;
             const toolResultMessages: ChatMessage[] = [
               ...messages,

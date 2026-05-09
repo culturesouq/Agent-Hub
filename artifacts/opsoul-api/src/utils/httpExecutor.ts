@@ -25,7 +25,7 @@ export async function executeHttpRequest(
     headers[resolve(k)] = resolve(v);
   }
 
-  const fetchOpts: RequestInit = { method: args.method, headers };
+  const fetchOpts: RequestInit = { method: args.method, headers, signal: AbortSignal.timeout(15000) };
   if (args.body && ['POST', 'PUT', 'PATCH'].includes(args.method.toUpperCase())) {
     fetchOpts.body = resolve(args.body);
   }
