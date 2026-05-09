@@ -23,6 +23,10 @@ Azure Container App pulls from this repo on each deployment.
 
 ## Commit Log (newest first)
 
+### 2026-05-09 — chore: remove opsoul-v2.4.tar.gz + add .dockerignore
+- `opsoul-v2.4.tar.gz`: deleted — old snapshots belong in git history, not the repo
+- `.dockerignore`: added — excludes node_modules, dist, screenshots, *.tar.gz, *.backup from build context
+
 ### 2026-05-09 — fix: phase 2 — ChatSection rewrite: white UI, no duplicate messages, thinking indicator
 - `ChatSection.tsx`: Full rewrite — white page, no bubbles for assistant, light-gray user messages (Claude-style)
 - Bug fix: `sending` state added to StreamStatus — thinking dots now visible immediately after send, before first token

@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+**/.turbo
+**/dist
+**/.next
+*.tar.gz
+*.backup
+screenshots
+SOURCE_OF_TRUTH.md
+replit.md
+scripts
+.git
