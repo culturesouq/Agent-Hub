@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import crypto from 'crypto';
 import { db } from '@workspace/db';
 import { operatorsTable, conversationsTable, messagesTable, operatorKbTable } from '@workspace/db';
-import { resolveScope } from '../utils/scopeResolver.js';
+import { buildOwnerScope } from '../utils/scopeResolver.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import {
   CreateOperatorSchema,
@@ -246,7 +246,7 @@ router.post('/blank', async (req: Request, res: Response): Promise<void> => {
     toolUsePolicy: {},
   }).returning();
 
-  const scope = resolveScope({ operatorId: op.id, source: 'owner', callerId: ownerId });
+  const scope = buildOwnerScope(ownerId);
   const convId = crypto.randomUUID();
 
   await db.insert(conversationsTable).values({

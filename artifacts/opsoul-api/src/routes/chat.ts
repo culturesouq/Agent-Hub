@@ -34,7 +34,7 @@ import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import { decryptToken, encryptToken } from '@workspace/opsoul-utils/crypto';
 import type { ChatMessage, ToolDefinition } from '../utils/openrouter.js';
 import type { Layer2Soul } from '../validation/operator.js';
-import { resolveScope } from '../utils/scopeResolver.js';
+import { buildOwnerScope, type ValidatedScope } from '../utils/scopeResolver.js';
 import { scrapeUrl } from '../utils/urlScraper.js';
 import type { ContentPart } from '../utils/openrouter.js';
 import { verifyAndStore, persistKbSeedEntry } from '../utils/kbIntake.js';
@@ -326,7 +326,7 @@ const SendMessageSchema = z.object({
 async function resolveOperatorAndConv(
   req: Request,
   res: Response,
-): Promise<{ operator: typeof operatorsTable.$inferSelect; conv: typeof conversationsTable.$inferSelect } | null> {
+): Promise<{ operator: typeof operatorsTable.$inferSelect; conv: typeof conversationsTable.$inferSelect; scope: ValidatedScope } | null> {
   const [operator] = await db
     .select()
     .from(operatorsTable)
@@ -341,7 +341,7 @@ async function resolveOperatorAndConv(
     return null;
   }
 
-  const expectedScope = resolveScope({ operatorId: operator.id, source: 'owner', callerId: req.owner!.ownerId });
+  const scope = buildOwnerScope(req.owner!.ownerId);
 
   const [conv] = await db
     .select()
@@ -350,7 +350,7 @@ async function resolveOperatorAndConv(
       and(
         eq(conversationsTable.id, req.params.convId as string),
         eq(conversationsTable.operatorId, operator.id),
-        eq(conversationsTable.scopeId, expectedScope.scopeId),
+        eq(conversationsTable.scopeId, scope.scopeId),
       ),
     );
   if (!conv) {
@@ -358,7 +358,7 @@ async function resolveOperatorAndConv(
     return null;
   }
 
-  return { operator, conv };
+  return { operator, conv, scope };
 }
 
 async function buildMessageHistory(convId: string): Promise<ChatMessage[]> {
@@ -640,6 +640,7 @@ function runPostResponseTasks(
   conv: typeof conversationsTable.$inferSelect,
   finalContent: string,
   isBirthMode: boolean,
+  scope: ValidatedScope,
 ): void {
   // [LEARN:] tag extraction — operator self-learning
   if (!operator.safeMode) {
@@ -679,7 +680,7 @@ function runPostResponseTasks(
     triggerSelfAwareness(operator.id, 'conversation_end').catch((err) => console.warn('[selfAwareness] failed:', err?.message));
     const shouldDistill = ((conv.messageCount ?? 0) % 10 === 0);
     if (shouldDistill) {
-      distillMemoriesFromConversations(operator.id, operator.ownerId, operator.name).catch((err) => console.warn('[runPostResponse] distill failed:', err?.message));
+      distillMemoriesFromConversations(operator.id, operator.ownerId, operator.name, scope.scopeId, scope.scopeTrust).catch((err) => console.warn('[runPostResponse] distill failed:', err?.message));
     }
   }
 }
@@ -839,7 +840,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   const ctx = await resolveOperatorAndConv(req, res);
   if (!ctx) return;
 
-  const { operator, conv } = ctx;
+  const { operator, conv, scope } = ctx;
 
   const parsed = SendMessageSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -970,7 +971,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       const queryEmbedding = await embed(message);
       const [kbHits, memHits] = await Promise.all([
         searchBothKbs(operator.id, queryEmbedding, kbTopN, kbMinConfidence, operator.archetype ?? [], operator.domainTags ?? []),
-        searchMemory(operator.id, queryEmbedding),
+        searchMemory(operator.id, queryEmbedding, undefined, undefined, undefined, scope.scopeId),
       ]);
       kbContext = buildRagContext(kbHits);
       memoryHits = memHits;
@@ -1183,21 +1184,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   // Attachment handling — always active, every operator
   staticCapLines.push('');
-  staticCapLines.push('Attachment handling (always active):');
   staticCapLines.push(SKILL_HOW_TO['image_attachment']!);
   staticCapLines.push(SKILL_HOW_TO['file_attachment']!);
 
-  // write_file — always available
+  // write_file reminder — one line, no repetition; full rule is in the tool description
   staticCapLines.push('');
-  staticCapLines.push('File creation (always active):');
-  staticCapLines.push(SKILL_HOW_TO['write_file'] ?? 'You have a write_file tool. When you decide to create a file, you MUST call write_file immediately — never describe the content as text. Never say "I created the file" without calling the tool. If you do not call write_file, the file does not exist.');
-
-  // Behavior rules — always active regardless of installed skills or selfAwareness
-  staticCapLines.push('');
-  staticCapLines.push('Operating principles:');
-  for (const [, rule] of Object.entries(BEHAVIOR_HOW_TO)) {
-    staticCapLines.push(rule);
-  }
+  staticCapLines.push('You have a write_file tool. When you create a file, call the tool — chat text is not a file.');
 
   messages.push({ role: 'user', content: staticCapLines.join('\n') });
 
@@ -1305,7 +1297,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     type: 'function',
     function: {
       name: 'write_file',
-      description: 'Create or update a file in your workspace. CRITICAL RULE: whenever you decide to create or write a file, you MUST call this tool — never describe the file content as text, never say "I created a file", never narrate it. The tool call IS the file creation. If you do not call this tool, the file does not exist and the owner cannot see it. Owner sees and downloads files from the Files tab.',
+      description: 'Create or update a file in your workspace. When you decide to create a file, call this tool immediately — do not describe the content as text. If you do not call this tool, the file does not exist. Owner sees and downloads files from the Files tab.',
       parameters: {
         type: 'object',
         properties: {
@@ -1323,7 +1315,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     type: 'function',
     function: {
       name: 'http_request',
-      description: 'Make an HTTP request to an external API using your stored secrets. Use {{SECRET_NAME}} as a placeholder in headers or body to inject a stored secret by its label. CRITICAL RULE: when you decide to use this tool, the tool call must be your ENTIRE response — zero text before it, zero narration, zero announcement, zero "let me", zero "testing now", zero "calling". No words at all. The call IS your full response. Violating this means the call never happens.',
+      description: 'Make an HTTP request to an external API using your stored secrets. Use {{SECRET_NAME}} as a placeholder in headers or body to inject a stored secret by its label. When you call this tool — call it directly, with no announcement before it. The tool call is your full response for that action.',
       parameters: {
         type: 'object',
         properties: {
@@ -1695,7 +1687,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       })}\n\n`);
       res.end();
 
-      runPostResponseTasks(operator, conv, finalContent, isBirthMode);
+      runPostResponseTasks(operator, conv, finalContent, isBirthMode, scope);
 
     } catch (err) {
       cleanupKeepalive();
@@ -1908,7 +1900,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         layer1WasLocked: operator.layer1LockedAt !== null,
       });
 
-      runPostResponseTasks(operator, conv, finalContent, isBirthMode);
+      runPostResponseTasks(operator, conv, finalContent, isBirthMode, scope);
 
     } catch (err) {
       res.status(502).json({ error: 'AI backend error', detail: (err as Error).message });

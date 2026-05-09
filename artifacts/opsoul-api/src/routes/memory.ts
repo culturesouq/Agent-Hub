@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db } from '@workspace/db';
 import { operatorMemoryTable, operatorsTable } from '@workspace/db';
 import { requireAuth } from '../middleware/requireAuth.js';
+import { buildOwnerScope } from '../utils/scopeResolver.js';
 import { eq, and, isNull, isNotNull, desc } from 'drizzle-orm';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
@@ -268,12 +269,13 @@ router.post('/distill', async (req: Request, res: Response): Promise<void> => {
   if (!op) return;
 
   try {
-    const result = await distillMemoriesFromConversations(op.id, op.ownerId, op.name);
+    const ownerScope = buildOwnerScope(op.ownerId);
+    const result = await distillMemoriesFromConversations(op.id, op.ownerId, op.name, ownerScope.scopeId, ownerScope.scopeTrust);
     res.json({
       operatorId: op.id,
       extracted: result.extracted,
-      stored: result.stored,
-      storedNote: 'Only memories with confidence ≥ 0.7 are stored.',
+      storedLayer1: result.storedLayer1,
+      storedLayer2: result.storedLayer2,
       memories: result.memories,
     });
   } catch (err) {

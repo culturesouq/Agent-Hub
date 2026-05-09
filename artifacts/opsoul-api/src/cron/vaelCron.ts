@@ -1,7 +1,7 @@
 import { db } from '@workspace/db';
-import { ragDnaTable, ragSourcesTable } from '@workspace/db/schema';
-import { eq, and, inArray } from 'drizzle-orm';
-import { validateEntry, extractEntriesFromSource } from '../utils/vaelEngine.js';
+import { ragDnaTable, ragSourcesTable, tasksTable, operatorMainMemoryTable } from '@workspace/db/schema';
+import { eq, and, inArray, sql, isNull, ne } from 'drizzle-orm';
+import { validateEntry, runDiscoverySweep, extractEntriesFromSource, type DiscoveryProposal } from '../utils/vaelEngine.js';
 import { fetchSource } from '../utils/ragSourceFetcher.js';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { chatCompletion, KB_MODEL } from '../utils/openrouter.js';
@@ -9,58 +9,77 @@ import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 
-// ── L0-L4 taxonomy ────────────────────────────────────────────────────────────
+const VAEL_OPERATOR_ID = 'a826164f-3111-4cc9-8f3c-856ecc589d77';
 
-const TAXONOMY_LAYERS = {
-  L0: 'l0_ai_builder',
-  L1: 'l1_foundation',
-  L2: 'l2_behavioral',
-  L3: 'l3_domain',
-  L4: 'l4_platform',
-} as const;
+async function recordVaelRun(taskType: 'full_sweep' | 'validation', summary: string, durationSec: number): Promise<void> {
+  try {
+    const rows = await db.select().from(tasksTable).where(
+      and(eq(tasksTable.operatorId, VAEL_OPERATOR_ID))
+    );
+    const task = rows.find(r => (r.payload as any)?.vaelTaskType === taskType);
+    if (!task) return;
+    const currentPayload = (task.payload as any) ?? {};
+    await db.update(tasksTable).set({
+      summary,
+      completedAt: new Date(),
+      payload: {
+        ...currentPayload,
+        lastRunAt: new Date().toISOString(),
+        lastRunSummary: summary,
+        lastRunDurationSec: durationSec,
+      },
+    }).where(eq(tasksTable.id, task.id));
+  } catch (err) {
+    console.error('[VAEL] Failed to record task run:', (err as Error).message);
+  }
+}
 
-type TaxonomyLayer = typeof TAXONOMY_LAYERS[keyof typeof TAXONOMY_LAYERS];
-const VALID_LAYERS = Object.values(TAXONOMY_LAYERS) as string[];
+// ── Budget timer ──────────────────────────────────────────────────────────────
+// Vael races the clock — she does as much as she can before the budget runs out.
 
-const VALID_ARCHETYPES = ['Advisor', 'Analyst', 'Executor', 'Catalyst', 'Expert', 'Mentor', 'Connector', 'Creator', 'Guardian', 'Builder'];
+const FULL_BUDGET_MS  = 270_000; // 4.5 min — full sweep (validate + discover)
+const FAST_BUDGET_MS  =  55_000; // 55 sec  — validate-only cycle
 
-// ── Taxonomy classifier ───────────────────────────────────────────────────────
+const VALID_ARCHETYPES = ['Advisor', 'Analyst', 'Executor', 'Catalyst', 'Expert', 'Mentor', 'Connector', 'Creator', 'Guardian'];
 
-const TAXONOMY_PROMPT = `Classify this knowledge entry for the OpSoul DNA corpus.
+class BudgetTimer {
+  private startedAt = Date.now();
+  constructor(private readonly budgetMs: number) {}
+  remaining   = ()  => this.budgetMs - (Date.now() - this.startedAt);
+  hasTime     = (minNeeded = 20_000) => this.remaining() > minNeeded;
+  elapsedSec  = ()  => ((Date.now() - this.startedAt) / 1000).toFixed(1);
+}
+
+// ── Scope classifier (Vael classifies her own discoveries) ───────────────────
+
+const SCOPE_PROMPT = `Classify this knowledge entry for the collective DNA corpus.
 
 Return JSON only:
 {
-  "layer": "l0_ai_builder" | "l1_foundation" | "l2_behavioral" | "l3_domain" | "l4_platform",
   "dna_scope": "general" | "specialty",
-  "archetype_scope": [],
-  "domain_tags": []
+  "archetype_scope": ["Analyst"],
+  "domain_tags": ["agriculture"]
 }
 
-Layers:
-- l0_ai_builder: HTTP, APIs, scraping, data formats, LLM control, tool chaining, code reading
-- l1_foundation: reasoning, ethics, identity stability, communication principles
-- l2_behavioral: per-archetype patterns — only if the content names a specific archetype
-- l3_domain: domain/industry knowledge (UAE, Arabic, startups, legal, finance, etc.)
-- l4_platform: OpSoul platform mechanics, GROW, lifecycle, drift, archetypes, values
+Rules:
+- "general": knowledge about how to think, operate, or communicate — target archetypes from [${VALID_ARCHETYPES.join(', ')}], empty [] if universal
+- "specialty": domain-specific — set domain_tags (e.g. agriculture, finance, legal, medical, engineering, hr, sales, marketing, education, technology)`;
 
-Scope:
-- general: applies across operators → set archetype_scope if archetype-specific, else []
-- specialty: domain-specific → set domain_tags`;
-
-async function classifyTaxonomy(content: string): Promise<{
-  layer: TaxonomyLayer;
+async function classifyScope(content: string): Promise<{
   dnaScope: 'general' | 'specialty';
   archetypeScope: string[];
   domainTags: string[];
 }> {
   try {
     const res = await chatCompletion(
-      [{ role: 'system', content: TAXONOMY_PROMPT }, { role: 'user', content: content.slice(0, 600) }],
+      [
+        { role: 'system', content: SCOPE_PROMPT },
+        { role: 'user', content: content.slice(0, 600) },
+      ],
       { model: KB_MODEL },
     );
-    const parsed = JSON.parse(res.content.trim().replace(/```json\s*/g, '').replace(/```/g, ''));
+    const parsed = JSON.parse(res.content.trim());
     return {
-      layer: VALID_LAYERS.includes(parsed.layer) ? parsed.layer as TaxonomyLayer : TAXONOMY_LAYERS.L1,
       dnaScope: parsed.dna_scope === 'specialty' ? 'specialty' : 'general',
       archetypeScope: Array.isArray(parsed.archetype_scope)
         ? parsed.archetype_scope.filter((a: string) => VALID_ARCHETYPES.includes(a))
@@ -68,92 +87,120 @@ async function classifyTaxonomy(content: string): Promise<{
       domainTags: Array.isArray(parsed.domain_tags) ? parsed.domain_tags : [],
     };
   } catch {
-    return { layer: TAXONOMY_LAYERS.L1, dnaScope: 'general', archetypeScope: [], domainTags: [] };
+    return { dnaScope: 'general', archetypeScope: [], domainTags: [] };
   }
 }
 
-// ── Budget timer ──────────────────────────────────────────────────────────────
+// ── Phase 0: Operator Knowledge Intake ───────────────────────────────────────
+// Reads high-confidence Layer 2 memories flagged as platform candidates from
+// all operators (Vael excluded). Validates each — domain knowledge goes to
+// rag_dna; interaction/user-specific content is rejected and stays private.
 
-class BudgetTimer {
-  private startedAt = Date.now();
-  constructor(private readonly budgetMs: number) {}
-  remaining  = () => this.budgetMs - (Date.now() - this.startedAt);
-  hasTime    = (minNeeded = 20_000) => this.remaining() > minNeeded;
-  elapsedSec = () => ((Date.now() - this.startedAt) / 1000).toFixed(1);
-}
+async function runOperatorKnowledgeIntake(timer: BudgetTimer): Promise<{
+  reviewed: number; approved: number; rejected: number;
+}> {
+  const stats = { reviewed: 0, approved: 0, rejected: 0 };
 
-const FULL_BUDGET_MS = 270_000; // 4.5 min
-const FAST_BUDGET_MS =  55_000; // 55 sec
+  const candidates = await db
+    .select({
+      id:         operatorMainMemoryTable.id,
+      operatorId: operatorMainMemoryTable.operatorId,
+      content:    operatorMainMemoryTable.content,
+      memoryType: operatorMainMemoryTable.memoryType,
+      confidence: operatorMainMemoryTable.confidence,
+    })
+    .from(operatorMainMemoryTable)
+    .where(and(
+      eq(operatorMainMemoryTable.platformCandidate, true),
+      isNull(operatorMainMemoryTable.platformReviewedAt),
+      ne(operatorMainMemoryTable.operatorId, VAEL_OPERATOR_ID),
+      isNull(operatorMainMemoryTable.archivedAt),
+    ))
+    .limit(30);
 
-// ── Shared seed helper ────────────────────────────────────────────────────────
+  if (candidates.length === 0) return stats;
+  console.log(`[VAEL] Phase 0 — ${candidates.length} operator knowledge candidate(s) to review`);
 
-async function seedCandidate(candidate: {
-  title: string;
-  content: string;
-  suggested_layer?: string;
-  suggested_tags?: string[];
-  suggested_confidence?: number;
-}, sourceName: string, hintedLayer?: TaxonomyLayer | null): Promise<'seeded' | 'rejected' | 'duplicate' | 'error'> {
-  try {
-    const candidateLayer = (candidate.suggested_layer && VALID_LAYERS.includes(candidate.suggested_layer))
-      ? candidate.suggested_layer as TaxonomyLayer
-      : null;
-    const resolvedLayer = hintedLayer ?? candidateLayer ?? TAXONOMY_LAYERS.L0;
+  for (const candidate of candidates) {
+    if (!timer.hasTime(20_000)) {
+      console.log('[VAEL] Budget low — stopping intake early');
+      break;
+    }
 
-    const validation = await validateEntry({
-      title: candidate.title,
-      content: candidate.content,
-      layer: resolvedLayer,
-      tags: candidate.suggested_tags ?? [],
-      sourceName,
-      confidence: candidate.suggested_confidence ?? 0.7,
-    });
+    stats.reviewed++;
 
-    if (validation.verdict === 'reject') return 'rejected';
+    try {
+      const result = await validateEntry({
+        title:      `Operator insight: ${candidate.memoryType}`,
+        content:    candidate.content,
+        layer:      'collective',
+        tags:       [candidate.memoryType],
+        confidence: candidate.confidence ?? undefined,
+      });
 
-    const finalContent = (validation.verdict === 'revise' && validation.revised_content)
-      ? validation.revised_content
-      : candidate.content;
+      if (result.verdict === 'reject') {
+        await db.update(operatorMainMemoryTable)
+          .set({ platformReviewedAt: new Date(), platformVerdict: 'rejected' })
+          .where(eq(operatorMainMemoryTable.id, candidate.id));
+        stats.rejected++;
+        console.log(`[VAEL] Phase 0 ✗ Rejected operator insight (${candidate.memoryType})`);
+        continue;
+      }
 
-    // Duplicate check via content hash
-    const hash = Buffer.from(finalContent.slice(0, 200)).toString('base64').slice(0, 64);
-    const [existing] = await db
-      .select({ id: ragDnaTable.id })
-      .from(ragDnaTable)
-      .where(eq(ragDnaTable.sourceHash, hash))
-      .limit(1);
-    if (existing) return 'duplicate';
+      const finalContent = (result.verdict === 'revise' && result.revised_content)
+        ? result.revised_content
+        : candidate.content;
 
-    const taxonomy = resolvedLayer
-      ? { layer: resolvedLayer, dnaScope: 'general' as const, archetypeScope: [] as string[], domainTags: candidate.suggested_tags ?? [] }
-      : await classifyTaxonomy(finalContent);
+      const [scopeResult, embedding] = await Promise.all([
+        classifyScope(finalContent),
+        embed(finalContent).catch(() => undefined),
+      ]);
 
-    const embedding = await embed(finalContent).catch(() => null);
+      const hash = Buffer.from(finalContent.slice(0, 200)).toString('base64').slice(0, 64);
+      const [existing] = await db
+        .select({ id: ragDnaTable.id })
+        .from(ragDnaTable)
+        .where(eq(ragDnaTable.sourceHash, hash))
+        .limit(1);
 
-    await db.insert(ragDnaTable).values({
-      id: randomUUID(),
-      layer: taxonomy.layer,
-      title: candidate.title,
-      content: finalContent,
-      embedding: embedding ?? null,
-      tags: candidate.suggested_tags ?? [],
-      sourceName,
-      sourceHash: hash,
-      confidence: validation.confidence_suggested ?? candidate.suggested_confidence ?? 0.75,
-      knowledgeStatus: 'current',
-      dnaScope: taxonomy.dnaScope,
-      archetypeScope: taxonomy.archetypeScope,
-      domainTags: taxonomy.domainTags,
-      isActive: true,
-    }).onConflictDoNothing();
+      if (!existing) {
+        await db.insert(ragDnaTable).values({
+          id:             randomUUID(),
+          layer:          'collective',
+          title:          `Operator insight — ${scopeResult.dnaScope}${scopeResult.archetypeScope.length ? ` [${scopeResult.archetypeScope.join(', ')}]` : ''}`,
+          content:        finalContent,
+          embedding:      embedding ?? null,
+          tags:           [candidate.memoryType, ...scopeResult.domainTags],
+          sourceName:     'operator_intake',
+          sourceHash:     hash,
+          confidence:     result.confidence_suggested ?? candidate.confidence ?? 0.80,
+          knowledgeStatus: 'current',
+          dnaScope:       scopeResult.dnaScope,
+          archetypeScope: scopeResult.archetypeScope,
+          domainTags:     scopeResult.domainTags,
+          isActive:       true,
+        });
+        stats.approved++;
+        console.log(`[VAEL] Phase 0 ✓ Promoted to Platform KB (${scopeResult.dnaScope}${scopeResult.archetypeScope.length ? `/${scopeResult.archetypeScope.join(',')}` : ''})`);
+      }
 
-    return 'seeded';
-  } catch {
-    return 'error';
+      await db.update(operatorMainMemoryTable)
+        .set({ platformReviewedAt: new Date(), platformVerdict: 'approved' })
+        .where(eq(operatorMainMemoryTable.id, candidate.id));
+
+    } catch (err) {
+      console.error(`[VAEL] Phase 0 error on candidate ${candidate.id}:`, (err as Error).message);
+      // Mark as reviewed with null verdict so it doesn't retry infinitely on transient errors
+      await db.update(operatorMainMemoryTable)
+        .set({ platformReviewedAt: new Date() })
+        .where(eq(operatorMainMemoryTable.id, candidate.id));
+    }
   }
+
+  return stats;
 }
 
-// ── Phase 1: Validate drafts ──────────────────────────────────────────────────
+// ── Phase 1: Validate draft/pending DNA entries ───────────────────────────────
 
 async function runValidationPhase(timer: BudgetTimer): Promise<{
   validated: number; approved: number; revised: number; rejected: number;
@@ -172,13 +219,19 @@ async function runValidationPhase(timer: BudgetTimer): Promise<{
       confidence: ragDnaTable.confidence,
     })
     .from(ragDnaTable)
-    .where(and(eq(ragDnaTable.isActive, true), inArray(ragDnaTable.knowledgeStatus, ['draft'])))
+    .where(and(
+      eq(ragDnaTable.isActive, true),
+      inArray(ragDnaTable.knowledgeStatus, ['draft']),
+    ))
     .limit(20);
 
   console.log(`[VAEL] Validation phase — ${drafts.length} draft entries to review`);
 
   for (const entry of drafts) {
-    if (!timer.hasTime(25_000)) { console.log('[VAEL] Budget low — stopping validation early'); break; }
+    if (!timer.hasTime(25_000)) {
+      console.log('[VAEL] Budget low — stopping validation early');
+      break;
+    }
 
     try {
       const result = await validateEntry({
@@ -192,25 +245,28 @@ async function runValidationPhase(timer: BudgetTimer): Promise<{
       });
 
       stats.validated++;
-      const updates: Partial<typeof ragDnaTable.$inferInsert> = { updatedAt: new Date() };
+
+      const updates: Partial<typeof ragDnaTable.$inferInsert> = {
+        confidence: result.confidence_suggested,
+        knowledgeStatus: result.status_suggested,
+        updatedAt: new Date(),
+      };
 
       if (result.verdict === 'approve') {
         updates.knowledgeStatus = 'current';
-        updates.confidence = result.confidence_suggested;
         stats.approved++;
         console.log(`[VAEL] ✓ Approved: "${entry.title}"`);
       } else if (result.verdict === 'revise' && result.revised_content) {
         updates.content = result.revised_content;
         updates.knowledgeStatus = 'current';
-        updates.confidence = result.confidence_suggested;
         try { updates.embedding = await embed(result.revised_content); } catch { /* keep old */ }
         stats.revised++;
-        console.log(`[VAEL] ✎ Revised: "${entry.title}"`);
+        console.log(`[VAEL] ✎ Revised + approved: "${entry.title}"`);
       } else if (result.verdict === 'reject') {
         updates.knowledgeStatus = 'deprecated';
         updates.isActive = false;
         stats.rejected++;
-        console.log(`[VAEL] ✗ Rejected: "${entry.title}" — ${result.reasoning.slice(0, 80)}`);
+        console.log(`[VAEL] ✗ Rejected: "${entry.title}" — ${result.reasoning.slice(0, 100)}`);
       }
 
       await db.update(ragDnaTable).set(updates).where(eq(ragDnaTable.id, entry.id));
@@ -222,76 +278,137 @@ async function runValidationPhase(timer: BudgetTimer): Promise<{
   return stats;
 }
 
-// ── Phase 2: Knowledge Inbox (PRIMARY — admin submitted content) ──────────────
+// ── Phase 2: Discovery sweep + auto-seed ─────────────────────────────────────
 
-const INBOX_DIR      = path.resolve(process.cwd(), 'knowledge_inbox');
-const PROCESSED_DIR  = path.join(INBOX_DIR, 'processed');
+async function seedProposal(proposal: DiscoveryProposal): Promise<boolean> {
+  if (!proposal.content) return false;
 
-async function processKnowledgeInbox(timer: BudgetTimer): Promise<{
-  filesRead: number; candidatesExtracted: number; seeded: number; rejected: number;
+  const validation = await validateEntry({
+    title: proposal.title,
+    content: proposal.content,
+    layer: 'collective',
+    tags: proposal.suggested_tags ?? [],
+    sourceName: proposal.suggested_source_name,
+    confidence: proposal.suggested_confidence,
+  });
+
+  if (validation.verdict === 'reject') {
+    console.log(`[VAEL] Proposal rejected by self-validation: "${proposal.title}"`);
+    return false;
+  }
+
+  const finalContent = (validation.verdict === 'revise' && validation.revised_content)
+    ? validation.revised_content
+    : proposal.content;
+
+  const [scope, embedding] = await Promise.all([
+    classifyScope(finalContent),
+    embed(finalContent).catch(() => undefined),
+  ]);
+
+  const hash = Buffer.from(finalContent.slice(0, 200)).toString('base64').slice(0, 64);
+
+  const [existing] = await db
+    .select({ id: ragDnaTable.id })
+    .from(ragDnaTable)
+    .where(eq(ragDnaTable.sourceHash, hash))
+    .limit(1);
+
+  if (existing) {
+    console.log(`[VAEL] Duplicate detected — skipping: "${proposal.title}"`);
+    return false;
+  }
+
+  await db.insert(ragDnaTable).values({
+    id: randomUUID(),
+    layer: 'collective',
+    title: proposal.title,
+    content: finalContent,
+    embedding: embedding ?? null,
+    tags: proposal.suggested_tags ?? [],
+    sourceName: proposal.suggested_source_name ?? 'Vael Discovery',
+    sourceHash: hash,
+    confidence: validation.confidence_suggested ?? proposal.suggested_confidence,
+    knowledgeStatus: 'current',
+    dnaScope: scope.dnaScope,
+    archetypeScope: scope.archetypeScope,
+    domainTags: scope.domainTags,
+    isActive: true,
+  });
+
+  return true;
+}
+
+async function applyFlagProposal(proposal: DiscoveryProposal): Promise<void> {
+  if (!proposal.affected_entry_title) return;
+
+  const [entry] = await db
+    .select({ id: ragDnaTable.id })
+    .from(ragDnaTable)
+    .where(and(
+      eq(ragDnaTable.title, proposal.affected_entry_title),
+      eq(ragDnaTable.isActive, true),
+    ))
+    .limit(1);
+
+  if (!entry) return;
+
+  await db.update(ragDnaTable)
+    .set({
+      knowledgeStatus: proposal.action === 'flag_deprecated' ? 'deprecated' : 'upgraded',
+      updatedAt: new Date(),
+    })
+    .where(eq(ragDnaTable.id, entry.id));
+
+  console.log(`[VAEL] Flagged "${proposal.affected_entry_title}" as ${proposal.action === 'flag_deprecated' ? 'deprecated' : 'upgraded'}`);
+}
+
+async function runDiscoveryPhase(timer: BudgetTimer): Promise<{
+  proposed: number; seeded: number; flagged: number;
 }> {
-  const stats = { filesRead: 0, candidatesExtracted: 0, seeded: 0, rejected: 0 };
+  const stats = { proposed: 0, seeded: 0, flagged: 0 };
 
-  let files: string[];
+  console.log('[VAEL] Discovery phase starting...');
+
+  let sweep;
   try {
-    await fs.mkdir(PROCESSED_DIR, { recursive: true });
-    files = (await fs.readdir(INBOX_DIR)).filter(f => /\.(md|txt)$/i.test(f));
-  } catch {
+    sweep = await runDiscoverySweep();
+  } catch (err) {
+    console.error('[VAEL] Discovery sweep failed:', (err as Error).message);
     return stats;
   }
 
-  if (files.length === 0) return stats;
-  console.log(`[VAEL] Inbox: ${files.length} file(s) to process`);
+  stats.proposed = sweep.proposals.length;
+  console.log(`[VAEL] Discovery found ${stats.proposed} proposals — ${sweep.summary}`);
 
-  for (const file of files) {
-    if (!timer.hasTime(35_000)) { console.log('[VAEL] Budget low — stopping inbox early'); break; }
-
-    let raw: string;
-    try {
-      raw = await fs.readFile(path.join(INBOX_DIR, file), 'utf-8');
-    } catch { continue; }
-
-    // Optional layer hint in the file: <!-- layer: l0_ai_builder -->
-    const layerHintMatch = raw.match(/<!--\s*layer:\s*(l[0-4]_\w+)\s*-->/i);
-    const hintedLayer = (layerHintMatch && VALID_LAYERS.includes(layerHintMatch[1]))
-      ? layerHintMatch[1] as TaxonomyLayer
-      : null;
-
-    stats.filesRead++;
-    const sourceTitle = file.replace(/\.(md|txt)$/i, '');
-
-    let candidates: Awaited<ReturnType<typeof extractEntriesFromSource>>;
-    try {
-      candidates = await extractEntriesFromSource(raw.slice(0, 8_000), sourceTitle);
-    } catch { candidates = []; }
-
-    stats.candidatesExtracted += candidates.length;
-    console.log(`[VAEL] "${sourceTitle}" — ${candidates.length} candidate(s) extracted`);
-
-    for (const candidate of candidates) {
-      if (!timer.hasTime(12_000)) break;
-      const result = await seedCandidate(candidate, `inbox:${file}`, hintedLayer);
-      if (result === 'seeded') {
-        stats.seeded++;
-        console.log(`[VAEL] ✓ Seeded: "${candidate.title}" [${hintedLayer ?? candidate.suggested_layer ?? 'auto'}]`);
-      } else if (result === 'rejected') {
-        stats.rejected++;
-        console.log(`[VAEL] ✗ Rejected: "${candidate.title}"`);
-      }
+  for (const proposal of sweep.proposals) {
+    if (!timer.hasTime(30_000)) {
+      console.log('[VAEL] Budget low — stopping discovery seeding early');
+      break;
     }
 
-    // Move to processed/
     try {
-      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-      await fs.rename(path.join(INBOX_DIR, file), path.join(PROCESSED_DIR, `${stamp}_${file}`));
-    } catch { /* best effort */ }
+      if (proposal.action === 'new_entry') {
+        const seeded = await seedProposal(proposal);
+        if (seeded) {
+          stats.seeded++;
+          console.log(`[VAEL] ✓ Seeded: "${proposal.title}"`);
+        }
+      } else if (proposal.action === 'flag_upgraded' || proposal.action === 'flag_deprecated') {
+        await applyFlagProposal(proposal);
+        stats.flagged++;
+      }
+    } catch (err) {
+      console.error(`[VAEL] Error processing proposal "${proposal.title}":`, (err as Error).message);
+    }
   }
 
-  console.log(`[VAEL] Inbox done — files=${stats.filesRead} candidates=${stats.candidatesExtracted} seeded=${stats.seeded} rejected=${stats.rejected}`);
   return stats;
 }
 
-// ── Phase 3: Source-guided scan (SECONDARY — admin-configured sources) ────────
+// ── Phase 3: Source-guided discovery ──────────────────────────────────────────
+// Vael visits active curated sources (HuggingFace, GitHub, etc.),
+// extracts knowledge candidates, validates them, and seeds what passes.
 
 async function runSourceGuidedPhase(timer: BudgetTimer): Promise<{
   sourcesVisited: number; candidatesExtracted: number; seeded: number;
@@ -304,40 +421,98 @@ async function runSourceGuidedPhase(timer: BudgetTimer): Promise<{
     .where(eq(ragSourcesTable.isActive, true));
 
   if (sources.length === 0) return stats;
-  console.log(`[VAEL] Source scan — ${sources.length} active source(s)`);
+
+  console.log(`[VAEL] Source-guided phase — ${sources.length} active source(s)`);
 
   for (const source of sources) {
-    if (!timer.hasTime(45_000)) { console.log('[VAEL] Budget low — stopping source scan early'); break; }
+    if (!timer.hasTime(45_000)) {
+      console.log('[VAEL] Budget low — stopping source-guided phase early');
+      break;
+    }
 
-    console.log(`[VAEL] Fetching source: "${source.name}"`);
+    console.log(`[VAEL] Fetching source: "${source.name}" (${source.sourceType})`);
     let chunks;
     try {
       chunks = await fetchSource(source.sourceType as any, source.url);
     } catch (err) {
-      console.error(`[VAEL] Source fetch failed "${source.name}":`, (err as Error).message);
+      console.error(`[VAEL] Source fetch failed for "${source.name}":`, (err as Error).message);
       continue;
     }
 
+    // Combine chunks into batches for Vael to extract from
     const batched = chunks.slice(0, 8).map(c => `## ${c.title}\n${c.rawContent}`).join('\n\n---\n\n');
-    let candidates: Awaited<ReturnType<typeof extractEntriesFromSource>>;
+    let candidates;
     try {
       candidates = await extractEntriesFromSource(batched, source.name);
-    } catch { continue; }
+    } catch (err) {
+      console.error(`[VAEL] Extraction failed for "${source.name}":`, (err as Error).message);
+      continue;
+    }
 
     stats.sourcesVisited++;
     stats.candidatesExtracted += candidates.length;
-    console.log(`[VAEL] "${source.name}" — ${candidates.length} candidate(s)`);
+    console.log(`[VAEL] "${source.name}" — ${candidates.length} candidate(s) extracted`);
 
     for (const candidate of candidates) {
-      if (!timer.hasTime(20_000)) break;
-      const result = await seedCandidate(candidate, source.name);
-      if (result === 'seeded') {
+      if (!timer.hasTime(25_000)) break;
+
+      try {
+        const validation = await validateEntry({
+          title: candidate.title,
+          content: candidate.content,
+          layer: 'collective',
+          tags: candidate.suggested_tags ?? [],
+          sourceName: source.name,
+          confidence: candidate.suggested_confidence,
+        });
+
+        if (validation.verdict === 'reject') {
+          console.log(`[VAEL] Source candidate rejected: "${candidate.title}"`);
+          continue;
+        }
+
+        const finalContent = (validation.verdict === 'revise' && validation.revised_content)
+          ? validation.revised_content
+          : candidate.content;
+
+        const hash = Buffer.from(finalContent.slice(0, 200)).toString('base64').slice(0, 64);
+        const [existing] = await db
+          .select({ id: ragDnaTable.id })
+          .from(ragDnaTable)
+          .where(eq(ragDnaTable.sourceHash, hash))
+          .limit(1);
+
+        if (existing) continue;
+
+        const embedding = await embed(finalContent).catch(() => undefined);
+
+        await db.insert(ragDnaTable).values({
+          id: randomUUID(),
+          layer: 'collective',
+          title: candidate.title,
+          content: finalContent,
+          embedding: embedding ?? null,
+          tags: candidate.suggested_tags ?? [],
+          sourceName: source.name,
+          sourceHash: hash,
+          confidence: validation.confidence_suggested ?? candidate.suggested_confidence,
+          knowledgeStatus: 'current',
+          dnaScope: 'general',
+          archetypeScope: [],
+          domainTags: candidate.suggested_tags ?? [],
+          isActive: true,
+        });
+
         stats.seeded++;
-        console.log(`[VAEL] ✓ Source seeded: "${candidate.title}"`);
+        console.log(`[VAEL] ✓ Seeded from source: "${candidate.title}"`);
+      } catch (err) {
+        console.error(`[VAEL] Source candidate error: "${candidate.title}":`, (err as Error).message);
       }
     }
 
-    await db.update(ragSourcesTable)
+    // Record last fetch on source
+    await db
+      .update(ragSourcesTable)
       .set({ lastFetchAt: new Date(), lastFetchCount: stats.seeded })
       .where(eq(ragSourcesTable.id, source.id));
   }
@@ -345,7 +520,104 @@ async function runSourceGuidedPhase(timer: BudgetTimer): Promise<{
   return stats;
 }
 
-// ── Run state ─────────────────────────────────────────────────────────────────
+// ── Knowledge Inbox ───────────────────────────────────────────────────────────
+// Vael reads every file dropped into knowledge_inbox/, decides what is worth
+// learning, validates each candidate, and seeds what passes. No admin gate.
+
+const INBOX_DIR = path.resolve(process.cwd(), 'knowledge_inbox');
+const PROCESSED_DIR = path.join(INBOX_DIR, 'processed');
+
+async function processKnowledgeInbox(timer: BudgetTimer): Promise<{ filesRead: number; candidatesExtracted: number; seeded: number }> {
+  const stats = { filesRead: 0, candidatesExtracted: 0, seeded: 0 };
+
+  let files: string[];
+  try {
+    await fs.mkdir(PROCESSED_DIR, { recursive: true });
+    files = (await fs.readdir(INBOX_DIR)).filter(f => /\.(md|txt)$/i.test(f));
+  } catch {
+    return stats;
+  }
+
+  if (files.length === 0) return stats;
+  console.log(`[VAEL] Inbox: ${files.length} file(s) to read`);
+
+  for (const file of files) {
+    if (!timer.hasTime(30_000)) break;
+
+    const filePath = path.join(INBOX_DIR, file);
+    let raw: string;
+    try {
+      raw = await fs.readFile(filePath, 'utf-8');
+    } catch {
+      continue;
+    }
+
+    const content = raw.slice(0, 8_000);
+    stats.filesRead++;
+
+    let candidates: Awaited<ReturnType<typeof extractEntriesFromSource>>;
+    try {
+      candidates = await extractEntriesFromSource(content, file.replace(/\.(md|txt)$/i, ''));
+    } catch {
+      candidates = [];
+    }
+
+    stats.candidatesExtracted += candidates.length;
+
+    for (const candidate of candidates) {
+      if (!timer.hasTime(10_000)) break;
+      try {
+        const validation = await validateEntry({
+          title: candidate.title,
+          content: candidate.content,
+          tags: candidate.suggested_tags ?? [],
+          layer: 'collective',
+          confidence: candidate.suggested_confidence ?? 0.7,
+        });
+
+        if (validation.verdict !== 'approve' && validation.verdict !== 'revise') continue;
+
+        const finalContent = validation.verdict === 'revise' && validation.revised_content
+          ? validation.revised_content
+          : candidate.content;
+
+        const embedding = await embed(finalContent).catch(() => null);
+
+        await db.insert(ragDnaTable).values({
+          id: randomUUID(),
+          layer: 'collective',
+          title: candidate.title,
+          content: finalContent,
+          embedding: embedding ?? null,
+          tags: candidate.suggested_tags ?? [],
+          sourceName: `inbox:${file}`,
+          confidence: validation.confidence_suggested ?? candidate.suggested_confidence ?? 0.75,
+          knowledgeStatus: 'current',
+          dnaScope: 'general',
+          archetypeScope: [],
+          domainTags: candidate.suggested_tags ?? [],
+          isActive: true,
+        }).onConflictDoNothing();
+
+        stats.seeded++;
+        console.log(`[VAEL] ✓ Inbox seeded: "${candidate.title}"`);
+      } catch (err) {
+        console.error(`[VAEL] Inbox candidate error: "${candidate.title}":`, (err as Error).message);
+      }
+    }
+
+    // Move file to processed/
+    try {
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      await fs.rename(filePath, path.join(PROCESSED_DIR, `${stamp}_${file}`));
+    } catch { /* best effort */ }
+  }
+
+  console.log(`[VAEL] Inbox done — read=${stats.filesRead} candidates=${stats.candidatesExtracted} seeded=${stats.seeded}`);
+  return stats;
+}
+
+// ── Run state (in-memory, resets on restart) ──────────────────────────────────
 
 export interface VaelRunState {
   isRunning: boolean;
@@ -363,7 +635,7 @@ const state: VaelRunState = {
   lastRunAt: null,
   lastRunDurationSec: null,
   lastRunSummary: null,
-  sweepSchedule:    process.env.VAEL_SWEEP_SCHEDULE    ?? '0 1,13 * * *',
+  sweepSchedule: process.env.VAEL_SWEEP_SCHEDULE    ?? '0 1,13 * * *',
   validateSchedule: process.env.VAEL_VALIDATE_SCHEDULE ?? '0 */6 * * *',
 };
 
@@ -371,38 +643,47 @@ export function getVaelRunState(): VaelRunState {
   return { ...state };
 }
 
-// ── Full sweep: validate → inbox → sources ────────────────────────────────────
+// ── Full sweep ────────────────────────────────────────────────────────────────
 
 export async function runVaelFullSweep(): Promise<void> {
-  if (state.isRunning) { console.log('[VAEL] Sweep already running — skipping'); return; }
+  if (state.isRunning) {
+    console.log('[VAEL] Sweep already in progress — skipping');
+    return;
+  }
   state.isRunning = true;
   const timer = new BudgetTimer(FULL_BUDGET_MS);
   console.log('[VAEL] Full sweep starting:', new Date().toISOString());
 
   try {
-    // Phase 1: review drafts
+    const intake = await runOperatorKnowledgeIntake(timer);
+
     const validation = await runValidationPhase(timer);
 
-    // Phase 2: inbox — gets priority over source scan
-    let inbox = { filesRead: 0, candidatesExtracted: 0, seeded: 0, rejected: 0 };
-    if (timer.hasTime(40_000)) {
-      inbox = await processKnowledgeInbox(timer);
+    let discovery = { proposed: 0, seeded: 0, flagged: 0 };
+    if (timer.hasTime(60_000)) {
+      discovery = await runDiscoveryPhase(timer);
     } else {
-      console.log('[VAEL] Budget too low — skipping inbox');
+      console.log('[VAEL] Budget too low after validation — skipping discovery');
     }
 
-    // Phase 3: source scan — secondary, uses remaining budget
     let sources = { sourcesVisited: 0, candidatesExtracted: 0, seeded: 0 };
     if (timer.hasTime(50_000)) {
       sources = await runSourceGuidedPhase(timer);
     } else {
-      console.log('[VAEL] Budget too low — skipping source scan');
+      console.log('[VAEL] Budget too low after discovery — skipping source-guided phase');
+    }
+
+    // Inbox requires explicit opt-in — not auto-run to prevent unapproved file injection
+    let inbox = { filesRead: 0, candidatesExtracted: 0, seeded: 0 };
+    if (process.env.VAEL_INBOX_ENABLED === 'true' && timer.hasTime(40_000)) {
+      inbox = await processKnowledgeInbox(timer);
     }
 
     const summary =
-      `validate: ${validation.approved} approved, ${validation.rejected} rejected | ` +
-      `inbox: ${inbox.filesRead} files, ${inbox.seeded} seeded, ${inbox.rejected} rejected | ` +
-      `sources: ${sources.sourcesVisited} visited, ${sources.seeded} seeded`;
+      `intake_reviewed=${intake.reviewed} intake_approved=${intake.approved} intake_rejected=${intake.rejected} | ` +
+      `validated=${validation.validated} approved=${validation.approved} revised=${validation.revised} rejected=${validation.rejected} | ` +
+      `proposed=${discovery.proposed} seeded=${discovery.seeded} flagged=${discovery.flagged} | ` +
+      `inbox_files=${inbox.filesRead} inbox_seeded=${inbox.seeded}`;
 
     console.log(`[VAEL] Full sweep done in ${timer.elapsedSec()}s — ${summary}`);
 
@@ -410,22 +691,25 @@ export async function runVaelFullSweep(): Promise<void> {
     state.lastRunAt          = new Date().toISOString();
     state.lastRunDurationSec = parseFloat(timer.elapsedSec());
     state.lastRunSummary     = summary;
+    await recordVaelRun('full_sweep', summary, parseFloat(timer.elapsedSec()));
   } finally {
     state.isRunning = false;
   }
 }
 
-// ── Validation-only cycle ─────────────────────────────────────────────────────
-
 export async function runVaelValidationOnly(): Promise<void> {
-  if (state.isRunning) { console.log('[VAEL] Sweep already running — skipping'); return; }
+  if (state.isRunning) {
+    console.log('[VAEL] Sweep already in progress — skipping');
+    return;
+  }
   state.isRunning = true;
   const timer = new BudgetTimer(FAST_BUDGET_MS);
-  console.log('[VAEL] Validation cycle starting:', new Date().toISOString());
+  console.log('[VAEL] Validation-only cycle starting:', new Date().toISOString());
 
   try {
     const validation = await runValidationPhase(timer);
-    const summary = `validate: ${validation.approved} approved, ${validation.revised} revised, ${validation.rejected} rejected`;
+    const summary =
+      `validated=${validation.validated} approved=${validation.approved} revised=${validation.revised} rejected=${validation.rejected}`;
 
     console.log(`[VAEL] Validation done in ${timer.elapsedSec()}s — ${summary}`);
 
@@ -433,6 +717,7 @@ export async function runVaelValidationOnly(): Promise<void> {
     state.lastRunAt          = new Date().toISOString();
     state.lastRunDurationSec = parseFloat(timer.elapsedSec());
     state.lastRunSummary     = summary;
+    await recordVaelRun('validation', summary, parseFloat(timer.elapsedSec()));
   } finally {
     state.isRunning = false;
   }
@@ -441,21 +726,28 @@ export async function runVaelValidationOnly(): Promise<void> {
 // ── Cron registration ─────────────────────────────────────────────────────────
 
 export function startVaelCron(): void {
+  // Full sweep twice daily — validate + discover + seed
   const SWEEP_SCHEDULE    = process.env.VAEL_SWEEP_SCHEDULE    ?? '0 1,13 * * *';
+  // Validation-only every 6 hours — keep drafts clean between sweeps
   const VALIDATE_SCHEDULE = process.env.VAEL_VALIDATE_SCHEDULE ?? '0 */6 * * *';
 
-  console.log(`[VAEL] Full sweep cron scheduled: "${SWEEP_SCHEDULE}" (UTC) — validate + inbox + sources`);
+  console.log(`[VAEL] Full sweep cron scheduled: "${SWEEP_SCHEDULE}" (UTC) — validate + discover + seed`);
   console.log(`[VAEL] Validation cron scheduled: "${VALIDATE_SCHEDULE}" (UTC) — draft review only`);
 
   import('node-cron').then(({ default: cron }) => {
     cron.schedule(SWEEP_SCHEDULE, () => {
-      runVaelFullSweep().catch(err => console.error('[VAEL] Unhandled error in full sweep:', err));
+      runVaelFullSweep().catch((err) => {
+        console.error('[VAEL] Unhandled error in full sweep:', err);
+      });
     }, { timezone: 'UTC' });
 
     cron.schedule(VALIDATE_SCHEDULE, () => {
-      runVaelValidationOnly().catch(err => console.error('[VAEL] Unhandled error in validation cycle:', err));
+      runVaelValidationOnly().catch((err) => {
+        console.error('[VAEL] Unhandled error in validation cycle:', err);
+      });
     }, { timezone: 'UTC' });
-  }).catch(err => {
+
+  }).catch((err) => {
     console.error('[VAEL] Failed to start cron — node-cron not available:', err.message);
   });
 }

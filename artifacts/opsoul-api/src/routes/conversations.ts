@@ -5,7 +5,7 @@ import { db } from '@workspace/db';
 import { conversationsTable, operatorsTable, messagesTable } from '@workspace/db';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { eq, and, desc, sql } from 'drizzle-orm';
-import { resolveScope } from '../utils/scopeResolver.js';
+import { buildOwnerScope } from '../utils/scopeResolver.js';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -41,7 +41,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  const scope = resolveScope({ operatorId: op.id, source: 'owner', callerId: req.owner!.ownerId });
+  const scope = buildOwnerScope(req.owner!.ownerId);
 
   const [conv] = await db.insert(conversationsTable).values({
     id: crypto.randomUUID(),
@@ -82,7 +82,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
       and(
         eq(conversationsTable.operatorId, op.id),
         eq(conversationsTable.ownerId, req.owner!.ownerId),
-        eq(conversationsTable.scopeType, 'owner'),
+        eq(conversationsTable.scopeType, 'authenticated'),
       ),
     )
     .orderBy(sql`${conversationsTable.lastMessageAt} DESC NULLS LAST`);
@@ -94,6 +94,7 @@ router.get('/:convId', async (req: Request, res: Response): Promise<void> => {
   const op = await resolveOperator(req, res);
   if (!op) return;
 
+  const scope = buildOwnerScope(req.owner!.ownerId);
   const [conv] = await db
     .select()
     .from(conversationsTable)
@@ -101,6 +102,8 @@ router.get('/:convId', async (req: Request, res: Response): Promise<void> => {
       and(
         eq(conversationsTable.id, req.params.convId as string),
         eq(conversationsTable.operatorId, op.id),
+        eq(conversationsTable.ownerId, req.owner!.ownerId),
+        eq(conversationsTable.scopeId, scope.scopeId),
       ),
     );
 
@@ -112,6 +115,7 @@ router.get('/:convId/messages', async (req: Request, res: Response): Promise<voi
   const op = await resolveOperator(req, res);
   if (!op) return;
 
+  const scope = buildOwnerScope(req.owner!.ownerId);
   const [conv] = await db
     .select({ id: conversationsTable.id })
     .from(conversationsTable)
@@ -119,6 +123,8 @@ router.get('/:convId/messages', async (req: Request, res: Response): Promise<voi
       and(
         eq(conversationsTable.id, req.params.convId as string),
         eq(conversationsTable.operatorId, op.id),
+        eq(conversationsTable.ownerId, req.owner!.ownerId),
+        eq(conversationsTable.scopeId, scope.scopeId),
       ),
     );
 
@@ -137,6 +143,7 @@ router.delete('/:convId', async (req: Request, res: Response): Promise<void> => 
   const op = await resolveOperator(req, res);
   if (!op) return;
 
+  const scope = buildOwnerScope(req.owner!.ownerId);
   const [conv] = await db
     .select({ id: conversationsTable.id })
     .from(conversationsTable)
@@ -144,6 +151,8 @@ router.delete('/:convId', async (req: Request, res: Response): Promise<void> => 
       and(
         eq(conversationsTable.id, req.params.convId as string),
         eq(conversationsTable.operatorId, op.id),
+        eq(conversationsTable.ownerId, req.owner!.ownerId),
+        eq(conversationsTable.scopeId, scope.scopeId),
       ),
     );
 

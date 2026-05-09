@@ -6,6 +6,7 @@ import {
   growProposalsTable,
   selfAwarenessStateTable,
   messagesTable,
+  conversationsTable,
 } from '@workspace/db';
 import { eq, and, desc } from 'drizzle-orm';
 import { requireAuth } from '../middleware/requireAuth.js';
@@ -258,13 +259,16 @@ router.post('/test-proposal/:proposalId', async (req: Request, res: Response): P
   const [operator] = await db.select().from(operatorsTable).where(eq(operatorsTable.id, operatorId));
   if (!operator) { res.status(404).json({ error: 'Operator not found' }); return; }
 
-  // Get recent user messages across conversations — pick 3 with temporal spread
+  // Get recent user messages — owner workspace scope only (authenticated).
+  // Channel messages (Telegram/WhatsApp users) must never feed into GROW validation.
   const recentUserMsgs = await db
     .select({ content: messagesTable.content, createdAt: messagesTable.createdAt })
     .from(messagesTable)
+    .innerJoin(conversationsTable, eq(messagesTable.conversationId, conversationsTable.id))
     .where(and(
       eq(messagesTable.operatorId, operatorId),
       eq(messagesTable.role, 'user'),
+      eq(conversationsTable.scopeType, 'authenticated'),
     ))
     .orderBy(desc(messagesTable.createdAt))
     .limit(9);

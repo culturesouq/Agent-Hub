@@ -7,12 +7,14 @@ import {
   conversationsTable,
   selfAwarenessStateTable,
   opsLogsTable,
+  ragDnaTable,
 } from '@workspace/db';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireAdmin } from '../middleware/requireAdmin.js';
 import { eq, sql, and, gte, desc, asc, isNull } from 'drizzle-orm';
 import { backfillTelegramWebhookSecrets } from '../utils/backfillTelegramSecrets.js';
 import { backfillWhatsAppAppSecrets } from '../utils/backfillWhatsAppSecrets.js';
+import { embed } from '@workspace/opsoul-utils/ai';
 
 const router = Router();
 router.use(requireAuth);
@@ -255,6 +257,30 @@ router.post('/backfill/whatsapp-app-secrets', async (_req: Request, res: Respons
     const message = err instanceof Error ? err.message : String(err);
     console.error('[admin] backfill whatsapp app secrets failed:', err);
     res.status(500).json({ ok: false, error: message });
+  }
+});
+
+router.post('/backfill/dna-embeddings', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const rows = await db
+      .select({ id: ragDnaTable.id, content: ragDnaTable.content })
+      .from(ragDnaTable)
+      .where(and(isNull(ragDnaTable.embedding), eq(ragDnaTable.isActive, true)));
+
+    let done = 0;
+    let failed = 0;
+    for (const row of rows) {
+      try {
+        const embedding = await embed(row.content);
+        await db.update(ragDnaTable).set({ embedding }).where(eq(ragDnaTable.id, row.id));
+        done++;
+      } catch {
+        failed++;
+      }
+    }
+    res.json({ ok: true, total: rows.length, done, failed });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
   }
 });
 

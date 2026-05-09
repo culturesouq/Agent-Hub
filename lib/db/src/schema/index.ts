@@ -11,6 +11,7 @@ export * from './owner_kb';
 export * from './operator_kb';
 export * from './kb_verification';
 export * from './memory';
+export * from './main_memory';
 export * from './capability_requests';
 export * from './tasks';
 export * from './platform_skills';

@@ -65,7 +65,8 @@ app.use(cookieParser());
 // --- CORS strict allowlist ---
 const allowedOrigins = new Set<string>();
 const configuredOrigins = process.env.ALLOWED_ORIGIN;
-if (configuredOrigins) {
+const allowAllOrigins = configuredOrigins?.trim() === '*';
+if (configuredOrigins && !allowAllOrigins) {
   configuredOrigins.split(',').map(o => o.trim()).filter(Boolean).forEach(o => allowedOrigins.add(o));
 }
 if (process.env.REPLIT_DEV_DOMAIN) {
@@ -78,6 +79,7 @@ if (process.env.NODE_ENV !== 'production') {
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
+    if (allowAllOrigins) return callback(null, true);
     if (allowedOrigins.has(origin)) return callback(null, true);
     callback(new Error(`CORS: origin '${origin}' not in allowlist`));
   },

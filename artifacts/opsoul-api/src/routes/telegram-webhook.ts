@@ -7,7 +7,7 @@ import { chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import { buildSystemPrompt } from '../utils/systemPrompt.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { searchMemory, buildMemoryContext } from '../utils/memoryEngine.js';
-import { resolveScope } from '../utils/scopeResolver.js';
+import { buildChannelScope } from '../utils/scopeResolver.js';
 import { eq, and, asc, sql } from 'drizzle-orm';
 import OpenAI, { toFile } from 'openai';
 import { embed } from '@workspace/opsoul-utils/ai';
@@ -187,7 +187,7 @@ router.post('/:operatorId', async (req: Request, res: Response): Promise<void> =
 
   if (!userMessage.trim()) return;
 
-  const scope = resolveScope({ operatorId, source: 'telegram', callerId: chatId.toString() });
+  const scope = buildChannelScope('telegram', chatId.toString());
   const conv = await resolveOrCreateConversation(
     operatorId,
     operator.ownerId,
@@ -208,7 +208,7 @@ router.post('/:operatorId', async (req: Request, res: Response): Promise<void> =
     const embedding = await embed(userMessage);
     const [hits, memHits] = await Promise.all([
       searchBothKbs(operator.id, embedding, 5, 0.5, operator.archetype, operator.domainTags ?? []),
-      searchMemory(operator.id, embedding, 5, 0.7, 0.3),
+      searchMemory(operator.id, embedding, 5, 0.7, 0.3, scope.scopeId),
     ]);
 
     const ragCtx = buildRagContext(hits);

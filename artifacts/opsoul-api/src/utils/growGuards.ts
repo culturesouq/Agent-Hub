@@ -60,6 +60,103 @@ export async function logLayer1Violation(
   });
 }
 
+// ─── Guard 1 — PII hard block ─────────────────────────────────────────────────
+// Scans the TEXT VALUES inside proposed soul changes for any PII that should
+// never reach a GROW proposal. Hard rejects the entire proposal if found.
+// Runs BEFORE enforceLayer1Lock and BEFORE storage.
+
+const PII_PATTERNS: { pattern: RegExp; label: string }[] = [
+  {
+    pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/,
+    label: 'email_address',
+  },
+  {
+    pattern: /\b(?:\+\d{1,3}[\s\-]?)?\(?\d{3,4}\)?[\s.\-]?\d{3,4}[\s.\-]?\d{3,4}\b/,
+    label: 'phone_number',
+  },
+  {
+    pattern: /\b(?:user|client|customer|person|individual)\s+(?:named?|called?)\s+[A-Z][a-z]+/i,
+    label: 'named_user_reference',
+  },
+  {
+    pattern: /\b(?:named?|called?)\s+[A-Z][a-z]{1,}(?:\s+[A-Z][a-z]+)?\b/,
+    label: 'named_reference',
+  },
+  {
+    pattern: /\b[A-Z][a-z]{1,15}(?:'s)?\s+(?:company|business|firm|organisation|organization|startup|venture)\b/,
+    label: 'possessive_company_reference',
+  },
+  {
+    pattern: /\b[A-Z][A-Za-z\s]{2,30}\s+(?:LLC|Ltd\.?|Inc\.?|Corp\.?|PLC|GmbH|PJSC|FZE|FZC)\b/,
+    label: 'company_legal_name',
+  },
+  {
+    pattern: /\b(?:he|she|they)\s+(?:is|was|are|were)\s+(?:a\s+)?(?:CEO|founder|director|manager|owner|partner)\b/i,
+    label: 'individual_role_reference',
+  },
+  {
+    pattern: /\bthe\s+(?:user|client|customer)\s+(?:who|that)\s+\w+/i,
+    label: 'specific_user_reference',
+  },
+];
+
+/** Recursively extracts all string leaf values from an object or array */
+function extractTextValues(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.flatMap(extractTextValues);
+  if (value && typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).flatMap(extractTextValues);
+  }
+  return [];
+}
+
+export interface PiiGuardResult {
+  blocked: boolean;
+  matches: { label: string; excerpt: string }[];
+}
+
+/**
+ * Guard 1 — PII hard block.
+ * Scans all string values in proposedChanges for PII patterns.
+ * A single match blocks the ENTIRE proposal — no exceptions.
+ */
+export function runPiiGuard(
+  proposedChanges: Record<string, unknown>,
+): PiiGuardResult {
+  const textValues = extractTextValues(proposedChanges);
+  const matches: { label: string; excerpt: string }[] = [];
+
+  for (const text of textValues) {
+    for (const { pattern, label } of PII_PATTERNS) {
+      if (pattern.test(text)) {
+        const matchIndex = text.search(pattern);
+        const start = Math.max(0, matchIndex - 30);
+        const excerpt = text.slice(start, start + 100).replace(/\n/g, ' ');
+        matches.push({ label, excerpt: `...${excerpt}...` });
+        break; // one match per text value is enough
+      }
+    }
+  }
+
+  return { blocked: matches.length > 0, matches };
+}
+
+export async function logPiiViolation(
+  operatorId: string,
+  matches: { label: string; excerpt: string }[],
+  proposalSummary: string,
+): Promise<void> {
+  await db.insert(growBlockedLogTable).values({
+    id: crypto.randomUUID(),
+    operatorId,
+    blockedFields: matches.map((m) => m.label),
+    reason: 'Guard 1 — PII detected in GROW proposal. Entire proposal hard rejected.',
+    proposalSummary: `PII matches: ${matches.map((m) => m.label).join(', ')} | ${proposalSummary.slice(0, 400)}`,
+  });
+}
+
+// ─── Guard 2 — Semantic identity manipulation patterns ────────────────────────
+
 const IDENTITY_MANIPULATION_PATTERNS: { pattern: RegExp; label: string }[] = [
   {
     pattern: /question\s+(your\s+)?(core\s+)?values/i,

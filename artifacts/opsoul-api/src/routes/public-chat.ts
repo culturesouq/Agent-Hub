@@ -10,7 +10,8 @@ import {
   platformSkillsTable,
 } from '@workspace/db';
 import { requireSlotKey } from '../middleware/requireSlotKey.js';
-import { resolveScope } from '../utils/scopeResolver.js';
+import { buildSlotScope } from '../utils/scopeResolver.js';
+import { appendToSession, getSessionMessages } from '../utils/sessionStore.js';
 import { searchMemory, distillMemoriesFromConversations } from '../utils/memoryEngine.js';
 import type { MemoryHit } from '../utils/memoryEngine.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
@@ -78,74 +79,86 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   }
 
   // ── Resolve scope ──
-  const scope = resolveScope({
-    operatorId: slot.operatorId,
-    source: slot.surfaceType,
-    callerId: slot.surfaceType === 'authenticated' ? userId : undefined,
-    slotId: slot.slotId,
-    scopeTrust: slot.scopeTrust,
-  });
+  const scope = buildSlotScope(
+    slot.surfaceType,
+    slot.scopeTrust ?? 'guest',
+    slot.slotId,
+    slot.surfaceType === 'authenticated' ? userId : undefined,
+  );
 
-  // ── Find or create conversation ──
+  // ── Find or create conversation (DB-backed for persistent scopes only) ──
   let conv: typeof conversationsTable.$inferSelect | undefined;
+  // For public scope: use an in-memory session key instead of DB conversation.
+  // conversationId doubles as the sessionId so the caller can resume within TTL.
+  const sessionId: string = scope.writesHistory ? '' : (conversationId ?? crypto.randomUUID());
 
-  if (conversationId) {
-    const [existing] = await db
-      .select()
-      .from(conversationsTable)
-      .where(
-        and(
-          eq(conversationsTable.id, conversationId),
-          eq(conversationsTable.operatorId, slot.operatorId),
-        ),
-      );
-    if (existing) {
+  if (scope.writesHistory) {
+    if (conversationId) {
+      const [existing] = await db
+        .select()
+        .from(conversationsTable)
+        .where(
+          and(
+            eq(conversationsTable.id, conversationId),
+            eq(conversationsTable.operatorId, slot.operatorId),
+          ),
+        );
+      if (existing) {
+        conv = existing;
+        scope.scopeId = existing.scopeId;
+        scope.scopeType = existing.scopeType as import('../utils/scopeResolver.js').ScopeType;
+      }
+    }
+
+    if (!conv && userId) {
+      const [existing] = await db
+        .select()
+        .from(conversationsTable)
+        .where(
+          and(
+            eq(conversationsTable.operatorId, slot.operatorId),
+            eq(conversationsTable.scopeId, scope.scopeId),
+          ),
+        )
+        .orderBy(desc(conversationsTable.lastMessageAt))
+        .limit(1);
       conv = existing;
-      // Use the scope from the existing conversation — not the freshly generated one
-      scope.scopeId = existing.scopeId;
-      scope.scopeType = existing.scopeType;
+    }
+
+    if (!conv) {
+      const [newConv] = await db.insert(conversationsTable).values({
+        id: crypto.randomUUID(),
+        operatorId: slot.operatorId,
+        ownerId: slot.ownerId,
+        contextName: userId ? `user:${userId}` : 'guest',
+        scopeId: scope.scopeId,
+        scopeType: scope.scopeType,
+        messageCount: 0,
+      }).returning();
+      conv = newConv;
     }
   }
 
-  if (!conv && slot.surfaceType === 'authenticated' && userId) {
-    const [existing] = await db
-      .select()
-      .from(conversationsTable)
-      .where(
-        and(
-          eq(conversationsTable.operatorId, slot.operatorId),
-          eq(conversationsTable.scopeId, scope.scopeId),
-        ),
-      )
-      .orderBy(desc(conversationsTable.lastMessageAt))
-      .limit(1);
-    conv = existing;
-  }
-
-  if (!conv) {
-    const [newConv] = await db.insert(conversationsTable).values({
-      id: crypto.randomUUID(),
-      operatorId: slot.operatorId,
-      ownerId: slot.ownerId,
-      contextName: slot.surfaceType === 'authenticated' ? `user:${userId}` : 'guest',
-      scopeId: scope.scopeId,
-      scopeType: scope.scopeType,
-      messageCount: 0,
-    }).returning();
-    conv = newConv;
-  }
-
   // ── Message history ──
-  const historyRows = await db
-    .select({ role: messagesTable.role, content: messagesTable.content })
-    .from(messagesTable)
-    .where(eq(messagesTable.conversationId, conv.id))
-    .orderBy(messagesTable.createdAt);
+  let history: ChatMessage[];
 
-  const history: ChatMessage[] = historyRows.map(r => ({
-    role: r.role as 'user' | 'assistant',
-    content: r.content,
-  }));
+  if (scope.writesHistory && conv) {
+    const historyRows = await db
+      .select({ role: messagesTable.role, content: messagesTable.content })
+      .from(messagesTable)
+      .where(eq(messagesTable.conversationId, conv.id))
+      .orderBy(messagesTable.createdAt);
+    history = historyRows.map(r => ({
+      role: r.role as 'user' | 'assistant',
+      content: r.content,
+    }));
+  } else {
+    // Public scope — recall from in-memory session (empty on first turn)
+    history = getSessionMessages(sessionId).map(m => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    }));
+  }
 
   // ── Skills ──
   const installedRows = await db
@@ -267,14 +280,16 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   const isInternal = INJECTION_PATTERN.test(message);
 
   // ── Store user message ──
-  await db.insert(messagesTable).values({
-    id: crypto.randomUUID(),
-    conversationId: conv.id,
-    operatorId: slot.operatorId,
-    role: 'user',
-    content: message,
-    isInternal,
-  });
+  if (scope.writesHistory && conv) {
+    await db.insert(messagesTable).values({
+      id: crypto.randomUUID(),
+      conversationId: conv.id,
+      operatorId: slot.operatorId,
+      role: 'user',
+      content: message,
+      isInternal,
+    });
+  }
 
   let model = (operator.defaultModel && operator.defaultModel !== 'opsoul/auto')
     ? operator.defaultModel
@@ -303,19 +318,17 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
       const finalContent = fullContent;
 
-      await db.insert(messagesTable).values({
-        id: crypto.randomUUID(),
-        conversationId: conv.id,
-        operatorId: slot.operatorId,
-        role: 'assistant',
-        content: finalContent,
-      });
-
-      await db.update(conversationsTable)
-        .set({ messageCount: sql`message_count + 2`, lastMessageAt: new Date() })
-        .where(eq(conversationsTable.id, conv.id));
-
-      if (slot.surfaceType === 'authenticated') {
+      if (scope.writesHistory && conv) {
+        await db.insert(messagesTable).values({
+          id: crypto.randomUUID(),
+          conversationId: conv.id,
+          operatorId: slot.operatorId,
+          role: 'assistant',
+          content: finalContent,
+        });
+        await db.update(conversationsTable)
+          .set({ messageCount: sql`message_count + 2`, lastMessageAt: new Date() })
+          .where(eq(conversationsTable.id, conv.id));
         distillMemoriesFromConversations(
           slot.operatorId,
           slot.ownerId,
@@ -323,9 +336,15 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           scope.scopeId,
           scope.scopeTrust,
         ).catch(() => {});
+      } else {
+        appendToSession(sessionId, slot.operatorId, [
+          { role: 'user', content: message },
+          { role: 'assistant', content: finalContent },
+        ]);
       }
 
-      res.write(`data: ${JSON.stringify({ done: true, conversationId: conv.id, scopeId: scope.scopeId })}\n\n`);
+      const responseConvId = scope.writesHistory ? conv!.id : sessionId;
+      res.write(`data: ${JSON.stringify({ done: true, conversationId: responseConvId, scopeId: scope.scopeId })}\n\n`);
       res.end();
     } catch (streamErr: unknown) {
       const streamStatus = (streamErr as { status?: number })?.status;
@@ -353,19 +372,17 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
     const finalContent = result.content;
 
-    await db.insert(messagesTable).values({
-      id: crypto.randomUUID(),
-      conversationId: conv.id,
-      operatorId: slot.operatorId,
-      role: 'assistant',
-      content: finalContent,
-    });
-
-    await db.update(conversationsTable)
-      .set({ messageCount: sql`message_count + 2`, lastMessageAt: new Date() })
-      .where(eq(conversationsTable.id, conv.id));
-
-    if (slot.surfaceType === 'authenticated') {
+    if (scope.writesHistory && conv) {
+      await db.insert(messagesTable).values({
+        id: crypto.randomUUID(),
+        conversationId: conv.id,
+        operatorId: slot.operatorId,
+        role: 'assistant',
+        content: finalContent,
+      });
+      await db.update(conversationsTable)
+        .set({ messageCount: sql`message_count + 2`, lastMessageAt: new Date() })
+        .where(eq(conversationsTable.id, conv.id));
       distillMemoriesFromConversations(
         slot.operatorId,
         slot.ownerId,
@@ -373,10 +390,16 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         scope.scopeId,
         scope.scopeTrust,
       ).catch(() => {});
+    } else {
+      appendToSession(sessionId, slot.operatorId, [
+        { role: 'user', content: message },
+        { role: 'assistant', content: finalContent },
+      ]);
     }
 
+    const responseConvId = scope.writesHistory ? conv!.id : sessionId;
     res.json({
-      conversationId: conv.id,
+      conversationId: responseConvId,
       message: { role: 'assistant', content: finalContent },
       scopeId: scope.scopeId,
     });
