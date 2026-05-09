@@ -8,6 +8,26 @@
 4. **Never run DB migrations without explicit owner approval.** Schema files (`.ts`) can be committed. `drizzle push` / `drizzle migrate` requires the owner to approve and run manually.
 5. **Azure deploys from GitHub only.** No manual file edits on Azure directly. All changes: Mac → commit → push → Azure redeploys.
 6. **Source of truth file updated after every commit.** Add what changed and date.
+7. **No code changes without explicit owner approval — word by word.** Claude reads and reports. Mohamed decides. Claude executes only after yes.
+8. **No summaries when full text is requested.** Owner sees full content, not paraphrases.
+9. **Layer 4 rules written by Mohamed only.** Nothing added to Layer 4 that Mohamed did not write himself. Approved text locked here verbatim before any commit.
+10. **No BEHAVIOR_HOW_TO or SKILL_HOW_TO hardcoded in system prompt or chat pipeline.** Behavior and skill guidance lives in platform DNA KB entries only — managed, versioned, not buried in code.
+
+---
+
+## Tomorrow's Rebuild Plan (2026-05-10)
+
+Execute in this order. No step starts until previous step is approved.
+
+**Step 1 — Layer 4:** Mohamed writes the rules in his own words. Claude formats only. Locked here verbatim. Then committed to systemPrompt.ts.
+
+**Step 2 — Clean system prompt pipeline:** Remove BEHAVIOR_HOW_TO and SKILL_HOW_TO from chat.ts entirely. The static `[CAPABILITY]` block reduced to minimum. Behavior guidance moved to DNA KB entries.
+
+**Step 3 — Scope system audit:** Read current live scopeResolver.ts and all scope call sites. Compare to spec. Report only. Mohamed decides if anything needs fixing.
+
+**Step 4 — Vael pipeline review:** Separate session after steps 1-3 confirmed.
+
+**Vision:** Operators with clean system prompts. Identity comes from soul and DNA. No injected noise. No hardcoded How-To. Every word in the system prompt was approved by Mohamed.
 
 ---
 
@@ -22,6 +42,18 @@ Azure Container App pulls from this repo on each deployment.
 ---
 
 ## Commit Log (newest first)
+
+### 2026-05-09 — audit session: cleanup, pipeline audit, tomorrow's plan set
+
+**No code changes made. No deploy.**
+
+- **Azure cleanup:** Deleted 13 old Container Registry images. Only `phase2-v2-05091647` remains live.
+- **Local cleanup:** Deleted all old OpSoul versions from Downloads (opsoul-v21, aiko-pack, memory-export, landing page designs, old zips). Kept: patent docs, logos, video, Istishari KB pack, Reem_OpSoul folder.
+- **Full pipeline audit completed:** Every block injected into the LLM was identified and documented — system prompt layers 0-4, [CONTEXT] KB, [WEB CONTEXT] silent gap resolution, [CONTEXT] memory, [STATION] with integration How-To, [OPSOUL IDENTITY] DNA, [CAPABILITY] with SKILL_HOW_TO, [OPERATOR STATE] with per-skill SKILL_HOW_TO, user message.
+- **Root cause found:** `80c6abc` sync commit (May 9) silently removed the BEHAVIOR_HOW_TO injection loop from chat.ts. This was `for (const [, rule] of Object.entries(BEHAVIOR_HOW_TO))` under "Operating principles:" — gone. Also weakened tool descriptions.
+- **Layer 4 problem identified:** Current Layer 4 has 2 unwanted additions vs clean version: "When executing tasks or using tools — act without narrating..." and the replacement of "Never ask more than one question at a time" with "Never ask a question unless you genuinely cannot proceed." Mohamed confirmed these are wrong.
+- **Decision:** Behavior rules and Skill How-To will NOT be hardcoded. They move to DNA KB entries. Layer 4 will be rewritten by Mohamed himself tomorrow.
+- **Rules 7-10 added** to this file based on today's session.
 
 ### 2026-05-09 — deploy: phase2-v2-05091647 live on Azure (replaces failed 05091632)
 - Image: `banistudioacr.azurecr.io/opsoul-api:phase2-v2-05091647`
