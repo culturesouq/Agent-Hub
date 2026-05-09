@@ -23,6 +23,13 @@ Azure Container App pulls from this repo on each deployment.
 
 ## Commit Log (newest first)
 
+### 2026-05-09 — fix: phase 2 — ChatSection rewrite: white UI, no duplicate messages, thinking indicator
+- `ChatSection.tsx`: Full rewrite — white page, no bubbles for assistant, light-gray user messages (Claude-style)
+- Bug fix: `sending` state added to StreamStatus — thinking dots now visible immediately after send, before first token
+- Bug fix: `accumulatedRef` tracks streamed content for `done` event — eliminates stale closure that caused duplicate messages
+- Bug fix: DONE no longer preserves `snapshot` — stream bubble clears correctly; optimistic cache injection provides seamless continuity
+- Bug fix: `accumulatedRef` resets on `clear` event — multi-pass skill responses no longer double-count first-pass content
+
 ### 2026-05-09 — fix: phase 1 complete — dedup, drift cron, token rotation, memory search scope
 - `memoryEngine.ts`: Dedup fallback now selects `id` from vector query and fetches that specific row by ID — no longer returns random first row for operator (fix 1.3)
 - `growEngine.ts`: Removed inline `cron.schedule` that duplicated drift cron registration from `driftCron.ts` / `index.ts` (fix 1.4)
@@ -74,8 +81,8 @@ Azure Container App pulls from this repo on each deployment.
 
 | # | File | Severity | Issue | Status |
 |---|------|----------|-------|--------|
-| 1 | `ChatSection.tsx` | Critical | Duplicate message: snapshot not cleared after DONE | Open |
-| 2 | `ChatSection.tsx` | Critical | No thinking indicator between send and first token | Open |
+| 1 | `ChatSection.tsx` | Critical | Duplicate message: snapshot not cleared after DONE | ✅ Fixed 2026-05-09 |
+| 2 | `ChatSection.tsx` | Critical | No thinking indicator between send and first token | ✅ Fixed 2026-05-09 |
 | 3 | `chat.ts` | Medium | Web search + URL results stored without scopeId — operator forgot research | ✅ Fixed 2026-05-09 |
 | 4 | `httpExecutor.ts` | Low | No timeout on external fetch — slow APIs hold SSE open | ✅ Fixed 2026-05-09 |
 | 5 | `auth.ts` | Low | Refresh token not rotated on use | ✅ Fixed 2026-05-09 |

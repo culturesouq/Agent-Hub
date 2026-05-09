@@ -2,7 +2,6 @@ import { useState, useRef, useEffect, useCallback, useReducer, memo } from "reac
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { Conversation, Message } from "@/types";
-import { Button } from "@/components/ui/button";
 import { Send, MessageSquare, Paperclip, X, Mic, ChevronDown, Search, Zap, Download, Link, Globe, Square, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
 
@@ -21,17 +20,18 @@ type RenderedItem =
   | { kind: "separator"; label: string; key: string }
   | { kind: "tool"; skillName: string; output: string; key: string; toolType?: "skill" | "search" | "url" | "http" };
 
-// ─── useReducer for atomic stream status ──────────────────────────────────────
+// ─── Stream state ─────────────────────────────────────────────────────────────
 
 type StreamStatus = {
-  content: string;          // accumulating stream text
-  snapshot: string;         // last stable content (prevents flash on done)
-  processing: boolean;      // backend DB write in progress
+  sending: boolean;        // true from START until first server event (shows thinking dots)
+  content: string;
+  snapshot: string;
+  processing: boolean;
   searching: string | null;
   seeding: string | null;
   reading: string | null;
   running: string | null;
-  ranSkill: string | null;  // persists across processing for badge
+  ranSkill: string | null;
   writing: string | null;
   calling: string | null;
   error: string | null;
@@ -53,7 +53,7 @@ type StreamAction =
   | { type: "ABORT" };
 
 const INITIAL_STATUS: StreamStatus = {
-  content: "", snapshot: "", processing: false,
+  sending: false, content: "", snapshot: "", processing: false,
   searching: null, seeding: null, reading: null,
   running: null, ranSkill: null, writing: null,
   calling: null, error: null,
@@ -62,10 +62,11 @@ const INITIAL_STATUS: StreamStatus = {
 function streamReducer(state: StreamStatus, action: StreamAction): StreamStatus {
   switch (action.type) {
     case "START":
-      return { ...INITIAL_STATUS };
+      return { ...INITIAL_STATUS, sending: true };
     case "DELTA":
       return {
         ...state,
+        sending: false,
         content: state.content + action.text,
         snapshot: state.content + action.text,
         processing: false,
@@ -74,27 +75,24 @@ function streamReducer(state: StreamStatus, action: StreamAction): StreamStatus 
         error: null,
       };
     case "CLEAR_STREAM":
-      // Saves current content as snapshot so UI doesn't flash — accumulator resets.
-      // Next delta will replace snapshot with new content.
       return { ...state, content: "", snapshot: state.content };
     case "PROCESSING":
-      return { ...state, processing: true };
+      return { ...state, sending: false, processing: true };
     case "SEARCHING":
-      return { ...state, searching: action.query, seeding: null, reading: null, running: null, writing: null, calling: null, processing: false };
+      return { ...state, sending: false, searching: action.query, seeding: null, reading: null, running: null, writing: null, calling: null, processing: false };
     case "SEEDING":
-      return { ...state, seeding: action.source, searching: null, reading: null, running: null, writing: null, calling: null, processing: false };
+      return { ...state, sending: false, seeding: action.source, searching: null, reading: null, running: null, writing: null, calling: null, processing: false };
     case "READING":
-      return { ...state, reading: action.url, searching: null, seeding: null, running: null, writing: null, calling: null, processing: false };
+      return { ...state, sending: false, reading: action.url, searching: null, seeding: null, running: null, writing: null, calling: null, processing: false };
     case "RUNNING":
-      return { ...state, running: action.tool, ranSkill: action.tool, searching: null, seeding: null, reading: null, writing: null, calling: null, processing: false };
+      return { ...state, sending: false, running: action.tool, ranSkill: action.tool, searching: null, seeding: null, reading: null, writing: null, calling: null, processing: false };
     case "WRITING":
-      return { ...state, writing: action.file, searching: null, seeding: null, reading: null, running: null, calling: null, processing: false };
+      return { ...state, sending: false, writing: action.file, searching: null, seeding: null, reading: null, running: null, calling: null, processing: false };
     case "CALLING":
-      // Preserve snapshot so UI doesn't blank while HTTP call is in flight.
-      // Accumulator resets so next deltas are fresh.
-      return { ...state, content: "", calling: action.url, searching: null, seeding: null, reading: null, running: null, writing: null, processing: false };
+      return { ...state, sending: false, content: "", calling: action.url, searching: null, seeding: null, reading: null, running: null, writing: null, processing: false };
     case "DONE":
-      return { ...INITIAL_STATUS, snapshot: state.snapshot, ranSkill: state.ranSkill };
+      // snapshot NOT preserved — optimistic cache injection eliminates the flash gap
+      return { ...INITIAL_STATUS, ranSkill: state.ranSkill };
     case "ERROR":
       return { ...INITIAL_STATUS, error: action.message };
     case "ABORT":
@@ -104,7 +102,7 @@ function streamReducer(state: StreamStatus, action: StreamAction): StreamStatus 
   }
 }
 
-// ─── MarkdownMessage ──────────────────────────────────────────────────────────
+// ─── Markdown renderer ─────────────────────────────────────────────────────────
 
 function parseInline(text: string): React.ReactNode[] {
   const parts: React.ReactNode[] = [];
@@ -112,9 +110,9 @@ function parseInline(text: string): React.ReactNode[] {
   let last = 0; let idx = 0; let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     if (m.index > last) parts.push(text.slice(last, m.index));
-    if (m[2]) parts.push(<strong key={idx++} className="font-semibold text-foreground">{m[2]}</strong>);
-    else if (m[3]) parts.push(<em key={idx++} className="italic">{m[3]}</em>);
-    else if (m[4]) parts.push(<code key={idx++} className="bg-background/60 rounded px-1 py-0.5 text-xs font-mono border border-border/20 text-left" dir="ltr">{m[4]}</code>);
+    if (m[2]) parts.push(<strong key={idx++} className="font-semibold">{m[2]}</strong>);
+    else if (m[3]) parts.push(<em key={idx++}>{m[3]}</em>);
+    else if (m[4]) parts.push(<code key={idx++} className="bg-gray-100 rounded px-1 py-0.5 text-xs font-mono" dir="ltr">{m[4]}</code>);
     last = m.index + m[0].length;
   }
   if (last < text.length) parts.push(text.slice(last));
@@ -129,7 +127,6 @@ const MarkdownMessage = memo(function MarkdownMessage({ content }: { content: st
   while (i < lines.length) {
     const line = lines[i];
 
-    // Fenced code block — always LTR regardless of page direction
     if (line.startsWith("```")) {
       const lang = line.slice(3).trim();
       const codeLines: string[] = [];
@@ -137,29 +134,27 @@ const MarkdownMessage = memo(function MarkdownMessage({ content }: { content: st
       while (i < lines.length && !lines[i].startsWith("```")) { codeLines.push(lines[i]); i++; }
       i++;
       nodes.push(
-        <pre key={`code-${i}`} dir="ltr" className="text-left bg-muted/60 rounded-lg p-3 text-xs font-mono overflow-x-auto my-2 border border-border/30 whitespace-pre">
-          {lang && <span className="text-muted-foreground/50 text-[10px] block mb-1">{lang}</span>}
+        <pre key={`code-${i}`} dir="ltr" className="text-left bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs font-mono overflow-x-auto my-2 whitespace-pre">
+          {lang && <span className="text-gray-400 text-[10px] block mb-1">{lang}</span>}
           {codeLines.join("\n")}
         </pre>
       );
       continue;
     }
 
-    if (/^---+$/.test(line.trim())) {
-      nodes.push(<hr key={`hr-${i}`} className="border-border/30 my-3" />); i++; continue;
-    }
-    if (line.startsWith("### ")) { nodes.push(<h3 key={`h3-${i}`} className="text-sm font-semibold mt-2 mb-0.5 text-foreground/90">{parseInline(line.slice(4))}</h3>); i++; continue; }
-    if (line.startsWith("## "))  { nodes.push(<h2 key={`h2-${i}`} className="text-sm font-bold mt-3 mb-1 text-foreground">{parseInline(line.slice(3))}</h2>); i++; continue; }
-    if (line.startsWith("# "))   { nodes.push(<h1 key={`h1-${i}`} className="text-base font-bold mt-3 mb-1 text-foreground">{parseInline(line.slice(2))}</h1>); i++; continue; }
+    if (/^---+$/.test(line.trim())) { nodes.push(<hr key={`hr-${i}`} className="border-gray-200 my-3" />); i++; continue; }
+    if (line.startsWith("### ")) { nodes.push(<h3 key={`h3-${i}`} className="text-sm font-semibold mt-3 mb-1 text-gray-900">{parseInline(line.slice(4))}</h3>); i++; continue; }
+    if (line.startsWith("## "))  { nodes.push(<h2 key={`h2-${i}`} className="text-sm font-bold mt-4 mb-1 text-gray-900">{parseInline(line.slice(3))}</h2>); i++; continue; }
+    if (line.startsWith("# "))   { nodes.push(<h1 key={`h1-${i}`} className="text-base font-bold mt-4 mb-1 text-gray-900">{parseInline(line.slice(2))}</h1>); i++; continue; }
 
     if (/^[-*] /.test(line)) {
       const items: React.ReactNode[] = [];
       const start = i;
       while (i < lines.length && /^[-*] /.test(lines[i])) {
-        items.push(<li key={`li-${i}`} className="text-sm leading-relaxed">{parseInline(lines[i].slice(2))}</li>);
+        items.push(<li key={`li-${i}`} className="leading-relaxed">{parseInline(lines[i].slice(2))}</li>);
         i++;
       }
-      nodes.push(<ul key={`ul-${start}`} className="list-disc pl-4 my-1.5 space-y-0.5">{items}</ul>);
+      nodes.push(<ul key={`ul-${start}`} className="list-disc pl-5 my-2 space-y-1 text-sm">{items}</ul>);
       continue;
     }
 
@@ -167,70 +162,66 @@ const MarkdownMessage = memo(function MarkdownMessage({ content }: { content: st
       const items: React.ReactNode[] = [];
       const start = i;
       while (i < lines.length && /^\d+\. /.test(lines[i])) {
-        items.push(<li key={`li-${i}`} className="text-sm leading-relaxed">{parseInline(lines[i].replace(/^\d+\. /, ""))}</li>);
+        items.push(<li key={`li-${i}`} className="leading-relaxed">{parseInline(lines[i].replace(/^\d+\. /, ""))}</li>);
         i++;
       }
-      nodes.push(<ol key={`ol-${start}`} className="list-decimal pl-4 my-1.5 space-y-0.5">{items}</ol>);
+      nodes.push(<ol key={`ol-${start}`} className="list-decimal pl-5 my-2 space-y-1 text-sm">{items}</ol>);
       continue;
     }
 
     if (line.startsWith("> ")) {
-      nodes.push(<blockquote key={`bq-${i}`} className="border-l-2 border-primary/40 pl-3 my-2 text-muted-foreground italic">{parseInline(line.slice(2))}</blockquote>);
+      nodes.push(<blockquote key={`bq-${i}`} className="border-l-2 border-gray-300 pl-3 my-2 text-gray-600 italic text-sm">{parseInline(line.slice(2))}</blockquote>);
       i++; continue;
     }
 
     if (line.trim() === "") { i++; continue; }
 
-    nodes.push(<p key={`p-${i}-${line.slice(0, 8)}`} className="mb-1.5 leading-relaxed">{parseInline(line)}</p>);
+    nodes.push(<p key={`p-${i}-${line.slice(0, 8)}`} className="mb-2 leading-relaxed text-sm">{parseInline(line)}</p>);
     i++;
   }
 
-  return <div className="space-y-0 text-sm">{nodes}</div>;
+  return <div className="text-gray-900">{nodes}</div>;
 });
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// ─── Tool block ───────────────────────────────────────────────────────────────
 
 function ToolOutputBlock({ skillName, output, toolType }: { skillName: string; output: string; toolType?: "skill" | "search" | "url" | "http" }) {
   const [open, setOpen] = useState(false);
-  const icon = toolType === "search" ? <Search className="w-3.5 h-3.5" />
-    : toolType === "url" ? <Link className="w-3.5 h-3.5" />
-    : toolType === "http" ? <Globe className="w-3.5 h-3.5" />
-    : <Zap className="w-3.5 h-3.5" />;
+  const icon = toolType === "search" ? <Search className="w-3 h-3" />
+    : toolType === "url" ? <Link className="w-3 h-3" />
+    : toolType === "http" ? <Globe className="w-3 h-3" />
+    : <Zap className="w-3 h-3" />;
   const label = toolType === "search" ? `Searched: ${skillName}`
     : toolType === "url" ? `Read: ${skillName}`
     : toolType === "http" ? `Called: ${skillName}`
-    : `Executed: ${skillName}`;
+    : `Ran: ${skillName}`;
   return (
-    <div className="flex justify-start my-2">
-      <div className="w-full max-w-[85%]">
-        <button
-          onClick={() => setOpen(o => !o)}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-primary/25 bg-accent text-primary/80 hover:bg-primary/10 hover:text-primary transition-colors text-xs font-mono text-left"
-        >
-          <div className="flex items-center gap-1.5 flex-1 min-w-0">
-            {icon}
-            <span className="truncate">{label}</span>
-          </div>
-          <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
-        </button>
-        {open && (
-          <div className="mt-1 px-4 py-3 rounded-lg border border-primary/15 bg-accent/50 text-sm leading-relaxed max-h-80 overflow-y-auto">
-            <MarkdownMessage content={output} />
-          </div>
-        )}
-      </div>
+    <div className="my-1">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors py-0.5"
+      >
+        {icon}
+        <span>{label}</span>
+        <ChevronDown className={`w-3 h-3 transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="mt-1.5 pl-4 border-l-2 border-gray-100 text-sm text-gray-700 leading-relaxed max-h-72 overflow-y-auto">
+          <MarkdownMessage content={output} />
+        </div>
+      )}
     </div>
   );
 }
 
-function BouncingDots() {
+// ─── Thinking dots ────────────────────────────────────────────────────────────
+
+function ThinkingDots() {
   return (
-    <div className="flex justify-start">
-      <div className="flex items-center gap-1 px-3 py-2.5">
-        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:0ms]" />
-        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:150ms]" />
-        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:300ms]" />
-      </div>
+    <div className="flex items-center gap-1 py-1">
+      <span className="w-1.5 h-1.5 rounded-full bg-gray-300 animate-bounce [animation-delay:0ms]" />
+      <span className="w-1.5 h-1.5 rounded-full bg-gray-300 animate-bounce [animation-delay:150ms]" />
+      <span className="w-1.5 h-1.5 rounded-full bg-gray-300 animate-bounce [animation-delay:300ms]" />
     </div>
   );
 }
@@ -257,9 +248,11 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   const audioChunksRef = useRef<Blob[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
   const queueRef = useRef<{ message: string; attachments: Attachment[] }[]>([]);
+  // tracks streamed content for done event — avoids stale closure over status.content
+  const accumulatedRef = useRef<string>("");
 
   const isStreaming = !!status.content;
-  const isBusy = isStreaming || status.processing || !!status.searching || !!status.running || !!status.writing || !!status.calling || !!status.reading || !!status.seeding;
+  const isBusy = status.sending || isStreaming || status.processing || !!status.searching || !!status.running || !!status.writing || !!status.calling || !!status.reading || !!status.seeding;
 
   const stopResponse = () => {
     abortControllerRef.current?.abort();
@@ -322,7 +315,6 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     return () => clearTimeout(id);
   }, [activeConvId, msgsArray.length]);
 
-  // Follow streaming tokens
   useEffect(() => {
     if (!status.content) return;
     sentinelRef.current?.scrollIntoView({ behavior: "instant", block: "end" });
@@ -444,20 +436,16 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
 
   const executeSend = async (msgText: string, pendingAttachments: Attachment[]) => {
     if (!activeConvId) return;
+    accumulatedRef.current = "";
     dispatch({ type: "START" });
 
     const tempId = `temp-${Date.now()}`;
-    const tempUserMsg: Message = {
-      id: tempId,
-      role: "user",
-      content: msgText,
-      createdAt: new Date().toISOString(),
-      tokenCount: 0,
-    };
-
     queryClient.setQueryData(
       ["operators", operatorId, "conversations", activeConvId, "messages"],
-      (old: Message[] | undefined) => [...(old ?? []), tempUserMsg],
+      (old: Message[] | undefined) => [...(old ?? []), {
+        id: tempId, role: "user", content: msgText,
+        createdAt: new Date().toISOString(), tokenCount: 0,
+      } as Message],
     );
 
     scrollToBottom(true);
@@ -516,8 +504,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
               } else if (data.seeding) {
                 dispatch({ type: "SEEDING", source: data.seeding });
               } else if (data.clear) {
-                // Skill replaced first-pass response — save snapshot, reset accumulator.
-                // Next deltas will replace the displayed snapshot seamlessly.
+                accumulatedRef.current = "";
                 dispatch({ type: "CLEAR_STREAM" });
               } else if (data.running) {
                 dispatch({ type: "RUNNING", tool: data.running });
@@ -526,18 +513,16 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
               } else if (data.calling) {
                 let displayUrl = data.calling;
                 try { displayUrl = new URL(data.calling).hostname; } catch { /* use full */ }
-                // Snapshot preserved — UI stays visible while HTTP call is in flight.
                 dispatch({ type: "CALLING", url: displayUrl });
               } else if (data.file_created) {
                 queryClient.invalidateQueries({ queryKey: ["operator-files", operatorId] });
               } else if (data.delta) {
+                accumulatedRef.current += data.delta;
                 dispatch({ type: "DELTA", text: data.delta });
               } else if (data.processing) {
                 dispatch({ type: "PROCESSING" });
               } else if (data.done) {
-                // Optimistically inject streamed assistant message into cache.
-                // This eliminates the race window between stream end and query refresh.
-                const streamedContent = status.content || status.snapshot;
+                const streamedContent = accumulatedRef.current;
                 if (streamedContent.trim()) {
                   const asstMsg: Message = {
                     id: data.messageId ?? `asst-${Date.now()}`,
@@ -548,14 +533,10 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                   };
                   queryClient.setQueryData(
                     ["operators", operatorId, "conversations", activeConvId, "messages"],
-                    (old: Message[] | undefined) => [
-                      ...(old ?? []).filter(m => m.id !== tempId),
-                      asstMsg,
-                    ],
+                    (old: Message[] | undefined) => [...(old ?? []), asstMsg],
                   );
                 }
                 dispatch({ type: "DONE" });
-                // Background refresh to sync with DB truth
                 queryClient.invalidateQueries({
                   queryKey: ["operators", operatorId, "conversations", activeConvId, "messages"],
                 });
@@ -640,172 +621,170 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
 
   const displayContent = status.content || status.snapshot;
   const showStream = !!displayContent;
+  const showThinking = isBusy && !showStream && !status.searching && !status.running && !status.calling && !status.writing && !status.seeding && !status.reading && !status.error;
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-      <div className="flex flex-col flex-1 min-h-0 bg-background/50 relative overflow-hidden">
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-white">
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4 relative" ref={scrollRef}>
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto" ref={scrollRef}>
+        <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
           {msgsLoading || (!activeConvId && createConv.isPending) ? (
-            <div className="h-full flex items-center justify-center font-mono text-sm text-muted-foreground animate-pulse">Loading…</div>
+            <div className="flex items-center justify-center py-20 text-sm text-gray-400">Loading…</div>
           ) : msgsArray.length === 0 && !showStream ? (
-            <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-40 space-y-3">
+            <div className="flex flex-col items-center justify-center py-24 text-gray-300 space-y-3">
               <MessageSquare className="w-10 h-10" />
-              <p className="font-label text-sm">Send a message to get started.</p>
+              <p className="text-sm">Send a message to get started.</p>
             </div>
           ) : (
             <>
               {items.map(item =>
                 item.kind === "separator" ? (
-                  <div key={item.key} className="flex items-center gap-3 my-4">
-                    <div className="flex-1 h-px bg-border/30" />
-                    <span className="text-[10px] font-mono text-muted-foreground/50">{item.label}</span>
-                    <div className="flex-1 h-px bg-border/30" />
+                  <div key={item.key} className="flex items-center gap-3">
+                    <div className="flex-1 h-px bg-gray-100" />
+                    <span className="text-[10px] text-gray-400">{item.label}</span>
+                    <div className="flex-1 h-px bg-gray-100" />
                   </div>
                 ) : item.kind === "tool" ? (
                   <ToolOutputBlock key={item.key} skillName={item.skillName} output={item.output} toolType={item.toolType} />
-                ) : (
-                  <div key={item.msg.id} className={`flex group ${item.msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                    <div className={`max-w-[90%] sm:max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed
-                      ${item.msg.role === "user"
-                        ? "bg-primary text-primary-foreground rounded-tr-none"
-                        : "bg-card border border-border/50 text-foreground rounded-tl-none"
-                      }`}
-                    >
-                      <div className="break-words">
-                        {item.msg.role === "user"
-                          ? <span className="whitespace-pre-wrap">{item.msg.content}</span>
-                          : <MarkdownMessage content={item.msg.content} />
-                        }
-                      </div>
-                      {item.msg.role === "assistant" && item.msg.content.length > 150 && (
-                        <div className="mt-2 flex justify-end">
-                          <button
-                            onClick={() => {
-                              const blob = new Blob([item.msg.content], { type: "text/markdown" });
-                              const url = URL.createObjectURL(blob);
-                              const a = document.createElement("a");
-                              a.href = url; a.download = "response.md"; a.click();
-                              URL.revokeObjectURL(url);
-                            }}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-[10px] text-muted-foreground/50 hover:text-muted-foreground px-1.5 py-0.5 rounded hover:bg-muted/30"
-                            title="Download as Markdown"
-                          >
-                            <Download className="w-2.5 h-2.5" /> .md
-                          </button>
-                        </div>
-                      )}
+                ) : item.msg.role === "user" ? (
+                  <div key={item.msg.id} className="flex justify-end">
+                    <div className="max-w-[75%] bg-gray-100 text-gray-900 rounded-2xl rounded-br-sm px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap break-words">
+                      {item.msg.content}
                     </div>
+                  </div>
+                ) : (
+                  <div key={item.msg.id} className="group">
+                    <div className="text-sm text-gray-900 leading-relaxed break-words">
+                      <MarkdownMessage content={item.msg.content} />
+                    </div>
+                    {item.msg.content.length > 150 && (
+                      <button
+                        onClick={() => {
+                          const blob = new Blob([item.msg.content], { type: "text/markdown" });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url; a.download = "response.md"; a.click();
+                          URL.revokeObjectURL(url);
+                        }}
+                        className="mt-1 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600"
+                        title="Download as Markdown"
+                      >
+                        <Download className="w-2.5 h-2.5" /> .md
+                      </button>
+                    )}
                   </div>
                 )
               )}
 
-              {/* Skill badge — shown alongside streaming content */}
+              {/* Skill badge — shown while streaming the skill response */}
               {status.ranSkill && showStream && (
-                <div className="flex justify-start my-1">
-                  <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 bg-accent text-primary text-xs font-mono">
-                    <Zap className="w-3.5 h-3.5" /> Executed: {status.ranSkill}
-                  </span>
+                <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                  <Zap className="w-3 h-3" />
+                  <span>Ran: {status.ranSkill}</span>
                 </div>
               )}
 
-              {/* Streaming / snapshot bubble — no flash between stream end and history load */}
+              {/* Streaming assistant content */}
               {showStream && (
-                <div className="flex justify-start">
-                  <div className="max-w-[90%] sm:max-w-[85%] rounded-2xl rounded-tl-none px-4 py-3 text-sm leading-relaxed bg-card border border-border/50 text-foreground">
-                    <div className="break-words">
-                      <MarkdownMessage content={displayContent} />
-                    </div>
-                  </div>
+                <div className="text-sm text-gray-900 leading-relaxed break-words">
+                  <MarkdownMessage content={displayContent} />
                 </div>
               )}
 
-              {/* Live execution block */}
+              {/* Live execution indicator */}
               {(status.searching || status.running || status.calling || status.writing || status.seeding || status.reading) && (
-                <div className="flex justify-start">
-                  <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-primary/25 bg-accent text-primary/80 text-xs font-mono">
-                    <span className="w-3.5 h-3.5 rounded-full border-2 border-primary/30 border-t-primary animate-spin shrink-0" />
-                    {status.searching && <span>Searching: <span className="font-semibold text-primary">{status.searching}</span></span>}
-                    {status.calling && <span>Calling: <span className="font-semibold text-primary">{status.calling}</span></span>}
-                    {status.running && <span>Running: <span className="font-semibold text-primary">{status.running}</span></span>}
-                    {status.writing && <span>Writing: <span className="font-semibold text-primary">{status.writing}</span></span>}
-                    {status.seeding && <span>Learning: <span className="font-semibold text-primary">{status.seeding}</span></span>}
-                    {status.reading && <span>Reading URL…</span>}
-                  </div>
+                <div className="flex items-center gap-2 text-xs text-gray-400">
+                  <span className="w-3 h-3 rounded-full border-2 border-gray-200 border-t-gray-400 animate-spin shrink-0" />
+                  {status.searching && <span>Searching: {status.searching}</span>}
+                  {status.calling && <span>Calling: {status.calling}</span>}
+                  {status.running && <span>Running: {status.running}</span>}
+                  {status.writing && <span>Writing: {status.writing}</span>}
+                  {status.seeding && <span>Learning…</span>}
+                  {status.reading && <span>Reading…</span>}
                 </div>
               )}
 
-              {/* Error message — user-visible, not silent */}
+              {/* Error */}
               {status.error && (
-                <div className="flex justify-start">
-                  <div className="flex items-start gap-2 max-w-[90%] sm:max-w-[85%] rounded-2xl rounded-tl-none px-4 py-3 bg-destructive/10 border border-destructive/30 text-destructive text-sm">
-                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                    <span>{status.error}</span>
-                  </div>
+                <div className="flex items-start gap-2 text-sm text-red-600 bg-red-50 rounded-xl px-4 py-3">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{status.error}</span>
                 </div>
               )}
 
-              {/* Waiting for first token */}
-              {isBusy && !showStream && !status.searching && !status.running && !status.calling && !status.writing && !status.seeding && !status.reading && !status.error && (
-                <BouncingDots />
-              )}
+              {/* Thinking indicator — visible between send and first token */}
+              {showThinking && <ThinkingDots />}
 
               <div ref={sentinelRef} />
             </>
           )}
         </div>
+      </div>
 
-        {/* Scroll to latest button */}
-        {!isAtBottom && (
+      {/* Scroll to bottom */}
+      {!isAtBottom && (
+        <div className="flex justify-center pb-2">
           <button
             onClick={() => scrollToBottom(false)}
-            className="absolute bottom-[72px] right-4 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-card border border-border/60 text-xs text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all shadow-lg animate-in fade-in duration-200"
+            className="flex items-center gap-1 px-3 py-1 rounded-full bg-white border border-gray-200 text-xs text-gray-500 hover:text-gray-700 shadow-sm transition-colors"
           >
             <ChevronDown className="w-3 h-3" /> Latest
           </button>
+        </div>
+      )}
+
+      {/* Input */}
+      <div className="border-t border-gray-100 bg-white px-4 pb-4 pt-3 space-y-2">
+        {attachments.length > 0 && (
+          <div className="max-w-3xl mx-auto flex flex-wrap gap-2">
+            {attachments.map((att, i) => (
+              <div key={i} className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-xs">
+                {att.previewUrl
+                  ? <img src={att.previewUrl} alt={att.name} className="w-7 h-7 rounded object-cover" />
+                  : <Paperclip className="w-3 h-3 text-gray-400" />
+                }
+                <span className="text-gray-700 max-w-[6rem] truncate">{att.name}</span>
+                <button type="button" onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))} className="text-gray-400 hover:text-red-500 ml-0.5">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
         )}
 
-        {/* Input area */}
-        <div className="p-2 sm:p-3 border-t border-border/50 bg-card/30 space-y-2 shrink-0">
-          {attachments.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {attachments.map((att, i) => (
-                <div key={i} className="relative flex items-center gap-1.5 bg-card border border-border/50 rounded-lg px-2 py-1 text-xs font-mono">
-                  {att.previewUrl
-                    ? <img src={att.previewUrl} alt={att.name} className="w-8 h-8 rounded object-cover" />
-                    : <Paperclip className="w-3 h-3 text-muted-foreground" />
-                  }
-                  <span className="text-foreground/80 max-w-[6rem] truncate">{att.name}</span>
-                  <button type="button" onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive ml-0.5">
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+        {messageQueue.length > 0 && (
+          <div className="max-w-3xl mx-auto space-y-1">
+            {messageQueue.map((msg, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs text-gray-500">
+                <span className="text-gray-400 shrink-0">{i === 0 ? "Next:" : "Queued:"}</span>
+                <span className="truncate flex-1">{msg}</span>
+                <button type="button" onClick={() => { queueRef.current.splice(i, 1); setMessageQueue(prev => prev.filter((_, j) => j !== i)); }} className="text-gray-300 hover:text-gray-500 shrink-0">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
-          {messageQueue.length > 0 && (
-            <div className="space-y-1 px-1 mb-1">
-              {messageQueue.map((msg, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <div className="flex-1 flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 rounded px-2 py-1 border border-border/30 min-w-0">
-                    <span className="text-primary font-medium shrink-0">{i === 0 ? "Next:" : "Queued:"}</span>
-                    <span className="truncate">{msg}</span>
-                  </div>
-                  <button type="button" onClick={() => { queueRef.current.splice(i, 1); setMessageQueue(prev => prev.filter((_, j) => j !== i)); }} className="text-muted-foreground hover:text-foreground shrink-0">
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <form onSubmit={sendMessage} className="flex gap-1.5 sm:gap-2">
-            <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,.txt,.md,.csv,.json,.yaml,.yml,.doc,.docx,.xlsx,.xls" className="hidden" onChange={handleFileSelect} />
-            <Button type="button" variant="ghost" size="icon" className="shrink-0 w-8 h-8 sm:w-9 sm:h-9 text-muted-foreground hover:text-primary" onClick={() => fileInputRef.current?.click()} disabled={isBusy || uploading || recording || transcribing} title="Attach file">
-              <Paperclip className={`w-4 h-4 ${uploading ? "animate-pulse text-primary" : ""}`} />
-            </Button>
+        <div className="max-w-3xl mx-auto">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,.txt,.md,.csv,.json,.yaml,.yml,.doc,.docx,.xlsx,.xls"
+            className="hidden"
+            onChange={handleFileSelect}
+          />
+          <form onSubmit={sendMessage} className="flex items-end gap-2 bg-gray-50 border border-gray-200 rounded-2xl px-3 py-2.5 focus-within:border-gray-300 transition-colors">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isBusy || uploading || recording || transcribing}
+              className="text-gray-400 hover:text-gray-600 transition-colors shrink-0 p-0.5 disabled:opacity-30"
+              title="Attach file"
+            >
+              <Paperclip className={`w-4 h-4 ${uploading ? "animate-pulse text-blue-400" : ""}`} />
+            </button>
             <button
               type="button"
               onMouseDown={startRecording}
@@ -815,7 +794,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
               onMouseLeave={() => { if (recording) stopRecording(); }}
               disabled={isBusy || uploading}
               title={recording ? "Release to transcribe" : transcribing ? "Transcribing…" : "Hold to record"}
-              className={`p-2 rounded-lg transition-colors ${recording ? "bg-destructive/20 text-destructive animate-pulse" : transcribing ? "text-primary/60 animate-pulse" : "text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/30"}`}
+              className={`transition-colors shrink-0 p-0.5 ${recording ? "text-red-500 animate-pulse" : transcribing ? "text-blue-400 animate-pulse" : "text-gray-400 hover:text-gray-600"} disabled:opacity-30`}
             >
               <Mic className="w-4 h-4" />
             </button>
@@ -829,20 +808,29 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                   if (input.trim() || attachments.length > 0) sendMessage(e as any);
                 }
               }}
-              placeholder="Type a message… (Shift+Enter for new line)"
+              placeholder="Message…"
               rows={1}
               disabled={isBusy}
-              className="flex-1 font-sans bg-background/50 border border-border/50 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/30 resize-none overflow-y-auto leading-relaxed disabled:opacity-50 placeholder:text-muted-foreground"
-              style={{ minHeight: "36px", maxHeight: "200px" }}
+              className="flex-1 bg-transparent text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none resize-none overflow-y-auto leading-relaxed disabled:opacity-50"
+              style={{ minHeight: "24px", maxHeight: "200px" }}
             />
             {isBusy ? (
-              <Button type="button" onClick={() => { stopResponse(); setMessageQueue([]); }} className="shrink-0 w-8 h-8 sm:w-10 sm:h-9 bg-destructive hover:bg-destructive/90 text-destructive-foreground p-0" variant="default" title="Stop response">
+              <button
+                type="button"
+                onClick={() => { stopResponse(); setMessageQueue([]); }}
+                className="shrink-0 p-1.5 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-600 transition-colors"
+                title="Stop"
+              >
                 <Square className="w-4 h-4 fill-current" />
-              </Button>
+              </button>
             ) : (
-              <Button type="submit" disabled={!input.trim() && attachments.length === 0} className="shrink-0 w-8 h-8 sm:w-10 sm:h-9 p-0" variant="default">
+              <button
+                type="submit"
+                disabled={!input.trim() && attachments.length === 0}
+                className="shrink-0 p-1.5 rounded-lg bg-gray-900 hover:bg-gray-700 text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              >
                 <Send className="w-4 h-4" />
-              </Button>
+              </button>
             )}
           </form>
         </div>
