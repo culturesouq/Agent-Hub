@@ -23,7 +23,15 @@ Azure Container App pulls from this repo on each deployment.
 
 ## Commit Log (newest first)
 
-### 2026-05-09 — deploy: phase2-fixes-05091632 live on Azure
+### 2026-05-09 — deploy: phase2-v2-05091647 live on Azure (replaces failed 05091632)
+- Image: `banistudioacr.azurecr.io/opsoul-api:phase2-v2-05091647`
+- Built via `az acr build` (Run ID: dg4m, 2m 7s)
+- Container App `opsoul` (`bani-studio-rg`) updated, server confirmed running
+- Fix 1: `vaelCron.ts` — removed `runDiscoverySweep` import that crashed server on startup
+- Fix 2: `Dockerfile` — `--filter @workspace/opsoul-hub` so ChatSection.tsx actually compiles
+- GitHub: `69da728`
+
+### 2026-05-09 — deploy: phase2-fixes-05091632 live on Azure (FAILED — server crashed)
 - Image: `banistudioacr.azurecr.io/opsoul-api:phase2-fixes-05091632`
 - Built via `az acr build` (Run ID: dg4k, 2m 8s)
 - Container App `opsoul` in `bani-studio-rg` updated and running
