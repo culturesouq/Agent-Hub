@@ -23,6 +23,11 @@ Azure Container App pulls from this repo on each deployment.
 
 ## Commit Log (newest first)
 
+### 2026-05-09 — fix: operator remembers research + http timeout
+**Commit:** `04bfadf`
+- `chat.ts`: All 4 `persistUrlScrapedResult` and `persistWebSearchResult` call sites now pass `scope.scopeId` + `scope.scopeTrust`. Operator research (web search, URL reads) is now stored under the correct scope and recalled in future conversations.
+- `httpExecutor.ts`: `AbortSignal.timeout(15000)` added to external fetch — slow APIs no longer hold the stream open.
+
 ### 2026-05-09 — sync: 5 days of uncommitted Mac work committed to GitHub
 **Commit:** `e93e3d6`
 - `memoryEngine.ts`: Layer 1/2 memory separation, scope-aware storage
@@ -61,20 +66,16 @@ Azure Container App pulls from this repo on each deployment.
 
 ## Known Open Bugs (as of 2026-05-09)
 
-| # | File | Severity | Issue |
-|---|------|----------|-------|
-| 1 | `ChatSection.tsx` | Critical | Duplicate message: snapshot not cleared after DONE |
-| 2 | `ChatSection.tsx` | Critical | No thinking indicator between send and first token |
-| 3 | `memoryEngine.ts` | Medium | Distillation has no dedup tracking — repeated calls may create redundant memories |
-| 4 | `chat.ts` | Medium | Memory stored under ownerId scope not conversationId scope — potential mismatch |
-| 5 | `growEngine.ts` | Medium | Soul update does not diff — may write identical values |
-| 6 | `vaelCron.ts` | Medium | Embedding failure is silently swallowed, stored as null |
-| 7 | `requireSlotKey.ts` | Medium | No validation that slot's operatorId maps to a real operator |
-| 8 | `public-chat.ts` | Medium | No res.end() guard after error in stream path |
-| 9 | `chat.ts` | Low | fullContent not reset after clear_stream — minor memory overhead |
-| 10 | `schema/memory.ts` | Low | No index on decayStartedAt — full table scan on decay cron |
-| 11 | `memoryEngine.ts` | Low | Both Layer 1/2 distillation use Haiku — Layer 2 may need Sonnet for PII safety |
-| 12 | `index.ts` | Low | Sovereign admin email hardcoded |
+| # | File | Severity | Issue | Status |
+|---|------|----------|-------|--------|
+| 1 | `ChatSection.tsx` | Critical | Duplicate message: snapshot not cleared after DONE | Open |
+| 2 | `ChatSection.tsx` | Critical | No thinking indicator between send and first token | Open |
+| 3 | `chat.ts` | Medium | Web search + URL results stored without scopeId — operator forgot research | ✅ Fixed 2026-05-09 |
+| 4 | `httpExecutor.ts` | Low | No timeout on external fetch — slow APIs hold SSE open | ✅ Fixed 2026-05-09 |
+| 5 | `auth.ts` | Low | Refresh token not rotated on use | Open (polish) |
+| 6 | `growEngine.ts` + `driftCron.ts` | Low | Drift cron double-scheduled — runs twice per quarterly trigger | Open (polish) |
+| 7 | `memoryEngine.ts` | Low | Dedup fallback returns wrong row (no functional impact) | Open (polish) |
+| 8 | `memory.ts` | Low | POST /search ignores scopeId — owner sees all-scope memories | Open (may be intentional) |
 
 ---
 
