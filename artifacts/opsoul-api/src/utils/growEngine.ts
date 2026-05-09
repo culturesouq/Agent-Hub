@@ -750,9 +750,4 @@ async function checkCumulativeDrift(): Promise<void> {
   }
 }
 
-// Schedule: 0 3 1 */3 * — 3am on the 1st of every 3rd month
-cron.schedule('0 3 1 */3 *', () => {
-  checkCumulativeDrift().catch(err => console.error('[DRIFT] Unhandled error:', err));
-});
-
 export { checkCumulativeDrift };

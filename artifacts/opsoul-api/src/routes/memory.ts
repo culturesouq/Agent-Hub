@@ -259,6 +259,7 @@ router.post('/search', async (req: Request, res: Response): Promise<void> => {
     parsed.data.topN,
     parsed.data.minSimilarity,
     parsed.data.minWeight,
+    buildOwnerScope(op.ownerId).scopeId,
   );
 
   res.json({ operatorId: op.id, query: parsed.data.query, count: hits.length, hits });

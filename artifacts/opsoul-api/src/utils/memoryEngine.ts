@@ -197,8 +197,8 @@ export async function storeMainMemory(
   const vecStr = `[${embedding.join(',')}]`;
 
   // Dedup: skip if a very similar insight already exists (>85% cosine similarity)
-  const dupCheck = await pool.query<{ distance: number }>(
-    `SELECT (embedding <=> $1::vector) AS distance
+  const dupCheck = await pool.query<{ id: string; distance: number }>(
+    `SELECT id, (embedding <=> $1::vector) AS distance
      FROM operator_main_memory
      WHERE operator_id = $2
        AND embedding IS NOT NULL
@@ -208,12 +208,10 @@ export async function storeMainMemory(
     [vecStr, operatorId],
   );
   if (dupCheck.rows.length > 0 && (1 - dupCheck.rows[0].distance) > 0.85) {
-    // Return the existing row rather than inserting a duplicate
     const [existing] = await db
       .select()
       .from(operatorMainMemoryTable)
-      .where(eq(operatorMainMemoryTable.operatorId, operatorId))
-      .limit(1);
+      .where(eq(operatorMainMemoryTable.id, dupCheck.rows[0].id));
     return existing;
   }
 

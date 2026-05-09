@@ -114,7 +114,8 @@ router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  const accessToken = signAccessToken({ ownerId: owner.id, email: owner.email });
+  await db.update(sessionsTable).set({ revokedAt: new Date() }).where(eq(sessionsTable.id, session.id));
+  const accessToken = await issueSession(res, owner);
 
   res.json({
     accessToken,

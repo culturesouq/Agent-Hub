@@ -23,6 +23,12 @@ Azure Container App pulls from this repo on each deployment.
 
 ## Commit Log (newest first)
 
+### 2026-05-09 — fix: phase 1 complete — dedup, drift cron, token rotation, memory search scope
+- `memoryEngine.ts`: Dedup fallback now selects `id` from vector query and fetches that specific row by ID — no longer returns random first row for operator (fix 1.3)
+- `growEngine.ts`: Removed inline `cron.schedule` that duplicated drift cron registration from `driftCron.ts` / `index.ts` (fix 1.4)
+- `auth.ts` `/refresh`: Old session is now revoked (`revokedAt`) before calling `issueSession()` — fresh refresh cookie + access token issued on every refresh (fix 1.5)
+- `memory.ts` `/search`: Passes `buildOwnerScope(op.ownerId).scopeId` to `searchMemory` — owner sees only their scope memories, not all-scope (fix 1.7)
+
 ### 2026-05-09 — fix: operator remembers research + http timeout
 **Commit:** `04bfadf`
 - `chat.ts`: All 4 `persistUrlScrapedResult` and `persistWebSearchResult` call sites now pass `scope.scopeId` + `scope.scopeTrust`. Operator research (web search, URL reads) is now stored under the correct scope and recalled in future conversations.
@@ -72,10 +78,10 @@ Azure Container App pulls from this repo on each deployment.
 | 2 | `ChatSection.tsx` | Critical | No thinking indicator between send and first token | Open |
 | 3 | `chat.ts` | Medium | Web search + URL results stored without scopeId — operator forgot research | ✅ Fixed 2026-05-09 |
 | 4 | `httpExecutor.ts` | Low | No timeout on external fetch — slow APIs hold SSE open | ✅ Fixed 2026-05-09 |
-| 5 | `auth.ts` | Low | Refresh token not rotated on use | Open (polish) |
-| 6 | `growEngine.ts` + `driftCron.ts` | Low | Drift cron double-scheduled — runs twice per quarterly trigger | Open (polish) |
-| 7 | `memoryEngine.ts` | Low | Dedup fallback returns wrong row (no functional impact) | Open (polish) |
-| 8 | `memory.ts` | Low | POST /search ignores scopeId — owner sees all-scope memories | Open (may be intentional) |
+| 5 | `auth.ts` | Low | Refresh token not rotated on use | ✅ Fixed 2026-05-09 |
+| 6 | `growEngine.ts` + `driftCron.ts` | Low | Drift cron double-scheduled — runs twice per quarterly trigger | ✅ Fixed 2026-05-09 |
+| 7 | `memoryEngine.ts` | Low | Dedup fallback returns wrong row (no functional impact) | ✅ Fixed 2026-05-09 |
+| 8 | `memory.ts` | Low | POST /search ignores scopeId — owner sees all-scope memories | ✅ Fixed 2026-05-09 |
 
 ---
 
