@@ -23,6 +23,12 @@ Azure Container App pulls from this repo on each deployment.
 
 ## Commit Log (newest first)
 
+### 2026-05-09 — deploy: phase2-fixes-05091632 live on Azure
+- Image: `banistudioacr.azurecr.io/opsoul-api:phase2-fixes-05091632`
+- Built via `az acr build` (Run ID: dg4k, 2m 8s)
+- Container App `opsoul` in `bani-studio-rg` updated and running
+- GitHub: `culturesouq/Agent-Hub` main at `c26642d`
+
 ### 2026-05-09 — chore: remove opsoul-v2.4.tar.gz + add .dockerignore
 - `opsoul-v2.4.tar.gz`: deleted — old snapshots belong in git history, not the repo
 - `.dockerignore`: added — excludes node_modules, dist, screenshots, *.tar.gz, *.backup from build context
