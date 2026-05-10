@@ -101,15 +101,12 @@ Step 2 CKAN: GET /api/3/action/package_search?q={query} | GET /api/3/action/data
 Step 2 Socrata: GET /resource/{dataset-id}.json?$limit=100&$offset=0
 If portal is JS-rendered and http_request returns empty — use web_search only and report.
 
-Secrets: never log, expose, or pass as URL params. Always use {{SECRET_NAME}} in headers or body.
-Irreversible actions (send email, delete, publish, pay): describe what will happen, state it cannot be undone, wait for explicit confirmation, then execute.`,
+Secrets: never log, expose, or pass as URL params. Always use {{SECRET_NAME}} in headers or body.`,
 
   write_file: `Persist content to the operator file workspace.
 Provide: filename (with extension) and content (text, JSON, CSV, Markdown, etc.).
 Result: file saved and available in the file list.
-Use for: reports, exports, structured output, KB research findings, autonomous work logs.
-When working autonomously (owner offline): always write a summary file of what you did and found.
-CRITICAL: When you say you will create or write a file, you MUST call write_file immediately. Never describe file content in text. Never say "I created the file" without calling the tool. If you do not call write_file, the file does not exist — the owner cannot see it, download it, or use it. Text narration is not a file.`,
+Use for: reports, exports, structured output, KB research findings, autonomous work logs.`,
 
   kb_seed: `Add verified knowledge to your own knowledge base.
 Provide: content (300–500 words max per entry), source (URL or document title), confidence (0.0–1.0).
@@ -1134,7 +1131,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           dynLines.push(`  ${skill.description}`);
         }
       }
-      dynLines.push('If a skill fails — report the failure clearly. Do not guess or fabricate results.');
     }
 
     if (dynLines.length > 1) {
@@ -1162,7 +1158,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         type: 'function',
         function: {
           name: 'web_search',
-          description: 'Search the web for current, live information. Use only when you genuinely need it. Call this tool directly and silently — never announce "I will search" or "searching now" in your text response. Just call the tool. Your next response will reflect what you found.',
+          description: 'Search the web for current, live information. Returns text snippets from result pages.',
           parameters: {
             type: 'object',
             properties: {
@@ -1182,13 +1178,13 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         type: 'function',
         function: {
           name: 'kb_seed',
-          description: 'Persist a validated knowledge entry into your knowledge base corpus. Call this AFTER you have researched and synthesized a clear, durable insight worth retaining permanently. Do not use for ephemeral data, opinions, or uncertain facts. Write a self-contained, factual entry of 100–400 words.',
+          description: 'Persist a validated knowledge entry into your knowledge base. Stores a self-contained factual entry that becomes retrievable in future conversations. Entries land pending VAEL verification.',
           parameters: {
             type: 'object',
             properties: {
               content: {
                 type: 'string',
-                description: 'The knowledge entry to store — a self-contained factual insight (100–400 words). No filler. No "I believe". Pure information.',
+                description: 'The knowledge entry to store — a self-contained factual insight, typically 100–400 words.',
               },
               source: {
                 type: 'string',
@@ -1196,7 +1192,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
               },
               confidence: {
                 type: 'number',
-                description: 'Your confidence score 40–85 based on source quality and corroboration. Use 80+ only if multiple independent sources agree. Never claim 100.',
+                description: 'Confidence score 0–100 reflecting source quality and corroboration.',
               },
             },
             required: ['content', 'source', 'confidence'],
@@ -1210,7 +1206,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     type: 'function',
     function: {
       name: 'write_file',
-      description: 'Create or update a file in your workspace. When you decide to create a file, call this tool immediately — do not describe the content as text. If you do not call this tool, the file does not exist. Owner sees and downloads files from the Files tab.',
+      description: 'Create or update a file in your workspace. The file becomes visible to the owner in the Files tab and downloadable from there.',
       parameters: {
         type: 'object',
         properties: {
@@ -1228,7 +1224,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     type: 'function',
     function: {
       name: 'http_request',
-      description: 'Make an HTTP request to an external API using your stored secrets. Use {{SECRET_NAME}} as a placeholder in headers or body to inject a stored secret by its label. When you call this tool — call it directly, with no announcement before it. The tool call is your full response for that action.',
+      description: 'Make an HTTP request to an external API using your stored secrets. Use {{SECRET_NAME}} as a placeholder in headers or body to inject a stored secret by its label.',
       parameters: {
         type: 'object',
         properties: {
