@@ -145,6 +145,10 @@ The patent draft (IPPT-2026-000028, not yet filed) needs these reconciliations b
 | **DB migration — `operator_main_memory`** | Schema in repo, NOT run on prod. Owner must approve and run `pnpm --filter opsoul-db push`. |
 | **DB migration — `operator_memory.scopeId`** | Default changed to `'legacy'`, NOT run. Safe (Postgres applies default to new rows only). |
 | **Known bugs (May 9 list)** | All 8 fixed and shipped. See history below. |
+| **LLM provider alternative — DeepSeek R + Kimi K2** | Open. Conversation started 2026-05-09 evening: explore replacing/supplementing OpenRouter with direct DeepSeek (reasoning) and Kimi (Moonshot) model access — both have free tiers usable for development and lower-cost paths for production. Never finished because the OpSoul cleanup work took over the session. Resume when stable. |
+| **UI/backend default model mismatch** | Open. `SettingsSection.tsx:416` reads `operator.defaultModel ?? "opsoul/auto"`. When `defaultModel` is NULL, the UI shows "OpSoul Auto" but the backend treats NULL as Sonnet (`chat.ts:833` falls back to `CHAT_MODEL`). If the owner clicks Save in Settings without changing the dropdown, the form submits `'opsoul/auto'` and silently flips the operator from Sonnet to auto-routing (which can downgrade to Haiku on short messages). Fix: make UI display match backend behavior — either NULL → Sonnet label, or NULL → genuinely auto on backend too. |
+| **OpenRouter credit monitoring** | Open. Low-credit conditions cause silent quirky behavior (model substitution, narration drift). Add a credit-balance check + UI banner when balance drops below a threshold. |
+| **Per-message model record** | Open. Currently no DB column captures which model handled which message — only console.log of auto-routing decisions. Hard to audit operator behavior after the fact. Add `model` column to `messages` table when migration window opens. |
 
 ---
 
