@@ -59,6 +59,24 @@ export const BUILTIN_SKILLS: BuiltinSkill[] = [
     availability: 'always',
   },
   {
+    name:         'Update task',
+    description:  'Change the name, prompt, or schedule of an existing automation by name.',
+    category:     'automation',
+    availability: 'always',
+  },
+  {
+    name:         'Pause / resume task',
+    description:  'Stop an automation from firing without losing it. Resume later when needed.',
+    category:     'automation',
+    availability: 'always',
+  },
+  {
+    name:         'Delete task',
+    description:  'Permanently retire an automation when it\'s no longer needed.',
+    category:     'automation',
+    availability: 'always',
+  },
+  {
     name:         'HTTP request',
     description:  'Call an external API using stored secrets. Methods: GET, POST, PUT, PATCH, DELETE. Inject secrets with {{SECRET_NAME}}.',
     category:     'integration',

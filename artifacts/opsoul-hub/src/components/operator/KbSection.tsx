@@ -165,19 +165,19 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
           <h2 className="headline-lg text-2xl font-bold text-primary flex items-center gap-2">
             <Database className="w-6 h-6" /> Knowledge
           </h2>
-          <p className="text-muted-foreground font-mono text-sm mt-1">What your operator knows and can do</p>
+          <p className="text-muted-foreground text-sm mt-1">What your operator knows and can do</p>
         </div>
 
         {(activeTab === "owner" || activeTab === "operator") && (
           <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
             <DialogTrigger asChild>
-              <Button className="font-mono font-bold tracking-wider">
+              <Button className="font-bold tracking-wider">
                 <Plus className="w-4 h-4 mr-2" /> Add Knowledge
               </Button>
             </DialogTrigger>
             <DialogContent className="border-primary/20 bg-card">
               <DialogHeader>
-                <DialogTitle className="font-mono text-xl">
+                <DialogTitle className="text-xl">
                   Add to {activeTab === "owner" ? "Your Facts" : "Learned Knowledge"}
                 </DialogTitle>
               </DialogHeader>
@@ -191,12 +191,12 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
                 />
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label className="font-mono text-xs uppercase text-muted-foreground">Content</Label>
+                    <Label className="text-xs text-muted-foreground">Content</Label>
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-7 text-xs gap-1.5 font-mono border-primary/30 text-primary hover:bg-primary/10"
+                      className="h-7 text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
                       onClick={() => fileInputRef.current?.click()}
                       disabled={uploadingFile}
                     >
@@ -210,13 +210,13 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
                   <Textarea
                     value={addForm.content}
                     onChange={e => setAddForm({ ...addForm, content: e.target.value })}
-                    className="font-mono min-h-[120px]"
+                    className="min-h-[120px]"
                     placeholder="Paste or type the knowledge here, or upload a file above..."
                   />
-                  <p className="font-mono text-[10px] text-muted-foreground/60">Supports .txt, .md, .csv, .json, PDF, Word (.docx), and Excel</p>
+                  <p className="text-[10px] text-muted-foreground/60">Supports .txt, .md, .csv, .json, PDF, Word (.docx), and Excel</p>
                 </div>
                 <div className="space-y-2">
-                  <Label className="font-mono text-xs uppercase text-muted-foreground">Title</Label>
+                  <Label className="text-xs text-muted-foreground">Title</Label>
                   <Input
                     value={addForm.sourceName}
                     onChange={e => setAddForm({ ...addForm, sourceName: e.target.value })}
@@ -225,7 +225,7 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="font-mono text-xs uppercase text-muted-foreground">Type</Label>
+                  <Label className="text-xs text-muted-foreground">Type</Label>
                   <Select value={addForm.sourceType} onValueChange={(val) => setAddForm({ ...addForm, sourceType: val })}>
                     <SelectTrigger className="font-mono">
                       <SelectValue />
@@ -241,8 +241,8 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
                 {activeTab === "operator" && (
                   <div className="space-y-4 pt-4 border-t border-border/50">
                     <div className="flex justify-between items-center">
-                      <Label className="font-mono text-xs uppercase text-muted-foreground">How confident is this?</Label>
-                      <span className="font-mono text-sm text-primary font-bold">{addForm.confidenceScore}%</span>
+                      <Label className="text-xs text-muted-foreground">How confident is this?</Label>
+                      <span className="text-sm text-primary font-bold">{addForm.confidenceScore}%</span>
                     </div>
                     <Slider
                       value={[addForm.confidenceScore]}
@@ -252,7 +252,7 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
                   </div>
                 )}
 
-                <Button type="submit" className="w-full font-mono font-bold mt-4" disabled={addOwnerKb.isPending || addOpKb.isPending}>
+                <Button type="submit" className="w-full font-bold mt-4" disabled={addOwnerKb.isPending || addOpKb.isPending}>
                   Save
                 </Button>
               </form>
@@ -263,13 +263,13 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-3 bg-card/50 border border-border/50 mb-6 h-auto p-1">
-          <TabsTrigger value="owner" className="font-mono text-xs py-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
+          <TabsTrigger value="owner" className="text-xs py-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
             Your Facts
           </TabsTrigger>
-          <TabsTrigger value="operator" className="font-mono text-xs py-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
+          <TabsTrigger value="operator" className="text-xs py-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
             Learned
           </TabsTrigger>
-          <TabsTrigger value="search" className="font-mono text-xs py-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
+          <TabsTrigger value="search" className="text-xs py-2 data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
             <Search className="w-3 h-3 mr-1.5" /> Search
           </TabsTrigger>
         </TabsList>
@@ -277,17 +277,17 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
         {/* Your Facts (Owner KB) */}
         <TabsContent value="owner" className="m-0 space-y-4">
           <div className="bg-accent border border-primary/20 rounded p-3 mb-4">
-            <p className="font-mono text-xs text-primary/80">
+            <p className="text-xs text-primary/80">
               These are facts you've provided directly. Your operator treats them as absolute truth.
             </p>
           </div>
 
           {ownerLoading ? (
-            <div className="text-center p-8 font-mono text-muted-foreground animate-pulse">Loading...</div>
+            <div className="text-center p-8 text-muted-foreground animate-pulse">Loading...</div>
           ) : ownerKbGroups.length === 0 ? (
             <div className="text-center p-12 border border-dashed border-border/50 rounded-lg bg-card/20">
               <Database className="w-8 h-8 text-muted-foreground mx-auto mb-3 opacity-30" />
-              <p className="font-mono text-sm text-muted-foreground">No facts added yet.</p>
+              <p className="text-sm text-muted-foreground">No facts added yet.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -296,21 +296,21 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
                   <CardHeader className="p-4 pb-2">
                     <div className="flex justify-between items-start">
                       <div className="flex gap-2 items-center flex-wrap">
-                        <Badge variant="outline" className="font-mono text-[10px] bg-background/50">{group.sourceType}</Badge>
+                        <Badge variant="outline" className="text-[10px] bg-background/50">{group.sourceType}</Badge>
                         {group.chunkCount > 1 && (
-                          <Badge variant="outline" className="font-mono text-[10px] bg-background/50 text-muted-foreground">{group.chunkCount} parts</Badge>
+                          <Badge variant="outline" className="text-[10px] bg-background/50 text-muted-foreground">{group.chunkCount} parts</Badge>
                         )}
                       </div>
                       <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0" onClick={() => deleteOwnerKb.mutate(group.ids)}>
                         <Trash2 className="w-3 h-3" />
                       </Button>
                     </div>
-                    <CardTitle className="font-mono text-sm mt-2">{group.sourceName}</CardTitle>
+                    <CardTitle className="text-sm mt-2">{group.sourceName}</CardTitle>
                   </CardHeader>
                   <CardContent className="p-4 pt-0 flex-1">
                     <p className="text-xs text-muted-foreground line-clamp-4 font-mono">{group.preview}</p>
                   </CardContent>
-                  <CardFooter className="p-4 pt-0 text-[10px] text-muted-foreground/50 font-mono border-t border-border/20 mt-2">
+                  <CardFooter className="p-4 pt-0 text-[10px] text-muted-foreground/50 border-t border-border/20 mt-2">
                     {format(new Date(group.createdAt), 'MMM d, yyyy')}
                   </CardFooter>
                 </Card>
@@ -322,17 +322,17 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
         {/* Learned (Operator KB) */}
         <TabsContent value="operator" className="m-0 space-y-4">
           <div className="bg-secondary/50 border border-secondary-foreground/20 rounded p-3 mb-4">
-            <p className="font-mono text-xs text-secondary-foreground/80">
+            <p className="text-xs text-secondary-foreground/80">
               Things your operator has learned on its own. You can verify facts you trust to promote them.
             </p>
           </div>
 
           {opLoading ? (
-            <div className="text-center p-8 font-mono text-muted-foreground animate-pulse">Loading...</div>
+            <div className="text-center p-8 text-muted-foreground animate-pulse">Loading...</div>
           ) : opKb?.length === 0 ? (
             <div className="text-center p-12 border border-dashed border-border/50 rounded-lg bg-card/20">
               <Database className="w-8 h-8 text-muted-foreground mx-auto mb-3 opacity-30" />
-              <p className="font-mono text-sm text-muted-foreground">Nothing learned yet.</p>
+              <p className="text-sm text-muted-foreground">Nothing learned yet.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -341,11 +341,11 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
                   <CardHeader className="p-4 pb-2">
                     <div className="flex justify-between items-start">
                       <div className="flex gap-2">
-                        <Badge variant="outline" className={`font-mono text-[10px] ${chunk.confidenceScore && chunk.confidenceScore > 80 ? 'text-green-500 border-green-500/30' : 'text-amber-500 border-amber-500/30'}`}>
+                        <Badge variant="outline" className={`text-[10px] ${chunk.confidenceScore && chunk.confidenceScore > 80 ? 'text-green-500 border-green-500/30' : 'text-amber-500 border-amber-500/30'}`}>
                           {chunk.confidenceScore}% sure
                         </Badge>
                         {chunk.isVerified && (
-                          <Badge variant="default" className="font-mono text-[10px] bg-primary">
+                          <Badge variant="default" className="text-[10px] bg-primary">
                             <ShieldCheck className="w-3 h-3 mr-1" /> Verified
                           </Badge>
                         )}
@@ -361,7 +361,7 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
                         </Button>
                       </div>
                     </div>
-                    <CardTitle className="font-mono text-sm mt-2">{chunk.sourceName}</CardTitle>
+                    <CardTitle className="text-sm mt-2">{chunk.sourceName}</CardTitle>
                   </CardHeader>
                   <CardContent className="p-4 pt-0 flex-1">
                     <p className="text-xs text-muted-foreground line-clamp-4 font-mono">{chunk.content}</p>
@@ -381,31 +381,31 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder="Search your operator's knowledge..."
-                className="font-mono pl-10 bg-card/50 h-12 text-sm border-primary/20 focus-visible:border-primary focus-visible:ring-primary/20"
+                className="pl-10 bg-card/50 h-12 text-sm border-primary/20 focus-visible:border-primary focus-visible:ring-primary/20"
               />
             </div>
-            <Button type="submit" disabled={isSearching || !searchQuery.trim()} className="h-12 px-8 font-mono font-bold">
+            <Button type="submit" disabled={isSearching || !searchQuery.trim()} className="h-12 px-8 font-bold">
               {isSearching ? "Searching..." : "Search"}
             </Button>
           </form>
 
           {searchResults.length > 0 && (
             <div className="space-y-4">
-              <h3 className="font-mono text-sm font-bold text-primary">Results</h3>
+              <h3 className="text-sm font-bold text-primary">Results</h3>
               <div className="space-y-3">
                 {searchResults.map((res, i) => (
                   <div key={i} className="p-4 border border-border/50 rounded-lg bg-card/20 relative overflow-hidden group hover:bg-card/40 transition-colors">
                     <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary/50 group-hover:bg-primary transition-colors" />
                     <div className="flex justify-between items-start mb-2">
                       <div className="flex gap-2 items-center">
-                        <Badge variant="outline" className="font-mono text-[10px] border-primary/30 text-primary">
+                        <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">
                           {(res.similarity * 100).toFixed(0)}% match
                         </Badge>
-                        <span className="font-mono text-xs text-muted-foreground">{res.sourceName || 'Unknown source'}</span>
+                        <span className="text-xs text-muted-foreground">{res.sourceName || 'Unknown source'}</span>
                       </div>
-                      <Badge variant="secondary" className="font-mono text-[10px] uppercase">{res.sourceType || 'KB'}</Badge>
+                      <Badge variant="secondary" className="text-[10px]">{res.sourceType || 'KB'}</Badge>
                     </div>
-                    <p className="font-mono text-sm text-foreground/90">{res.content}</p>
+                    <p className="text-sm text-foreground/90">{res.content}</p>
                   </div>
                 ))}
               </div>
@@ -414,7 +414,7 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
 
           {searchResults.length === 0 && searchQuery && !isSearching && (
             <div className="text-center p-12 border border-dashed border-border/50 rounded-lg bg-card/20">
-              <p className="font-mono text-sm text-muted-foreground">No results found for "{searchQuery}"</p>
+              <p className="text-sm text-muted-foreground">No results found for "{searchQuery}"</p>
             </div>
           )}
         </TabsContent>

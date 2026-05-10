@@ -107,7 +107,7 @@ export default function IdentitySection({ operator, panel }: Props) {
   const showPersonality = !panel || panel === "personality";
 
   return (
-    <div className="space-y-8 animate-in fade-in zoom-in-95 duration-300 bg-white rounded-2xl border border-border/30 p-6">
+    <div className="space-y-8 bg-white p-6">
       {showIdentity && (
         <div className={`border rounded-lg p-6 space-y-4 transition-all ${isLocked ? "border-primary/20 bg-accent" : "border-border/50 bg-card/30"}`}>
           <div className="flex items-center justify-between">
@@ -115,28 +115,28 @@ export default function IdentitySection({ operator, panel }: Props) {
               <User className="w-4 h-4" /> Identity
             </h3>
             {isLocked ? (
-              <div className="flex items-center gap-1.5 text-xs font-mono text-primary font-bold tracking-widest uppercase bg-primary/10 px-2 py-1 rounded">
+              <div className="flex items-center gap-1.5 text-xs text-primary font-bold bg-primary/10 px-2 py-1 rounded">
                 <Lock className="w-3 h-3" /> Self-modification locked
               </div>
             ) : (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="outline" size="sm" className="font-mono text-xs border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground">
+                  <Button variant="outline" size="sm" className="text-xs border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground">
                     <Lock className="w-3 h-3 mr-1.5" /> Prevent operator from self-modifying
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent className="border-primary/20">
                   <AlertDialogHeader>
-                    <AlertDialogTitle className="font-mono text-primary flex items-center gap-2">
+                    <AlertDialogTitle className="text-primary flex items-center gap-2">
                       <Lock className="w-5 h-5" /> Prevent operator from self-modifying?
                     </AlertDialogTitle>
-                    <AlertDialogDescription className="font-mono">
+                    <AlertDialogDescription className="">
                       Your operator will not be able to change its own identity. You as the owner can always edit it here.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel className="font-mono">Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => lockCore.mutate()} className="font-mono font-bold">
+                    <AlertDialogCancel className="">Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => lockCore.mutate()} className="font-bold">
                       Lock it
                     </AlertDialogAction>
                   </AlertDialogFooter>
@@ -146,26 +146,26 @@ export default function IdentitySection({ operator, panel }: Props) {
           </div>
 
           <div className="space-y-2">
-            <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
+            <Label className="text-xs text-muted-foreground">
               Who is this operator?
             </Label>
             <Textarea
               value={identityDesc}
               onChange={e => setIdentityDesc(e.target.value)}
-              className="font-mono h-36 bg-background/50 resize-none"
+              className="h-36 bg-background/50 resize-none"
               placeholder="Describe your operator in your own words — their name, what they do, how they think."
             />
           </div>
 
           {needsName && (
             <div className="border border-amber-500/30 bg-amber-500/5 rounded-lg p-4 space-y-3">
-              <p className="font-mono text-sm text-amber-400">
+              <p className="text-sm text-amber-400">
                 What should we call your operator?
               </p>
               <Input
                 value={confirmedName}
                 onChange={e => setConfirmedName(e.target.value)}
-                className="font-mono bg-background/50"
+                className="bg-background/50"
                 placeholder="e.g. Nahil"
                 autoFocus
               />
@@ -173,7 +173,7 @@ export default function IdentitySection({ operator, panel }: Props) {
                 <Button
                   onClick={() => updateIdentity.mutate({ description: identityDesc, confirmedName })}
                   disabled={!confirmedName.trim() || updateIdentity.isPending}
-                  className="font-mono"
+                  className=""
                   size="sm"
                 >
                   {updateIdentity.isPending ? "Saving..." : "Confirm"}
@@ -181,7 +181,7 @@ export default function IdentitySection({ operator, panel }: Props) {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="font-mono text-muted-foreground"
+                  className="text-muted-foreground"
                   onClick={() => { setNeedsName(false); setConfirmedName(""); }}
                 >
                   Cancel
@@ -210,24 +210,24 @@ export default function IdentitySection({ operator, panel }: Props) {
             </h3>
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="ghost" size="sm" className="font-mono text-xs text-muted-foreground hover:text-destructive">
+                <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-destructive">
                   <RefreshCw className="w-3 h-3 mr-1.5" /> Reset
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent className="border-destructive/20">
                 <AlertDialogHeader>
-                  <AlertDialogTitle className="font-mono text-destructive flex items-center gap-2">
+                  <AlertDialogTitle className="text-destructive flex items-center gap-2">
                     <AlertTriangle className="w-5 h-5" /> Reset personality?
                   </AlertDialogTitle>
-                  <AlertDialogDescription className="font-mono">
+                  <AlertDialogDescription className="">
                     All personality changes will revert to the original. This cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel className="font-mono">Cancel</AlertDialogCancel>
+                  <AlertDialogCancel className="">Cancel</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={() => resetPersonality.mutate()}
-                    className="bg-destructive text-destructive-foreground font-mono font-bold"
+                    className="bg-destructive text-destructive-foreground font-bold"
                   >
                     Reset
                   </AlertDialogAction>
@@ -236,14 +236,14 @@ export default function IdentitySection({ operator, panel }: Props) {
             </AlertDialog>
           </div>
 
-          <p className="font-mono text-xs text-muted-foreground leading-relaxed">
+          <p className="text-xs text-muted-foreground leading-relaxed">
             Describe your operator in your own words. Who they are, how they speak, what they care about. This is yours — it won't change unless you change it.
           </p>
 
           <Textarea
             value={soulDesc}
             onChange={e => setSoulDesc(e.target.value)}
-            className="font-mono min-h-48 bg-background/50"
+            className="min-h-48 bg-background/50"
             placeholder="Write freely — personality, voice, values, backstory. No length limit."
           />
 

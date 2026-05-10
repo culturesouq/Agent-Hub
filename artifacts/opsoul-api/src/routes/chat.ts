@@ -1293,6 +1293,73 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     },
   };
 
+  // update_task tool — change name, prompt, or schedule of an existing automation
+  const updateTaskTool: ToolDefinition = {
+    type: 'function',
+    function: {
+      name: 'update_task',
+      description: 'Change the name, prompt, or schedule of one of your existing tasks. Match the task by its current name.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Current name of the task to update.' },
+          newName: { type: 'string', description: 'Optional new name.' },
+          newPrompt: { type: 'string', description: 'Optional new prompt — what each future run will read.' },
+          newSchedule: { type: 'string', enum: ['daily', 'weekly'], description: 'Optional new schedule.' },
+        },
+        required: ['name'],
+      },
+    },
+  };
+
+  // pause_task tool — stop a task from firing without deleting it
+  const pauseTaskTool: ToolDefinition = {
+    type: 'function',
+    function: {
+      name: 'pause_task',
+      description: 'Pause a task so it stops firing on its schedule. The task is kept and can be resumed later. Match by name.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Name of the task to pause.' },
+        },
+        required: ['name'],
+      },
+    },
+  };
+
+  // resume_task tool — restart a paused task
+  const resumeTaskTool: ToolDefinition = {
+    type: 'function',
+    function: {
+      name: 'resume_task',
+      description: 'Resume a paused task so it starts firing again on its schedule. Match by name.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Name of the paused task to resume.' },
+        },
+        required: ['name'],
+      },
+    },
+  };
+
+  // delete_task tool — retire a task permanently
+  const deleteTaskTool: ToolDefinition = {
+    type: 'function',
+    function: {
+      name: 'delete_task',
+      description: 'Permanently delete a task. Use only when the task is no longer needed. Match by name.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Name of the task to delete.' },
+        },
+        required: ['name'],
+      },
+    },
+  };
+
   // ─── STREAMING PATH ────────────────────────────────────────────────────────
 
   if (stream) {
@@ -1375,6 +1442,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         iterTools.push(readFileTool);
         iterTools.push(listFilesTool);
         iterTools.push(scheduleTaskTool);
+        iterTools.push(updateTaskTool);
+        iterTools.push(pauseTaskTool);
+        iterTools.push(resumeTaskTool);
+        iterTools.push(deleteTaskTool);
         if (httpRequestTool) iterTools.push(httpRequestTool);
         const iterOpts = {
           ...chatOpts,
@@ -1674,6 +1745,148 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           break;
         }
 
+        // ── UPDATE TASK TOOL CALL ──────────────────────────────────────────
+        if (iterToolCall?.name === 'update_task') {
+          let upd: { name?: string; newName?: string; newPrompt?: string; newSchedule?: string } = {};
+          try { upd = JSON.parse(iterToolCall.args); } catch { /* skip */ }
+
+          if (upd.name) {
+            const [task] = await db.select({ id: tasksTable.id })
+              .from(tasksTable)
+              .where(and(eq(tasksTable.operatorId, operator.id), eq(tasksTable.contextName, upd.name)))
+              .limit(1);
+
+            let toolResultText: string;
+            if (!task) {
+              toolResultText = `No task named "${upd.name}" found in your station.`;
+            } else {
+              const patch: Record<string, unknown> = {};
+              if (upd.newName) patch.contextName = upd.newName;
+              if (upd.newPrompt) patch.prompt = upd.newPrompt;
+              if (upd.newSchedule === 'daily' || upd.newSchedule === 'weekly') patch.taskType = upd.newSchedule;
+              if (Object.keys(patch).length === 0) {
+                toolResultText = `No fields to update on "${upd.name}".`;
+              } else {
+                await db.update(tasksTable).set(patch).where(eq(tasksTable.id, task.id));
+                console.log(`[agency] loop iter ${iter} — update_task: "${upd.name}"`);
+                res.write(`data: ${JSON.stringify({ updating_task: upd.name })}\n\n`);
+                toolResultText = `Task "${upd.name}" updated.`;
+              }
+            }
+
+            loopMessages.push(
+              {
+                role: 'assistant',
+                content: iterContent || '',
+                tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'update_task', arguments: iterToolCall.args } }],
+              },
+              { role: 'tool', content: toolResultText, tool_call_id: iterToolCall.id },
+            );
+            continue;
+          }
+
+          finalContent = iterContent;
+          break;
+        }
+
+        // ── PAUSE TASK TOOL CALL ───────────────────────────────────────────
+        if (iterToolCall?.name === 'pause_task') {
+          let p: { name?: string } = {};
+          try { p = JSON.parse(iterToolCall.args); } catch { /* skip */ }
+
+          if (p.name) {
+            const result = await db.update(tasksTable)
+              .set({ status: 'paused' })
+              .where(and(eq(tasksTable.operatorId, operator.id), eq(tasksTable.contextName, p.name)))
+              .returning({ id: tasksTable.id });
+
+            const toolResultText = result.length > 0
+              ? `Task "${p.name}" paused. It will not fire until you resume it.`
+              : `No task named "${p.name}" found in your station.`;
+
+            console.log(`[agency] loop iter ${iter} — pause_task: "${p.name}" (${result.length} rows)`);
+            res.write(`data: ${JSON.stringify({ pausing_task: p.name })}\n\n`);
+
+            loopMessages.push(
+              {
+                role: 'assistant',
+                content: iterContent || '',
+                tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'pause_task', arguments: iterToolCall.args } }],
+              },
+              { role: 'tool', content: toolResultText, tool_call_id: iterToolCall.id },
+            );
+            continue;
+          }
+
+          finalContent = iterContent;
+          break;
+        }
+
+        // ── RESUME TASK TOOL CALL ──────────────────────────────────────────
+        if (iterToolCall?.name === 'resume_task') {
+          let r: { name?: string } = {};
+          try { r = JSON.parse(iterToolCall.args); } catch { /* skip */ }
+
+          if (r.name) {
+            const result = await db.update(tasksTable)
+              .set({ status: 'active' })
+              .where(and(eq(tasksTable.operatorId, operator.id), eq(tasksTable.contextName, r.name)))
+              .returning({ id: tasksTable.id });
+
+            const toolResultText = result.length > 0
+              ? `Task "${r.name}" resumed.`
+              : `No task named "${r.name}" found in your station.`;
+
+            console.log(`[agency] loop iter ${iter} — resume_task: "${r.name}" (${result.length} rows)`);
+            res.write(`data: ${JSON.stringify({ resuming_task: r.name })}\n\n`);
+
+            loopMessages.push(
+              {
+                role: 'assistant',
+                content: iterContent || '',
+                tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'resume_task', arguments: iterToolCall.args } }],
+              },
+              { role: 'tool', content: toolResultText, tool_call_id: iterToolCall.id },
+            );
+            continue;
+          }
+
+          finalContent = iterContent;
+          break;
+        }
+
+        // ── DELETE TASK TOOL CALL ──────────────────────────────────────────
+        if (iterToolCall?.name === 'delete_task') {
+          let d: { name?: string } = {};
+          try { d = JSON.parse(iterToolCall.args); } catch { /* skip */ }
+
+          if (d.name) {
+            const result = await db.delete(tasksTable)
+              .where(and(eq(tasksTable.operatorId, operator.id), eq(tasksTable.contextName, d.name)))
+              .returning({ id: tasksTable.id });
+
+            const toolResultText = result.length > 0
+              ? `Task "${d.name}" deleted.`
+              : `No task named "${d.name}" found in your station.`;
+
+            console.log(`[agency] loop iter ${iter} — delete_task: "${d.name}" (${result.length} rows)`);
+            res.write(`data: ${JSON.stringify({ deleting_task: d.name })}\n\n`);
+
+            loopMessages.push(
+              {
+                role: 'assistant',
+                content: iterContent || '',
+                tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'delete_task', arguments: iterToolCall.args } }],
+              },
+              { role: 'tool', content: toolResultText, tool_call_id: iterToolCall.id },
+            );
+            continue;
+          }
+
+          finalContent = iterContent;
+          break;
+        }
+
 
         // ── NO TOOL CALL — clean final response ────────────────────────────
         finalContent = iterContent;
@@ -1787,6 +2000,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       syncTools.push(readFileTool);
       syncTools.push(listFilesTool);
       syncTools.push(scheduleTaskTool);
+      syncTools.push(updateTaskTool);
+      syncTools.push(pauseTaskTool);
+      syncTools.push(resumeTaskTool);
+      syncTools.push(deleteTaskTool);
       if (httpRequestTool) syncTools.push(httpRequestTool);
       const syncOpts = { ...chatOpts, tools: syncTools.length > 0 ? syncTools : undefined };
       const result = await chatCompletion(messages, syncOpts);
@@ -1952,6 +2169,101 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             { role: 'system', content: `[Task Scheduled]\n${toolResultText}` },
           ];
           const secondResult = await chatCompletion(taskMessages, chatOpts);
+          finalContent = secondResult.content;
+          finalPromptTokens = secondResult.promptTokens;
+          finalCompletionTokens = secondResult.completionTokens;
+        }
+      }
+
+      // Update task — operator called update_task tool (sync path)
+      if (!capabilityFired && result.toolCall && result.toolCall.name === 'update_task') {
+        let upd: { name?: string; newName?: string; newPrompt?: string; newSchedule?: string } = {};
+        try { upd = JSON.parse(result.toolCall.args); } catch { /* skip */ }
+        if (upd.name) {
+          const [task] = await db.select({ id: tasksTable.id })
+            .from(tasksTable)
+            .where(and(eq(tasksTable.operatorId, operator.id), eq(tasksTable.contextName, upd.name)))
+            .limit(1);
+          let toolResultText: string;
+          if (!task) {
+            toolResultText = `No task named "${upd.name}" found in your station.`;
+          } else {
+            const patch: Record<string, unknown> = {};
+            if (upd.newName) patch.contextName = upd.newName;
+            if (upd.newPrompt) patch.prompt = upd.newPrompt;
+            if (upd.newSchedule === 'daily' || upd.newSchedule === 'weekly') patch.taskType = upd.newSchedule;
+            if (Object.keys(patch).length === 0) {
+              toolResultText = `No fields to update on "${upd.name}".`;
+            } else {
+              await db.update(tasksTable).set(patch).where(eq(tasksTable.id, task.id));
+              toolResultText = `Task "${upd.name}" updated.`;
+            }
+          }
+          capabilityFired = true;
+          const updMessages: ChatMessage[] = [...messages, { role: 'system', content: `[Task Updated]\n${toolResultText}` }];
+          const secondResult = await chatCompletion(updMessages, chatOpts);
+          finalContent = secondResult.content;
+          finalPromptTokens = secondResult.promptTokens;
+          finalCompletionTokens = secondResult.completionTokens;
+        }
+      }
+
+      // Pause task (sync)
+      if (!capabilityFired && result.toolCall && result.toolCall.name === 'pause_task') {
+        let p: { name?: string } = {};
+        try { p = JSON.parse(result.toolCall.args); } catch { /* skip */ }
+        if (p.name) {
+          const updated = await db.update(tasksTable)
+            .set({ status: 'paused' })
+            .where(and(eq(tasksTable.operatorId, operator.id), eq(tasksTable.contextName, p.name)))
+            .returning({ id: tasksTable.id });
+          capabilityFired = true;
+          const toolResultText = updated.length > 0
+            ? `Task "${p.name}" paused.`
+            : `No task named "${p.name}" found in your station.`;
+          const pauseMessages: ChatMessage[] = [...messages, { role: 'system', content: `[Task Paused]\n${toolResultText}` }];
+          const secondResult = await chatCompletion(pauseMessages, chatOpts);
+          finalContent = secondResult.content;
+          finalPromptTokens = secondResult.promptTokens;
+          finalCompletionTokens = secondResult.completionTokens;
+        }
+      }
+
+      // Resume task (sync)
+      if (!capabilityFired && result.toolCall && result.toolCall.name === 'resume_task') {
+        let r: { name?: string } = {};
+        try { r = JSON.parse(result.toolCall.args); } catch { /* skip */ }
+        if (r.name) {
+          const updated = await db.update(tasksTable)
+            .set({ status: 'active' })
+            .where(and(eq(tasksTable.operatorId, operator.id), eq(tasksTable.contextName, r.name)))
+            .returning({ id: tasksTable.id });
+          capabilityFired = true;
+          const toolResultText = updated.length > 0
+            ? `Task "${r.name}" resumed.`
+            : `No task named "${r.name}" found in your station.`;
+          const resMessages: ChatMessage[] = [...messages, { role: 'system', content: `[Task Resumed]\n${toolResultText}` }];
+          const secondResult = await chatCompletion(resMessages, chatOpts);
+          finalContent = secondResult.content;
+          finalPromptTokens = secondResult.promptTokens;
+          finalCompletionTokens = secondResult.completionTokens;
+        }
+      }
+
+      // Delete task (sync)
+      if (!capabilityFired && result.toolCall && result.toolCall.name === 'delete_task') {
+        let d: { name?: string } = {};
+        try { d = JSON.parse(result.toolCall.args); } catch { /* skip */ }
+        if (d.name) {
+          const deleted = await db.delete(tasksTable)
+            .where(and(eq(tasksTable.operatorId, operator.id), eq(tasksTable.contextName, d.name)))
+            .returning({ id: tasksTable.id });
+          capabilityFired = true;
+          const toolResultText = deleted.length > 0
+            ? `Task "${d.name}" deleted.`
+            : `No task named "${d.name}" found in your station.`;
+          const delMessages: ChatMessage[] = [...messages, { role: 'system', content: `[Task Deleted]\n${toolResultText}` }];
+          const secondResult = await chatCompletion(delMessages, chatOpts);
           finalContent = secondResult.content;
           finalPromptTokens = secondResult.promptTokens;
           finalCompletionTokens = secondResult.completionTokens;

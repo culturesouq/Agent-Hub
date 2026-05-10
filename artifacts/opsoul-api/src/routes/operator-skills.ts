@@ -143,9 +143,8 @@ router.get('/manifest', async (req: Request, res: Response): Promise<void> => {
       customInstructions: operatorSkillsTable.customInstructions,
       isActive:           operatorSkillsTable.isActive,
       installedAt:        operatorSkillsTable.installedAt,
-      name:               platformSkillsTable.name,
-      description:        platformSkillsTable.description,
-      archetype:          platformSkillsTable.archetype,
+      skillName:          platformSkillsTable.name,
+      skillDescription:   platformSkillsTable.description,
     })
       .from(operatorSkillsTable)
       .innerJoin(platformSkillsTable, eq(operatorSkillsTable.skillId, platformSkillsTable.id))

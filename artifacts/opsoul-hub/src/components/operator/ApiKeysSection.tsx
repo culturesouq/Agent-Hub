@@ -105,7 +105,7 @@ function KeyRevealCard({
           </div>
           <h3 className="font-headline font-bold text-base">Copy this key now</h3>
         </div>
-        <p className="font-mono text-xs text-muted-foreground mt-1 mb-4">
+        <p className="text-xs text-muted-foreground mt-1 mb-4">
           It will <span className="text-amber-500 font-bold">never be shown again</span>. We do not store it.
         </p>
 
@@ -136,7 +136,7 @@ function KeyRevealCard({
           </p>
         </div>
 
-        <Button className="w-full font-mono text-sm" onClick={onDone}>
+        <Button className="w-full text-sm" onClick={onDone}>
           I've copied it — Done
         </Button>
       </div>
@@ -148,7 +148,7 @@ function SurfacePill({ type }: { type: keyof typeof SURFACE_META }) {
   const meta = SURFACE_META[type];
   const Icon = meta.icon;
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold border ${meta.color}`}>
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${meta.color}`}>
       <Icon className="w-3 h-3" />
       {meta.label}
     </span>
@@ -208,13 +208,13 @@ export default function ApiKeysSection({ operatorId }: { operatorId: string }) {
       <div className="space-y-3">
         <div>
           <h2 className="font-headline font-bold text-lg">API Keys</h2>
-          <p className="font-mono text-sm text-muted-foreground mt-0.5">
+          <p className="text-sm text-muted-foreground mt-0.5">
             Embed this operator in your website, app, or any system that can make HTTP requests.
           </p>
         </div>
 
         <div className="space-y-2">
-          <p className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
+          <p className="text-[11px] text-muted-foreground">
             Your Endpoint
           </p>
           <EndpointBlock />
@@ -224,13 +224,13 @@ export default function ApiKeysSection({ operatorId }: { operatorId: string }) {
       {/* Section 2 — Create New Key */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <p className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
+          <p className="text-[11px] text-muted-foreground">
             Create New Key
           </p>
           {!showForm && (
             <Button
               size="sm"
-              className="font-mono text-xs gap-1.5 h-7"
+              className="text-xs gap-1.5 h-7"
               onClick={() => setShowForm(true)}
             >
               <Plus className="w-3.5 h-3.5" />
@@ -242,18 +242,18 @@ export default function ApiKeysSection({ operatorId }: { operatorId: string }) {
         {showForm && (
           <div className="border border-border/50 rounded-xl p-5 bg-card space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
             <div className="space-y-1.5">
-              <label className="text-xs font-mono text-muted-foreground">Key Name</label>
+              <label className="text-xs text-muted-foreground">Key Name</label>
               <input
                 value={form.name}
                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                 placeholder="e.g. My Website, FM App, Telegram Bot"
-                className="w-full bg-background/60 border border-border/50 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-primary/50 transition-colors"
+                className="w-full bg-background/60 border border-border/50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary/50 transition-colors"
                 autoFocus
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-mono text-muted-foreground">Surface Type</label>
+              <label className="text-xs text-muted-foreground">Surface Type</label>
               <div className="grid grid-cols-2 gap-2">
                 {(["guest", "authenticated"] as const).map(type => {
                   const meta = SURFACE_META[type];
@@ -270,7 +270,7 @@ export default function ApiKeysSection({ operatorId }: { operatorId: string }) {
                     >
                       <Icon className="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground" />
                       <div>
-                        <p className="text-xs font-semibold font-mono">{meta.label}</p>
+                        <p className="text-xs font-semibold">{meta.label}</p>
                         <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
                           {meta.description}
                         </p>
@@ -284,7 +284,7 @@ export default function ApiKeysSection({ operatorId }: { operatorId: string }) {
             <div className="flex gap-2 pt-1">
               <Button
                 size="sm"
-                className="font-mono text-xs"
+                className="text-xs"
                 onClick={() => create.mutate()}
                 disabled={!form.name.trim() || create.isPending}
               >
@@ -295,7 +295,7 @@ export default function ApiKeysSection({ operatorId }: { operatorId: string }) {
               <Button
                 size="sm"
                 variant="ghost"
-                className="font-mono text-xs"
+                className="text-xs"
                 onClick={() => { setShowForm(false); setForm({ name: "", surfaceType: "guest" }); }}
               >
                 Cancel
@@ -307,19 +307,19 @@ export default function ApiKeysSection({ operatorId }: { operatorId: string }) {
 
       {/* Section 3 — Active Keys */}
       <div className="space-y-3">
-        <p className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
+        <p className="text-[11px] text-muted-foreground">
           Active Keys
         </p>
 
         {isLoading ? (
-          <div className="text-center py-10 font-mono text-sm text-muted-foreground animate-pulse">
+          <div className="text-center py-10 text-sm text-muted-foreground animate-pulse">
             Loading keys…
           </div>
         ) : chatSlots.length === 0 ? (
           <div className="border border-dashed border-border/40 rounded-xl p-10 text-center space-y-2">
             <Key className="w-8 h-8 text-muted-foreground/30 mx-auto" />
-            <p className="font-mono font-semibold text-sm text-foreground/60">No API keys yet</p>
-            <p className="text-xs text-muted-foreground font-mono">
+            <p className="font-semibold text-sm text-foreground/60">No API keys yet</p>
+            <p className="text-xs text-muted-foreground">
               Create a key to embed this operator in your product.
             </p>
           </div>
@@ -341,22 +341,22 @@ export default function ApiKeysSection({ operatorId }: { operatorId: string }) {
                   <div className="flex items-center gap-3">
                     <div className="flex-1 min-w-0 space-y-1.5">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-sm font-mono truncate">
+                        <span className="font-semibold text-sm truncate">
                           {slot.name}
                         </span>
                         <SurfacePill type={slot.surfaceType as keyof typeof SURFACE_META} />
-                        <span className={`inline-flex items-center gap-1 font-mono text-[10px] font-semibold ${isRevoked ? "text-muted-foreground/50" : "text-green-500"}`}>
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-semibold ${isRevoked ? "text-muted-foreground/50" : "text-green-500"}`}>
                           <Circle className={`w-2 h-2 fill-current ${isRevoked ? "opacity-40" : ""}`} />
                           {isRevoked ? "Revoked" : "Active"}
                         </span>
                       </div>
 
                       <div className="flex items-center gap-3">
-                        <span className="font-mono text-[11px] text-muted-foreground">
+                        <span className="text-[11px] text-muted-foreground">
                           {slot.apiKeyPreview}
                           <span className="opacity-30">••••••••••••••••••</span>
                         </span>
-                        <span className="text-[10px] text-muted-foreground/60 font-mono">
+                        <span className="text-[10px] text-muted-foreground/60">
                           {new Date(slot.createdAt).toLocaleDateString()}
                         </span>
                       </div>
@@ -365,7 +365,7 @@ export default function ApiKeysSection({ operatorId }: { operatorId: string }) {
                     {!isRevoked && !isConfirming && (
                       <button
                         onClick={() => setRevokeConfirm(slot.id)}
-                        className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                        className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-destructive transition-colors shrink-0"
                         title="Revoke this key"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -376,14 +376,14 @@ export default function ApiKeysSection({ operatorId }: { operatorId: string }) {
 
                   {isConfirming && (
                     <div className="mt-3 pt-3 border-t border-border/30 animate-in fade-in duration-150">
-                      <p className="font-mono text-xs text-muted-foreground mb-2.5">
+                      <p className="text-xs text-muted-foreground mb-2.5">
                         Revoke <span className="text-foreground font-semibold">"{slot.name}"</span>? Apps using it will stop working immediately.
                       </p>
                       <div className="flex gap-2">
                         <Button
                           size="sm"
                           variant="outline"
-                          className="font-mono text-xs h-7 text-destructive border-destructive/30 hover:bg-destructive/10"
+                          className="text-xs h-7 text-destructive border-destructive/30 hover:bg-destructive/10"
                           onClick={() => revoke.mutate(slot.id)}
                           disabled={revoke.isPending}
                         >
@@ -394,7 +394,7 @@ export default function ApiKeysSection({ operatorId }: { operatorId: string }) {
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="font-mono text-xs h-7"
+                          className="text-xs h-7"
                           onClick={() => setRevokeConfirm(null)}
                         >
                           Cancel

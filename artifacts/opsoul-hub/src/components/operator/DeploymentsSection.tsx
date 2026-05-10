@@ -34,7 +34,7 @@ function SurfaceBadge({ type }: { type: string }) {
   const meta = SURFACE_META[type] ?? SURFACE_META.guest;
   const Icon = meta.icon;
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold border ${meta.color}`}>
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${meta.color}`}>
       <Icon className="w-3 h-3" />
       {meta.label}
     </span>
@@ -143,7 +143,7 @@ function KeyRevealModal({
           </div>
           <h3 className="font-headline font-bold text-base">Save your API key</h3>
         </div>
-        <p className="text-sm text-muted-foreground font-mono mb-4 mt-1">
+        <p className="text-sm text-muted-foreground mb-4 mt-1">
           This is shown <span className="text-amber-500 font-bold">once only</span>. Copy it now — we do not store it.
         </p>
         <div className="relative group mb-4">
@@ -158,7 +158,7 @@ function KeyRevealModal({
             {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
           </button>
         </div>
-        <div className="bg-muted/20 border border-border/30 rounded-lg p-3 mb-5 font-mono text-xs text-muted-foreground">
+        <div className="bg-muted/20 border border-border/30 rounded-lg p-3 mb-5 text-xs text-muted-foreground">
           <p className="font-semibold text-foreground/70 mb-1">Code example:</p>
           <p className="whitespace-pre-wrap">{codeExample(slot, slot.apiKey)}</p>
         </div>
@@ -249,13 +249,13 @@ export default function DeploymentsSection({ operatorId }: { operatorId: string 
       <div className="flex items-center justify-between">
         <div>
           <h2 className="font-headline font-bold text-lg">Deployment Slots</h2>
-          <p className="text-sm text-muted-foreground font-mono mt-0.5">
+          <p className="text-sm text-muted-foreground mt-0.5">
             Deploy this operator across multiple surfaces with isolated sessions and API keys.
           </p>
         </div>
         <Button
           size="sm"
-          className="font-mono text-xs gap-1.5"
+          className="text-xs gap-1.5"
           onClick={() => setShowCreate(!showCreate)}
         >
           <Plus className="w-3.5 h-3.5" />
@@ -268,17 +268,17 @@ export default function DeploymentsSection({ operatorId }: { operatorId: string 
           <h3 className="font-headline font-semibold text-sm">Create Deployment Slot</h3>
 
           <div className="space-y-1">
-            <label className="text-xs font-mono text-muted-foreground">Name</label>
+            <label className="text-xs text-muted-foreground">Name</label>
             <input
               value={form.name}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
               placeholder="e.g. My Website Chat"
-              className="w-full bg-background/60 border border-border/50 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-primary/50 transition-colors"
+              className="w-full bg-background/60 border border-border/50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary/50 transition-colors"
             />
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-mono text-muted-foreground">Surface Type</label>
+            <label className="text-xs text-muted-foreground">Surface Type</label>
             <div className="grid grid-cols-2 gap-2">
               {(["guest", "authenticated", "crud", "workspace"] as const).map(type => {
                 const meta = SURFACE_META[type];
@@ -295,7 +295,7 @@ export default function DeploymentsSection({ operatorId }: { operatorId: string 
                   >
                     <Icon className="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground" />
                     <div>
-                      <p className="text-xs font-semibold font-mono">{meta.label}</p>
+                      <p className="text-xs font-semibold">{meta.label}</p>
                       <p className="text-[10px] text-muted-foreground mt-0.5">{meta.description}</p>
                     </div>
                   </button>
@@ -305,22 +305,22 @@ export default function DeploymentsSection({ operatorId }: { operatorId: string 
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-mono text-muted-foreground">
+            <label className="text-xs text-muted-foreground">
               Allowed Origins <span className="text-muted-foreground/50">(optional, comma-separated)</span>
             </label>
             <input
               value={form.allowedOrigins}
               onChange={e => setForm(f => ({ ...f, allowedOrigins: e.target.value }))}
               placeholder="https://yourapp.com, https://app.yourapp.com"
-              className="w-full bg-background/60 border border-border/50 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-primary/50 transition-colors"
+              className="w-full bg-background/60 border border-border/50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary/50 transition-colors"
             />
-            <p className="text-[10px] text-muted-foreground font-mono">Leave blank to allow all origins</p>
+            <p className="text-[10px] text-muted-foreground">Leave blank to allow all origins</p>
           </div>
 
           <div className="flex gap-2 pt-1">
             <Button
               size="sm"
-              className="font-mono text-xs"
+              className="text-xs"
               onClick={() => create.mutate()}
               disabled={!form.name.trim() || create.isPending}
             >
@@ -328,7 +328,7 @@ export default function DeploymentsSection({ operatorId }: { operatorId: string 
                 <><RefreshCw className="w-3 h-3 mr-1.5 animate-spin" />Creating...</>
               ) : "Create Slot"}
             </Button>
-            <Button size="sm" variant="ghost" className="font-mono text-xs" onClick={() => setShowCreate(false)}>
+            <Button size="sm" variant="ghost" className="text-xs" onClick={() => setShowCreate(false)}>
               Cancel
             </Button>
           </div>
@@ -336,14 +336,14 @@ export default function DeploymentsSection({ operatorId }: { operatorId: string 
       )}
 
       {isLoading ? (
-        <div className="text-center py-12 text-muted-foreground font-mono text-sm animate-pulse">
+        <div className="text-center py-12 text-muted-foreground text-sm animate-pulse">
           Loading slots...
         </div>
       ) : slots.length === 0 ? (
         <div className="border border-dashed border-border/40 rounded-xl p-10 text-center space-y-2">
           <Globe className="w-8 h-8 text-muted-foreground/30 mx-auto" />
-          <p className="font-mono font-semibold text-sm text-foreground/60">No deployment slots yet</p>
-          <p className="text-xs text-muted-foreground font-mono">
+          <p className="font-semibold text-sm text-foreground/60">No deployment slots yet</p>
+          <p className="text-xs text-muted-foreground">
             Create a slot to deploy this operator on your website, app, or backend.
           </p>
         </div>
@@ -371,16 +371,16 @@ export default function DeploymentsSection({ operatorId }: { operatorId: string 
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-sm font-mono truncate">{slot.name}</span>
+                      <span className="font-semibold text-sm truncate">{slot.name}</span>
                       <SurfaceBadge type={slot.surfaceType} />
                       {isRevoked && (
-                        <span className="text-[10px] font-mono font-bold text-destructive/80 border border-destructive/30 rounded px-1.5 py-0.5">
+                        <span className="text-[10px] font-bold text-destructive/80 border border-destructive/30 rounded px-1.5 py-0.5">
                           REVOKED
                         </span>
                       )}
                     </div>
                     <div className="flex items-center gap-3 mt-1">
-                      <span className="font-mono text-[11px] text-muted-foreground">
+                      <span className="text-[11px] text-muted-foreground">
                         {slot.apiKeyPreview}<span className="opacity-40">••••••••••••••••••</span>
                       </span>
                       <span className="text-[10px] text-muted-foreground">
@@ -414,7 +414,7 @@ export default function DeploymentsSection({ operatorId }: { operatorId: string 
                     {!isRevoked && (
                       <>
                         <div>
-                          <p className="text-xs font-mono font-semibold text-muted-foreground mb-2 flex items-center gap-1.5">
+                          <p className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1.5">
                             <Code2 className="w-3 h-3" /> Code Example
                           </p>
                           <CodeBlock code={codeExample(slot, "")} />
@@ -424,7 +424,7 @@ export default function DeploymentsSection({ operatorId }: { operatorId: string 
                           <Button
                             size="sm"
                             variant="outline"
-                            className={`font-mono text-xs gap-1.5 h-7 ${slot.isActive ? "text-amber-400 border-amber-500/30 hover:bg-amber-500/10" : "text-green-400 border-green-500/30 hover:bg-green-500/10"}`}
+                            className={`text-xs gap-1.5 h-7 ${slot.isActive ? "text-amber-400 border-amber-500/30 hover:bg-amber-500/10" : "text-green-400 border-green-500/30 hover:bg-green-500/10"}`}
                             onClick={() => toggle.mutate({ slotId: slot.id, isActive: !slot.isActive })}
                             disabled={toggle.isPending}
                           >
@@ -437,7 +437,7 @@ export default function DeploymentsSection({ operatorId }: { operatorId: string 
                           <Button
                             size="sm"
                             variant="outline"
-                            className="font-mono text-xs gap-1.5 h-7 text-destructive border-destructive/30 hover:bg-destructive/10"
+                            className="text-xs gap-1.5 h-7 text-destructive border-destructive/30 hover:bg-destructive/10"
                             onClick={() => {
                               if (confirm(`Revoke slot "${slot.name}"? This cannot be undone.`)) {
                                 revoke.mutate(slot.id);
@@ -451,7 +451,7 @@ export default function DeploymentsSection({ operatorId }: { operatorId: string 
                       </>
                     )}
 
-                    <div className="grid grid-cols-2 gap-2 text-[11px] font-mono text-muted-foreground">
+                    <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
                       <div><span className="text-foreground/50">Trust level:</span> {slot.scopeTrust}</div>
                       <div><span className="text-foreground/50">Origins:</span> {slot.allowedOrigins?.join(", ") || "any"}</div>
                       <div><span className="text-foreground/50">Slot ID:</span> {slot.id.slice(0, 8)}...</div>

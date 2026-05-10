@@ -44,7 +44,7 @@ function OperatorAvatar({ name }: { name: string }) {
   const color = colors[name.charCodeAt(0) % colors.length];
   return (
     <div className={`w-9 h-9 rounded-xl ${color} flex items-center justify-center shrink-0`}>
-      <span className="text-white font-bold font-mono text-base leading-none">{letter}</span>
+      <span className="text-white font-bold text-base leading-none">{letter}</span>
     </div>
   );
 }
@@ -241,7 +241,7 @@ export default function OperatorDetail({ id }: { id: string }) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background text-primary font-mono tracking-widest animate-pulse">
+      <div className="min-h-screen flex items-center justify-center bg-background text-primary animate-pulse">
         Loading...
       </div>
     );
@@ -249,7 +249,7 @@ export default function OperatorDetail({ id }: { id: string }) {
 
   if (!operator) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background text-destructive font-mono text-xl">
+      <div className="min-h-screen flex items-center justify-center bg-background text-destructive text-xl">
         Operator not found
       </div>
     );
@@ -332,13 +332,13 @@ export default function OperatorDetail({ id }: { id: string }) {
 
         <div className="flex items-center gap-2">
           {operator.safeMode && (
-            <div className="flex items-center gap-1.5 font-mono text-xs border border-amber-500/30 rounded px-2 py-0.5 bg-amber-500/10 text-amber-500">
+            <div className="flex items-center gap-1.5 text-xs border border-amber-500/30 rounded px-2 py-0.5 bg-amber-500/10 text-amber-500">
               <Shield className="w-3 h-3" />
               <span className="hidden sm:inline">Safe Mode</span>
             </div>
           )}
           {healthScore && (
-            <div className="flex items-center gap-2 font-mono text-xs border border-border/50 rounded px-2.5 py-1 bg-background/50">
+            <div className="flex items-center gap-2 text-xs border border-border/50 rounded px-2.5 py-1 bg-background/50">
               <Activity className="w-3 h-3 text-muted-foreground" />
               <span className="text-muted-foreground hidden sm:inline">Health:</span>
               <span className={

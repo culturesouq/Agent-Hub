@@ -57,7 +57,7 @@ function LightInput({
     <div className="space-y-1.5">
       <label
         htmlFor={id}
-        className="block font-label text-[10px] font-bold uppercase tracking-[0.22em] px-1 text-muted-foreground"
+        className="block block text-xs font-medium px-1 text-muted-foreground"
       >
         {label}
       </label>
@@ -226,7 +226,7 @@ export default function Login() {
           {/* Divider */}
           <div className="w-full flex items-center gap-4 mb-6">
             <div className="h-px flex-1 bg-border" />
-            <span className="font-label font-bold uppercase tracking-[0.22em] text-[10px] text-muted-foreground">
+            <span className="text-xs font-medium text-muted-foreground">
               or continue with email
             </span>
             <div className="h-px flex-1 bg-border" />
@@ -250,7 +250,7 @@ export default function Login() {
               <div className="flex items-center justify-between px-1">
                 <label
                   htmlFor="password"
-                  className="font-label text-[10px] font-bold uppercase tracking-[0.22em] text-muted-foreground"
+                  className="text-xs font-medium text-muted-foreground"
                 >
                   Password
                 </label>

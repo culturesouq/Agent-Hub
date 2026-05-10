@@ -72,7 +72,7 @@ function CodeBlock({ code, onCopy }: { code: string; onCopy: () => void }) {
   };
   return (
     <div className="relative group">
-      <pre className="font-mono text-xs bg-background/80 border border-border/30 rounded-lg p-4 overflow-x-auto text-muted-foreground leading-relaxed whitespace-pre-wrap break-all">
+      <pre className="text-xs bg-background/80 border border-border/30 rounded-lg p-4 overflow-x-auto text-muted-foreground leading-relaxed whitespace-pre-wrap break-all">
         {code}
       </pre>
       <button
@@ -159,7 +159,7 @@ function ApiCopyButton({ text, title }: { text: string; title?: string }) {
 function PublicEndpointBlock() {
   return (
     <div className="relative group">
-      <pre className="bg-muted border border-border rounded-xl p-4 text-xs font-mono text-foreground overflow-x-auto whitespace-pre leading-relaxed">
+      <pre className="bg-muted border border-border rounded-xl p-4 text-xs text-foreground overflow-x-auto whitespace-pre leading-relaxed">
         {PUBLIC_ENDPOINT_BLOCK}
       </pre>
       <div className="absolute top-2 right-2">
@@ -181,11 +181,11 @@ function KeyRevealCard({ slot, onDone }: { slot: ApiSlot & { apiKey: string }; o
           </div>
           <h3 className="font-headline font-bold text-base">Copy this key now</h3>
         </div>
-        <p className="font-mono text-xs text-muted-foreground mt-1 mb-4">
+        <p className="text-xs text-muted-foreground mt-1 mb-4">
           It will <span className="text-amber-500 font-bold">never be shown again</span>. We do not store it.
         </p>
         <div className="relative group mb-3">
-          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2.5 font-mono text-xs text-amber-700 break-all leading-relaxed pr-10">
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2.5 text-xs text-amber-700 break-all leading-relaxed pr-10">
             {slot.apiKey}
           </div>
           <button
@@ -195,7 +195,7 @@ function KeyRevealCard({ slot, onDone }: { slot: ApiSlot & { apiKey: string }; o
             {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
           </button>
         </div>
-        <div className="bg-muted/10 border border-border/30 rounded-lg p-3 mb-5 font-mono text-[11px] text-muted-foreground space-y-1">
+        <div className="bg-muted/10 border border-border/30 rounded-lg p-3 mb-5 text-[11px] text-muted-foreground space-y-1">
           <p className="text-foreground/60 font-semibold text-xs">Use it like this:</p>
           <p><span className="text-slate-400">Authorization:</span>{" "}<span className="text-amber-300/80">Bearer {slot.apiKey.slice(0, 24)}…</span></p>
           <p><span className="text-slate-400">Endpoint:</span>{" "}<span className="text-blue-400/80">POST {endpoint}</span></p>
@@ -203,7 +203,7 @@ function KeyRevealCard({ slot, onDone }: { slot: ApiSlot & { apiKey: string }; o
             <p className="text-violet-400/70 mt-1">Backend actions only — no conversation stored</p>
           )}
         </div>
-        <Button className="w-full font-mono text-sm" onClick={onDone}>I've copied it — Done</Button>
+        <Button className="w-full text-sm" onClick={onDone}>I've copied it — Done</Button>
       </div>
     </div>
   );
@@ -213,7 +213,7 @@ function ApiSlotPill({ type }: { type: keyof typeof API_SLOT_META }) {
   const meta = API_SLOT_META[type];
   const Icon = meta.icon;
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold border ${meta.color}`}>
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${meta.color}`}>
       <Icon className="w-3 h-3" />
       {meta.label}
     </span>
@@ -296,7 +296,7 @@ function SecretsPanel({ operatorId }: { operatorId: string }) {
         <Key className="w-4 h-4 text-muted-foreground" />
         <div>
           <h2 className="font-headline font-bold text-base">Keys & Secrets</h2>
-          <p className="font-mono text-xs text-muted-foreground mt-0.5">
+          <p className="text-xs text-muted-foreground mt-0.5">
             Store API keys and tokens your operator can use during tasks — webhooks, third-party tools, external services.
           </p>
         </div>
@@ -304,13 +304,13 @@ function SecretsPanel({ operatorId }: { operatorId: string }) {
 
       {/* Add new */}
       <div className="rounded-xl border border-border/30 bg-card/20 p-4 space-y-3">
-        <p className="font-mono text-xs text-muted-foreground uppercase tracking-wider">Add secret</p>
+        <p className="text-xs text-muted-foreground tracking-wider">Add secret</p>
         <div className="flex gap-2 flex-col sm:flex-row">
           <Input
             placeholder="KEY_NAME"
             value={newKey}
             onChange={(e) => handleKeyInput(e.target.value)}
-            className="font-mono text-xs sm:w-44 shrink-0 uppercase"
+            className="text-xs sm:w-44 shrink-0"
             autoComplete="off"
             spellCheck={false}
           />
@@ -319,7 +319,7 @@ function SecretsPanel({ operatorId }: { operatorId: string }) {
             placeholder="value / token"
             value={newValue}
             onChange={(e) => setNewValue(e.target.value)}
-            className="font-mono text-xs flex-1"
+            className="text-xs flex-1"
             autoComplete="off"
             onKeyDown={(e) => {
               if (e.key === "Enter" && newKey.trim() && newValue.trim()) saveSecret.mutate();
@@ -329,7 +329,7 @@ function SecretsPanel({ operatorId }: { operatorId: string }) {
             size="sm"
             onClick={() => saveSecret.mutate()}
             disabled={!newKey.trim() || !newValue.trim() || saveSecret.isPending}
-            className="font-mono text-xs shrink-0"
+            className="text-xs shrink-0"
           >
             {saveSecret.isPending ? (
               <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
@@ -351,7 +351,7 @@ function SecretsPanel({ operatorId }: { operatorId: string }) {
       ) : secrets.length === 0 ? (
         <div className="rounded-xl border border-border/20 bg-card/10 p-6 text-center">
           <Key className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
-          <p className="font-mono text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             No secrets yet. Add API keys or tokens your operator can use during tasks.
           </p>
         </div>
@@ -365,10 +365,10 @@ function SecretsPanel({ operatorId }: { operatorId: string }) {
                 key={secret.id}
                 className="flex items-center gap-3 rounded-lg border border-border/30 bg-card/20 px-4 py-3"
               >
-                <code className="font-mono text-xs font-bold text-primary w-40 truncate shrink-0">
+                <code className="text-xs font-bold text-primary w-40 truncate shrink-0">
                   {secret.key}
                 </code>
-                <div className="flex-1 font-mono text-xs text-muted-foreground tracking-widest overflow-hidden">
+                <div className="flex-1 text-xs text-muted-foreground tracking-widest overflow-hidden">
                   {isRevealed ? (
                     <span className="text-foreground break-all tracking-normal">{revealedIds[secret.id]}</span>
                   ) : (
@@ -634,8 +634,8 @@ print(response.json()["content"])`;
             <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3">
               <Info className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
               <div className="space-y-0.5">
-                <p className="font-mono text-xs font-bold text-amber-500">Using OpSoul's shared key</p>
-                <p className="font-mono text-[11px] text-muted-foreground leading-relaxed">
+                <p className="text-xs font-bold text-amber-500">Using OpSoul's shared key</p>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
                   Your operator runs on OpSoul's OpenRouter key. Add your own key to get full model access and remove usage limits.
                 </p>
               </div>
@@ -646,12 +646,12 @@ print(response.json()["content"])`;
             <div className="flex items-start gap-3 rounded-lg border border-green-500/30 bg-green-500/5 px-4 py-3">
               <Check className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
               <div className="space-y-0.5">
-                <p className="font-mono text-xs font-bold text-green-500">Custom OpenRouter key active</p>
-                <p className="font-mono text-[11px] text-muted-foreground">Your operator uses your own API key.</p>
+                <p className="text-xs font-bold text-green-500">Custom OpenRouter key active</p>
+                <p className="text-[11px] text-muted-foreground">Your operator uses your own API key.</p>
               </div>
               <button
                 onClick={() => saveModelSettings.mutate({ clearApiKey: true })}
-                className="ml-auto font-mono text-[10px] text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                className="ml-auto text-[10px] text-muted-foreground hover:text-destructive transition-colors shrink-0"
               >
                 Remove key
               </button>
@@ -659,18 +659,18 @@ print(response.json()["content"])`;
           )}
 
           <div className="space-y-2">
-            <label className="font-mono text-xs text-muted-foreground uppercase tracking-wider">Default Model</label>
+            <label className="text-xs text-muted-foreground tracking-wider">Default Model</label>
             <div className="relative">
               <button
                 onClick={() => setShowModelDropdown(!showModelDropdown)}
-                className="w-full flex items-center justify-between p-4 rounded-lg border-2 border-border/40 bg-card/20 hover:border-border transition-all font-mono text-left"
+                className="w-full flex items-center justify-between p-4 rounded-lg border-2 border-border/40 bg-card/20 hover:border-border transition-all text-left"
               >
                 <div>
                   <div className="text-sm font-bold">{selectedModelInfo.label}</div>
                   <div className="text-xs text-muted-foreground mt-0.5">{selectedModelInfo.description}</div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
                     {selectedModelInfo.badge}
                   </span>
                   <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${showModelDropdown ? "rotate-180" : ""}`} />
@@ -683,7 +683,7 @@ print(response.json()["content"])`;
                     <button
                       key={m.id}
                       onClick={() => { setSelectedModel(m.id); setShowModelDropdown(false); }}
-                      className={`w-full flex items-center justify-between px-4 py-3 font-mono text-left hover:bg-card/80 transition-colors border-b border-border/20 last:border-0
+                      className={`w-full flex items-center justify-between px-4 py-3 text-left hover:bg-card/80 transition-colors border-b border-border/20 last:border-0
                         ${selectedModel === m.id ? "bg-accent" : ""}`}
                     >
                       <div>
@@ -691,7 +691,7 @@ print(response.json()["content"])`;
                         <div className="text-xs text-muted-foreground mt-0.5">{m.description}</div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-muted/30 text-muted-foreground border border-border/20">
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted/30 text-muted-foreground border border-border/20">
                           {m.badge}
                         </span>
                         {selectedModel === m.id && <Check className="w-4 h-4 text-primary" />}
@@ -708,7 +708,7 @@ print(response.json()["content"])`;
               size="sm"
               onClick={() => saveModelSettings.mutate({ model: selectedModel })}
               disabled={saveModelSettings.isPending}
-              className="font-mono text-xs"
+              className="text-xs"
             >
               {saveModelSettings.isPending ? <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> Saving...</> : "Save Settings"}
             </Button>
@@ -727,48 +727,48 @@ print(response.json()["content"])`;
             <h2 className="font-headline font-bold text-base">API Reference</h2>
           </div>
 
-          <p className="font-mono text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Connect your operator to any app, script, or automation using the REST API below.
           </p>
 
           <div className="space-y-1">
             <div className="flex items-center justify-between mb-1">
-              <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">Operator ID</span>
-              <button onClick={() => copy(operator.id, "opid")} className={`font-mono text-xs flex items-center gap-1 transition-colors ${copiedField === "opid" ? "text-green-500" : "text-primary hover:underline"}`}>
+              <span className="text-xs text-muted-foreground tracking-wider">Operator ID</span>
+              <button onClick={() => copy(operator.id, "opid")} className={`text-xs flex items-center gap-1 transition-colors ${copiedField === "opid" ? "text-green-500" : "text-primary hover:underline"}`}>
                 {copiedField === "opid" ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
                 {copiedField === "opid" ? "Copied" : "Copy"}
               </button>
             </div>
-            <div className="font-mono text-sm bg-background/60 border border-border/30 rounded-lg px-3 py-2.5 break-all select-all text-primary/80">
+            <div className="text-sm bg-background/60 border border-border/30 rounded-lg px-3 py-2.5 break-all select-all text-primary/80">
               {operator.id}
             </div>
           </div>
 
           <div className="space-y-1">
             <div className="flex items-center justify-between mb-1">
-              <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">Authentication header</span>
-              <button onClick={() => copy("Authorization: Bearer <YOUR_TOKEN>", "auth")} className={`font-mono text-xs flex items-center gap-1 transition-colors ${copiedField === "auth" ? "text-green-500" : "text-primary hover:underline"}`}>
+              <span className="text-xs text-muted-foreground tracking-wider">Authentication header</span>
+              <button onClick={() => copy("Authorization: Bearer <YOUR_TOKEN>", "auth")} className={`text-xs flex items-center gap-1 transition-colors ${copiedField === "auth" ? "text-green-500" : "text-primary hover:underline"}`}>
                 {copiedField === "auth" ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
                 {copiedField === "auth" ? "Copied" : "Copy"}
               </button>
             </div>
-            <div className="font-mono text-sm bg-background/60 border border-border/30 rounded-lg px-3 py-2.5 text-muted-foreground">
+            <div className="text-sm bg-background/60 border border-border/30 rounded-lg px-3 py-2.5 text-muted-foreground">
               Authorization: Bearer {"<YOUR_TOKEN>"}
             </div>
-            <p className="font-mono text-[10px] text-muted-foreground">Use the token from your login response or refresh token endpoint.</p>
+            <p className="text-[10px] text-muted-foreground">Use the token from your login response or refresh token endpoint.</p>
           </div>
 
           <div className="space-y-2">
-            <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">Chat endpoint</span>
-            <div className="font-mono text-xs bg-background/60 border border-border/30 rounded-lg px-3 py-2.5 text-muted-foreground">
+            <span className="text-xs text-muted-foreground tracking-wider">Chat endpoint</span>
+            <div className="text-xs bg-background/60 border border-border/30 rounded-lg px-3 py-2.5 text-muted-foreground">
               POST {chatEndpoint}
             </div>
           </div>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">curl</span>
-              <button onClick={() => copy(curlExample, "curl")} className={`font-mono text-xs flex items-center gap-1 transition-colors ${copiedField === "curl" ? "text-green-500" : "text-primary hover:underline"}`}>
+              <span className="text-xs text-muted-foreground tracking-wider">curl</span>
+              <button onClick={() => copy(curlExample, "curl")} className={`text-xs flex items-center gap-1 transition-colors ${copiedField === "curl" ? "text-green-500" : "text-primary hover:underline"}`}>
                 {copiedField === "curl" ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
                 {copiedField === "curl" ? "Copied" : "Copy"}
               </button>
@@ -778,8 +778,8 @@ print(response.json()["content"])`;
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">JavaScript</span>
-              <button onClick={() => copy(jsExample, "js")} className={`font-mono text-xs flex items-center gap-1 transition-colors ${copiedField === "js" ? "text-green-500" : "text-primary hover:underline"}`}>
+              <span className="text-xs text-muted-foreground tracking-wider">JavaScript</span>
+              <button onClick={() => copy(jsExample, "js")} className={`text-xs flex items-center gap-1 transition-colors ${copiedField === "js" ? "text-green-500" : "text-primary hover:underline"}`}>
                 {copiedField === "js" ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
                 {copiedField === "js" ? "Copied" : "Copy"}
               </button>
@@ -789,8 +789,8 @@ print(response.json()["content"])`;
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">Python</span>
-              <button onClick={() => copy(pythonExample, "py")} className={`font-mono text-xs flex items-center gap-1 transition-colors ${copiedField === "py" ? "text-green-500" : "text-primary hover:underline"}`}>
+              <span className="text-xs text-muted-foreground tracking-wider">Python</span>
+              <button onClick={() => copy(pythonExample, "py")} className={`text-xs flex items-center gap-1 transition-colors ${copiedField === "py" ? "text-green-500" : "text-primary hover:underline"}`}>
                 {copiedField === "py" ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
                 {copiedField === "py" ? "Copied" : "Copy"}
               </button>
@@ -803,16 +803,16 @@ print(response.json()["content"])`;
 
             {/* Section 1 — Public Endpoint */}
             <div className="space-y-2">
-              <p className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">Public Endpoint</p>
+              <p className="text-[11px] text-muted-foreground tracking-wider">Public Endpoint</p>
               <PublicEndpointBlock />
             </div>
 
             {/* Section 2 — Create New Key */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <p className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">Create New Key</p>
+                <p className="text-[11px] text-muted-foreground tracking-wider">Create New Key</p>
                 {!showKeyForm && (
-                  <Button size="sm" className="font-mono text-xs gap-1.5 h-7" onClick={() => setShowKeyForm(true)}>
+                  <Button size="sm" className="text-xs gap-1.5 h-7" onClick={() => setShowKeyForm(true)}>
                     <Plus className="w-3.5 h-3.5" />
                     New Key
                   </Button>
@@ -822,17 +822,17 @@ print(response.json()["content"])`;
               {showKeyForm && (
                 <div className="border border-border/50 rounded-xl p-5 bg-card space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-mono text-muted-foreground">Key Name</label>
+                    <label className="text-xs text-muted-foreground">Key Name</label>
                     <input
                       value={keyForm.name}
                       onChange={(e) => setKeyForm((f) => ({ ...f, name: e.target.value }))}
                       placeholder="e.g. My Website, FM App, Telegram Bot"
-                      className="w-full bg-background/60 border border-border/50 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-primary/50 transition-colors"
+                      className="w-full bg-background/60 border border-border/50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary/50 transition-colors"
                       autoFocus
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-mono text-muted-foreground">Surface Type</label>
+                    <label className="text-xs text-muted-foreground">Surface Type</label>
                     <div className="grid grid-cols-1 gap-2">
                       {(["guest", "authenticated", "crud"] as const).map((type) => {
                         const meta = API_SLOT_META[type];
@@ -860,7 +860,7 @@ print(response.json()["content"])`;
                   <div className="flex gap-2 pt-1">
                     <Button
                       size="sm"
-                      className="font-mono text-xs"
+                      className="text-xs"
                       onClick={() => createSlot.mutate()}
                       disabled={!keyForm.name.trim() || createSlot.isPending}
                     >
@@ -871,7 +871,7 @@ print(response.json()["content"])`;
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="font-mono text-xs"
+                      className="text-xs"
                       onClick={() => { setShowKeyForm(false); setKeyForm({ name: "", surfaceType: "guest" }); }}
                     >
                       Cancel
@@ -883,13 +883,13 @@ print(response.json()["content"])`;
 
             {/* Section 3 — Active Keys */}
             <div className="space-y-3">
-              <p className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">Active Keys</p>
+              <p className="text-[11px] text-muted-foreground tracking-wider">Active Keys</p>
               {slotsLoading ? (
-                <div className="text-center py-8 font-mono text-sm text-muted-foreground animate-pulse">Loading keys…</div>
+                <div className="text-center py-8 text-sm text-muted-foreground animate-pulse">Loading keys…</div>
               ) : chatSlots.length === 0 ? (
                 <div className="border border-dashed border-border/40 rounded-xl p-8 text-center space-y-2">
                   <Key className="w-7 h-7 text-muted-foreground/30 mx-auto" />
-                  <p className="font-mono font-semibold text-sm text-foreground/60">No API keys yet</p>
+                  <p className="font-semibold text-sm text-foreground/60">No API keys yet</p>
                   <p className="text-xs text-muted-foreground font-mono">Create a key to embed this operator in your product.</p>
                 </div>
               ) : (
@@ -907,15 +907,15 @@ print(response.json()["content"])`;
                         <div className="flex items-center gap-3">
                           <div className="flex-1 min-w-0 space-y-1.5">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-semibold text-sm font-mono truncate">{slot.name}</span>
+                              <span className="font-semibold text-sm truncate">{slot.name}</span>
                               <ApiSlotPill type={slot.surfaceType as keyof typeof API_SLOT_META} />
-                              <span className={`inline-flex items-center gap-1 font-mono text-[10px] font-semibold ${isRevoked ? "text-muted-foreground/50" : "text-green-500"}`}>
+                              <span className={`inline-flex items-center gap-1 text-[10px] font-semibold ${isRevoked ? "text-muted-foreground/50" : "text-green-500"}`}>
                                 <Circle className={`w-2 h-2 fill-current ${isRevoked ? "opacity-40" : ""}`} />
                                 {isRevoked ? "Revoked" : "Active"}
                               </span>
                             </div>
                             <div className="flex items-center gap-3">
-                              <span className="font-mono text-[11px] text-muted-foreground">
+                              <span className="text-[11px] text-muted-foreground">
                                 {slot.apiKeyPreview}<span className="opacity-30">••••••••••••••••••</span>
                               </span>
                               <span className="text-[10px] text-muted-foreground/60 font-mono">
@@ -926,7 +926,7 @@ print(response.json()["content"])`;
                           {!isRevoked && !isConfirming && (
                             <button
                               onClick={() => setRevokeConfirm(slot.id)}
-                              className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                              className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-destructive transition-colors shrink-0"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                               Revoke
@@ -935,14 +935,14 @@ print(response.json()["content"])`;
                         </div>
                         {isConfirming && (
                           <div className="mt-3 pt-3 border-t border-border/30 animate-in fade-in duration-150">
-                            <p className="font-mono text-xs text-muted-foreground mb-2.5">
+                            <p className="text-xs text-muted-foreground mb-2.5">
                               Revoke <span className="text-foreground font-semibold">"{slot.name}"</span>? Apps using it will stop working immediately.
                             </p>
                             <div className="flex gap-2">
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="font-mono text-xs h-7 text-destructive border-destructive/30 hover:bg-destructive/10"
+                                className="text-xs h-7 text-destructive border-destructive/30 hover:bg-destructive/10"
                                 onClick={() => revokeSlot.mutate(slot.id)}
                                 disabled={revokeSlot.isPending}
                               >
@@ -951,7 +951,7 @@ print(response.json()["content"])`;
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                className="font-mono text-xs h-7"
+                                className="text-xs h-7"
                                 onClick={() => setRevokeConfirm(null)}
                               >
                                 Cancel
@@ -978,13 +978,13 @@ print(response.json()["content"])`;
           <div className="rounded-lg border border-border/40 bg-card/30 p-5">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
-                <p className="font-mono text-sm font-bold">Enable Safe Mode</p>
-                <p className="font-mono text-xs text-muted-foreground mt-1 leading-relaxed">
+                <p className="text-sm font-bold">Enable Safe Mode</p>
+                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
                   When on: growth is paused, integrations become read-only, and nothing new is learned.
                   Use this when you want the operator to stay exactly as it is, without any changes.
                 </p>
                 {safeMode && (
-                  <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-500 font-mono text-xs font-bold">
+                  <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-500 text-xs font-bold">
                     <Shield className="w-3 h-3" /> Safe Mode is active
                   </div>
                 )}
@@ -1011,7 +1011,7 @@ print(response.json()["content"])`;
                 disabled={updateFreeRoaming.isPending}
               />
             </div>
-            <p className="font-mono text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               When enabled, the Operator can act autonomously using connected integrations.
               Tool Use Policy activates and controls what it is allowed to do.
             </p>
@@ -1030,7 +1030,7 @@ print(response.json()["content"])`;
             <ShieldCheck className="w-4 h-4 text-muted-foreground" />
             <h2 className="font-headline font-bold text-base">Evolution Lock</h2>
           </div>
-          <p className="font-mono text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Choose how much your operator is allowed to learn and adapt over time.
           </p>
           <div className="space-y-3">
@@ -1071,20 +1071,20 @@ print(response.json()["content"])`;
             {!isLocked && (
               <div className="flex items-start justify-between p-4 border border-border/40 rounded-lg bg-card/20">
                 <div>
-                  <p className="font-mono text-sm font-bold">Prevent operator from self-modifying</p>
-                  <p className="font-mono text-xs text-muted-foreground mt-0.5">
+                  <p className="text-sm font-bold">Prevent operator from self-modifying</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     Stops your operator from changing its own identity during conversations. You as the owner can always edit it. Cannot be undone.
                   </p>
                 </div>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="outline" size="sm" className="font-mono text-xs border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground ml-4 shrink-0">
+                    <Button variant="outline" size="sm" className="text-xs border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground ml-4 shrink-0">
                       <Lock className="w-3 h-3 mr-1.5" /> Lock
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent className="border-primary/20">
                     <AlertDialogHeader>
-                      <AlertDialogTitle className="font-mono text-primary flex items-center gap-2">
+                      <AlertDialogTitle className="text-primary flex items-center gap-2">
                         <Lock className="w-5 h-5" /> Prevent operator from self-modifying?
                       </AlertDialogTitle>
                       <AlertDialogDescription className="font-mono">
@@ -1093,7 +1093,7 @@ print(response.json()["content"])`;
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel className="font-mono">Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => lockIdentity.mutate()} className="font-mono font-bold">
+                      <AlertDialogAction onClick={() => lockIdentity.mutate()} className="font-bold">
                         Lock forever
                       </AlertDialogAction>
                     </AlertDialogFooter>
@@ -1103,20 +1103,20 @@ print(response.json()["content"])`;
             )}
             <div className="flex items-start justify-between p-4 border border-border/40 rounded-lg bg-card/20">
               <div>
-                <p className="font-mono text-sm font-bold">Reset personality</p>
-                <p className="font-mono text-xs text-muted-foreground mt-0.5">
+                <p className="text-sm font-bold">Reset personality</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
                   Reverts all personality changes back to the original. Chat history stays intact.
                 </p>
               </div>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="outline" size="sm" className="font-mono text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 ml-4 shrink-0">
+                  <Button variant="outline" size="sm" className="text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 ml-4 shrink-0">
                     <RefreshCw className="w-3 h-3 mr-1.5" /> Reset
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent className="border-amber-500/20">
                   <AlertDialogHeader>
-                    <AlertDialogTitle className="font-mono text-amber-500 flex items-center gap-2">
+                    <AlertDialogTitle className="text-amber-500 flex items-center gap-2">
                       <AlertTriangle className="w-5 h-5" /> Reset personality?
                     </AlertDialogTitle>
                     <AlertDialogDescription className="font-mono">
@@ -1125,7 +1125,7 @@ print(response.json()["content"])`;
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel className="font-mono">Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => resetPersonality.mutate()} className="bg-amber-500 text-white font-mono font-bold">
+                    <AlertDialogAction onClick={() => resetPersonality.mutate()} className="bg-amber-500 text-white font-bold">
                       Reset
                     </AlertDialogAction>
                   </AlertDialogFooter>
@@ -1134,27 +1134,27 @@ print(response.json()["content"])`;
             </div>
             <div className="flex items-start justify-between p-4 border border-destructive/30 rounded-lg bg-destructive/5">
               <div>
-                <p className="font-mono text-sm font-bold text-destructive">Delete {operator.name}</p>
-                <p className="font-mono text-xs text-muted-foreground mt-0.5">
+                <p className="text-sm font-bold text-destructive">Delete {operator.name}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
                   Removes this operator from your dashboard. All data is recoverable for 30 days, then permanently purged.
                 </p>
               </div>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="outline" size="sm" className="font-mono text-xs border-destructive/30 text-destructive hover:bg-destructive hover:text-destructive-foreground ml-4 shrink-0">
+                  <Button variant="outline" size="sm" className="text-xs border-destructive/30 text-destructive hover:bg-destructive hover:text-destructive-foreground ml-4 shrink-0">
                     Delete
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent className="border-destructive/20">
                   <AlertDialogHeader>
-                    <AlertDialogTitle className="font-mono text-destructive">Delete {operator.name}?</AlertDialogTitle>
+                    <AlertDialogTitle className="text-destructive">Delete {operator.name}?</AlertDialogTitle>
                     <AlertDialogDescription className="font-mono">
                       This operator will be permanently deleted after 30 days. All memory, knowledge, and conversations will be removed. Contact support within 30 days to recover it.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel className="font-mono">Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => deleteOperator.mutate()} className="bg-destructive text-destructive-foreground font-mono font-bold">
+                    <AlertDialogAction onClick={() => deleteOperator.mutate()} className="bg-destructive text-destructive-foreground font-bold">
                       Delete
                     </AlertDialogAction>
                   </AlertDialogFooter>

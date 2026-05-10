@@ -100,7 +100,7 @@ export default function FilesSection({ operator }: { operator: Operator }) {
   });
 
   return (
-    <div className="space-y-4 animate-in fade-in zoom-in-95 duration-300 bg-white rounded-2xl border border-border/30 p-6">
+    <div className="space-y-4 bg-white p-6">
       <input
         ref={uploadInputRef}
         type="file"
@@ -108,32 +108,32 @@ export default function FilesSection({ operator }: { operator: Operator }) {
         className="hidden"
         onChange={handleFileUpload}
       />
-      <div className="flex items-center justify-between border-b border-border/50 pb-4">
+      <div className="flex items-center justify-between border-b pb-4">
         <div className="flex items-center gap-2">
           <FileText className="w-5 h-5 text-primary" />
           <div>
-            <h2 className="font-headline font-bold text-lg text-primary">Files</h2>
-            <p className="font-mono text-xs text-muted-foreground mt-0.5">Documents and reference materials for your operator</p>
+            <h2 className="font-bold text-lg">Files</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Documents and reference materials for your operator</p>
           </div>
         </div>
         <Button
           variant="outline"
           size="sm"
-          className="h-8 text-xs gap-1.5 font-mono border-primary/30 text-primary hover:bg-primary/10"
+          className="h-8 text-xs gap-1.5"
           onClick={() => uploadInputRef.current?.click()}
           disabled={uploadingFile}
         >
           {uploadingFile ? (
             <><Loader2 className="w-3 h-3 animate-spin" /> Uploading...</>
           ) : (
-            <><Upload className="w-3 h-3" /> Upload File</>
+            <><Upload className="w-3 h-3" /> Upload file</>
           )}
         </Button>
       </div>
-    <div className="flex gap-4 font-mono">
+    <div className="flex gap-4">
       <div className="w-48 shrink-0 flex flex-col gap-2">
         <div className="flex items-center justify-between mb-1">
-          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Files</span>
+          <span className="text-xs font-bold text-muted-foreground">Files</span>
           <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setCreating(true)}>
             <FilePlus className="w-3.5 h-3.5" />
           </Button>
