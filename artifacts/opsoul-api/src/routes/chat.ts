@@ -24,7 +24,10 @@ import { embed, semanticDistance } from '@workspace/opsoul-utils/ai';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { lockLayer1IfUnlocked } from '../utils/lockLayer1.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
-import { computeCoverageScore, resolveKbGap } from '../utils/curiosityEngine.js';
+// Curiosity engine is operator-governed (Patent claim 14): the operator's
+// self-awareness layer initiates curiosity, not the chat route. Silent
+// `[WEB CONTEXT]` auto-injection removed (Phase 4). The web_search tool
+// remains available for the operator to call when its own soul decides.
 import { buildSystemPrompt, buildBirthSystemPrompt } from '../utils/systemPrompt.js';
 import type { SelfAwarenessSnapshot, BuildSystemPromptOpts } from '../utils/systemPrompt.js';
 import { searchMemory, buildMemoryContext, distillMemoriesFromConversations, storeMemory } from '../utils/memoryEngine.js';
@@ -916,7 +919,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   ];
 
   let kbContext = '';
-  let webGapContext = '';
   let memoryHits: MemoryHit[] = [];
 
   if (kbSearch) {
@@ -928,15 +930,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       ]);
       kbContext = buildRagContext(kbHits);
       memoryHits = memHits;
-
-      // Silent gap resolution — if KB coverage < 35%, fire a web search invisibly
-      const coverageScore = computeCoverageScore(kbHits);
-      if (coverageScore < 0.35) {
-        const gapResult = await resolveKbGap(message, operator.id);
-        if (gapResult) {
-          webGapContext = gapResult;
-        }
-      }
     } catch {
       kbContext = '';
       memoryHits = [];
@@ -1085,13 +1078,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     messages.push({
       role: 'user',
       content: `[CONTEXT]\nKnowledge retrieved for this conversation:\n${kbContext}`,
-    });
-  }
-
-  if (webGapContext) {
-    messages.push({
-      role: 'user',
-      content: `[WEB CONTEXT]\n${webGapContext}`,
     });
   }
 
