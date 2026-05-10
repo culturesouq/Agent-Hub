@@ -188,9 +188,9 @@ Revised against the principles of *Operator–LLM Flow*, *Architecture-as-Secret
 
 ~~**Phase 2 — Inject `rawIdentity` AND `roles` in normal Layer 1.**~~ ✓ DONE — commit `8cd0b11` (2026-05-10). `OperatorIdentity` interface now carries `roles?: string[]`. Layer 1 injection order: archetype foundations → "**Who you are:**" + rawIdentity → "**Roles:** ..." → Mandate → Core Values → Ethical Boundaries. All 7 callers (chat, public-chat, telegram-webhook, whatsapp-webhook, public-crud, tasksCron, grow) pass `operator.roles` through. Multi-role / multi-archetype framework (Patent claims 13 and 20) is now visible to the LLM in every prompt.
 
-**Phase 3 — Delete dead `BEHAVIOR_HOW_TO` dictionary and the hardcoded "no narration" patches.** Why: chat.ts defines BEHAVIOR_HOW_TO that nothing reads, and contains hardcoded user messages telling the LLM not to narrate after skill execution. Both are patches working around an architectural gap. With the operator-LLM flow correct and capabilities real, narration disappears on its own. End: no behavioral patches in code. Action: delete chat.ts lines 224-265 (BEHAVIOR_HOW_TO) and remove the "Report results only... no narration about process" hardcoded user messages in the second-pass logic (~lines 1656 stream, ~1868 sync).
+~~**Phase 3 — Delete dead `BEHAVIOR_HOW_TO` dictionary and the hardcoded "no narration" patches.**~~ ✓ DONE — commit `805b040` (2026-05-10). Removed: BEHAVIOR_HOW_TO dictionary (6 entries), SKILL_HOW_TO image_attachment + file_attachment entries, entire static [CAPABILITY] block, both "Report results only..." narration patches in chat.ts (stream + sync paths), long instruction text in operatorCapabilityLoop.ts buildSecondPassMessages. Behavior now flows from soul + DNA + KB.
 
-**Phase 4 — Stop silent curiosity injection from chat route.** Why: patent claim 14 says operator's self-awareness initiates curiosity, not chat route. End: curiosity operator-governed. Action: remove `resolveKbGap` call from chat.ts.
+~~**Phase 4 — Stop silent curiosity injection from chat route.**~~ ✓ DONE — commit `5776f3c` (2026-05-10). Removed the auto-firing `resolveKbGap` call and `[WEB CONTEXT]` injection from chat.ts. The web_search tool stays available for the operator to call explicitly. curiosityEngine.ts itself still serves KB intake verification and self-awareness gap filling.
 
 **Phase 5 — Capability truth audit.** Why: narration is caused by capability mismatch — the operator is told he has skills or tools that aren't actually wired, so the LLM covers by narrating. Fix the gap, narration disappears. End: every skill the operator is told he has, actually works. Every tool description matches what the tool actually does. End-to-end check across all archetypes, all skills, all integrations. Action: walk every active skill in seedSkills.ts and seed-new-archetype-skills.ts against actual route implementations and tool wiring. Remove or fix anything that's promised but not real.
 
@@ -236,6 +236,18 @@ Azure Container App pulls from this repo on each deployment.
 ---
 
 ## Commit Log (newest first)
+
+### 2026-05-10 — Phase 4: Stop silent curiosity injection from chat route (`5776f3c`)
+**What:** Removed auto-firing curiosity from chat.ts. The chat route no longer calls `resolveKbGap()` when KB coverage drops below 35%. The `[WEB CONTEXT]` invisible injection is gone. Import of `computeCoverageScore` and `resolveKbGap` removed.
+**Why:** Patent claim 14 — Curiosity Engine is operator-governed. The operator self-awareness layer initiates curiosity, not the chat route. Silent invisible injection violates Architecture-as-Secret too.
+**End:** chat.ts pipeline carries no auto-firing curiosity. Operator uses own knowledge, calls web_search explicitly, or acknowledges what they don't know. curiosityEngine.ts still serves kbIntake (verifyAndStore source verification) and selfAwarenessEngine (mandate gap filling).
+**Files:** `chat.ts` (1 file, +4/-18)
+
+### 2026-05-10 — Phase 3: Delete dead BEHAVIOR_HOW_TO + narration patches (`805b040`)
+**What:** Deleted (a) BEHAVIOR_HOW_TO dictionary in chat.ts (6 entries, dead code since 80c6abc), (b) image_attachment + file_attachment SKILL_HOW_TO entries with behavioral commands, (c) entire static [CAPABILITY] block injection, (d) two "Report results only..." narration patches in chat.ts post-skill paths, (e) long instruction text in operatorCapabilityLoop.ts buildSecondPassMessages.
+**Why:** Parent Guidance, Not Hard Rules principle. Hardcoded behavioral patches paper over architectural gaps. With Layer 4 in parent tone and rawIdentity + roles in Layer 1 (Phases 1 & 2), the operator naturally responds without prescriptive instructions.
+**End:** Prompt pipeline carries no hardcoded behavioral commands. [OPERATOR STATE] still surfaces dynamic state (KB count, memory count, active skills). Behavior comes from soul + DNA + KB.
+**Files:** `chat.ts`, `operatorCapabilityLoop.ts` (2 files, +3/-83)
 
 ### 2026-05-10 — Phase 2: rawIdentity + roles in Layer 1 (`8cd0b11`)
 **What:** Added optional `roles` to `OperatorIdentity`. In `buildSystemPrompt` Layer 1, after archetype foundations, inject rawIdentity ("Who you are") and roles ("Roles:") before Mandate. Updated all 7 callers to thread `operator.roles` through.
