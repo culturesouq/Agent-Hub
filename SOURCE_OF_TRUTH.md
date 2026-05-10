@@ -204,7 +204,7 @@ Revised against the principles of *Operator–LLM Flow*, *Architecture-as-Secret
 
 **Phase 10 — UI tone refresh + roles visibility.** Why: current UI feels like Linux admin terminal AND the operator's job titles vanish once you leave the dashboard. End: reads as personal AI workspace; operator detail page shows the operator's roles (job titles) in the header so the owner sees at a glance "this is my Strategist + Project Manager + Coach." Action: (a) refresh operator components — Identity, Memory, KB, CapabilityRequests, Grow, others; no "INJECT", "TRANSMIT", "CHECKING QUEUE"; mono font reserved for code/data only. (b) render `operator.roles` as chips in OperatorDetail.tsx header next to the operator name.
 
-**Phase 11 — Memory type fix in UI.** Why: dropdown mismatch — UI shows fact/preference/pattern/instruction; backend uses fact/preference/interaction/pattern/context. User-created "instruction" memories fail. End: UI matches backend. Action: one dropdown change in MemorySection.tsx.
+~~**Phase 11 — Memory type fix in UI.**~~ ✓ DONE — commit `6278d23` (2026-05-10). MemorySection.tsx dropdown and color mapping now match the backend enum (fact / preference / interaction / pattern / context). `Memory` type in types.ts updated. The `instruction` type that didn't exist server-side is removed.
 
 **Phase 12 — Scope labels in UI (architecture-respecting).** Why: owner should know where their operator is having conversations, but should not see scopeIds or architectural mechanisms. End: human-readable labels — "Workspace", "WhatsApp — +971...", "Telegram — @username", "Public widget". No raw scopeIds. Action: badge component on conversations + memories using friendly labels.
 
@@ -236,6 +236,12 @@ Azure Container App pulls from this repo on each deployment.
 ---
 
 ## Commit Log (newest first)
+
+### 2026-05-10 — Phase 11: Memory type fix in UI (`6278d23`)
+**What:** MemorySection.tsx dropdown now lists 5 backend memory types (fact / preference / interaction / pattern / context). Color mapping and types.ts updated to match.
+**Why:** UI was showing 4 types, one of which (instruction) didn't exist server-side; two backend types (interaction, context) were missing. User-created memories with type=instruction failed silently.
+**End:** UI-backend memory type alignment.
+**Files:** `MemorySection.tsx`, `types.ts` (2 files, +9/-7)
 
 ### 2026-05-10 — Phase 4: Stop silent curiosity injection from chat route (`5776f3c`)
 **What:** Removed auto-firing curiosity from chat.ts. The chat route no longer calls `resolveKbGap()` when KB coverage drops below 35%. The `[WEB CONTEXT]` invisible injection is gone. Import of `computeCoverageScore` and `resolveKbGap` removed.
