@@ -63,11 +63,12 @@ export default function MemorySection({ operatorId }: { operatorId: string }) {
 
   const getTypeColor = (type: string) => {
     switch(type) {
-      case 'fact': return 'border-blue-500/30 text-blue-500 bg-blue-500/10';
-      case 'preference': return 'border-pink-500/30 text-pink-500 bg-pink-500/10';
-      case 'pattern': return 'border-purple-500/30 text-purple-500 bg-purple-500/10';
-      case 'instruction': return 'border-amber-500/30 text-amber-500 bg-amber-500/10';
-      default: return 'border-border/50 text-foreground bg-background';
+      case 'fact':        return 'border-blue-500/30 text-blue-500 bg-blue-500/10';
+      case 'preference':  return 'border-pink-500/30 text-pink-500 bg-pink-500/10';
+      case 'interaction': return 'border-amber-500/30 text-amber-500 bg-amber-500/10';
+      case 'pattern':     return 'border-purple-500/30 text-purple-500 bg-purple-500/10';
+      case 'context':     return 'border-emerald-500/30 text-emerald-500 bg-emerald-500/10';
+      default:            return 'border-border/50 text-foreground bg-background';
     }
   };
 
@@ -127,8 +128,9 @@ export default function MemorySection({ operatorId }: { operatorId: string }) {
                     <SelectContent>
                       <SelectItem value="fact">Fact</SelectItem>
                       <SelectItem value="preference">Preference</SelectItem>
+                      <SelectItem value="interaction">Interaction</SelectItem>
                       <SelectItem value="pattern">Pattern</SelectItem>
-                      <SelectItem value="instruction">Instruction</SelectItem>
+                      <SelectItem value="context">Context</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

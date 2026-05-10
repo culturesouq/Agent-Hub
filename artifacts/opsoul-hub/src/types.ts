@@ -107,7 +107,7 @@ export interface KbChunk {
 export interface Memory {
   id: string;
   content: string;
-  memoryType: "fact" | "preference" | "pattern" | "instruction";
+  memoryType: "fact" | "preference" | "interaction" | "pattern" | "context";
   weight: number;
   createdAt: string;
   archivedAt: string | null;
