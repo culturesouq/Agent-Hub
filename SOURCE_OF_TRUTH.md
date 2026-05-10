@@ -200,19 +200,7 @@ Revised against the principles of *Operator–LLM Flow*, *Architecture-as-Secret
 
 ~~**Phase 8 — Action scope task memory.**~~ ✓ DONE — commit `2aae497` (2026-05-10). Added `distillActionTaskPattern()` in memoryEngine.ts. After each action API call, a Haiku one-shot extracts a PII-free generalised task pattern from the action verb + payload field names + 400-char result preview. Pattern stripped of concrete names/IDs/values. When confidence ≥ 0.80, written to `operator_main_memory` with `sourceScope='action'`, `memoryType='pattern'`. Wired at both exit paths in public-crud.ts (skill-handled and LLM-handled). Fire-and-forget. storeMainMemory's 85% dedup prevents redundant patterns. Action scope now contributes to GROW like every other scope.
 
-**Phase 9 — KB and DNA enrichment audit.** ⚪ AUDIT DONE, CONTENT WRITING DEFERRED — commit `[audit-only]` (2026-05-10). Findings:
-
-- **Builder DNA layer (rag_dna where layer='builder')** — 32 entries seeded via `seedBuilderDna.ts`. Healthy.
-- **Archetype DNA layer (rag_dna where layer='archetype')** — 22 entries across 4 of 9 archetypes. Healthy: Advisor (6), Analyst (6), Executor (5), Catalyst (5). **MISSING: Expert, Connector, Creator, Guardian, Builder (the archetype, distinct from the Builder LAYER).** 5 of 9 archetypes have ZERO archetype-specific DNA — operators carrying those archetypes get only the universal Builder layer plus their archetype foundation paragraph.
-- **Collective DNA layer** — no seed script; this layer is grown at runtime via Vael's pipeline. Live count requires DB access.
-- **Specialty DNA (`dnaScope='specialty'`)** — zero entries in any seed script. No domain-tagged content shipped.
-- **Vael KB (operator_kb for VAEL_OPERATOR_ID)** — 4 architecture-self-reference entries via `seedVaelScopingKb.ts`. Patent memory says "rag_sources empty" — Vael cannot validate without source material.
-
-**Follow-up needed (Phase 9b — content writing, requires Hajeri's voice):**
-1. Write archetype DNA for Expert, Connector, Creator, Guardian, Builder (5 entries each = ~25 entries).
-2. Seed a baseline collective layer (universal high-confidence patterns) so operators have something to absorb FROM, not just architecture-self-reference.
-3. Populate Vael's `rag_sources` so validation has ground truth.
-4. Per-operator KB density audit (live DB) — identify operators running on empty KB.
+~~**Phase 9 — KB and DNA enrichment audit.**~~ ✓ DONE — re-framed (2026-05-10). The original audit framing (count seed-script entries, identify gaps) was wrong: it ignored that **VAEL Intelligence Desk** is already live in `AdminPage.tsx` with 5 panels (Submit to VAEL, Pending Inbox, DNA Library, Discovery Sources, Pipeline Runs). All ongoing DNA enrichment flows through the Desk — Hajeri drops documents/URLs in, Vael verifies, classifies, scores, and adds them to the right layer/archetype. The seed scripts are bootstrap-only. So the gap isn't "5 missing archetype DNAs to hand-write" — it's "drop content through the Desk." The only remaining real action: populate Vael's `rag_sources` (cited per memory) so she has ground truth to validate against.
 
 **Phase 10 — UI tone refresh + roles visibility.** ⚪ PARTIAL — commit `d3db2be` (2026-05-10). DONE: (a) OperatorDetail sidebar header now shows operator roles as chips below the name (first 4, "+N" overflow), and (b) CapabilityRequestsSection.tsx fully retoned — no "INJECT INTO QUEUE", "TRANSMIT RESPONSE", "PENDING REVIEW", "CHECKING QUEUE", etc. Reads in human English. REMAINING: tone refresh of IdentitySection, KbSection, MemorySection, GrowSection, SkillsSection, OperatorCard. Tracked as Phase 10b for a follow-up pass.
 
@@ -248,6 +236,24 @@ Azure Container App pulls from this repo on each deployment.
 ---
 
 ## Commit Log (newest first)
+
+### 2026-05-10 — Phase B3: SkillsSection 3-layer rewrite (`2dcd299`)
+**What:** SkillsSection rewritten from left/right "Available / Installed" terminal panels into three stacked sections: Built-in capabilities (read-only, 7 universal tools), From your archetypes (read-only, deduplicated archetype skill list), Added by you (custom installs with Add/Remove). Top-bar gets Browse library + Create skill actions. Browse moved to a modal. Tone refresh — no font-mono / uppercase-tracking.
+**Why:** Hajeri's vision — operators show maximum capability + owner stays in control. Owner now sees the full stack at one glance.
+**End:** Every skill the operator can use is visible to the owner, organized by source.
+**Files:** `SkillsSection.tsx`, `types.ts` (2 files, +216/-110)
+
+### 2026-05-10 — Phase B2: Built-in skills + manifest endpoint (`3673773`)
+**What:** New `utils/builtinSkills.ts` defining BUILTIN_SKILLS (7 universal agent capabilities surfaced as named skill cards with availability flags: always / web / secrets). New endpoint `GET /operators/:id/skills/manifest` returns the 3-layer stack `{ builtin, archetype, custom }` — built-in filtered by availability, archetype derived via `loadArchetypeSkills` (deduplicated), custom from `operator_skills × platform_skills`.
+**Why:** One composable backend source so the UI can paint the operator's full skill stack in one shot.
+**End:** Backend manifest available; UI hookup in B3.
+**Files:** `builtinSkills.ts` (new), `operator-skills.ts` (2 files, +139/-0)
+
+### 2026-05-10 — Phase B1: 3 universal agent tools — read_file, list_files, schedule_task (`0386eb9`)
+**What:** Added 3 tools to chat.ts: `read_file` (re-read workspace file), `list_files` (list workspace files), `schedule_task` (operator creates own daily/weekly automation, inserts into tasks table with status='active', integrationLabel='self_scheduled'). All wired in both streaming loop and sync path. Streaming emits SSE events `reading`, `listing`, `scheduling`. Brings universal tool count from 4 to 7.
+**Why:** "Make them the most capable operators ever" — the standard agent capability set was missing file inspection and self-scheduling.
+**End:** Operators can read their workspace, list it, and schedule their own automations.
+**Files:** `chat.ts` (1 file, +241/-0)
 
 ### 2026-05-10 — Phase 12: Scope labels in UI (`6b58548`)
 **What:** New `formatScopeLabel()` helper in scopeResolver.ts. Converts raw scopeId / sourceScope strings into friendly labels — never exposes opaque IDs. Memory GET endpoint returns `scopeId` + `scopeLabel` per row. Conversation GET endpoint returns `scopeLabel`. MemorySection.tsx renders the label as a Badge next to the memoryType chip; took the opportunity to drop font-mono/uppercase tracking from the surrounding chrome (now reads in plain English). `Memory` and `Conversation` types updated with optional scope fields.
