@@ -295,6 +295,8 @@ router.post('/test-proposal/:proposalId', async (req: Request, res: Response): P
   const opIdentity: OperatorIdentity = {
     name: operator.name,
     archetype: operator.archetype,
+    roles: operator.roles ?? [],
+    rawIdentity: operator.rawIdentity ?? undefined,
     mandate: operator.mandate,
     coreValues: operator.coreValues,
     ethicalBoundaries: operator.ethicalBoundaries,

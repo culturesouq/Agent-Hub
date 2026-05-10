@@ -4,6 +4,7 @@ import type { WorkspaceManifest } from './selfAwarenessEngine.js';
 export interface OperatorIdentity {
   name: string;
   archetype: string[];
+  roles?: string[] | null;
   rawIdentity?: string | null;
   mandate: string;
   coreValues: string[] | null;
@@ -375,6 +376,16 @@ export function buildSystemPrompt(
   if (archetypes.length > 0 && !archetypes.some(a => ARCHETYPE_FOUNDATIONS[a])) {
     parts.push(`**Archetype:** ${archetypes.join(', ')}`);
   }
+
+  if (operator.rawIdentity) {
+    parts.push('**Who you are:**');
+    parts.push(operator.rawIdentity);
+  }
+
+  if (operator.roles && operator.roles.length > 0) {
+    parts.push(`**Roles:** ${operator.roles.join(', ')}`);
+  }
+
   parts.push(`**Mandate:** ${operator.mandate}`);
 
   if (operator.coreValues && operator.coreValues.length > 0) {

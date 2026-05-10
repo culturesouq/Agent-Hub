@@ -85,6 +85,7 @@ async function runDueTasks(): Promise<void> {
         name:              operator.name ?? 'Operator',
         rawIdentity:       operator.rawIdentity,
         archetype:         (operator.archetype as string[]) ?? [],
+        roles:             (operator.roles as string[] | null) ?? [],
         mandate:           operator.mandate ?? '',
         coreValues:        (operator.coreValues as string[] | null) ?? null,
         ethicalBoundaries: (operator.ethicalBoundaries as string[] | null) ?? null,

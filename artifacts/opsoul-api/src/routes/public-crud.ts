@@ -190,6 +190,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   const operatorIdentity = {
     name: operator.name,
     archetype: (operator.archetype ?? []) as string[],
+    roles: (operator.roles as string[] | null) ?? [],
     rawIdentity: operator.rawIdentity ?? '',
     mandate: (layer2Soul?.mandate as string) ?? operator.mandate ?? '',
     coreValues: (layer2Soul?.coreValues ?? null) as string[] | null,

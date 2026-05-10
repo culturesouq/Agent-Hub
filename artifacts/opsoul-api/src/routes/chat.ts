@@ -1061,6 +1061,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         {
           name: operator.name,
           archetype: operator.archetype,
+          roles: operator.roles ?? [],
           rawIdentity: operator.rawIdentity ?? undefined,
           mandate: operator.mandate,
           coreValues: operator.coreValues,

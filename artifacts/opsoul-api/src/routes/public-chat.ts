@@ -230,6 +230,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     {
       name:              operator.name,
       archetype:         operator.archetype as string[],
+      roles:             (operator.roles as string[] | null) ?? [],
       rawIdentity:       operator.rawIdentity ?? undefined,
       mandate:           operator.mandate,
       coreValues:        operator.coreValues as string[],

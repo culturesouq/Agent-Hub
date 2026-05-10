@@ -221,6 +221,7 @@ router.post('/:operatorId', async (req: Request, res: Response): Promise<void> =
       {
         name: operator.name,
         archetype: operator.archetype,
+        roles: operator.roles ?? [],
         rawIdentity: operator.rawIdentity,
         mandate: operator.mandate,
         coreValues: operator.coreValues,

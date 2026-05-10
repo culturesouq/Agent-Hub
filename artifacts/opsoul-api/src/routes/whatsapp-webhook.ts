@@ -287,6 +287,7 @@ router.post('/:operatorId', async (req: RequestWithRawBody, res: Response): Prom
       {
         name: operator.name,
         archetype: operator.archetype,
+        roles: operator.roles ?? [],
         rawIdentity: operator.rawIdentity,
         mandate: operator.mandate,
         coreValues: operator.coreValues,
