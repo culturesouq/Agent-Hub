@@ -28,7 +28,7 @@ import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 // self-awareness layer initiates curiosity, not the chat route. Silent
 // `[WEB CONTEXT]` auto-injection removed (Phase 4). The web_search tool
 // remains available for the operator to call when its own soul decides.
-import { buildSystemPrompt, buildBirthSystemPrompt } from '../utils/systemPrompt.js';
+import { assembleOperatorPrompt, buildBirthSystemPrompt } from '../utils/systemPrompt.js';
 import type { SelfAwarenessSnapshot, BuildSystemPromptOpts } from '../utils/systemPrompt.js';
 import { searchMemory, buildMemoryContext, distillMemoriesFromConversations, storeMemory } from '../utils/memoryEngine.js';
 import type { MemoryHit } from '../utils/memoryEngine.js';
@@ -36,7 +36,6 @@ import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import { decryptToken, encryptToken } from '@workspace/opsoul-utils/crypto';
 import type { ChatMessage, ToolDefinition } from '../utils/openrouter.js';
-import type { Layer2Soul } from '../validation/operator.js';
 import { buildOwnerScope, type ValidatedScope } from '../utils/scopeResolver.js';
 import { scrapeUrl } from '../utils/urlScraper.js';
 import type { ContentPart } from '../utils/openrouter.js';
@@ -993,20 +992,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   const systemPrompt = isBirthMode
     ? buildBirthSystemPrompt()
-    : buildSystemPrompt(
-        {
-          name: operator.name,
-          archetype: operator.archetype,
-          roles: operator.roles ?? [],
-          rawIdentity: operator.rawIdentity ?? undefined,
-          mandate: operator.mandate,
-          coreValues: operator.coreValues,
-          ethicalBoundaries: operator.ethicalBoundaries,
-          layer2Soul: operator.layer2Soul as Layer2Soul,
-        },
-        selfAwareness,
-        promptOpts,
-      );
+    : assembleOperatorPrompt(operator, selfAwareness, promptOpts);
 
   // Build user content — plain string or multimodal array when attachments present
   let userContent: string | ContentPart[] = message;

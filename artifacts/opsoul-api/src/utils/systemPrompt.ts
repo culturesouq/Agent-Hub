@@ -288,6 +288,35 @@ export interface BuildSystemPromptOpts {
   scopeLine?: string;
 }
 
+export interface OperatorRowForPrompt {
+  name: string | null;
+  archetype: unknown;
+  roles: unknown;
+  rawIdentity: string | null;
+  mandate: string | null;
+  coreValues: unknown;
+  ethicalBoundaries: unknown;
+  layer2Soul: unknown;
+}
+
+export function assembleOperatorPrompt(
+  operator: OperatorRowForPrompt,
+  selfAwareness?: SelfAwarenessSnapshot | null,
+  opts?: BuildSystemPromptOpts,
+): string {
+  const identity: OperatorIdentity = {
+    name: operator.name ?? 'Operator',
+    archetype: (operator.archetype as string[] | null) ?? [],
+    roles: (operator.roles as string[] | null) ?? [],
+    rawIdentity: operator.rawIdentity ?? undefined,
+    mandate: operator.mandate ?? '',
+    coreValues: (operator.coreValues as string[] | null) ?? null,
+    ethicalBoundaries: (operator.ethicalBoundaries as string[] | null) ?? null,
+    layer2Soul: (operator.layer2Soul as Layer2Soul) ?? ({} as Layer2Soul),
+  };
+  return buildSystemPrompt(identity, selfAwareness, opts);
+}
+
 function buildLayer1Block(operator: OperatorIdentity): string[] {
   const block: string[] = [];
   block.push('## Layer 1 — Foundation');

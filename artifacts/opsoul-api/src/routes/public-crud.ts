@@ -18,7 +18,7 @@ import { detectSkillTrigger } from '../utils/skillTriggerEngine.js';
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
 import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
-import { buildSystemPrompt } from '../utils/systemPrompt.js';
+import { assembleOperatorPrompt } from '../utils/systemPrompt.js';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { eq, and } from 'drizzle-orm';
 
@@ -185,19 +185,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   };
 
   // ── LLM fallback — pure function, no conversation stored ──
-  const layer2Soul = operator.layer2Soul as Record<string, unknown> | null;
-
-  const operatorIdentity = {
-    name: operator.name,
-    archetype: (operator.archetype ?? []) as string[],
-    roles: (operator.roles as string[] | null) ?? [],
-    rawIdentity: operator.rawIdentity ?? '',
-    mandate: (layer2Soul?.mandate as string) ?? operator.mandate ?? '',
-    coreValues: (layer2Soul?.coreValues ?? null) as string[] | null,
-    ethicalBoundaries: (layer2Soul?.ethicalBoundaries ?? null) as string[] | null,
-    layer2Soul: layer2Soul as any,
-  };
-
   const activeSkills = allSkills.map(s => ({
     name: s.name,
     instructions: s.instructions,
@@ -213,8 +200,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     `Schema — action: string describing what to do | payload: optional object containing input data.`,
   ].join('\n');
 
-  const systemPrompt = buildSystemPrompt(
-    operatorIdentity,
+  const systemPrompt = assembleOperatorPrompt(
+    operator,
     undefined,
     { scopeLine: crudScopeLine },
   );

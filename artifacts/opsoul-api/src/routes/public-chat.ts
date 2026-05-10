@@ -15,14 +15,13 @@ import { appendToSession, getSessionMessages } from '../utils/sessionStore.js';
 import { searchMemory, distillMemoriesFromConversations } from '../utils/memoryEngine.js';
 import type { MemoryHit } from '../utils/memoryEngine.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
-import { buildSystemPrompt } from '../utils/systemPrompt.js';
+import { assembleOperatorPrompt } from '../utils/systemPrompt.js';
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
 import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import type { ChatMessage, ContentPart } from '../utils/openrouter.js';
 
 import { embed } from '@workspace/opsoul-utils/ai';
 import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
-import type { Layer2Soul } from '../validation/operator.js';
 import { eq, and, desc, sql } from 'drizzle-orm';
 
 const router = Router();
@@ -226,17 +225,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   } catch { /* non-fatal */ }
 
   // ── System prompt ──
-  const systemPrompt = buildSystemPrompt(
-    {
-      name:              operator.name,
-      archetype:         operator.archetype as string[],
-      roles:             (operator.roles as string[] | null) ?? [],
-      rawIdentity:       operator.rawIdentity ?? undefined,
-      mandate:           operator.mandate,
-      coreValues:        operator.coreValues as string[],
-      ethicalBoundaries: operator.ethicalBoundaries as string[],
-      layer2Soul:        operator.layer2Soul as Layer2Soul,
-    },
+  const systemPrompt = assembleOperatorPrompt(
+    operator,
     null,
     { scopeLine: `[SCOPE: ${scope.scopeType} | ${scope.scopeId}]` },
   );

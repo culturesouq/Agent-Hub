@@ -1,7 +1,7 @@
 import { db } from '@workspace/db';
 import { tasksTable, operatorsTable } from '@workspace/db';
 import { eq, and, lte, isNotNull } from 'drizzle-orm';
-import { buildSystemPrompt } from '../utils/systemPrompt.js';
+import { assembleOperatorPrompt } from '../utils/systemPrompt.js';
 import { CHAT_MODEL } from '../utils/openrouter.js';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { storeMemory, searchMemory } from '../utils/memoryEngine.js';
@@ -11,7 +11,6 @@ import {
   runCapabilityLoop,
   type ChatMessage,
 } from '../utils/operatorCapabilityLoop.js';
-import type { Layer2Soul } from '../validation/operator.js';
 
 interface TaskPayload {
   customSchedule?: string | null;
@@ -80,17 +79,7 @@ async function runDueTasks(): Promise<void> {
         continue;
       }
 
-      const layer2Soul = operator.layer2Soul as Layer2Soul;
-      const systemPromptText = buildSystemPrompt({
-        name:              operator.name ?? 'Operator',
-        rawIdentity:       operator.rawIdentity,
-        archetype:         (operator.archetype as string[]) ?? [],
-        roles:             (operator.roles as string[] | null) ?? [],
-        mandate:           operator.mandate ?? '',
-        coreValues:        (operator.coreValues as string[] | null) ?? null,
-        ethicalBoundaries: (operator.ethicalBoundaries as string[] | null) ?? null,
-        layer2Soul,
-      });
+      const systemPromptText = assembleOperatorPrompt(operator);
 
       const taskEmbedding = await embed(taskPrompt);
 

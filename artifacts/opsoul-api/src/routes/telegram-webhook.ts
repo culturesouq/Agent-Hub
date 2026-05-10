@@ -4,14 +4,13 @@ import { db } from '@workspace/db';
 import { operatorIntegrationsTable, operatorsTable, conversationsTable, messagesTable } from '@workspace/db';
 import { decryptToken } from '@workspace/opsoul-utils/crypto';
 import { chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
-import { buildSystemPrompt } from '../utils/systemPrompt.js';
+import { assembleOperatorPrompt } from '../utils/systemPrompt.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { searchMemory, buildMemoryContext } from '../utils/memoryEngine.js';
 import { buildChannelScope } from '../utils/scopeResolver.js';
 import { eq, and, asc, sql } from 'drizzle-orm';
 import OpenAI, { toFile } from 'openai';
 import { embed } from '@workspace/opsoul-utils/ai';
-import type { Layer2Soul } from '../validation/operator.js';
 import type { ChatMessage } from '../utils/openrouter.js';
 
 const router = Router();
@@ -217,20 +216,7 @@ router.post('/:operatorId', async (req: Request, res: Response): Promise<void> =
     let scopeLine = '[CHANNEL: Telegram]';
     if (ragCtx) scopeLine += `\n\n[KNOWLEDGE]\n${ragCtx}`;
 
-    const systemPrompt = buildSystemPrompt(
-      {
-        name: operator.name,
-        archetype: operator.archetype,
-        roles: operator.roles ?? [],
-        rawIdentity: operator.rawIdentity,
-        mandate: operator.mandate,
-        coreValues: operator.coreValues,
-        ethicalBoundaries: operator.ethicalBoundaries,
-        layer2Soul: operator.layer2Soul as Layer2Soul,
-      },
-      null,
-      { scopeLine },
-    );
+    const systemPrompt = assembleOperatorPrompt(operator, null, { scopeLine });
 
     const history = await buildConvHistory(conv.id);
 
