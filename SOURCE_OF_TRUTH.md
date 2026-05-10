@@ -218,7 +218,7 @@ Revised against the principles of *Operator–LLM Flow*, *Architecture-as-Secret
 
 ~~**Phase 11 — Memory type fix in UI.**~~ ✓ DONE — commit `6278d23` (2026-05-10). MemorySection.tsx dropdown and color mapping now match the backend enum (fact / preference / interaction / pattern / context). `Memory` type in types.ts updated. The `instruction` type that didn't exist server-side is removed.
 
-**Phase 12 — Scope labels in UI (architecture-respecting).** Why: owner should know where their operator is having conversations, but should not see scopeIds or architectural mechanisms. End: human-readable labels — "Workspace", "WhatsApp — +971...", "Telegram — @username", "Public widget". No raw scopeIds. Action: badge component on conversations + memories using friendly labels.
+~~**Phase 12 — Scope labels in UI (architecture-respecting).**~~ ✓ DONE — commit `6b58548` (2026-05-10). Added `formatScopeLabel()` in scopeResolver.ts that converts raw scopeIds (`authenticated:usr_123`, `channel:whatsapp:+971...`, `public:slot_42`, `action`, `legacy`) into friendly labels ("Workspace", "WhatsApp — +971...", "Public widget", "Action API", "Earlier (pre-scope)"). Wired into memory GET (per-memory scopeLabel) and conversation GET (per-conversation scopeLabel). MemorySection.tsx renders the label as a small badge next to the memoryType chip. Memory and Conversation types updated.
 
 *Phase 13 (System Prompt Inspector) — REMOVED.* Conflicts with Architecture-as-Secret. The owner trusts the operator the way you trust a person — by what they do, not by reading their internal monologue.
 
@@ -248,6 +248,12 @@ Azure Container App pulls from this repo on each deployment.
 ---
 
 ## Commit Log (newest first)
+
+### 2026-05-10 — Phase 12: Scope labels in UI (`6b58548`)
+**What:** New `formatScopeLabel()` helper in scopeResolver.ts. Converts raw scopeId / sourceScope strings into friendly labels — never exposes opaque IDs. Memory GET endpoint returns `scopeId` + `scopeLabel` per row. Conversation GET endpoint returns `scopeLabel`. MemorySection.tsx renders the label as a Badge next to the memoryType chip; took the opportunity to drop font-mono/uppercase tracking from the surrounding chrome (now reads in plain English). `Memory` and `Conversation` types updated with optional scope fields.
+**Why:** Architecture-as-Secret means the owner sees the surface ("WhatsApp", "Workspace", "Telegram") but never the routing tag underneath. This is the bridge.
+**End:** Every memory card shows where it was learned. Conversation listing has the field in place for the eventual cross-scope view.
+**Files:** `scopeResolver.ts`, `memory.ts`, `conversations.ts`, `types.ts`, `MemorySection.tsx` (5 files, +69/-10)
 
 ### 2026-05-10 — Phase 9: KB / DNA enrichment audit (audit-only — no commit)
 **What:** Read-only walk through all DNA seed scripts. Counted entries per layer per archetype. Identified gaps.
