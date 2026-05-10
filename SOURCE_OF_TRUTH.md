@@ -200,7 +200,19 @@ Revised against the principles of *Operator–LLM Flow*, *Architecture-as-Secret
 
 ~~**Phase 8 — Action scope task memory.**~~ ✓ DONE — commit `2aae497` (2026-05-10). Added `distillActionTaskPattern()` in memoryEngine.ts. After each action API call, a Haiku one-shot extracts a PII-free generalised task pattern from the action verb + payload field names + 400-char result preview. Pattern stripped of concrete names/IDs/values. When confidence ≥ 0.80, written to `operator_main_memory` with `sourceScope='action'`, `memoryType='pattern'`. Wired at both exit paths in public-crud.ts (skill-handled and LLM-handled). Fire-and-forget. storeMainMemory's 85% dedup prevents redundant patterns. Action scope now contributes to GROW like every other scope.
 
-**Phase 9 — KB and DNA enrichment audit.** Why: parent guidance comes from rich, absorbed knowledge. If platform DNA is sparse or the operator's KB is empty, the operator has nothing to draw on and the LLM compensates with narration or fabrication. End: every operator's platform KB is full of relevant DNA, every owner's operators have meaningful Owner KB seeded, the Builder/Archetype/Collective DNA layers are populated and current. Action: audit rag_dna table content, audit per-operator KB density, identify sparse archetypes, refill where needed.
+**Phase 9 — KB and DNA enrichment audit.** ⚪ AUDIT DONE, CONTENT WRITING DEFERRED — commit `[audit-only]` (2026-05-10). Findings:
+
+- **Builder DNA layer (rag_dna where layer='builder')** — 32 entries seeded via `seedBuilderDna.ts`. Healthy.
+- **Archetype DNA layer (rag_dna where layer='archetype')** — 22 entries across 4 of 9 archetypes. Healthy: Advisor (6), Analyst (6), Executor (5), Catalyst (5). **MISSING: Expert, Connector, Creator, Guardian, Builder (the archetype, distinct from the Builder LAYER).** 5 of 9 archetypes have ZERO archetype-specific DNA — operators carrying those archetypes get only the universal Builder layer plus their archetype foundation paragraph.
+- **Collective DNA layer** — no seed script; this layer is grown at runtime via Vael's pipeline. Live count requires DB access.
+- **Specialty DNA (`dnaScope='specialty'`)** — zero entries in any seed script. No domain-tagged content shipped.
+- **Vael KB (operator_kb for VAEL_OPERATOR_ID)** — 4 architecture-self-reference entries via `seedVaelScopingKb.ts`. Patent memory says "rag_sources empty" — Vael cannot validate without source material.
+
+**Follow-up needed (Phase 9b — content writing, requires Hajeri's voice):**
+1. Write archetype DNA for Expert, Connector, Creator, Guardian, Builder (5 entries each = ~25 entries).
+2. Seed a baseline collective layer (universal high-confidence patterns) so operators have something to absorb FROM, not just architecture-self-reference.
+3. Populate Vael's `rag_sources` so validation has ground truth.
+4. Per-operator KB density audit (live DB) — identify operators running on empty KB.
 
 **Phase 10 — UI tone refresh + roles visibility.** ⚪ PARTIAL — commit `d3db2be` (2026-05-10). DONE: (a) OperatorDetail sidebar header now shows operator roles as chips below the name (first 4, "+N" overflow), and (b) CapabilityRequestsSection.tsx fully retoned — no "INJECT INTO QUEUE", "TRANSMIT RESPONSE", "PENDING REVIEW", "CHECKING QUEUE", etc. Reads in human English. REMAINING: tone refresh of IdentitySection, KbSection, MemorySection, GrowSection, SkillsSection, OperatorCard. Tracked as Phase 10b for a follow-up pass.
 
@@ -236,6 +248,11 @@ Azure Container App pulls from this repo on each deployment.
 ---
 
 ## Commit Log (newest first)
+
+### 2026-05-10 — Phase 9: KB / DNA enrichment audit (audit-only — no commit)
+**What:** Read-only walk through all DNA seed scripts. Counted entries per layer per archetype. Identified gaps.
+**Why:** Operators with sparse DNA fall back on LLM narration/fabrication.
+**End:** Findings logged in Phased Plan above. Content writing (5 missing archetype DNAs, baseline collective seed, Vael rag_sources, per-operator KB density) deferred to Phase 9b — needs Hajeri's voice and judgment, not autonomous code change.
 
 ### 2026-05-10 — Phase 8: Action scope task pattern memory (`2aae497`)
 **What:** New `distillActionTaskPattern()` in memoryEngine.ts. Wired in public-crud.ts at both skill path and LLM path. Each action call fires a Haiku-based extraction that produces a PII-free generalised task pattern; ≥0.80 confidence patterns persist to `operator_main_memory` with `sourceScope='action'`, `memoryType='pattern'`.
