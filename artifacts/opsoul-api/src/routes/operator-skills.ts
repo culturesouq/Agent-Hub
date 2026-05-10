@@ -6,6 +6,10 @@ import { operatorSkillsTable, platformSkillsTable, operatorsTable } from '@works
 import { requireAuth } from '../middleware/requireAuth.js';
 import { eq, and } from 'drizzle-orm';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
+import { BUILTIN_SKILLS } from '../utils/builtinSkills.js';
+import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
+import { isWebSearchAvailable } from '../utils/capabilityEngine.js';
+import { operatorSecretsTable } from '@workspace/db';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -108,6 +112,74 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     .where(eq(operatorSkillsTable.operatorId, operatorId));
 
   res.json({ operatorId, count: installs.length, skills: installs });
+});
+
+// Manifest endpoint — returns the operator's full skill stack in 3 layers:
+//   builtin   — universal agent capabilities (every operator)
+//   archetype — derived from the operator's archetypes (deduplicated)
+//   custom    — owner-installed platform skills
+router.get('/manifest', async (req: Request, res: Response): Promise<void> => {
+  const operatorId = await resolveOperator(req, res);
+  if (!operatorId) return;
+
+  const [op] = await db
+    .select({ archetype: operatorsTable.archetype })
+    .from(operatorsTable)
+    .where(eq(operatorsTable.id, operatorId));
+  if (!op) { res.status(404).json({ error: 'Operator not found' }); return; }
+
+  const archetypes = (op.archetype as string[] | null) ?? [];
+
+  const [hasSecrets, archetypeSkills, customInstalls] = await Promise.all([
+    db.select({ id: operatorSecretsTable.id })
+      .from(operatorSecretsTable)
+      .where(eq(operatorSecretsTable.operatorId, operatorId))
+      .limit(1)
+      .then((rows) => rows.length > 0),
+    loadArchetypeSkills(archetypes),
+    db.select({
+      id:                 operatorSkillsTable.id,
+      skillId:            operatorSkillsTable.skillId,
+      customInstructions: operatorSkillsTable.customInstructions,
+      isActive:           operatorSkillsTable.isActive,
+      installedAt:        operatorSkillsTable.installedAt,
+      name:               platformSkillsTable.name,
+      description:        platformSkillsTable.description,
+      archetype:          platformSkillsTable.archetype,
+    })
+      .from(operatorSkillsTable)
+      .innerJoin(platformSkillsTable, eq(operatorSkillsTable.skillId, platformSkillsTable.id))
+      .where(eq(operatorSkillsTable.operatorId, operatorId)),
+  ]);
+
+  const webOn = isWebSearchAvailable();
+  const builtin = BUILTIN_SKILLS
+    .filter((s) => {
+      if (s.availability === 'always') return true;
+      if (s.availability === 'web') return webOn;
+      if (s.availability === 'secrets') return hasSecrets;
+      return false;
+    })
+    .map((s) => ({
+      name:        s.name,
+      description: s.description,
+      category:    s.category,
+    }));
+
+  const archetype = archetypeSkills.map((s) => ({
+    skillId:            s.skillId,
+    name:               s.name,
+    description:        s.triggerDescription,
+    integrationType:    s.integrationType,
+  }));
+
+  res.json({
+    operatorId,
+    archetypes,
+    builtin,
+    archetype,
+    custom: customInstalls,
+  });
 });
 
 router.patch('/:installId', async (req: Request, res: Response): Promise<void> => {
