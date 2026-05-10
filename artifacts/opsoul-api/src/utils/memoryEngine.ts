@@ -153,6 +153,45 @@ export function buildMemoryContext(hits: MemoryHit[]): string {
 
 // ─── Store Layer 1 memory (endpoint memory, PII ok, scope-bound) ─────────────
 
+/**
+ * Distill noisy raw content (web search hits, scraped pages) into a single
+ * clean fact the operator can actually learn from. Strips URLs, snippet
+ * boilerplate, formatting artifacts.
+ *
+ * Returns null when there's nothing worth remembering — caller should skip the
+ * store rather than persist noise.
+ */
+export async function distillRawContentForMemory(
+  rawContent: string,
+  context: string,
+): Promise<string | null> {
+  const trimmed = rawContent.trim();
+  if (trimmed.length < 40) return null;
+
+  const prompt = `You are filtering raw content (web search results or scraped page text) into a single clean fact for an operator's long-term memory.
+
+Context: ${context}
+
+Raw content (often noisy — URLs, snippet fragments, formatting artifacts, repeated boilerplate):
+${trimmed.slice(0, 3000)}
+
+Extract the single most useful factual takeaway. Strip URLs, dates, navigation text, snippet markers, and any formatting. Output ONE sentence the operator can recall later — under 240 characters, no markdown, no quotes.
+
+If the content has no clear factual takeaway worth remembering long-term, output exactly: NONE`;
+
+  try {
+    const result = await chatCompletion(
+      [{ role: 'user', content: prompt }],
+      DISTILL_MODEL,
+    );
+    const text = result.content.trim().replace(/^["'`]+|["'`]+$/g, '');
+    if (text === 'NONE' || text.length < 15 || text.length > 280) return null;
+    return text;
+  } catch {
+    return null;
+  }
+}
+
 export async function storeMemory(
   operatorId: string,
   ownerId: string,

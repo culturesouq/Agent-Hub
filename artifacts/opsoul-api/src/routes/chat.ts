@@ -30,7 +30,7 @@ import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 // remains available for the operator to call when its own soul decides.
 import { assembleOperatorPrompt, buildBirthSystemPrompt } from '../utils/systemPrompt.js';
 import type { SelfAwarenessSnapshot, BuildSystemPromptOpts } from '../utils/systemPrompt.js';
-import { searchMemory, buildMemoryContext, distillMemoriesFromConversations, storeMemory } from '../utils/memoryEngine.js';
+import { searchMemory, buildMemoryContext, distillMemoriesFromConversations, storeMemory, distillRawContentForMemory } from '../utils/memoryEngine.js';
 import type { MemoryHit } from '../utils/memoryEngine.js';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
@@ -490,17 +490,26 @@ async function persistUrlScrapedResult(
     role:           'system',
     content:        `[URL Content] ${url}\n${content}`,
   });
-  storeMemory(
-    operatorId,
-    ownerId,
-    `Operator read URL "${domain}". Summary: ${content.slice(0, 400)}`,
-    'fact',
-    'ai_distilled',
-    0.6,
-    false,
-    scopeId,
-    scopeTrust,
-  ).catch(() => {});
+
+  // Distill the noisy raw content into one clean fact before persisting to
+  // memory. Conversation log keeps the raw output above; long-term memory
+  // gets only the filtered insight.
+  distillRawContentForMemory(content, `URL: ${url}`)
+    .then((distilled) => {
+      if (!distilled) return;
+      return storeMemory(
+        operatorId,
+        ownerId,
+        `From ${domain}: ${distilled}`,
+        'fact',
+        'ai_distilled',
+        0.6,
+        false,
+        scopeId,
+        scopeTrust,
+      );
+    })
+    .catch(() => {});
 }
 
 async function persistWebSearchResult(
@@ -530,17 +539,25 @@ async function persistWebSearchResult(
     mandate,
   ).catch(() => {});
 
-  storeMemory(
-    operatorId,
-    ownerId,
-    `Web search performed: "${searchQuery}". Key findings: ${capResult.output.slice(0, 600)}`,
-    'fact',
-    'ai_distilled',
-    0.65,
-    false,
-    scopeId,
-    scopeTrust,
-  ).catch(() => {});
+  // Distill the raw search output into one clean fact before persisting to
+  // memory. Conversation log keeps the raw snippet bundle above; long-term
+  // memory gets only the filtered takeaway.
+  distillRawContentForMemory(capResult.output, `web search: ${searchQuery}`)
+    .then((distilled) => {
+      if (!distilled) return;
+      return storeMemory(
+        operatorId,
+        ownerId,
+        `Web search "${searchQuery}": ${distilled}`,
+        'fact',
+        'ai_distilled',
+        0.65,
+        false,
+        scopeId,
+        scopeTrust,
+      );
+    })
+    .catch(() => {});
 }
 
 // Persists a skill execution result to the conversation log, tasks table, and memory.
@@ -576,14 +593,22 @@ async function persistSkillResult(
 
   triggerSelfAwareness(operatorId, 'integration_change').catch((err) => console.warn('[selfAwareness] failed:', err?.message));
 
-  storeMemory(
-    operatorId,
-    ownerId,
-    `Skill executed: ${skillTrigger.name}. Result: ${skillResult.output.slice(0, 500)}`,
-    'pattern',
-    'ai_distilled',
-    0.6,
-  ).catch(() => {});
+  // Distill the skill's raw output into one clean fact before persisting.
+  // The conversation log keeps the full output above; memory gets the
+  // filtered takeaway only.
+  distillRawContentForMemory(skillResult.output, `skill: ${skillTrigger.name}`)
+    .then((distilled) => {
+      if (!distilled) return;
+      return storeMemory(
+        operatorId,
+        ownerId,
+        `Skill "${skillTrigger.name}": ${distilled}`,
+        'pattern',
+        'ai_distilled',
+        0.6,
+      );
+    })
+    .catch(() => {});
 }
 
 // Runs all post-response fire-and-forget tasks — identical for both stream and sync.
