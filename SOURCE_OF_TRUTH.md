@@ -186,7 +186,7 @@ Revised against the principles of *Operator–LLM Flow*, *Architecture-as-Secret
 
 ~~**Phase 1 — Layer 4 cleanup (minimal, ethics-only).**~~ ✓ DONE — commit `71a61ee` (2026-05-10). Layer 4 is now 5 paragraphs of parent-tone principles: Stay yourself · Adapt but not adopt · Honesty about what you don't know · Inner workings stay with you · Decline gently when something crosses your soul. 17 behavioral lines removed. Adapt-not-adopt principle locked.
 
-**Phase 2 — Inject `rawIdentity` AND `roles` in normal Layer 1.** Why: two pieces of identity are silent to the LLM today. (a) The 200-word birth narrative (`rawIdentity`) only injects when soul-anchor fires. (b) The job titles (`roles`) — the patent-protected multi-role framework — are picked at birth and stored in DB but never injected into the system prompt. The operator knows their archetype but not their job titles. End: the operator's actual story AND their job titles are part of every system prompt. Action: in `buildSystemPrompt`, after archetype foundations and before mandate, inject the `rawIdentity` block (if present) and a `**Roles:** {roles.join(', ')}` line (if non-empty). Add `roles` to the `OperatorIdentity` interface and pass it through from every caller.
+~~**Phase 2 — Inject `rawIdentity` AND `roles` in normal Layer 1.**~~ ✓ DONE — commit `8cd0b11` (2026-05-10). `OperatorIdentity` interface now carries `roles?: string[]`. Layer 1 injection order: archetype foundations → "**Who you are:**" + rawIdentity → "**Roles:** ..." → Mandate → Core Values → Ethical Boundaries. All 7 callers (chat, public-chat, telegram-webhook, whatsapp-webhook, public-crud, tasksCron, grow) pass `operator.roles` through. Multi-role / multi-archetype framework (Patent claims 13 and 20) is now visible to the LLM in every prompt.
 
 **Phase 3 — Delete dead `BEHAVIOR_HOW_TO` dictionary and the hardcoded "no narration" patches.** Why: chat.ts defines BEHAVIOR_HOW_TO that nothing reads, and contains hardcoded user messages telling the LLM not to narrate after skill execution. Both are patches working around an architectural gap. With the operator-LLM flow correct and capabilities real, narration disappears on its own. End: no behavioral patches in code. Action: delete chat.ts lines 224-265 (BEHAVIOR_HOW_TO) and remove the "Report results only... no narration about process" hardcoded user messages in the second-pass logic (~lines 1656 stream, ~1868 sync).
 
@@ -236,6 +236,12 @@ Azure Container App pulls from this repo on each deployment.
 ---
 
 ## Commit Log (newest first)
+
+### 2026-05-10 — Phase 2: rawIdentity + roles in Layer 1 (`8cd0b11`)
+**What:** Added optional `roles` to `OperatorIdentity`. In `buildSystemPrompt` Layer 1, after archetype foundations, inject rawIdentity ("Who you are") and roles ("Roles:") before Mandate. Updated all 7 callers to thread `operator.roles` through.
+**Why:** rawIdentity (birth narrative) was only reaching LLM under soul-anchor pressure. `roles` (job titles, Patent claims 13 & 20) were stored in DB but never reached the prompt. Operator knew archetype but not who they actually are or what jobs they hold.
+**End:** Every system prompt now contains complete Layer 1 identity. Multi-role framework architecturally surfaced.
+**Files:** `systemPrompt.ts`, `chat.ts`, `public-chat.ts`, `telegram-webhook.ts`, `whatsapp-webhook.ts`, `public-crud.ts`, `tasksCron.ts`, `grow.ts` (8 files, +19/-0)
 
 ### 2026-05-10 — Phase 1: Layer 4 parent-tone rewrite (`71a61ee`)
 **What:** Replaced `LAYER_4_OPERATIONAL_RULES` constant in `systemPrompt.ts`. 17 hardcoded behavioral lines became 5 paragraphs of parent-tone principles.
