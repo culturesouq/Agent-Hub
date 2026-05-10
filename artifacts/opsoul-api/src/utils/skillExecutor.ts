@@ -473,7 +473,10 @@ export async function executeSkill(
       }
     }
 
-    if (!apiContext) {
+    // If the skill expected an integration but the integration is missing
+    // or returned nothing, surface that clearly. Conversational/advisory
+    // skills (no integrationType) skip this check and proceed to synthesis.
+    if (trigger.integrationType && !apiContext) {
       return {
         skillName: trigger.name,
         output: `Skill "${trigger.name}" could not run — the integration returned no data. The connection may not be active or the credentials may have expired.`,
@@ -482,15 +485,17 @@ export async function executeSkill(
       };
     }
 
-    const prompt = `You are executing a skill on behalf of an AI Operator. Your output will be used by the operator to report findings back to their owner.
+    // Synthesis prompt — runs for both integration-backed skills (with
+    // apiContext) and advisory/archetype skills (no apiContext, instructions
+    // and user context only). The skill instructions guide the operator's
+    // reasoning either way.
+    const prompt = `You are executing a skill on behalf of an AI Operator.
 
 Skill: ${trigger.name}
 Instructions: ${instructions}${outputFormatLine}
 
-Context from the Operator's response (what triggered this skill):
-${trigger.extractedParams}${apiContext}
-
-The live API data above contains raw information. Interpret it. Extract what matters. Return a clear, human-readable findings report — specific facts, key items, important numbers, relevant names. No raw JSON, no raw URLs, no API field names. Report results only. Be direct and specific.`;
+Context from the conversation:
+${trigger.extractedParams}${apiContext}`;
 
     const result = await chatCompletion([{ role: 'user', content: prompt }], model);
     return { skillName: trigger.name, output: result.content, success: true };
