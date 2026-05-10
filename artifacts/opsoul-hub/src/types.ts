@@ -72,6 +72,8 @@ export interface Conversation {
   title: string;
   createdAt: string;
   messageCount: number;
+  scopeId?: string | null;
+  scopeLabel?: string | null;
 }
 
 export interface GrowProposal {
@@ -111,6 +113,8 @@ export interface Memory {
   weight: number;
   createdAt: string;
   archivedAt: string | null;
+  scopeId?: string | null;
+  scopeLabel?: string | null;
 }
 
 export interface Integration {

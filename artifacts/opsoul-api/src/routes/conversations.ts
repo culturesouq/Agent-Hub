@@ -5,7 +5,7 @@ import { db } from '@workspace/db';
 import { conversationsTable, operatorsTable, messagesTable } from '@workspace/db';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { eq, and, desc, sql } from 'drizzle-orm';
-import { buildOwnerScope } from '../utils/scopeResolver.js';
+import { buildOwnerScope, formatScopeLabel } from '../utils/scopeResolver.js';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -87,7 +87,12 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     )
     .orderBy(sql`${conversationsTable.lastMessageAt} DESC NULLS LAST`);
 
-  res.json({ operatorId: op.id, count: convs.length, conversations: convs });
+  const convsWithLabels = convs.map((c) => ({
+    ...c,
+    scopeLabel: formatScopeLabel(c.scopeId),
+  }));
+
+  res.json({ operatorId: op.id, count: convsWithLabels.length, conversations: convsWithLabels });
 });
 
 router.get('/:convId', async (req: Request, res: Response): Promise<void> => {

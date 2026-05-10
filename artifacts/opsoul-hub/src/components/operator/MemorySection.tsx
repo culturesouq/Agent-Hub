@@ -178,20 +178,27 @@ export default function MemorySection({ operatorId }: { operatorId: string }) {
                 <Card key={mem.id} className="bg-card/30 border-border/50 flex flex-col relative overflow-hidden">
                   <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary/20" style={{ opacity: mem.weight }} />
                   <CardHeader className="p-3 pb-0 flex flex-row items-center justify-between space-y-0">
-                    <Badge variant="outline" className={`font-mono text-[9px] uppercase tracking-widest ${getTypeColor(mem.memoryType)}`}>
-                      {mem.memoryType}
-                    </Badge>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <Badge variant="outline" className={`text-[10px] ${getTypeColor(mem.memoryType)}`}>
+                        {mem.memoryType}
+                      </Badge>
+                      {mem.scopeLabel && (
+                        <Badge variant="outline" className="text-[10px] text-muted-foreground border-border/50">
+                          {mem.scopeLabel}
+                        </Badge>
+                      )}
+                    </div>
                     <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-destructive" onClick={() => deleteMemory.mutate(mem.id)}>
                       <Trash2 className="w-3 h-3" />
                     </Button>
                   </CardHeader>
                   <CardContent className="p-3 pt-2 flex-1">
-                    <p className="text-sm font-mono text-foreground/90">{mem.content}</p>
+                    <p className="text-sm text-foreground/90">{mem.content}</p>
                   </CardContent>
                   <CardFooter className="p-3 pt-0 border-t border-border/20 mt-2 flex justify-between items-center">
-                    <div className="text-[10px] font-mono text-muted-foreground">{format(new Date(mem.createdAt), 'MM/dd HH:mm')}</div>
+                    <div className="text-[10px] text-muted-foreground">{format(new Date(mem.createdAt), 'MMM d, HH:mm')}</div>
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono text-primary/60">Weight: {Math.round(mem.weight * 100)}%</span>
+                      <span className="text-[10px] text-primary/60">Weight: {Math.round(mem.weight * 100)}%</span>
                       <div className="w-16 h-1 bg-background rounded overflow-hidden border border-border/30">
                         <div className="h-full bg-primary" style={{ width: `${mem.weight * 100}%` }} />
                       </div>

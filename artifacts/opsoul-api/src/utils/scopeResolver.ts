@@ -176,3 +176,40 @@ export function buildSlotScope(
     persistsLayer1: false,
   };
 }
+
+/**
+ * Convert a scopeId or sourceScope tag into a human-readable label for the UI.
+ * Reveals where, not how — never exposes raw scopeIds, slot IDs, or session IDs.
+ *
+ * Examples:
+ *   authenticated:usr_123        -> "Workspace"
+ *   channel:whatsapp:+971...     -> "WhatsApp — +971..."
+ *   channel:telegram:@malhajeri  -> "Telegram — @malhajeri"
+ *   public:slot_widget_42        -> "Public widget"
+ *   action:slot_crud_07          -> "Action API"
+ *   action                       -> "Action API"
+ *   owner / authenticated        -> "Workspace"
+ *   legacy                       -> "Earlier (pre-scope)"
+ */
+export function formatScopeLabel(value: string | null | undefined): string {
+  if (!value) return 'Workspace';
+
+  if (value === 'legacy') return 'Earlier (pre-scope)';
+  if (value === 'owner' || value === 'authenticated') return 'Workspace';
+  if (value === 'public') return 'Public widget';
+  if (value === 'action') return 'Action API';
+
+  if (value.startsWith('authenticated:')) return 'Workspace';
+  if (value.startsWith('public:')) return 'Public widget';
+  if (value.startsWith('action:')) return 'Action API';
+
+  if (value.startsWith('channel:')) {
+    const parts = value.split(':');
+    const name = parts[1] ?? 'channel';
+    const caller = parts.slice(2).join(':');
+    const pretty = name.charAt(0).toUpperCase() + name.slice(1);
+    return caller ? `${pretty} — ${caller}` : pretty;
+  }
+
+  return 'Workspace';
+}

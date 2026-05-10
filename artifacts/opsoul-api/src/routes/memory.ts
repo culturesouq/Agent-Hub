@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { db } from '@workspace/db';
 import { operatorMemoryTable, operatorsTable } from '@workspace/db';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { buildOwnerScope } from '../utils/scopeResolver.js';
+import { buildOwnerScope, formatScopeLabel } from '../utils/scopeResolver.js';
 import { eq, and, isNull, isNotNull, desc } from 'drizzle-orm';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
@@ -142,6 +142,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
       decayStartedAt: operatorMemoryTable.decayStartedAt,
       archivedAt: operatorMemoryTable.archivedAt,
       createdAt: operatorMemoryTable.createdAt,
+      scopeId: operatorMemoryTable.scopeId,
     })
     .from(operatorMemoryTable)
     .where(and(...conditions))
@@ -149,7 +150,12 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     .limit(limit)
     .offset(offset);
 
-  res.json({ operatorId: op.id, count: memories.length, memories });
+  const memoriesWithLabels = memories.map((m) => ({
+    ...m,
+    scopeLabel: formatScopeLabel(m.scopeId),
+  }));
+
+  res.json({ operatorId: op.id, count: memoriesWithLabels.length, memories: memoriesWithLabels });
 });
 
 router.get('/:memId', async (req: Request, res: Response): Promise<void> => {
