@@ -11,17 +11,16 @@
 |---|---|
 | **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` |
 | **Container App** | `opsoul` (resource group `bani-studio-rg`, region `uaenorth`) |
-| **Active Revision** | `opsoul--0000035` |
-| **Image** | `banistudioacr.azurecr.io/opsoul-api:cleanup-fd20792` |
-| **Image digest** | `sha256:3d7d7249fc7b66d104de7ec33bb2f3753a8757b826151f4ca959a263129075b2` |
-| **Source commit** | `fd20792` (HEAD of `main`) |
-| **Build** | ACR Run ID `dg4n` (2m 8s, 2026-05-10 14:03 UTC) |
+| **Active Revision** | `opsoul--0000036` |
+| **Image** | `banistudioacr.azurecr.io/opsoul-api:hide-archetype-7895e75` |
+| **Source commit** | `7895e75` (HEAD of `main`) |
+| **Build** | ACR Run ID `dg4p` (2m 8s, 2026-05-10) |
 
 ### ACR (Azure Container Registry) — `banistudioacr`
 
 | Repository | Tags | Status |
 |---|---|---|
-| `opsoul-api` | `cleanup-fd20792` (only) | Live — used by revision 0000035 |
+| `opsoul-api` | `hide-archetype-7895e75` (only) | Live — used by revision 0000036 |
 | `opsoul` | — | **DELETED** (was holding old `v20260504…` `v20260505…` tags) |
 | `opsoul-hub` | — | **DELETED** (no longer used; hub is built into the `opsoul-api` image) |
 | `bani-studio`, `foundermoment`, `hafeet-tutoring`, `nahilai`, `sovereign-rag` | — | Untouched (other projects) |
@@ -149,6 +148,27 @@ The patent draft (IPPT-2026-000028, not yet filed) needs these reconciliations b
 ---
 
 ## 8. Commit History — newest first
+
+### 2026-05-10 — Hide archetype from owner-facing surfaces (`7895e75`)
+
+**What:** Owner caught the Skills page leaking the archetype concept — section header "From your archetypes" with archetype names listed underneath, plus per-skill archetype badges in the browse library. That violated Architecture-as-Secret. Removed every owner-facing reference to archetypes:
+- SkillsSection: "From your archetypes" → "Specialty skills" with sub-header "Comes with your operator". Archetype name list deleted. Browse library: no archetype filter, no per-skill archetype badge, no "Show all" toggle.
+- OperatorDetail: stops passing archetype prop to SkillsSection.
+- AdminPage DNA Library: row label no longer shows archetype.
+- DocsPage: Soul description "name, archetype, mandate" → "name, role, mandate".
+- LandingPage: image alt text "archetype portrait" → "portrait".
+- API responses: `/operators/:id/skills/manifest` dropped `archetypes` array, renamed `archetype` field → `specialty`. `/operators` GET, `/admin/operators` list: dropped archetype field.
+- Frontend types: `Operator`, `PlatformSkill`, AdminPage local types — archetype field removed. `ArchetypeSkillCard` renamed `SpecialtySkillCard`.
+
+**Kept internal:** DB column `operators.archetype`, `OperatorIdentity.archetype` in systemPrompt.ts (sent to LLM in prompt — invisible to user), Vael's classifier logic in adminRag.ts.
+
+**Why:** Patent claims 13 and 20 depend on the archetype machinery being non-obvious. The owner sees roles (job titles), not the cognitive types beneath. Architecture-as-Secret enforced.
+
+**Verification:** `grep -ri archetype hub/src/` → zero hits in any user-rendered string.
+
+**Deploy:** Built as image `hide-archetype-7895e75` (ACR Run `dg4p`). Rolled to revision `opsoul--0000036`. Old `cleanup-fd20792` image deleted from ACR.
+
+**Files:** 9 changed, +23 / −53.
 
 ### 2026-05-10 — full cleanup & deploy session
 
