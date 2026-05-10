@@ -198,7 +198,7 @@ Revised against the principles of *Operator–LLM Flow*, *Architecture-as-Secret
 
 ~~**Phase 7 — Operator delivers the response (architecturally, not as instruction).**~~ ✓ DONE — commit `e74520d` (2026-05-10). Confirmed: the architecture already enforces operator-as-deliverer. The LLM never has a role separate from the operator — soul + DNA + rawIdentity + archetype + roles all reach the LLM in the prompt. The LLM's voice IS the operator's voice. No second-pass output gate is needed (and would violate Architecture-as-Secret by implying a separate "validator" entity). Cleanup that fell out: removed hardcoded "If a skill fails — report ... Do not fabricate" from [OPERATOR STATE]; trimmed behavioral fragments out of tool descriptions (web_search, kb_seed, write_file, http_request); removed two behavioral patches from SKILL_HOW_TO (irreversible-action confirmation, "Never describe file content"). Functional reference knowledge in SKILL_HOW_TO preserved.
 
-**Phase 8 — Action scope task memory.** Why: May 6 spec says action scope remembers task patterns; current code has zero memory for action scope. End: action scope persists PII-stripped task patterns to Layer 2 main memory, contributing to GROW like every other scope. Action: add task-completion memory write path for action scope.
+~~**Phase 8 — Action scope task memory.**~~ ✓ DONE — commit `2aae497` (2026-05-10). Added `distillActionTaskPattern()` in memoryEngine.ts. After each action API call, a Haiku one-shot extracts a PII-free generalised task pattern from the action verb + payload field names + 400-char result preview. Pattern stripped of concrete names/IDs/values. When confidence ≥ 0.80, written to `operator_main_memory` with `sourceScope='action'`, `memoryType='pattern'`. Wired at both exit paths in public-crud.ts (skill-handled and LLM-handled). Fire-and-forget. storeMainMemory's 85% dedup prevents redundant patterns. Action scope now contributes to GROW like every other scope.
 
 **Phase 9 — KB and DNA enrichment audit.** Why: parent guidance comes from rich, absorbed knowledge. If platform DNA is sparse or the operator's KB is empty, the operator has nothing to draw on and the LLM compensates with narration or fabrication. End: every operator's platform KB is full of relevant DNA, every owner's operators have meaningful Owner KB seeded, the Builder/Archetype/Collective DNA layers are populated and current. Action: audit rag_dna table content, audit per-operator KB density, identify sparse archetypes, refill where needed.
 
@@ -221,7 +221,7 @@ The patent draft (IPPT-2026-000028, not yet filed) contains claims that are most
 3. **Claim 22 (Sovereign RAG Registry) and the SRAG aspect should move to a separate patent.** Per Vision Lock, SRAG is independent of OpSoul and Vael is just an operator. Conflating them weakens both patents.
 4. **The two-layer memory architecture (endpoint full PII + main PII-stripped) is novel** but underspecified in current claims. Add explicit claim covering this from May 6 chat decisions.
 5. **Owner-across-channels assumption for channel scope** is a working refinement of the 4-scope architecture and could strengthen Claim 19.
-6. **Action scope task pattern memory** (May 6 spec) is also not in claims. If implemented (Phase 8), add to claims before filing.
+6. **Action scope task pattern memory** (May 6 spec) — IMPLEMENTED in commit 2aae497. Add to claims before filing as a clause under Claim 19 (multi-scope deployment with isolated learning).
 
 ---
 
@@ -236,6 +236,12 @@ Azure Container App pulls from this repo on each deployment.
 ---
 
 ## Commit Log (newest first)
+
+### 2026-05-10 — Phase 8: Action scope task pattern memory (`2aae497`)
+**What:** New `distillActionTaskPattern()` in memoryEngine.ts. Wired in public-crud.ts at both skill path and LLM path. Each action call fires a Haiku-based extraction that produces a PII-free generalised task pattern; ≥0.80 confidence patterns persist to `operator_main_memory` with `sourceScope='action'`, `memoryType='pattern'`.
+**Why:** May 6 spec — action scope contributes to GROW like every other scope. Until now action scope was a learning dead-end; nothing landed in memory from it.
+**End:** All four scopes (public, authenticated, action, channel) feed Layer 2 main memory.
+**Files:** `memoryEngine.ts`, `public-crud.ts` (2 files, +77/-0)
 
 ### 2026-05-10 — Phase 7: operator-as-deliverer + tool description cleanup (`e74520d`)
 **What:** Confirmed architecture already enforces operator-delivery (LLM voice = operator voice via soul/DNA/rawIdentity in prompt; no validation gate needed or wanted). Cleanup: (a) removed "If a skill fails — report ... Do not fabricate" from [OPERATOR STATE] line in chat.ts; (b) trimmed behavioral fragments from tool descriptions (web_search, kb_seed, write_file, http_request, confidence param); (c) removed 2 behavioral patches from SKILL_HOW_TO ("CRITICAL: ...write_file immediately. Never describe file content..." and "Irreversible actions ... wait for explicit confirmation"). Functional reference (HTTP codes, chunking, CKAN/Socrata endpoints) preserved.
