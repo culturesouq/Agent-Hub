@@ -58,33 +58,33 @@ export default function CapabilityRequestsSection({ operatorId }: { operatorId: 
     <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300 bg-white rounded-2xl border border-border/30 p-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-border/50 pb-4">
         <div>
-          <h2 className="headline-lg text-2xl font-bold text-primary flex items-center gap-2">
-            <ShieldAlert className="w-6 h-6" /> Capability Requests
+          <h2 className="text-2xl font-bold text-primary flex items-center gap-2">
+            <ShieldAlert className="w-6 h-6" /> Capability requests
           </h2>
-          <p className="text-muted-foreground font-mono text-sm mt-1">Autonomous requests for escalated permissions or skills</p>
+          <p className="text-muted-foreground text-sm mt-1">When your operator needs something they don't have, they ask here.</p>
         </div>
-        
+
         <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
           <DialogTrigger asChild>
-            <Button variant="outline" className="font-mono text-xs tracking-wider border-amber-500/30 text-amber-500 hover:bg-amber-500/10">
-              <Plus className="w-4 h-4 mr-2" /> SIMULATE REQUEST
+            <Button variant="outline" className="text-sm border-border text-muted-foreground hover:bg-muted">
+              <Plus className="w-4 h-4 mr-2" /> Add manually
             </Button>
           </DialogTrigger>
-          <DialogContent className="border-amber-500/30 bg-card">
+          <DialogContent className="bg-card">
             <DialogHeader>
-              <DialogTitle className="font-mono text-xl text-amber-500">Inject Fake Request</DialogTitle>
+              <DialogTitle className="text-xl">Add a capability request</DialogTitle>
             </DialogHeader>
             <form onSubmit={(e) => { e.preventDefault(); addRequest.mutate(addForm); }} className="space-y-4 mt-4">
               <div className="space-y-2">
-                <Label className="font-mono text-xs uppercase text-muted-foreground">Requested Capability</Label>
-                <Input value={addForm.requestedCapability} onChange={e => setAddForm({...addForm, requestedCapability: e.target.value})} required className="font-mono" placeholder="e.g. Email Send Access" />
+                <Label className="text-xs text-muted-foreground">What's being requested</Label>
+                <Input value={addForm.requestedCapability} onChange={e => setAddForm({...addForm, requestedCapability: e.target.value})} required placeholder="e.g. Send email on my behalf" />
               </div>
               <div className="space-y-2">
-                <Label className="font-mono text-xs uppercase text-muted-foreground">Justification</Label>
-                <Textarea value={addForm.reason} onChange={e => setAddForm({...addForm, reason: e.target.value})} required className="font-mono h-24" />
+                <Label className="text-xs text-muted-foreground">Why</Label>
+                <Textarea value={addForm.reason} onChange={e => setAddForm({...addForm, reason: e.target.value})} required className="h-24" />
               </div>
-              <Button type="submit" className="w-full font-mono font-bold mt-4 bg-amber-500 hover:bg-amber-600 text-white" disabled={addRequest.isPending}>
-                INJECT INTO QUEUE
+              <Button type="submit" className="w-full font-bold mt-4" disabled={addRequest.isPending}>
+                Submit
               </Button>
             </form>
           </DialogContent>
@@ -92,10 +92,10 @@ export default function CapabilityRequestsSection({ operatorId }: { operatorId: 
       </div>
 
       {isLoading ? (
-        <div className="text-center p-8 font-mono text-primary animate-pulse">CHECKING QUEUE...</div>
+        <div className="text-center p-8 text-muted-foreground animate-pulse">Loading...</div>
       ) : requests?.length === 0 ? (
-        <div className="text-center p-12 border border-dashed border-border/50 rounded-lg bg-card/20 text-muted-foreground font-mono text-sm">
-          No pending or historical capability requests.
+        <div className="text-center p-12 border border-dashed border-border/50 rounded-lg bg-card/20 text-muted-foreground text-sm">
+          No requests yet. Your operator will ask here when they need something.
         </div>
       ) : (
         <div className="space-y-4">
@@ -104,44 +104,44 @@ export default function CapabilityRequestsSection({ operatorId }: { operatorId: 
               <div className="flex justify-between items-start">
                 <div className="flex items-center gap-3">
                   {!req.ownerResponse ? (
-                    <Badge variant="outline" className="font-mono text-[10px] bg-amber-500/10 text-amber-500 border-amber-500/30 animate-pulse">PENDING REVIEW</Badge>
+                    <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-500 border-amber-500/30">Awaiting your reply</Badge>
                   ) : (
-                    <Badge variant="outline" className="font-mono text-[10px] bg-background/50 border-border/50 text-muted-foreground">RESPONDED</Badge>
+                    <Badge variant="outline" className="text-[10px] bg-background/50 border-border/50 text-muted-foreground">Replied</Badge>
                   )}
-                  <span className="font-mono text-sm font-bold text-foreground">Requested: <span className="text-primary">{req.requestedCapability}</span></span>
+                  <span className="text-sm font-bold text-foreground">Requested: <span className="text-primary">{req.requestedCapability}</span></span>
                 </div>
                 <div className="flex gap-2 items-center">
-                  <span className="font-mono text-[10px] text-muted-foreground">{format(new Date(req.createdAt), 'yy-MM-dd HH:mm')}</span>
+                  <span className="text-[10px] text-muted-foreground">{format(new Date(req.createdAt), 'MMM d, HH:mm')}</span>
                   <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => deleteRequest.mutate(req.id)}>
                     <Trash2 className="w-3 h-3" />
                   </Button>
                 </div>
               </div>
-              
+
               <div className="bg-background/50 p-3 rounded border border-border/30">
-                <div className="font-mono text-[10px] text-muted-foreground uppercase mb-1">Operator Justification</div>
-                <div className="font-mono text-xs text-foreground/90">{req.reason}</div>
+                <div className="text-[10px] text-muted-foreground mb-1">Why your operator asked</div>
+                <div className="text-xs text-foreground/90">{req.reason}</div>
               </div>
 
               {!req.ownerResponse ? (
                 <div className="pt-2 border-t border-border/30 flex justify-end">
                   <Dialog open={respondId === req.id} onOpenChange={(open) => !open && setRespondId(null)}>
                     <DialogTrigger asChild>
-                      <Button variant="default" size="sm" className="font-mono text-xs font-bold" onClick={() => setRespondId(req.id)}>
-                        <Reply className="w-3 h-3 mr-2" /> PROVIDE DECISION
+                      <Button variant="default" size="sm" className="text-xs font-bold" onClick={() => setRespondId(req.id)}>
+                        <Reply className="w-3 h-3 mr-2" /> Reply
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="border-primary/20 bg-card">
+                    <DialogContent className="bg-card">
                       <DialogHeader>
-                        <DialogTitle className="font-mono text-xl">Respond to Request</DialogTitle>
+                        <DialogTitle className="text-xl">Reply to your operator</DialogTitle>
                       </DialogHeader>
                       <form onSubmit={(e) => { e.preventDefault(); respondRequest.mutate({ id: req.id, data: responseForm }); }} className="space-y-4 mt-4">
                         <div className="space-y-2">
-                          <Label className="font-mono text-xs uppercase text-muted-foreground">Owner Directives / Response</Label>
-                          <Textarea value={responseForm.ownerResponse} onChange={e => setResponseForm({ ownerResponse: e.target.value })} required className="font-mono h-32" placeholder="Explain approval bounds or reason for denial..." />
+                          <Label className="text-xs text-muted-foreground">Your response</Label>
+                          <Textarea value={responseForm.ownerResponse} onChange={e => setResponseForm({ ownerResponse: e.target.value })} required className="h-32" placeholder="Approve, decline, or set conditions..." />
                         </div>
-                        <Button type="submit" className="w-full font-mono font-bold mt-4" disabled={respondRequest.isPending}>
-                          TRANSMIT RESPONSE
+                        <Button type="submit" className="w-full font-bold mt-4" disabled={respondRequest.isPending}>
+                          Send
                         </Button>
                       </form>
                     </DialogContent>
@@ -149,8 +149,8 @@ export default function CapabilityRequestsSection({ operatorId }: { operatorId: 
                 </div>
               ) : (
                 <div className="bg-accent p-3 rounded border border-primary/20">
-                  <div className="font-mono text-[10px] text-primary uppercase mb-1">Owner Response Transmitted</div>
-                  <div className="font-mono text-xs text-primary/90">{req.ownerResponse}</div>
+                  <div className="text-[10px] text-primary mb-1">Your response</div>
+                  <div className="text-xs text-primary/90">{req.ownerResponse}</div>
                 </div>
               )}
             </div>

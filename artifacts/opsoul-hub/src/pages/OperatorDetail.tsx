@@ -369,10 +369,24 @@ export default function OperatorDetail({ id }: { id: string }) {
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-sidebar/80 from-[5%] via-sidebar/10 via-[30%] to-transparent to-[60%]" />
               </div>
-              <div className="px-4 py-3 border-b border-sidebar-border flex items-center gap-3">
+              <div className="px-4 py-3 border-b border-sidebar-border flex items-start gap-3">
                 <OperatorAvatar name={operator.name} />
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="font-headline font-bold text-sm truncate leading-tight text-sidebar-foreground">{operator.name}</div>
+                  {operator.roles && operator.roles.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {operator.roles.slice(0, 4).map((role) => (
+                        <span key={role} className="text-[10px] text-sidebar-foreground/60 bg-sidebar-accent/50 border border-sidebar-border rounded px-1.5 py-0.5 leading-none">
+                          {role}
+                        </span>
+                      ))}
+                      {operator.roles.length > 4 && (
+                        <span className="text-[10px] text-sidebar-foreground/40 leading-none px-1">
+                          +{operator.roles.length - 4}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
