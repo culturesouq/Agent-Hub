@@ -9,7 +9,6 @@ export interface Owner {
 export interface Operator {
   id: string;
   name: string;
-  archetype: string[];
   roles?: string[];
   mandate: string;
   rawIdentity?: string;
@@ -134,7 +133,6 @@ export interface PlatformSkill {
   name: string;
   description: string;
   category: string;
-  archetype: string;
   isActive: boolean;
 }
 
@@ -154,7 +152,7 @@ export interface BuiltinSkillCard {
   category: 'research' | 'workspace' | 'integration' | 'automation';
 }
 
-export interface ArchetypeSkillCard {
+export interface SpecialtySkillCard {
   skillId: string;
   name: string;
   description: string;
@@ -163,9 +161,8 @@ export interface ArchetypeSkillCard {
 
 export interface SkillManifest {
   operatorId: string;
-  archetypes: string[];
   builtin: BuiltinSkillCard[];
-  archetype: ArchetypeSkillCard[];
+  specialty: SpecialtySkillCard[];
   custom: OperatorSkill[];
 }
 

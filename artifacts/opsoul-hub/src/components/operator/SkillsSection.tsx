@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
-import { PlatformSkill, OperatorSkill, SkillManifest, BuiltinSkillCard, ArchetypeSkillCard } from "@/types";
+import { PlatformSkill, OperatorSkill, SkillManifest, BuiltinSkillCard, SpecialtySkillCard } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,12 +19,11 @@ const CATEGORY_COLORS: Record<string, string> = {
   automation:  "bg-amber-500/10 text-amber-600 border-amber-500/30",
 };
 
-export default function SkillsSection({ operatorId, archetype }: { operatorId: string; archetype: string | string[] }) {
+export default function SkillsSection({ operatorId }: { operatorId: string }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedPlatformSkill, setSelectedPlatformSkill] = useState<PlatformSkill | null>(null);
   const [showBrowse, setShowBrowse] = useState(false);
-  const [showAll, setShowAll] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newSkill, setNewSkill] = useState({
     name: '',
@@ -69,7 +68,7 @@ export default function SkillsSection({ operatorId, archetype }: { operatorId: s
     mutationFn: (data: typeof newSkill) =>
       apiFetch(`/platform-skills`, {
         method: "POST",
-        body: JSON.stringify({ ...data, archetype }),
+        body: JSON.stringify(data),
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["platform-skills"] });
@@ -80,24 +79,17 @@ export default function SkillsSection({ operatorId, archetype }: { operatorId: s
     },
   });
 
-  const filteredSkills = showAll
-    ? platformSkills
-    : platformSkills.filter((s: PlatformSkill) => {
-        const archetypes = Array.isArray(archetype) ? archetype : [archetype];
-        return archetypes.includes(s.archetype) || s.archetype === 'All';
-      });
-
   const isInstalled = (platformId: string) =>
     manifest?.custom?.some((s) => s.skillId === platformId) ?? false;
 
   const builtin: BuiltinSkillCard[] = manifest?.builtin ?? [];
-  const archetypeSkills: ArchetypeSkillCard[] = manifest?.archetype ?? [];
+  const specialtySkills: SpecialtySkillCard[] = manifest?.specialty ?? [];
   const customSkills: OperatorSkill[] = manifest?.custom ?? [];
 
   return (
-    <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300 bg-white rounded-2xl border border-border/30 p-6">
+    <div className="space-y-6 bg-white p-6">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border/50 pb-4">
+      <div className="flex items-center justify-between border-b pb-4">
         <div className="flex items-center gap-2">
           <Sparkles className="w-5 h-5 text-primary" />
           <div>
@@ -140,20 +132,18 @@ export default function SkillsSection({ operatorId, archetype }: { operatorId: s
             </div>
           </div>
 
-          {/* Archetype skills */}
-          {archetypeSkills.length > 0 && (
+          {/* Specialty skills (operator-specific, derived backend-side) */}
+          {specialtySkills.length > 0 && (
             <div>
               <div className="flex items-baseline justify-between mb-3">
                 <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
                   <Layers className="w-4 h-4 text-primary/70" />
-                  From your archetypes
+                  Specialty skills
                 </h3>
-                <span className="text-xs text-muted-foreground">
-                  {(manifest?.archetypes ?? []).join(' · ') || 'Your archetypes'}
-                </span>
+                <span className="text-xs text-muted-foreground">Comes with your operator</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                {archetypeSkills.map((s) => (
+                {specialtySkills.map((s) => (
                   <div key={s.skillId} className="p-3 border border-border/50 rounded-lg bg-card/20 flex flex-col gap-1">
                     <span className="text-sm font-bold text-foreground">{s.name}</span>
                     {s.description && (
@@ -214,28 +204,17 @@ export default function SkillsSection({ operatorId, archetype }: { operatorId: s
           </DialogHeader>
           <div className="flex items-center justify-between border-b border-border/50 pb-3">
             <p className="text-xs text-muted-foreground">
-              Add a skill from the platform catalog. Currently showing {showAll ? 'all' : 'matches for your archetypes'}.
+              Add any skill from the platform catalog to your operator.
             </p>
-            <button
-              onClick={() => setShowAll(v => !v)}
-              className="text-xs text-primary/70 hover:text-primary underline underline-offset-2"
-            >
-              {showAll ? 'Relevant only' : 'Show all'}
-            </button>
           </div>
           <div className="flex-1 overflow-y-auto space-y-2 py-2">
-            {filteredSkills.length === 0 ? (
+            {platformSkills.length === 0 ? (
               <div className="text-center text-xs text-muted-foreground py-8">No skills available.</div>
             ) : (
-              filteredSkills.map((skill: PlatformSkill) => (
+              platformSkills.map((skill: PlatformSkill) => (
                 <div key={skill.id} className="p-3 border border-border/50 rounded-lg bg-background/50 flex flex-col gap-1.5">
                   <div className="flex justify-between items-start">
-                    <div>
-                      <span className="text-sm font-bold text-foreground">{skill.name}</span>
-                      <Badge variant="outline" className="text-[10px] ml-2 border-border/50 text-muted-foreground">
-                        {skill.archetype}
-                      </Badge>
-                    </div>
+                    <span className="text-sm font-bold text-foreground">{skill.name}</span>
                     {isInstalled(skill.id) ? (
                       <Badge variant="default" className="text-[10px] bg-primary/20 text-primary border-primary/30">
                         Added

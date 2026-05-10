@@ -65,7 +65,6 @@ router.get('/operators', async (_req: Request, res: Response): Promise<void> => 
       id: operatorsTable.id,
       name: operatorsTable.name,
       ownerId: operatorsTable.ownerId,
-      archetype: operatorsTable.archetype,
       safeMode: operatorsTable.safeMode,
       growLockLevel: operatorsTable.growLockLevel,
       createdAt: operatorsTable.createdAt,

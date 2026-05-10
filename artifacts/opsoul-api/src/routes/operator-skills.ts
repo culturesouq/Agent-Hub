@@ -165,7 +165,7 @@ router.get('/manifest', async (req: Request, res: Response): Promise<void> => {
       category:    s.category,
     }));
 
-  const archetype = archetypeSkills.map((s) => ({
+  const specialty = archetypeSkills.map((s) => ({
     skillId:            s.skillId,
     name:               s.name,
     description:        s.triggerDescription,
@@ -174,9 +174,8 @@ router.get('/manifest', async (req: Request, res: Response): Promise<void> => {
 
   res.json({
     operatorId,
-    archetypes,
     builtin,
-    archetype,
+    specialty,
     custom: customInstalls,
   });
 });

@@ -25,7 +25,6 @@ interface AdminOperator {
   name: string;
   ownerId: string;
   ownerEmail: string;
-  archetype: string[];
   safeMode: boolean;
   growLockLevel: string;
   driftScore: number | null;
@@ -79,7 +78,6 @@ interface VaelRunState {
 interface DnaEntry {
   id: string;
   layer: string;
-  archetype: string | null;
   title: string;
   content: string;
   tags: string[];
@@ -89,7 +87,6 @@ interface DnaEntry {
   isActive: boolean;
   hasEmbedding: boolean;
   dnaScope: string;
-  archetypeScope: string[];
   domainTags: string[];
   createdAt: string;
   updatedAt: string;
@@ -1543,7 +1540,7 @@ export default function AdminPage() {
                                 >
                                   <div className="font-sans text-sm text-on-surface">{entry.title}</div>
                                   <div className="font-label text-[9px] text-muted-foreground mt-0.5 uppercase tracking-widest">
-                                    {LAYER_LABELS[entry.layer] ?? entry.layer}{entry.archetype ? ` · ${entry.archetype}` : ""}
+                                    {LAYER_LABELS[entry.layer] ?? entry.layer}
                                     {entry.sourceName ? ` · ${entry.sourceName.slice(0, 40)}` : ""}
                                   </div>
                                 </button>

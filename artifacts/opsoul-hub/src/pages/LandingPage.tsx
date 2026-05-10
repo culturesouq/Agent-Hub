@@ -143,7 +143,7 @@ export default function LandingPage() {
                 <div className="h-64 relative overflow-hidden bg-[#0a0a0f]">
                   <img
                     src={p.imageSrc}
-                    alt={`${p.title} archetype portrait`}
+                    alt={`${p.title} portrait`}
                     className="w-full h-full object-cover object-top opacity-80 group-hover:opacity-100 transition-opacity duration-500"
                   />
                   <div

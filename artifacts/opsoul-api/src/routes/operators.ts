@@ -40,7 +40,6 @@ function serializeOperator(op: typeof operatorsTable.$inferSelect) {
     ownerId: op.ownerId,
     slug: op.slug,
     name: op.name,
-    archetype: op.archetype,
     roles: op.roles,
     mandate: op.mandate,
     rawIdentity: op.rawIdentity,

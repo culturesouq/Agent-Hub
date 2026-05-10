@@ -233,7 +233,7 @@ export default function DocsPage() {
                 id="doc-soul"
                 icon="auto_awesome"
                 title="Soul"
-                description="The Soul defines your Operator's core identity: name, archetype, mandate, language, and behavioral constraints. It is the root of all downstream behavior and can be refined over time as the Operator grows."
+                description="The Soul defines your Operator's core identity: name, role, mandate, language, and the values they hold. It is the root of all downstream behavior and can be refined over time as the Operator grows."
               />
               <DocStubSection
                 id="doc-skills"
