@@ -527,3 +527,61 @@ export async function distillMemoriesFromConversations(
 
   return { storedLayer1, storedLayer2, extracted: allDistilled.length, memories: allDistilled };
 }
+
+// ─── Action scope task pattern memory ────────────────────────────────────────
+// Action scope has no conversations to distill from. Each action invocation
+// produces a structured request → result pair. We synthesize a PII-free task
+// pattern memory so action scope contributes to GROW like every other scope.
+
+export async function distillActionTaskPattern(
+  operatorId: string,
+  ownerId: string,
+  operatorName: string,
+  action: string,
+  payload: Record<string, unknown> | null,
+  resultContent: string,
+): Promise<void> {
+  const payloadShape = payload && Object.keys(payload).length > 0
+    ? Object.keys(payload).join(', ')
+    : 'none';
+  const resultPreview = resultContent.slice(0, 400);
+
+  const prompt = `${operatorName} just executed an action via the structured action API.
+
+Action: ${action}
+Payload field names (no values): ${payloadShape}
+Result preview (first 400 chars): ${resultPreview}
+
+Extract one PII-free task pattern that captures what kind of work this operator handles via the action API. Generalize away from this specific request — focus on the type of task, the kind of input, the kind of output. Examples: "Generates short marketing copy from product details", "Translates Arabic feedback into English summaries", "Returns sentiment scores for review text".
+
+Strip every concrete name, number, brand, person, place, URL, code identifier — keep only the schema-level pattern.
+
+Return strict JSON: { "pattern": "<one sentence>", "confidence": <0.0-1.0> }
+Confidence 0.85+ only when the action implies a clearly repeatable task type. Lower for one-off or ambiguous actions.`;
+
+  try {
+    const result = await chatCompletion(
+      [{ role: 'user', content: prompt }],
+      DISTILL_MODEL,
+    );
+    const match = result.content.match(/\{[\s\S]*\}/);
+    if (!match) return;
+    const parsed = JSON.parse(match[0]) as { pattern?: string; confidence?: number };
+    if (
+      parsed.pattern &&
+      typeof parsed.confidence === 'number' &&
+      parsed.confidence >= 0.80
+    ) {
+      await storeMainMemory(
+        operatorId,
+        ownerId,
+        parsed.pattern,
+        'pattern',
+        parsed.confidence,
+        'action',
+      );
+    }
+  } catch {
+    /* non-fatal — task pattern distillation is best-effort */
+  }
+}

@@ -19,6 +19,7 @@ import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
 import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { assembleOperatorPrompt } from '../utils/systemPrompt.js';
+import { distillActionTaskPattern } from '../utils/memoryEngine.js';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { eq, and } from 'drizzle-orm';
 
@@ -115,6 +116,14 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         : 'anthropic/claude-haiku-4-5';
       const skillResult = await executeSkill(trigger, skillModel);
       res.json({ result: skillResult.output, skill: trigger.name });
+      distillActionTaskPattern(
+        slot.operatorId,
+        slot.ownerId,
+        operator.name,
+        action,
+        payload ?? null,
+        skillResult.output,
+      ).catch(() => {});
       return;
     } catch { /* fall through to LLM */ }
   }
@@ -219,6 +228,16 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   );
 
   res.json({ result: result.content });
+
+  // Action scope contributes to GROW via PII-free task pattern memory
+  distillActionTaskPattern(
+    slot.operatorId,
+    slot.ownerId,
+    operator.name,
+    action,
+    payload ?? null,
+    result.content,
+  ).catch(() => {});
 });
 
 export default router;
