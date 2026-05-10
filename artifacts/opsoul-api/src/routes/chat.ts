@@ -130,20 +130,6 @@ Chunking rules:
 
 Tagging for retrieval: domain (specific, not "general"), source, confidence, created_at. Well-tagged entries are found 10x more reliably.`,
 
-  image_attachment: `When an image is attached to this message:
-- You can see the image. Do not say "I cannot see images" — you can.
-- Describe what you see, extract text from it, answer questions about it, or analyze it.
-- If the user sends an image without a question, act on the most obvious intent.
-- If asked to extract text: do so word for word.
-- Never fabricate image content you cannot see.`,
-
-  file_attachment: `When a file or document is attached:
-- The file content has been extracted and is in this message as text.
-- Always acknowledge the filename before responding.
-- If asked to summarize: give a concise structured summary.
-- If asked to extract specific data: pull it directly from the content.
-- If asked to analyze: respond only based on what is in the document.
-- Never fabricate content that is not in the file.`,
 };
 
 const INTEGRATION_HOW_TO: Record<string, string> = {
@@ -219,49 +205,6 @@ GET /files/{id}?alt=media — download file content
 POST /files (multipart upload for new files)
 PATCH /files/{id} {"name":"new name"} — rename/move
 Pagination: use nextPageToken in pageToken param.`,
-};
-
-const BEHAVIOR_HOW_TO: Record<string, string> = {
-  autonomous_work: `When working without the owner present (scheduled tasks, background jobs):
-1. Start with a clear plan — what you will do and in what order.
-2. Execute each step. If a step fails, log the failure and move to the next — do not stop.
-3. When done, write a summary file: what was attempted, what succeeded, what failed, what needs owner attention.
-4. Never ask for input mid-task when working autonomously — make reasonable decisions and log them.
-5. If a decision requires owner approval (irreversible action, ambiguous mandate), skip it, log it, and flag it in the summary.`,
-
-  memory_use: `Use memory to stay coherent across conversations:
-- Before answering a complex question, search memory for relevant past context.
-- After learning something important about the owner or their work, note it for future sessions.
-- Memory is for durable facts — not transient details from a single message.
-- Never contradict a strong memory without flagging the conflict: "I previously understood X but you're now saying Y — which is correct?"`,
-
-  escalation: `When to escalate to owner vs. handle independently:
-Handle independently: research, summarization, drafting, scheduling, reading files, fetching data.
-Escalate (ask first): sending emails or messages, deleting data, making purchases, publishing content, any action that cannot be undone.
-When escalating: state exactly what you want to do, why, and what will happen. One clear question. Wait for yes/no.`,
-
-  research_workflow: `For complex research tasks:
-1. web_search — discover the landscape, find authoritative sources.
-2. http_request — fetch primary sources (official docs, APIs, papers).
-3. Synthesize — combine findings into a coherent answer. Note conflicts.
-4. kb_seed — store durable findings for future use.
-5. write_file — save the full research report.
-6. Respond — give the owner a concise summary with key findings and the file reference.
-Never skip to step 6 without doing steps 1–3. Never present search snippets as a final answer.`,
-
-  uncertainty: `When you don't know something:
-- Say so clearly: "I don't have enough on this to give you a solid answer."
-- Call web_search immediately — no announcement, no "I'll search for that now", just call the tool.
-- Never guess and present it as fact.
-- Never fill silence with plausible-sounding fabrications.
-- Directional knowledge (unverified, single source): hedge naturally — "from what I'm seeing", "my read on this", "worth checking before you act on it."`,
-
-  file_creation: `File creation rule — non-negotiable:
-You have a write_file tool. When you create a file, you MUST call write_file. Always.
-- Never write file content as chat text and claim you "created" it — chat text is not a file.
-- Never say "The file is created" or "Here is the file:" without having called write_file.
-- If you want to show the owner a preview of what you will write, show it, then call write_file immediately after.
-- The owner sees files only in the Files tab. If you don't call write_file, the file does not exist.`,
 };
 
 function buildStationContext(data: LiveStationData): string {
@@ -1186,25 +1129,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     messages.push({ role: 'user', content: dnaBlock.join('\n') });
   }
 
-  // [CAPABILITY] — static rules (always) + dynamic operator state (if selfAwareness exists)
+  // [OPERATOR STATE] — dynamic capability state (if selfAwareness exists)
+  // Static behavioral rules removed: behavior is shaped by soul + DNA + KB,
+  // not by hardcoded capability blocks. Tool descriptions carry functional info.
   const cap = selfAwareness?.capabilityState;
   const wm = selfAwareness?.workspaceManifest;
 
-  // ── STATIC CAPABILITY BLOCK — always injected, no conditions ─────────────────
-  const staticCapLines: string[] = ['[CAPABILITY]'];
-
-  // Attachment handling — always active, every operator
-  staticCapLines.push('');
-  staticCapLines.push(SKILL_HOW_TO['image_attachment']!);
-  staticCapLines.push(SKILL_HOW_TO['file_attachment']!);
-
-  // write_file reminder — one line, no repetition; full rule is in the tool description
-  staticCapLines.push('');
-  staticCapLines.push('You have a write_file tool. When you create a file, call the tool — chat text is not a file.');
-
-  messages.push({ role: 'user', content: staticCapLines.join('\n') });
-
-  // ── DYNAMIC CAPABILITY BLOCK — only if selfAwareness exists ─────────────────
   if (cap) {
     const dynLines: string[] = ['[OPERATOR STATE]'];
 
@@ -1654,7 +1584,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
                 ...(loopMessages.length > 0 ? loopMessages : messages),
                 { role: 'assistant', content: finalContent },
                 { role: 'system', content: `[Skill result — ${trigger.name}]\n${skillResult.output}` },
-                { role: 'user', content: 'Report results only. The operator\'s soul controls the format. Be direct, specific, no filler, no questions, no narration about process.' },
               ];
               const secondResult = await chatCompletion(secondMsgs, chatOpts).catch(() => null);
               if (secondResult?.content && secondResult.content.trim().length > 0) {
@@ -1866,7 +1795,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
                 ...messages,
                 { role: 'assistant', content: finalContent },
                 { role: 'system', content: `[Skill result — ${trigger.name}]\n${skillResult.output}` },
-                { role: 'user', content: 'Report results only. The operator\'s soul controls the format. Be direct, specific, no filler, no questions, no narration about process.' },
               ];
               const secondResult = await chatCompletion(secondMsgs, chatOpts).catch(() => null);
               if (secondResult?.content && secondResult.content.trim().length > 0) {

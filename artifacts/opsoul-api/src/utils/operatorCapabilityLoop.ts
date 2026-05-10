@@ -68,14 +68,6 @@ function buildSecondPassMessages(
     ...messages,
     { role: 'assistant', content: firstResponse },
     { role: 'system',    content: `[Task completed — findings below]\n${skillOutput}` },
-    {
-      role: 'user',
-      content:
-        `You just ran a skill and received the output above. Synthesize and present the findings clearly. Lead with the answer or key finding. Be concise and specific. No filler phrases, no wrap-up questions, no narration about your process.\n\n` +
-        `If the output says no live data was available or the connection failed — be honest. Tell the owner clearly what didn't work and what they need to set up. Do not pretend you completed work you couldn't do.\n\n` +
-        `If the output has real findings — report them specifically. Highlight what matters. Be direct.\n\n` +
-        `Never mention tool names, skill names, raw JSON, raw URLs, or API field names. Just speak naturally as their operator.`,
-    },
   ];
 }
 
