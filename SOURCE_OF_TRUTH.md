@@ -11,16 +11,16 @@
 |---|---|
 | **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` |
 | **Container App** | `opsoul` (resource group `bani-studio-rg`, region `uaenorth`) |
-| **Active Revision** | `opsoul--0000036` |
-| **Image** | `banistudioacr.azurecr.io/opsoul-api:hide-archetype-7895e75` |
-| **Source commit** | `7895e75` (HEAD of `main`) |
-| **Build** | ACR Run ID `dg4p` (2m 8s, 2026-05-10) |
+| **Active Revision** | `opsoul--0000037` |
+| **Image** | `banistudioacr.azurecr.io/opsoul-api:memdistill-ae32a8a` |
+| **Source commit** | `ae32a8a` (HEAD of `main`) |
+| **Build** | ACR Run ID `dg4q` (2m 7s, 2026-05-10) |
 
 ### ACR (Azure Container Registry) — `banistudioacr`
 
 | Repository | Tags | Status |
 |---|---|---|
-| `opsoul-api` | `hide-archetype-7895e75` (only) | Live — used by revision 0000036 |
+| `opsoul-api` | `memdistill-ae32a8a` (only) | Live — used by revision 0000037 |
 | `opsoul` | — | **DELETED** (was holding old `v20260504…` `v20260505…` tags) |
 | `opsoul-hub` | — | **DELETED** (no longer used; hub is built into the `opsoul-api` image) |
 | `bani-studio`, `foundermoment`, `hafeet-tutoring`, `nahilai`, `sovereign-rag` | — | Untouched (other projects) |
@@ -55,6 +55,7 @@ Mac = GitHub = Azure. Always.
 8. **No summaries when full text is requested.** Owner sees full content, not paraphrases.
 9. **Layer 4 rules written by Mohamed only.** Nothing added to Layer 4 that Mohamed did not write himself. Approved text locked here verbatim before any commit.
 10. **No BEHAVIOR_HOW_TO or SKILL_HOW_TO hardcoded in system prompt or chat pipeline.** Behavior and skill guidance lives in platform DNA KB entries only — managed, versioned, not buried in code.
+11. **Be careful what you feed the operator.** Memory and KB receive *filtered facts*, never raw output. Web search results, scraped pages, and skill outputs flow through a distillation step before they reach `operator_memory`. **Never paste structured data (YAML, JSON, key:value blocks) into prose fields like `backstory` or `rawIdentity`.** Backstory is for prose. Layer 2 fields (toneProfile, emotionalRange, etc.) are for the structured slots. Mixing them confuses GROW and the operator's self-awareness.
 
 ---
 
@@ -148,6 +149,16 @@ The patent draft (IPPT-2026-000028, not yet filed) needs these reconciliations b
 ---
 
 ## 8. Commit History — newest first
+
+### 2026-05-10 — Filter web/URL/skill output before persisting to memory (`ae32a8a`)
+
+**What:** Memory was storing raw search snippets, scraped pages, and skill outputs as the first 400-600 chars sliced from the source. The operator was learning from URLs, navigation boilerplate, and snippet fragments instead of facts. Added `distillRawContentForMemory()` in memoryEngine.ts — a Haiku one-shot that extracts ONE clean factual sentence (max 240 chars, URLs/dates/markdown stripped). Returns `null` ("NONE") when there's nothing worth remembering. Wired into all three persist paths: `persistUrlScrapedResult`, `persistWebSearchResult`, `persistSkillResult`. Conversation log keeps full raw content; only long-term memory gets the filtered version.
+
+**Why:** Operators couldn't actually learn from raw scrape junk. Filtered facts = real recall. (Hajeri caught this looking at memory entries.)
+
+**Deploy:** Built as `memdistill-ae32a8a` (ACR Run `dg4q`). Rolled to revision `opsoul--0000037`. Old image `hide-archetype-7895e75` deleted from ACR.
+
+**Files:** 2 changed, +95 / −31.
 
 ### 2026-05-10 — Hide archetype from owner-facing surfaces (`7895e75`)
 
