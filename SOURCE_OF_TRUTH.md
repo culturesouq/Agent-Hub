@@ -194,7 +194,7 @@ Revised against the principles of *Operator–LLM Flow*, *Architecture-as-Secret
 
 **Phase 5 — Capability truth audit.** Why: narration is caused by capability mismatch — the operator is told he has skills or tools that aren't actually wired, so the LLM covers by narrating. Fix the gap, narration disappears. End: every skill the operator is told he has, actually works. Every tool description matches what the tool actually does. End-to-end check across all archetypes, all skills, all integrations. Action: walk every active skill in seedSkills.ts and seed-new-archetype-skills.ts against actual route implementations and tool wiring. Remove or fix anything that's promised but not real.
 
-**Phase 6 — Unified prompt assembly function.** Why: five routes each roll their own assembly. End: one `assembleOperatorPrompt()` used everywhere. Action: refactor chat, public-chat, telegram-webhook, whatsapp-webhook, public-crud, tasksCron to call one shared assembler.
+~~**Phase 6 — Unified prompt assembly function.**~~ ✓ DONE — commit `a77fa91` (2026-05-10). Added `assembleOperatorPrompt(operator, selfAwareness?, opts?)` in systemPrompt.ts that takes a DB-shaped operator row, normalizes to `OperatorIdentity`, and calls `buildSystemPrompt`. All 6 callers (chat, public-chat, telegram-webhook, whatsapp-webhook, public-crud, tasksCron) refactored. 90 lines deleted, 43 added. Dead `Layer2Soul` imports removed. public-crud.ts inconsistency (`layer2Soul.mandate ?? operator.mandate`) eliminated. grow.ts still calls `buildSystemPrompt` directly because it A/B tests proposed souls — that exemption is intentional.
 
 **Phase 7 — Operator delivers the response (architecturally, not as instruction).** Why: patent claim 21d-e says the operator soul receives LLM output and delivers it. Currently for plain conversation, the LLM's first response streams direct to user. There's no architectural step where the operator stands between the LLM and the user. End: the flow is enforced — operator builds soul-rich context → LLM → response is in operator's voice (because soul defined the voice) → operator delivers. No hard "validation gate" that filters words. The architecture itself ensures the LLM speaks as the operator. Action: confirm soul + DNA + KB are rich enough that the FIRST response is naturally in operator voice, with no second-pass instruction needed.
 
@@ -236,6 +236,12 @@ Azure Container App pulls from this repo on each deployment.
 ---
 
 ## Commit Log (newest first)
+
+### 2026-05-10 — Phase 6: Unified prompt assembly (`a77fa91`)
+**What:** Added `assembleOperatorPrompt(operator, selfAwareness?, opts?)` in systemPrompt.ts. Refactored chat.ts, public-chat.ts, telegram-webhook.ts, whatsapp-webhook.ts, public-crud.ts, tasksCron.ts to use it. Removed dead `Layer2Soul` imports from those 5 files. Public-crud's quirk (sourcing mandate/coreValues/ethicalBoundaries from layer2Soul JSON instead of columns) eliminated.
+**Why:** 6 routes were each constructing the same OperatorIdentity object literal with the same nullable coercions — drift-prone. Future prompt-pipeline changes need one place to land.
+**End:** Every operator-channel prompt assembles via one function. grow.ts keeps direct `buildSystemPrompt` access (it A/B tests proposed souls — intentional exemption).
+**Files:** `systemPrompt.ts`, `chat.ts`, `public-chat.ts`, `telegram-webhook.ts`, `whatsapp-webhook.ts`, `public-crud.ts`, `tasksCron.ts` (7 files, +43/-90)
 
 ### 2026-05-10 — Phase 10 (partial): UI tone refresh + roles in operator detail (`d3db2be`)
 **What:** (1) OperatorDetail.tsx sidebar header (mobile + desktop) renders operator roles as small chips below the name, first 4 with "+N" overflow indicator. (2) CapabilityRequestsSection.tsx fully retoned: removed "SIMULATE REQUEST", "INJECT FAKE REQUEST", "INJECT INTO QUEUE", "CHECKING QUEUE...", "PENDING REVIEW", "RESPONDED", "PROVIDE DECISION", "TRANSMIT RESPONSE", "Owner Response Transmitted", "Owner Directives", "Operator Justification". Replaced with "Add manually", "Submit", "Loading...", "Awaiting your reply", "Replied", "Reply", "Send", "Your response", "Why your operator asked". Removed font-mono and uppercase tracking from labels.
