@@ -202,7 +202,7 @@ Revised against the principles of *Operator–LLM Flow*, *Architecture-as-Secret
 
 **Phase 9 — KB and DNA enrichment audit.** Why: parent guidance comes from rich, absorbed knowledge. If platform DNA is sparse or the operator's KB is empty, the operator has nothing to draw on and the LLM compensates with narration or fabrication. End: every operator's platform KB is full of relevant DNA, every owner's operators have meaningful Owner KB seeded, the Builder/Archetype/Collective DNA layers are populated and current. Action: audit rag_dna table content, audit per-operator KB density, identify sparse archetypes, refill where needed.
 
-**Phase 10 — UI tone refresh + roles visibility.** Why: current UI feels like Linux admin terminal AND the operator's job titles vanish once you leave the dashboard. End: reads as personal AI workspace; operator detail page shows the operator's roles (job titles) in the header so the owner sees at a glance "this is my Strategist + Project Manager + Coach." Action: (a) refresh operator components — Identity, Memory, KB, CapabilityRequests, Grow, others; no "INJECT", "TRANSMIT", "CHECKING QUEUE"; mono font reserved for code/data only. (b) render `operator.roles` as chips in OperatorDetail.tsx header next to the operator name.
+**Phase 10 — UI tone refresh + roles visibility.** ⚪ PARTIAL — commit `d3db2be` (2026-05-10). DONE: (a) OperatorDetail sidebar header now shows operator roles as chips below the name (first 4, "+N" overflow), and (b) CapabilityRequestsSection.tsx fully retoned — no "INJECT INTO QUEUE", "TRANSMIT RESPONSE", "PENDING REVIEW", "CHECKING QUEUE", etc. Reads in human English. REMAINING: tone refresh of IdentitySection, KbSection, MemorySection, GrowSection, SkillsSection, OperatorCard. Tracked as Phase 10b for a follow-up pass.
 
 ~~**Phase 11 — Memory type fix in UI.**~~ ✓ DONE — commit `6278d23` (2026-05-10). MemorySection.tsx dropdown and color mapping now match the backend enum (fact / preference / interaction / pattern / context). `Memory` type in types.ts updated. The `instruction` type that didn't exist server-side is removed.
 
@@ -236,6 +236,12 @@ Azure Container App pulls from this repo on each deployment.
 ---
 
 ## Commit Log (newest first)
+
+### 2026-05-10 — Phase 10 (partial): UI tone refresh + roles in operator detail (`d3db2be`)
+**What:** (1) OperatorDetail.tsx sidebar header (mobile + desktop) renders operator roles as small chips below the name, first 4 with "+N" overflow indicator. (2) CapabilityRequestsSection.tsx fully retoned: removed "SIMULATE REQUEST", "INJECT FAKE REQUEST", "INJECT INTO QUEUE", "CHECKING QUEUE...", "PENDING REVIEW", "RESPONDED", "PROVIDE DECISION", "TRANSMIT RESPONSE", "Owner Response Transmitted", "Owner Directives", "Operator Justification". Replaced with "Add manually", "Submit", "Loading...", "Awaiting your reply", "Replied", "Reply", "Send", "Your response", "Why your operator asked". Removed font-mono and uppercase tracking from labels.
+**Why:** Operator workspace was reading like a Linux admin terminal; the moment where operator asks owner for a capability is supposed to feel human, not military. Roles (job titles, Patent claims 13 & 20) were on dashboard cards but disappeared inside the operator detail page.
+**End:** Operator detail page shows job titles. Capability Requests reads in plain English. Vision Lock UI principle applied to two highest-impact components.
+**Files:** `OperatorDetail.tsx`, `CapabilityRequestsSection.tsx` (2 files, +50/-36)
 
 ### 2026-05-10 — Phase 11: Memory type fix in UI (`6278d23`)
 **What:** MemorySection.tsx dropdown now lists 5 backend memory types (fact / preference / interaction / pattern / context). Color mapping and types.ts updated to match.
