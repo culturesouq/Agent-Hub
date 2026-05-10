@@ -1245,6 +1245,54 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     },
   } : null;
 
+  // read_file tool — always offered; operator can re-read its own workspace
+  const readFileTool: ToolDefinition = {
+    type: 'function',
+    function: {
+      name: 'read_file',
+      description: 'Read the full content of a file in your workspace by filename.',
+      parameters: {
+        type: 'object',
+        properties: {
+          filename: { type: 'string', description: 'Filename including extension. Must match an existing file exactly.' },
+        },
+        required: ['filename'],
+      },
+    },
+  };
+
+  // list_files tool — always offered; operator can see what is in its workspace
+  const listFilesTool: ToolDefinition = {
+    type: 'function',
+    function: {
+      name: 'list_files',
+      description: 'List the files in your workspace. Returns each filename with its size and last update time.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+      },
+    },
+  };
+
+  // schedule_task tool — always offered; operator can create its own automations
+  const scheduleTaskTool: ToolDefinition = {
+    type: 'function',
+    function: {
+      name: 'schedule_task',
+      description: 'Create a recurring task that wakes you up on a schedule with a prompt to run. Use this when something needs to be done repeatedly without the owner having to ask each time.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Short label for the task (shown in the Tasks tab).' },
+          prompt: { type: 'string', description: 'The instruction you want to run on each schedule. Be specific — this is what the next-run version of you will read.' },
+          schedule: { type: 'string', enum: ['daily', 'weekly'], description: 'How often the task fires.' },
+        },
+        required: ['name', 'prompt', 'schedule'],
+      },
+    },
+  };
+
   // ─── STREAMING PATH ────────────────────────────────────────────────────────
 
   if (stream) {
@@ -1324,6 +1372,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         if (webSearchTool && webSearchCount < MAX_SEARCHES) iterTools.push(webSearchTool);
         if (kbSeedTool) iterTools.push(kbSeedTool);
         iterTools.push(writeFileTool);
+        iterTools.push(readFileTool);
+        iterTools.push(listFilesTool);
+        iterTools.push(scheduleTaskTool);
         if (httpRequestTool) iterTools.push(httpRequestTool);
         const iterOpts = {
           ...chatOpts,
@@ -1519,6 +1570,110 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           break;
         }
 
+        // ── READ FILE TOOL CALL ────────────────────────────────────────────
+        if (iterToolCall?.name === 'read_file') {
+          let readArgs: { filename?: string } = {};
+          try { readArgs = JSON.parse(iterToolCall.args); } catch { /* skip */ }
+
+          if (readArgs.filename) {
+            console.log(`[agency] loop iter ${iter} — read_file: "${readArgs.filename}"`);
+            res.write(`data: ${JSON.stringify({ reading: readArgs.filename })}\n\n`);
+
+            const [file] = await db.select({ content: operatorFilesTable.content })
+              .from(operatorFilesTable)
+              .where(and(eq(operatorFilesTable.operatorId, operator.id), eq(operatorFilesTable.filename, readArgs.filename)))
+              .limit(1);
+
+            const toolResultText = file
+              ? `File "${readArgs.filename}":\n${file.content}`
+              : `File "${readArgs.filename}" not found in your workspace.`;
+
+            loopMessages.push(
+              {
+                role: 'assistant',
+                content: iterContent || '',
+                tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'read_file', arguments: iterToolCall.args } }],
+              },
+              { role: 'tool', content: toolResultText, tool_call_id: iterToolCall.id },
+            );
+            continue;
+          }
+
+          finalContent = iterContent;
+          break;
+        }
+
+        // ── LIST FILES TOOL CALL ───────────────────────────────────────────
+        if (iterToolCall?.name === 'list_files') {
+          console.log(`[agency] loop iter ${iter} — list_files`);
+          res.write(`data: ${JSON.stringify({ listing: 'workspace files' })}\n\n`);
+
+          const files = await db.select({
+            filename: operatorFilesTable.filename,
+            updatedAt: operatorFilesTable.updatedAt,
+            content: operatorFilesTable.content,
+          })
+            .from(operatorFilesTable)
+            .where(eq(operatorFilesTable.operatorId, operator.id));
+
+          const toolResultText = files.length === 0
+            ? 'Your workspace has no files yet.'
+            : files
+                .map((f) => `- ${f.filename} (${f.content.length} chars, updated ${f.updatedAt?.toISOString() ?? 'unknown'})`)
+                .join('\n');
+
+          loopMessages.push(
+            {
+              role: 'assistant',
+              content: iterContent || '',
+              tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'list_files', arguments: iterToolCall.args } }],
+            },
+            { role: 'tool', content: toolResultText, tool_call_id: iterToolCall.id },
+          );
+          continue;
+        }
+
+        // ── SCHEDULE TASK TOOL CALL ────────────────────────────────────────
+        if (iterToolCall?.name === 'schedule_task') {
+          let taskArgs: { name?: string; prompt?: string; schedule?: string } = {};
+          try { taskArgs = JSON.parse(iterToolCall.args); } catch { /* skip */ }
+
+          if (taskArgs.name && taskArgs.prompt && (taskArgs.schedule === 'daily' || taskArgs.schedule === 'weekly')) {
+            console.log(`[agency] loop iter ${iter} — schedule_task: "${taskArgs.name}" (${taskArgs.schedule})`);
+            res.write(`data: ${JSON.stringify({ scheduling: taskArgs.name })}\n\n`);
+
+            const intervalMs = taskArgs.schedule === 'daily' ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
+            const taskId = crypto.randomUUID();
+            await db.insert(tasksTable).values({
+              id: taskId,
+              operatorId: operator.id,
+              conversationId: conv.id,
+              contextName: taskArgs.name,
+              taskType: taskArgs.schedule,
+              integrationLabel: 'self_scheduled',
+              prompt: taskArgs.prompt,
+              payload: { description: taskArgs.prompt, scheduledBy: 'operator' },
+              status: 'active',
+              nextRunAt: new Date(Date.now() + intervalMs),
+            });
+
+            const toolResultText = `Task "${taskArgs.name}" scheduled to run ${taskArgs.schedule}. First run at ${new Date(Date.now() + intervalMs).toISOString()}. Owner can pause or edit it from the Tasks tab.`;
+
+            loopMessages.push(
+              {
+                role: 'assistant',
+                content: iterContent || '',
+                tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'schedule_task', arguments: iterToolCall.args } }],
+              },
+              { role: 'tool', content: toolResultText, tool_call_id: iterToolCall.id },
+            );
+            continue;
+          }
+
+          finalContent = iterContent;
+          break;
+        }
+
 
         // ── NO TOOL CALL — clean final response ────────────────────────────
         finalContent = iterContent;
@@ -1629,6 +1784,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       if (webSearchTool) syncTools.push(webSearchTool);
       if (kbSeedTool) syncTools.push(kbSeedTool);
       syncTools.push(writeFileTool);
+      syncTools.push(readFileTool);
+      syncTools.push(listFilesTool);
+      syncTools.push(scheduleTaskTool);
       if (httpRequestTool) syncTools.push(httpRequestTool);
       const syncOpts = { ...chatOpts, tools: syncTools.length > 0 ? syncTools : undefined };
       const result = await chatCompletion(messages, syncOpts);
@@ -1711,6 +1869,89 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             { role: 'system', content: `[File Created]\n${toolResultText}` },
           ];
           const secondResult = await chatCompletion(fileMessages, chatOpts);
+          finalContent = secondResult.content;
+          finalPromptTokens = secondResult.promptTokens;
+          finalCompletionTokens = secondResult.completionTokens;
+        }
+      }
+
+      // Read file — operator called read_file tool (sync path)
+      if (!capabilityFired && result.toolCall && result.toolCall.name === 'read_file') {
+        let readArgs: { filename?: string } = {};
+        try { readArgs = JSON.parse(result.toolCall.args); } catch { /* skip */ }
+        if (readArgs.filename) {
+          console.log(`[agency] read_file (sync): "${readArgs.filename}"`);
+          const [file] = await db.select({ content: operatorFilesTable.content })
+            .from(operatorFilesTable)
+            .where(and(eq(operatorFilesTable.operatorId, operator.id), eq(operatorFilesTable.filename, readArgs.filename)))
+            .limit(1);
+          capabilityFired = true;
+          const toolResultText = file
+            ? `File "${readArgs.filename}":\n${file.content}`
+            : `File "${readArgs.filename}" not found in your workspace.`;
+          const readMessages: ChatMessage[] = [
+            ...messages,
+            { role: 'system', content: `[File Read]\n${toolResultText}` },
+          ];
+          const secondResult = await chatCompletion(readMessages, chatOpts);
+          finalContent = secondResult.content;
+          finalPromptTokens = secondResult.promptTokens;
+          finalCompletionTokens = secondResult.completionTokens;
+        }
+      }
+
+      // List files — operator called list_files tool (sync path)
+      if (!capabilityFired && result.toolCall && result.toolCall.name === 'list_files') {
+        console.log(`[agency] list_files (sync)`);
+        const files = await db.select({
+          filename: operatorFilesTable.filename,
+          updatedAt: operatorFilesTable.updatedAt,
+          content: operatorFilesTable.content,
+        })
+          .from(operatorFilesTable)
+          .where(eq(operatorFilesTable.operatorId, operator.id));
+        capabilityFired = true;
+        const toolResultText = files.length === 0
+          ? 'Your workspace has no files yet.'
+          : files
+              .map((f) => `- ${f.filename} (${f.content.length} chars, updated ${f.updatedAt?.toISOString() ?? 'unknown'})`)
+              .join('\n');
+        const listMessages: ChatMessage[] = [
+          ...messages,
+          { role: 'system', content: `[Files in workspace]\n${toolResultText}` },
+        ];
+        const secondResult = await chatCompletion(listMessages, chatOpts);
+        finalContent = secondResult.content;
+        finalPromptTokens = secondResult.promptTokens;
+        finalCompletionTokens = secondResult.completionTokens;
+      }
+
+      // Schedule task — operator called schedule_task tool (sync path)
+      if (!capabilityFired && result.toolCall && result.toolCall.name === 'schedule_task') {
+        let taskArgs: { name?: string; prompt?: string; schedule?: string } = {};
+        try { taskArgs = JSON.parse(result.toolCall.args); } catch { /* skip */ }
+        if (taskArgs.name && taskArgs.prompt && (taskArgs.schedule === 'daily' || taskArgs.schedule === 'weekly')) {
+          console.log(`[agency] schedule_task (sync): "${taskArgs.name}" (${taskArgs.schedule})`);
+          const intervalMs = taskArgs.schedule === 'daily' ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
+          await db.insert(tasksTable).values({
+            id: crypto.randomUUID(),
+            operatorId: operator.id,
+            conversationId: conv.id,
+            contextName: taskArgs.name,
+            taskType: taskArgs.schedule,
+            integrationLabel: 'self_scheduled',
+            prompt: taskArgs.prompt,
+            payload: { description: taskArgs.prompt, scheduledBy: 'operator' },
+            status: 'active',
+            nextRunAt: new Date(Date.now() + intervalMs),
+          });
+          capabilityFired = true;
+          const toolResultText = `Task "${taskArgs.name}" scheduled to run ${taskArgs.schedule}. First run at ${new Date(Date.now() + intervalMs).toISOString()}.`;
+          const taskMessages: ChatMessage[] = [
+            ...messages,
+            { role: 'system', content: `[Task Scheduled]\n${toolResultText}` },
+          ];
+          const secondResult = await chatCompletion(taskMessages, chatOpts);
           finalContent = secondResult.content;
           finalPromptTokens = secondResult.promptTokens;
           finalCompletionTokens = secondResult.completionTokens;
