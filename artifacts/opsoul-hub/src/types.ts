@@ -148,6 +148,27 @@ export interface OperatorSkill {
   installedAt: string;
 }
 
+export interface BuiltinSkillCard {
+  name: string;
+  description: string;
+  category: 'research' | 'workspace' | 'integration' | 'automation';
+}
+
+export interface ArchetypeSkillCard {
+  skillId: string;
+  name: string;
+  description: string;
+  integrationType: string | null;
+}
+
+export interface SkillManifest {
+  operatorId: string;
+  archetypes: string[];
+  builtin: BuiltinSkillCard[];
+  archetype: ArchetypeSkillCard[];
+  custom: OperatorSkill[];
+}
+
 export interface CapabilityRequest {
   id: string;
   requestedCapability: string;
