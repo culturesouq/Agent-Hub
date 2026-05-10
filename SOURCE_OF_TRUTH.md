@@ -196,7 +196,7 @@ Revised against the principles of *Operator–LLM Flow*, *Architecture-as-Secret
 
 ~~**Phase 6 — Unified prompt assembly function.**~~ ✓ DONE — commit `a77fa91` (2026-05-10). Added `assembleOperatorPrompt(operator, selfAwareness?, opts?)` in systemPrompt.ts that takes a DB-shaped operator row, normalizes to `OperatorIdentity`, and calls `buildSystemPrompt`. All 6 callers (chat, public-chat, telegram-webhook, whatsapp-webhook, public-crud, tasksCron) refactored. 90 lines deleted, 43 added. Dead `Layer2Soul` imports removed. public-crud.ts inconsistency (`layer2Soul.mandate ?? operator.mandate`) eliminated. grow.ts still calls `buildSystemPrompt` directly because it A/B tests proposed souls — that exemption is intentional.
 
-**Phase 7 — Operator delivers the response (architecturally, not as instruction).** Why: patent claim 21d-e says the operator soul receives LLM output and delivers it. Currently for plain conversation, the LLM's first response streams direct to user. There's no architectural step where the operator stands between the LLM and the user. End: the flow is enforced — operator builds soul-rich context → LLM → response is in operator's voice (because soul defined the voice) → operator delivers. No hard "validation gate" that filters words. The architecture itself ensures the LLM speaks as the operator. Action: confirm soul + DNA + KB are rich enough that the FIRST response is naturally in operator voice, with no second-pass instruction needed.
+~~**Phase 7 — Operator delivers the response (architecturally, not as instruction).**~~ ✓ DONE — commit `e74520d` (2026-05-10). Confirmed: the architecture already enforces operator-as-deliverer. The LLM never has a role separate from the operator — soul + DNA + rawIdentity + archetype + roles all reach the LLM in the prompt. The LLM's voice IS the operator's voice. No second-pass output gate is needed (and would violate Architecture-as-Secret by implying a separate "validator" entity). Cleanup that fell out: removed hardcoded "If a skill fails — report ... Do not fabricate" from [OPERATOR STATE]; trimmed behavioral fragments out of tool descriptions (web_search, kb_seed, write_file, http_request); removed two behavioral patches from SKILL_HOW_TO (irreversible-action confirmation, "Never describe file content"). Functional reference knowledge in SKILL_HOW_TO preserved.
 
 **Phase 8 — Action scope task memory.** Why: May 6 spec says action scope remembers task patterns; current code has zero memory for action scope. End: action scope persists PII-stripped task patterns to Layer 2 main memory, contributing to GROW like every other scope. Action: add task-completion memory write path for action scope.
 
@@ -236,6 +236,12 @@ Azure Container App pulls from this repo on each deployment.
 ---
 
 ## Commit Log (newest first)
+
+### 2026-05-10 — Phase 7: operator-as-deliverer + tool description cleanup (`e74520d`)
+**What:** Confirmed architecture already enforces operator-delivery (LLM voice = operator voice via soul/DNA/rawIdentity in prompt; no validation gate needed or wanted). Cleanup: (a) removed "If a skill fails — report ... Do not fabricate" from [OPERATOR STATE] line in chat.ts; (b) trimmed behavioral fragments from tool descriptions (web_search, kb_seed, write_file, http_request, confidence param); (c) removed 2 behavioral patches from SKILL_HOW_TO ("CRITICAL: ...write_file immediately. Never describe file content..." and "Irreversible actions ... wait for explicit confirmation"). Functional reference (HTTP codes, chunking, CKAN/Socrata endpoints) preserved.
+**Why:** Patent claim 21d-e met by architecture, not by output filter. Tool descriptions tell LLM what the tool does, not how to behave around it — behavior comes from soul.
+**End:** Every contributor to the prompt pipeline is functional. Behavior emerges from soul + DNA + KB.
+**Files:** `chat.ts` (1 file, +8/-12)
 
 ### 2026-05-10 — Phase 6: Unified prompt assembly (`a77fa91`)
 **What:** Added `assembleOperatorPrompt(operator, selfAwareness?, opts?)` in systemPrompt.ts. Refactored chat.ts, public-chat.ts, telegram-webhook.ts, whatsapp-webhook.ts, public-crud.ts, tasksCron.ts to use it. Removed dead `Layer2Soul` imports from those 5 files. Public-crud's quirk (sourcing mandate/coreValues/ethicalBoundaries from layer2Soul JSON instead of columns) eliminated.
