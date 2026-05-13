@@ -213,16 +213,21 @@ router.post('/:operatorId', async (req: Request, res: Response): Promise<void> =
     const ragCtx = buildRagContext(hits);
     const memCtx = buildMemoryContext(memHits);
 
-    let scopeLine = '[CHANNEL: Telegram]';
-    if (ragCtx) scopeLine += `\n\n[KNOWLEDGE]\n${ragCtx}`;
-
-    const systemPrompt = assembleOperatorPrompt(operator, null, { scopeLine });
+    // KB hits + memory hits woven into system prompt unlabeled per § 3 rule 10
+    // + § 4 architecture-as-secret. No more [KNOWLEDGE] / [MEMORY] labels in
+    // the operator's prompt — operator carries them as absorbed knowledge.
+    const promptSections: string[] = [
+      assembleOperatorPrompt(operator, null, { scopeLine: '[CHANNEL: Telegram]' }),
+    ];
+    if (ragCtx) promptSections.push(ragCtx);
+    if (memCtx) promptSections.push(memCtx);
 
     const history = await buildConvHistory(conv.id);
 
-    const chatMessages: ChatMessage[] = [{ role: 'system', content: systemPrompt }];
-    if (memCtx) chatMessages.push({ role: 'system', content: `[MEMORY]\n${memCtx}` });
-    chatMessages.push(...history);
+    const chatMessages: ChatMessage[] = [
+      { role: 'system', content: promptSections.join('\n\n') },
+      ...history,
+    ];
 
     const model = (operator.defaultModel && operator.defaultModel !== 'opsoul/auto')
       ? operator.defaultModel

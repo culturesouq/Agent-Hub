@@ -51,196 +51,13 @@ interface ActiveSkill {
   outputFormat?: string | null;
 }
 
-export interface LiveStationData {
-  integrations: { type: string; label: string; status: string; scopes?: string[] | null }[];
-  tasks: { name: string; status: string; lastRunAt?: string | null; lastRunSummary?: string | null; payload?: Record<string, unknown> | null }[];
-  fileCount: number;
-  fileNames?: string[];
-  deploymentSlots?: { name: string; surfaceType: string; apiKeyPreview: string; isActive: boolean; allowedOrigins?: string[] | null }[];
-  secretLabels?: string[];
-}
-
-const SKILL_HOW_TO: Record<string, string> = {
-  web_search: `Trigger when the user asks for current info, recent events, real-time data, or when you need to discover a URL before fetching it.
-Provide a precise search query — not a sentence, a targeted phrase.
-Result: titles, snippets, and URLs. Cite sources when using web results.
-Use web_search BEFORE http_request when you don't have the exact URL yet.
-Do NOT use web_search on Base44 or React SPA apps — they don't expose content to search crawlers.
-For corroboration: search "[claim] site:official-source.com" or the claim directly. Multiple agreeing sources = high confidence. Conflicting sources = reduce confidence and flag.
-For research tasks: run multiple searches from different angles. Cross-reference before concluding.
-Effective query patterns: use specific terms, not vague phrases. "Bayanat open data API endpoint" beats "UAE data portal".`,
-
-  http_request: `Call external APIs or fetch web content directly.
-Provide: method (GET/POST/PUT/DELETE), url, optional headers and body.
-Reference stored secrets with {{SECRET_NAME}} syntax — substituted server-side before the request.
-Result: raw API response. Parse JSON if needed. Report HTTP errors clearly.
-
-Error handling:
-- 200: success. Read the response.
-- 401: token expired. Retry once. If still 401, tell owner to reconnect the integration.
-- 403: no permission. Stop. Do not retry. Report which permission is missing.
-- 429: rate limited. Read Retry-After header. Wait that many seconds, then retry once. Never spam retry.
-- 4xx/5xx: stop and report. Never retry blindly.
-
-HTML responses: strip <script>, <style>, <nav>, <header>, <footer>, <aside> blocks first. Then strip all HTML tags. Collapse whitespace. Result is clean plain text ready for chunking.
-JSON responses: parse and navigate with dot notation. Always check for null before accessing nested fields.
-Pagination: check for next_page, next_cursor, nextPageToken, or Link header. Always paginate to completion — partial data = wrong answers.
-
-Blocked scraping (403, Cloudflare, CAPTCHA, empty 200): do NOT attempt to bypass. Fall back to web_search. Report the limitation.
-PDF URLs: download binary, system PDF parser extracts text. If unavailable, check for companion .md or .txt version first.
-Link extraction from HTML: find all <a href="..."> tags. Ignore #anchors, mailto:, tel:. Convert relative to absolute URLs. Deduplicate.
-
-GitHub raw files: https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}
-GitHub API file list: GET https://api.github.com/repos/{owner}/{repo}/contents/{path} — returns JSON array with name, type, download_url
-GitHub rate limit: 60 req/hr unauthenticated, 5000/hr with token.
-Base44/React SPAs: do NOT scrape with http_request — returns empty HTML shell. Use web_search instead.
-
-UAE/Gulf open data portals (Bayanat, Dubai Pulse, Abu Dhabi Open Data): use CKAN or Socrata APIs.
-Step 1: web_search to find the dataset and API endpoint.
-Step 2 CKAN: GET /api/3/action/package_search?q={query} | GET /api/3/action/datastore_search?resource_id={id}
-Step 2 Socrata: GET /resource/{dataset-id}.json?$limit=100&$offset=0
-If portal is JS-rendered and http_request returns empty — use web_search only and report.
-
-Secrets: never log, expose, or pass as URL params. Always use {{SECRET_NAME}} in headers or body.`,
-
-  write_file: `Persist content to the operator file workspace.
-Provide: filename (with extension) and content (text, JSON, CSV, Markdown, etc.).
-Result: file saved and available in the file list.
-Use for: reports, exports, structured output, KB research findings, autonomous work logs.`,
-
-  kb_seed: `Add verified knowledge to your own knowledge base.
-Provide: content (300–500 words max per entry), source (URL or document title), confidence (0.0–1.0).
-
-Confidence scoring: official/peer-reviewed = 0.85–1.0 | institutional = 0.75–0.85 | practitioner = 0.65–0.75 | unverified = do not seed.
-All entries start at 0.40 pending until external corroboration confirms them.
-
-Before seeding — verify:
-1. Is this from a reliable source? (official docs, verified repo, peer-reviewed)
-2. Is it still current? (not outdated or superseded)
-3. Does it contradict existing high-confidence entries? Surface both to owner — never silently pick one.
-4. Is it factual and traceable? (no speculation, no unverified claims)
-
-Chunking rules:
-- 300–500 words per chunk. Never split mid-sentence.
-- Each chunk must make sense on its own — retrieved without surrounding context.
-- Add context prefix from titled documents: "[Document Title] — [content]"
-- Overlap: include last 1–2 sentences of previous chunk at start of next chunk.
-- Chunk Markdown by heading sections.
-
-Tagging for retrieval: domain (specific, not "general"), source, confidence, created_at. Well-tagged entries are found 10x more reliably.`,
-
-};
-
-const INTEGRATION_HOW_TO: Record<string, string> = {
-  gmail: `Base URL: https://gmail.googleapis.com/gmail/v1/users/me
-Auth: injected automatically — do not set manually
-GET /messages?q={query}&maxResults=20 | GET /messages/{id} | POST /messages/send
-Send format: {"raw": "<base64url-encoded RFC 2822 message>"}
-Build RFC 2822: "From: me\r\nTo: {to}\r\nSubject: {subject}\r\nContent-Type: text/plain\r\n\r\n{body}"
-Base64url encode the entire string. Use standard base64 then replace + with - and / with _ and strip =.
-Pagination: use nextPageToken in pageToken param.
-Decode message bodies: parts[].body.data is base64url — decode to read content.
-Search operators: from:, to:, subject:, is:unread, after:YYYY/MM/DD, label:inbox`,
-
-  github: `Base URL: https://api.github.com
-Auth: injected automatically — do not set manually
-GET /user | GET /repos/{owner}/{repo}/issues?state=open&per_page=50&page=1
-POST /repos/{owner}/{repo}/issues {"title","body","labels":[]}
-GET /repos/{owner}/{repo}/pulls?state=open
-GET /repos/{owner}/{repo}/contents/{path} — file content in base64 in .content field
-Pagination: use page param (per_page max 100) or Link header rel="next".
-Rate limit: 5000 req/hr with token. Check X-RateLimit-Remaining header.`,
-
-  notion: `Base URL: https://api.notion.com/v1
-Auth: injected automatically — do not set manually. System also injects Notion-Version: 2022-06-28.
-POST /search {"query":"...","filter":{"property":"object","value":"page"}}
-GET /pages/{id} | PATCH /pages/{id} {"properties":{...}}
-POST /pages {"parent":{"database_id":"..."},"properties":{...}}
-POST /databases/{id}/query {"filter":{"property":"Status","select":{"equals":"Done"}}}
-POST /blocks/{id}/children {"children":[{"type":"paragraph","paragraph":{"rich_text":[{"text":{"content":"..."}}]}}]}
-Pagination: use start_cursor from response in next request.`,
-
-  slack: `Base URL: https://slack.com/api
-Auth: injected automatically — do not set manually
-POST /chat.postMessage {"channel":"#general","text":"...","blocks":[...]}
-GET /conversations.list?limit=100 | GET /conversations.history?channel={id}&limit=50
-GET /users.list | POST /reactions.add {"channel":"...","name":"thumbsup","timestamp":"..."}
-Pagination: use response_metadata.next_cursor in cursor param.
-Blocks: use for rich messages — section, divider, button. Fallback text always required.`,
-
-  google_calendar: `Base URL: https://www.googleapis.com/calendar/v3/calendars/primary
-Auth: injected automatically — do not set manually
-GET /events?timeMin={ISO}&timeMax={ISO}&maxResults=20&singleEvents=true&orderBy=startTime
-POST /events {"summary":"...","start":{"dateTime":"2026-01-01T10:00:00+04:00"},"end":{"dateTime":"..."}}
-PATCH /events/{id} | DELETE /events/{id}
-Timezone: always include timezone in dateTime. Dubai = Asia/Dubai (UTC+4).
-Pagination: use nextPageToken.`,
-
-  linear: `Base URL: https://api.linear.app/graphql (GraphQL — all calls are POST)
-Auth: injected automatically — do not set manually
-List issues: {"query":"{issues(filter:{state:{name:{eq:\\"Todo\\"}}}){nodes{id title priority state{name}}}}"}
-Create issue: {"query":"mutation{issueCreate(input:{title:\\"...\\" teamId:\\"...\\" description:\\"...\\"}) {success issue{id}}}"}
-Update issue: {"query":"mutation{issueUpdate(id:\\"...\\" input:{stateId:\\"...\\"}) {success}}"}
-Get teams: {"query":"{teams{nodes{id name}}}"}
-Pagination: use pageInfo.endCursor in after param.`,
-
-  hubspot: `Base URL: https://api.hubapi.com
-Auth: injected automatically — do not set manually
-GET /crm/v3/objects/contacts?limit=100&properties=firstname,lastname,email,company
-GET /crm/v3/objects/contacts/{id}?properties=firstname,lastname,email,phone,company
-POST /crm/v3/objects/contacts {"properties":{"firstname":"...","lastname":"...","email":"..."}}
-PATCH /crm/v3/objects/contacts/{id} {"properties":{"email":"new@example.com"}}
-GET /crm/v3/objects/deals?limit=50&properties=dealname,amount,dealstage,closedate
-POST /crm/v3/objects/deals {"properties":{"dealname":"...","amount":"5000","pipeline":"default","dealstage":"appointmentscheduled"}}
-GET /crm/v3/objects/companies?limit=50&properties=name,domain,industry
-Search: POST /crm/v3/objects/{objectType}/search {"filterGroups":[{"filters":[{"propertyName":"email","operator":"EQ","value":"..."}]}]}
-Pagination: use paging.next.after token.`,
-
-  google_drive: `Base URL: https://www.googleapis.com/drive/v3
-Auth: injected automatically — do not set manually
-GET /files?q={query}&fields=files(id,name,mimeType,modifiedTime)&pageSize=50
-Query examples: name contains 'report' | mimeType='application/pdf' | '1abc...' in parents
-GET /files/{id}?alt=media — download file content
-POST /files (multipart upload for new files)
-PATCH /files/{id} {"name":"new name"} — rename/move
-Pagination: use nextPageToken in pageToken param.`,
-};
-
-function buildStationContext(data: LiveStationData): string {
-  const lines: string[] = ['[STATION]'];
-
-  const activeIntegrations = data.integrations.filter(
-    (i) => i.status === 'connected' || i.status === 'active',
-  );
-  if (activeIntegrations.length > 0) {
-    lines.push(`Active integrations (${activeIntegrations.length}):`);
-    for (const int of activeIntegrations) {
-      lines.push(`- ${int.label} [${int.type}]`);
-      const howTo = INTEGRATION_HOW_TO[int.type];
-      if (howTo) lines.push(howTo);
-    }
-  }
-
-  const activeTasks = data.tasks.filter((t) => t.status === 'active');
-  if (activeTasks.length > 0) {
-    lines.push(`Active tasks (${activeTasks.length}):`);
-    for (const task of activeTasks) {
-      const summary = task.lastRunSummary ? ` — last run: ${task.lastRunSummary}` : '';
-      lines.push(`- ${task.name}${summary}`);
-    }
-  }
-
-  if (data.fileCount > 0) {
-    const names = (data.fileNames ?? []).slice(0, 5).join(', ');
-    lines.push(`Files: ${data.fileCount} available${names ? ` (${names}${data.fileCount > 5 ? '...' : ''})` : ''}`);
-  }
-
-  if (data.secretLabels && data.secretLabels.length > 0) {
-    lines.push(`Stored secrets (use as {{SECRET_NAME}} in http_request): ${data.secretLabels.join(', ')}`);
-  }
-
-  return lines.length > 1 ? lines.join('\n') : '';
-}
+// Dead code removed 2026-05-13 (C — chat.ts cleanup, §7 SoT):
+// LiveStationData interface, SKILL_HOW_TO + INTEGRATION_HOW_TO records,
+// and buildStationContext function. These were the machinery behind the
+// [STATION] and [OPERATOR STATE] role:'user' injection blocks, which
+// violated § 3 rule 10 and § 4 architecture-as-secret. The blocks are
+// removed in the message-assembly path further below; their support code
+// goes with them.
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -834,32 +651,15 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   let chatModel = rawModel;
   const chatOpts = { apiKey: chatApiKey, get model() { return chatModel; } };
 
-  const [skills, archetypeDefaultSkills, selfAwarenessRow, history, liveIntegrations, liveTasks, liveFiles, liveSlots, liveSecrets] = await Promise.all([
+  // Stale queries removed 2026-05-13 (C — chat.ts cleanup): the old [STATION]
+  // injection prefetched integrations / tasks / files / slots into a literal
+  // that was dumped into the operator prompt. The block was removed; the queries
+  // went with it. liveSecrets is kept — still used by httpRequestTool gating below.
+  const [skills, archetypeDefaultSkills, selfAwarenessRow, history, liveSecrets] = await Promise.all([
     loadActiveSkills(operator.id),
     loadArchetypeSkills((operator.archetype as string[]) ?? []),
     db.select().from(selfAwarenessStateTable).where(eq(selfAwarenessStateTable.operatorId, operator.id)).limit(1),
     buildMessageHistory(conv.id),
-    db.select({
-      type: operatorIntegrationsTable.integrationType,
-      label: operatorIntegrationsTable.integrationLabel,
-      status: operatorIntegrationsTable.status,
-      scopes: operatorIntegrationsTable.scopes,
-    }).from(operatorIntegrationsTable).where(eq(operatorIntegrationsTable.operatorId, operator.id)),
-    db.select({
-      name: tasksTable.contextName,
-      status: tasksTable.status,
-      payload: tasksTable.payload,
-    }).from(tasksTable).where(eq(tasksTable.operatorId, operator.id)),
-    db.select({ filename: operatorFilesTable.filename })
-      .from(operatorFilesTable)
-      .where(eq(operatorFilesTable.operatorId, operator.id)),
-    db.select({
-      name: operatorDeploymentSlotsTable.name,
-      surfaceType: operatorDeploymentSlotsTable.surfaceType,
-      apiKeyPreview: operatorDeploymentSlotsTable.apiKeyPreview,
-      isActive: operatorDeploymentSlotsTable.isActive,
-      allowedOrigins: operatorDeploymentSlotsTable.allowedOrigins,
-    }).from(operatorDeploymentSlotsTable).where(eq(operatorDeploymentSlotsTable.operatorId, operator.id)),
     db.select({ key: operatorSecretsTable.key })
       .from(operatorSecretsTable)
       .where(eq(operatorSecretsTable.operatorId, operator.id)),
@@ -982,36 +782,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // BIRTH MODE — operator has no identity yet; use birth system prompt instead of Layer 1
   const isBirthMode = !operator.rawIdentity;
 
-  // Build live station data — fetched fresh every turn so the operator always knows their real state
-  const liveStation = {
-    integrations: liveIntegrations.map(i => ({
-      type: i.type ?? '',
-      label: i.label ?? '',
-      status: i.status ?? 'unknown',
-      scopes: i.scopes ?? null,
-    })),
-    tasks: liveTasks.map(t => {
-      const p = (t.payload ?? {}) as Record<string, unknown>;
-      return {
-        name: t.name ?? 'Unnamed task',
-        status: t.status ?? 'active',
-        payload: p,
-        lastRunAt: (p.lastRunAt as string | null) ?? null,
-        lastRunSummary: (p.lastRunSummary as string | null) ?? null,
-      };
-    }),
-    fileCount: liveFiles.length,
-    fileNames: liveFiles.map(f => f.filename),
-    deploymentSlots: liveSlots.map(s => ({
-      name: s.name,
-      surfaceType: s.surfaceType,
-      apiKeyPreview: s.apiKeyPreview,
-      isActive: s.isActive ?? false,
-      allowedOrigins: s.allowedOrigins ?? null,
-    })),
-    secretLabels: liveSecrets.map(s => s.key),
-  };
-
   const systemPrompt = isBirthMode
     ? buildBirthSystemPrompt()
     : assembleOperatorPrompt(operator, selfAwareness, promptOpts);
@@ -1077,38 +847,19 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     }
   }
 
-  const messages: ChatMessage[] = [
-    { role: 'system', content: systemPrompt },
-    ...history,
-  ];
-
-  if (kbContext && kbContext.trim()) {
-    messages.push({
-      role: 'user',
-      content: `[CONTEXT]\nKnowledge retrieved for this conversation:\n${kbContext}`,
-    });
-  }
-
-  if (memoryHits && memoryHits.length > 0) {
-    const memLines = memoryHits.map((m: MemoryHit) => `[${m.memoryType}] ${m.content}`).join('\n');
-    messages.push({
-      role: 'user',
-      content: `[CONTEXT]\nMemory recalled from past conversations:\n${memLines}`,
-    });
-  }
-
-  // [STATION] — live integration state, active tasks, files, stored secrets
-  if (liveStation) {
-    const stationContext = buildStationContext(liveStation);
-    if (stationContext) {
-      messages.push({ role: 'user', content: stationContext });
-    }
-  }
-
-  // ── Inject OpSoul DNA — platform identity layer ───────────────────────────
-  // L4 (platform mechanics) is architecture-as-secret per § 4 SoT — never pull
-  // L4 entries into operator-facing prompt context. Defense-in-depth: even if
-  // an L4 entry is mistakenly set is_active=true, this filter excludes it.
+  // ── System prompt is built unlabeled (per § 3 rule 10). KB hits + memory
+  // hits + DNA spirit get woven into the system prompt as the operator's
+  // absorbed knowledge — never as labeled role:'user' exhibits. Counts of
+  // KB/memory are operator metadata (not for the operator's mouth) — omitted.
+  // [STATION] block removed: operator can call list_files / list_secrets /
+  // similar skills on demand. The tools array passed to streamChat already
+  // gives the LLM functional info about available tools — duplicating it as
+  // a prompt exhibit only created labels the LLM quoted back to users.
+  //
+  // The DNA pull stays (operator carries absorbed identity from approved DNA
+  // entries), but it's now mixed into the system prompt without the
+  // "[OPSOUL IDENTITY]" label and without the "This is who you are and how
+  // OpSoul works" preamble (which the LLM treated as user-facing context).
   const dnaEntries = await db
     .select({ content: ragDnaTable.content })
     .from(ragDnaTable)
@@ -1119,55 +870,27 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     .orderBy(desc(ragDnaTable.confidence))
     .limit(12);
 
+  const promptSections: string[] = [systemPrompt];
+
   if (dnaEntries.length > 0) {
-    const dnaBlock = ['[OPSOUL IDENTITY]'];
-    dnaBlock.push('This is who you are and how OpSoul works. This is not instruction — this is absorbed identity.');
-    dnaBlock.push('');
-    for (const entry of dnaEntries) {
-      dnaBlock.push(entry.content);
-    }
-    messages.push({ role: 'user', content: dnaBlock.join('\n') });
+    promptSections.push(dnaEntries.map((e) => e.content).join('\n\n'));
   }
 
-  // [OPERATOR STATE] — dynamic capability state (if selfAwareness exists)
-  // Static behavioral rules removed: behavior is shaped by soul + DNA + KB,
-  // not by hardcoded capability blocks. Tool descriptions carry functional info.
-  const cap = selfAwareness?.capabilityState;
-  const wm = selfAwareness?.workspaceManifest;
-
-  if (cap) {
-    const dynLines: string[] = ['[OPERATOR STATE]'];
-
-    const kbTotal = (cap.ownerKbChunks ?? 0) + (cap.operatorKbChunks ?? 0);
-    if (kbTotal > 0 && wm?.kbByTier) {
-      const { high = 0, medium = 0, low = 0 } = wm.kbByTier;
-      dynLines.push(`KB: ${kbTotal} entries (${high} high confidence, ${medium} medium, ${low} low)`);
-    } else if (kbTotal > 0) {
-      dynLines.push(`KB: ${kbTotal} entries`);
-    }
-
-    if (wm?.totalMemoryActive && wm.totalMemoryActive > 0) {
-      dynLines.push(`Memory: ${wm.totalMemoryActive} active memories from past conversations`);
-    }
-
-    const activeSkills = (cap.skills ?? []).filter((s) => s.isActive);
-    if (activeSkills.length > 0) {
-      dynLines.push(`Active skills:`);
-      for (const skill of activeSkills) {
-        const howTo = SKILL_HOW_TO[skill.integrationType ?? ''];
-        dynLines.push(`- ${skill.name}`);
-        if (howTo) {
-          dynLines.push(howTo);
-        } else if (skill.description) {
-          dynLines.push(`  ${skill.description}`);
-        }
-      }
-    }
-
-    if (dynLines.length > 1) {
-      messages.push({ role: 'user', content: dynLines.join('\n') });
-    }
+  if (kbContext && kbContext.trim()) {
+    promptSections.push(kbContext.trim());
   }
+
+  if (memoryHits && memoryHits.length > 0) {
+    const memLines = memoryHits.map((m: MemoryHit) => m.content).join('\n');
+    promptSections.push(memLines);
+  }
+
+  const fullSystemPrompt = promptSections.join('\n\n');
+
+  const messages: ChatMessage[] = [
+    { role: 'system', content: fullSystemPrompt },
+    ...history,
+  ];
 
   messages.push({ role: 'user', content: userContent });
 

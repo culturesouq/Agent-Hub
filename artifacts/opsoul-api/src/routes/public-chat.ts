@@ -225,31 +225,28 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   } catch { /* non-fatal */ }
 
   // ── System prompt ──
+  // KB hits + memory hits are woven into the system prompt unlabeled (per
+  // § 3 rule 10 + § 4 architecture-as-secret). Operator carries them as
+  // absorbed knowledge, not as labeled role:'user' exhibits the LLM might
+  // quote back to users.
   const systemPrompt = assembleOperatorPrompt(
     operator,
     null,
     { scopeLine: `[SCOPE: ${scope.scopeType} | ${scope.scopeId}]` },
   );
 
+  const promptSections: string[] = [systemPrompt];
+  if (ragContext && ragContext.trim()) {
+    promptSections.push(ragContext.trim());
+  }
+  if (memoryHits && memoryHits.length > 0) {
+    promptSections.push((memoryHits as MemoryHit[]).map(m => m.content).join('\n'));
+  }
+
   const messages: ChatMessage[] = [
-    { role: 'system', content: systemPrompt },
+    { role: 'system', content: promptSections.join('\n\n') },
     ...history,
   ];
-
-  if (ragContext && ragContext.trim()) {
-    messages.push({
-      role: 'user',
-      content: `[CONTEXT]\nKnowledge retrieved for this conversation:\n${ragContext}`,
-    });
-  }
-
-  if (memoryHits && memoryHits.length > 0) {
-    const memLines = (memoryHits as MemoryHit[]).map(m => `[${m.memoryType}] ${m.content}`).join('\n');
-    messages.push({
-      role: 'user',
-      content: `[CONTEXT]\nMemory recalled from past conversations:\n${memLines}`,
-    });
-  }
 
   // Build userContent — multipart if attachments present
   let userContent: string | ContentPart[] = message;
