@@ -450,6 +450,30 @@ Defense-in-depth against L4 platform-mechanics ever reaching operator prompts:
 
 **Effect:** Vael's auto-import cron is now structurally unable to repopulate the leak surface that A just cleared. chat.ts has a safety net. Both protections need the new image to take effect (pending build/deploy at end of A-E).
 
+**C — chat.ts + public-chat.ts + webhooks cleanup — DONE (commit `7cd3867`)**
+
+Net diff: 4 files changed, 76 insertions(+), 346 deletions(-). −270 lines.
+
+`chat.ts` (Hub UI path, 6 distinct surgeries):
+1. Removed `[CONTEXT]` KB-chunks `role:'user'` exhibit (was lines 1085-1090). KB content now woven into the system prompt as unlabeled text.
+2. Removed `[CONTEXT]` memory-hits `role:'user'` exhibit (was lines 1092-1098). Memory content woven into system prompt.
+3. Removed `[STATION]` integration/task/file/secret `role:'user'` exhibit (was lines 1101-1106) AND `buildStationContext()` function (was lines 209-243). Operator can call `list_files` / `list_secrets` / `list_tasks` skills on demand. Dead.
+4. Removed `[OPSOUL IDENTITY]` DNA block with "This is who you are" preamble (was lines 1117-1130). DNA spirit still woven into system prompt unlabeled. Preamble gone.
+5. Removed `[OPERATOR STATE]` block (was lines 1133-1170). KB/memory counts are metadata leak — removed entirely. Skills info already lives in `tools` array passed to streamChat; duplicating it as a prompt exhibit was redundant.
+6. Removed dead code: `LiveStationData` interface, `SKILL_HOW_TO` record (~70 lines), `INTEGRATION_HOW_TO` record (~75 lines), `liveStation` literal (~30 lines), 4 dead `Promise.all` queries (integrations/tasks/files/slots). All references purged.
+
+`public-chat.ts` (slot-key path) — removed 2 `[CONTEXT]` `role:'user'` exhibits. KB + memory woven into system prompt unlabeled.
+
+`telegram-webhook.ts` — removed `[KNOWLEDGE]` appended to scopeLine + `[MEMORY]` `role:'system'` block. Both woven into system prompt unlabeled.
+
+`whatsapp-webhook.ts` — same fix as telegram.
+
+**After this commit:** no user-facing route in OpSoul pushes labeled architecture exhibits into the LLM's message stream. Operators receive system prompt (with embedded DNA/KB/memory spirit) + history + user message. That's it. No `[OPSOUL IDENTITY]` for the LLM to quote back, no `[OPERATOR STATE]` counts for the operator to recite. The architecture-as-secret rule from § 4 is now structurally enforced.
+
+**Tool-result labels** in `chat.ts:1947` onwards (`[Web Search]`, `[KB Seed Result]`, `[Task Scheduled]`, etc.) are NOT changed in C — they're operational labels inside the tool-loop, framed as `role:'system'`. Considered separately (potential E follow-up or leave as-is).
+
+Needs build + deploy to take effect.
+
 **Fix path (proposed, not yet executed — awaiting owner direction):**
 
 1. **DNA injection** — keep the architectural intent (operators carry absorbed identity) but remove the label and preamble. DNA content should be *embedded inside the system prompt* by `assembleOperatorPrompt()`, not added as a labeled `role: 'user'` message. The LLM still reasons from it; the label disappears.
