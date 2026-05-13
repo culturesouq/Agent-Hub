@@ -274,6 +274,15 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 **Why this is pre-existing, not caused by today's deploys:** This code path is in `memdistill-ae32a8a` (the rolled-back image). My temporal substrate (`d5df3f8` / `42657dd`) did not touch this section of chat.ts. The leak has been present for months — just not surfaced because no one asked the operator "what is that?" pointing at the labeled blocks.
 
+**Origin commits (when the violations of rule 10 entered the codebase):**
+
+- **`4eedeea` — 2026-04-15 — *"Task #41 — Phase 2: [CONTEXT] injection in chat.ts"*** added `[CONTEXT]` (KB + memory), `[STATION]`, and the original `[CAPABILITY]` block (later renamed `[OPERATOR STATE]`).
+- **`efc1fa5` — 2026-04-24 — *"Task #92 — Split capability injection + wire OpSoul DNA into chat pipeline"*** added the `[OPSOUL IDENTITY]` block with the explicit `"This is who you are and how OpSoul works"` preamble.
+
+Both commits **directly violated § 3 rule 10**: *"No BEHAVIOR_HOW_TO or SKILL_HOW_TO hardcoded in system prompt or chat pipeline. Behavior and skill guidance lives in platform DNA KB entries only — managed, versioned, not buried in code."* The commit message of `efc1fa5` literally says "*wire OpSoul DNA into chat pipeline*" — the opposite of the rule.
+
+**Architecture clarification — what rule 10 wants:** DNA content stays in `rag_dna_table` (already correct — Vael Desk manages it). At chat time, the *spirit* of the DNA should be woven into the operator's identity layers (Layer 0 / Layer 1 / Layer 2) inside `buildSystemPrompt()` — without labels, without `role: 'user'` exhibits. The operator carries the identity; the model never sees the label `[OPSOUL IDENTITY]`. Same for KB/memory: retrieved when relevant, framed as the operator's own recollection, not as labeled exhibits in the conversation.
+
 **Fix path (proposed, not yet executed — awaiting owner direction):**
 
 1. **DNA injection** — keep the architectural intent (operators carry absorbed identity) but remove the label and preamble. DNA content should be *embedded inside the system prompt* by `assembleOperatorPrompt()`, not added as a labeled `role: 'user'` message. The LLM still reasons from it; the label disappears.
