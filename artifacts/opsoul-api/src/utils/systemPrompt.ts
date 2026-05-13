@@ -297,9 +297,17 @@ export interface BuildSystemPromptOpts {
  * time-relative ("right now", "this month", "today's weather"), the model falls
  * back to its training-cutoff era's assumptions and confidently fabricates.
  *
- * Layer 4 already says "When you do not know something, say so. Guessing is not."
- * but the LLM can't follow that rule about the current date if it has no current
- * date to reason against. This line is the substrate — not a behavioral rule.
+ * Layer 4 ("When you do not know something, say so. Guessing is not.") already
+ * handles the behavior. This line is just the fact the LLM was missing — pure
+ * substrate, no instruction wrapper. Per § 4 of OpSoul SoT line 93:
+ *
+ *   "No prescriptive behavioral rules in the system prompt."
+ *
+ * Earlier version of this function included a "Use this for any question..."
+ * clause. That clause was a behavioral instruction and was interpreted by the
+ * LLM as a directive to call tools on every input — including bare "hi" —
+ * causing tool-loop soul failures (Vael, Nahil both regressed 2026-05-13).
+ * Removed. The fact stands alone now.
  *
  * Timezone is fixed to Asia/Dubai (GST, UTC+4, no DST) — operator deployment region.
  * If we ever multi-region, this becomes per-operator config.
@@ -315,7 +323,7 @@ export function buildTemporalContext(now: Date = new Date()): string {
     minute: '2-digit',
     hour12: false,
   });
-  return `**Now (authoritative):** ${fmt.format(now)} · GST (Asia/Dubai). Use this for any question that depends on the current date or time — never substitute training-era assumptions for "now".`;
+  return `**Now:** ${fmt.format(now)} · GST (Asia/Dubai).`;
 }
 
 export interface OperatorRowForPrompt {
