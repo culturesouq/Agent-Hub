@@ -491,6 +491,23 @@ Two parts:
 
 **After this:** operators table has exactly 2 rows (Vael + Nahil), admin metric shows 2 once new image deploys.
 
+**E — rewrite Agency Core KB seed — DONE (commit `b888074`)**
+
+`seedAgencyCore.ts` AGENCY_CORE_CONTENT rewritten from platform-manual prose to operator-first-person instinct:
+- Title: `"# Agency Core — Operator Operating Manual"` → `"# How I Operate"` (operator's voice, not a manual title)
+- `"the platform resolves it server-side"` → `"the real value comes through but I never see it directly"`
+- `"You never see the actual value — the platform injects it at call time"` → `"The values are filled in before the call goes out. I never see them as plain text."`
+- All section headers rewritten in first-person (`Your Tools` → `My tools`, `How You Drive Your Own Agency` → `How I work`)
+
+**Existing chunks deleted:** 4 `operator_kb` rows with `source_name = '_agency-core'` removed via SQL admin op. 2 for Vael + Nahil (active), 2 orphaned chunks from a hardcoded Vael ID (`a826164f-...`) in `seedVaelScopingKb.ts` that doesn't match any operator in the table. After next boot, `backfillAllAgencyCore()` re-seeds Vael + Nahil with the new content.
+
+**Vael scoping KB (`seedVaelScopingKb.ts`) NOT TOUCHED in E.** That content describes the DNA pipeline / collective scoping / archetype layers — Vael genuinely needs this knowledge to do her DNA-governance work. Removing it would break Vael's classification ability. The cleaner architectural fix is a chat-time KB-retrieval filter that excludes architecture-describing entries when retrieving for user-facing chat (keep them retrievable for Vael's internal validation calls).
+
+**Deferred follow-ups (not in A-F):**
+- Vael chat-time KB filter for architecture-describing entries
+- Tool-result labels in chat.ts:1947 onwards (`[Web Search]`, `[KB Seed Result]`, etc.) — operationally useful, low priority
+- `seedArchetypeDna.ts` and `seedBuilderDna.ts` scripts exist but never ran in production (0 rows) — could be deleted as dead code, but harmless if left
+
 **Fix path (proposed, not yet executed — awaiting owner direction):**
 
 1. **DNA injection** — keep the architectural intent (operators carry absorbed identity) but remove the label and preamble. DNA content should be *embedded inside the system prompt* by `assembleOperatorPrompt()`, not added as a labeled `role: 'user'` message. The LLM still reasons from it; the label disappears.
