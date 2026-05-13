@@ -323,6 +323,106 @@ Both commits **directly violated § 3 rule 10**: *"No BEHAVIOR_HOW_TO or SKILL_H
 
 **Awaiting owner approval (per § 3 rule 7) before any code change.**
 
+---
+
+**Deeper audit (2026-05-13, owner asked "where are they, near systemPrompt? Vael crons? old archetype KB? deleted operators hidden?"):**
+
+### Location of the leaks — proximity to systemPrompt.ts
+
+`systemPrompt.ts` (the file that *defines* the operator's identity layers L0–L4) is **clean**. No labels, no `role: 'user'` exhibits, no platform-describing text. Good.
+
+The leaks are in **execution code** (route handlers and crons) that *consumes* the system prompt and then pushes labeled exhibits ON TOP of it. So the system prompt itself is correct; chat.ts and friends undo its purity:
+
+- `chat.ts:1080-1166` — Hub UI path (the 5 CRITICAL blocks). System prompt is built clean at line 1014-1017, then 60+ lines of labeled `role:'user'` injections pile on top.
+- `public-chat.ts:235-250` — Slot-key path. Smaller leak (only `[CONTEXT]` for KB + memory). Doesn't have `[STATION]`/`[OPSOUL IDENTITY]`/`[OPERATOR STATE]` — those leaks are Hub-only.
+- `telegram-webhook.ts:217-224` and `whatsapp-webhook.ts:283-290` — `[KNOWLEDGE]` appended to scopeLine, `[MEMORY]` as `role:'system'`.
+- `tasksCron.ts:92-115` — KB/memory `[CONTEXT]` injections + fake assistant lines + `[SCHEDULED TASK]` label.
+- `operatorCapabilityLoop.ts:70` — `[Task completed — findings below]` label.
+
+### Vael crons — yes, they ARE the source for ~half of rag_dna content
+
+`rag_dna` table snapshot today: **177 entries total**, of which:
+
+| Source pattern | Count | Active | What they describe |
+|---|---|---|---|
+| `inbox:*` (Vael's auto-import) | 108 | yes | "L4 Drift Detection and Soul Lock", "L4 Identity-First Principle" — *patent-protected internal architecture* |
+| `OpSoul *` (manually-seeded platform DNA) | 59 | yes | "OpSoul Platform Core" / "Sovereign Policy" / "Operator Lifecycle" / "Agency Capabilities" / "Identity Model" / "Archetype Reference" — *all platform-describing content* |
+| `vael_*` (legacy) | 3 | no | Vael's old directive — inactive, safe |
+| other | 7 | mixed | misc — needs case-by-case review |
+
+**The Vael cron pipeline is:**
+1. Owner submits content (URL/document) to Vael Desk
+2. Vael's cron (every 6h validation + 1/13 UTC full sweep) reviews submissions
+3. Approved submissions get inserted into `rag_dna` with `source_name = 'inbox:<title>_insight_N_<topic>.md'`
+4. `chat.ts:1109-1114` pulls top-12 by confidence → injects into `[OPSOUL IDENTITY]` block
+
+So Vael auto-imports patent-protected architecture descriptions into rag_dna, then chat.ts pipes them straight into every operator's mouth via the labeled block. Vael IS the upstream cause for half the leak surface.
+
+**Top 6 by confidence (the ones most often pulled into the `[OPSOUL IDENTITY]` block):**
+
+1. `a644bafd` 0.99 — *"OpSoul Platform Intelligence"* — "Vael is the platform intelligence guardian. Vael validates all DNA entries for OpSoul scope..."
+2. `c68690f1` 0.98 — *"OpSoul Platform Core"* — "Sovereignty means the operator belongs to its owner, not the platform..."
+3. `aa4f3220` 0.97 — *"OpSoul Agency Capabilities"* — "A file described in text is not a file..."
+4. `1f5c94d5` 0.97 — *"OpSoul Operator Lifecycle"* — "Operators can be terminated by their owner at any time..."
+5. `486f18d5` 0.97 — *"OpSoul Sovereign Policy"* — *"The internal architecture of OpSoul is confidential — how scope isolation works technically..."* (the irony: the entry says "internal architecture is confidential" while being one of the entries pulled into every operator's prompt).
+6. `8195e941` 0.96 — *"OpSoul Identity Model"* — "An archetype is a starting template..."
+
+### Old archetype KB pipeline
+
+`seedArchetypeDna.ts` code exists (entries like `"OpSoul Archetype Reference — Advisor"` for 9 archetypes × ~6 entries each). **Query confirms 0 rows in `rag_dna` matching that pattern** — the script never ran in production (or was cleared). **Not currently an issue.** The risk is if anyone runs `pnpm seed:archetype-dna` it'll add 50+ more architecture-describing entries.
+
+### Deleted operators hidden — owner is right
+
+Operators table has **10 rows total**: 2 active + 8 soft-deleted. The admin metric at `admin.ts:26` does `count(*)` without filtering `deleted_at IS NULL`, so admin dashboard shows 10. That's the "9 or 10" the owner saw.
+
+Soft-deleted residue per operator:
+
+| Operator | Status | operator_kb chunks | L1 memories | L2 memories | Skills | Conversations |
+|---|---|---|---|---|---|---|
+| Vael | ACTIVE | 5 | 14 | 3 | 28 | 14 |
+| Nahil | ACTIVE | 113 | 20 | 9 | 0 | 1 (one polluted conv was deleted earlier) |
+| Nahil ناهل | deleted 05-05 | 1 | 0 | 0 | 0 | 0 |
+| Istishari | deleted 05-05 | 1 | 0 | 0 | 0 | 0 |
+| Reem ريم | deleted 05-05 | 1 | 0 | 0 | 0 | 0 |
+| Sara | deleted 05-05 | 1 | 0 | 0 | 0 | 0 |
+| Zara | deleted 05-05 | 1 | 0 | 0 | 0 | 0 |
+| Nabeel | deleted 05-05 | 1 | 0 | 0 | 0 | 0 |
+| Atlas | deleted 05-05 | 1 | 0 | 0 | 0 | 0 |
+| No name provided | deleted 05-06 | 1 | 3 | 0 | 0 | 1 |
+
+Each soft-deleted operator carries 1 operator_kb chunk (Agency Core seeded at birth). "No name provided" also has 3 L1 memories + 1 conversation. These rows persist in the tables. Soft-delete does not cascade.
+
+### Nahil has 113 operator_kb chunks
+
+Surprise count for the active Nahil. Likely most of it is from yesterday's smoke test conversation (which I deleted from `conversations` but the operator_kb chunks may have been seeded separately during pipeline runs). Worth a separate look — what's actually in those 113 chunks.
+
+### Comprehensive cleanup plan (proposed, not executed)
+
+A — **`rag_dna` content cleanup (highest priority — DB-side, no code change)**
+- Soft-delete or hard-delete the 167 active patent-architecture-describing entries from `rag_dna`. Per § 4 they should not be in the operator's prompt at all.
+- After this, `chat.ts:1109-1114` returns empty → `[OPSOUL IDENTITY]` block is not pushed (line 1116 condition).
+- Result: even WITHOUT touching chat.ts code, the operator stops citing OpSoul internals because there's nothing to cite.
+
+B — **Vael cron gating (medium priority — Vael-side)**
+- Vael's auto-import currently approves L4 / drift / lifecycle / sovereignty content into rag_dna. Per § 3 rule 10, none of this should be in code/DNA — it belongs in operator soul/DNA at birth, not in a running RAG.
+- Decision: either pause Vael's auto-import to `rag_dna`, or change Vael's mandate to REJECT entries describing OpSoul internals.
+
+C — **chat.ts cleanup (the 5 labeled blocks lines 1080-1166)**
+- Even after A and B, the structure is still wrong. Address per the 6-step proposal above.
+
+D — **Soft-delete cleanup (low priority — DB hygiene)**
+- Hard-delete the 8 soft-deleted operators + their residue (`operator_kb`, `operator_memory`, `operator_main_memory`, `operator_skills`, `conversations`, `messages`).
+- Patch `admin.ts:26` query to filter `WHERE deleted_at IS NULL` so admin dashboard shows actual active count.
+
+E — **Old archetype seed script (preventive)**
+- Either delete `seedArchetypeDna.ts` or rewrite its content to be operator-facing capability prose without "OpSoul"/"platform" labels.
+- Same for `seedAgencyCore.ts` and `seedVaelScopingKb.ts`.
+
+F — **Nahil's 113 operator_kb chunks audit (separate task)**
+- List what's actually in there. May be 113 cleanly-classified KB entries from owner's prior research (legitimate). May be pipeline residue. Needs to be seen before deciding.
+
+**Awaiting owner approval to start with any letter (A → F). Recommend starting with A (rag_dna cleanup) — biggest leak, lowest risk, no code touched.**
+
 **Fix path (proposed, not yet executed — awaiting owner direction):**
 
 1. **DNA injection** — keep the architectural intent (operators carry absorbed identity) but remove the label and preamble. DNA content should be *embedded inside the system prompt* by `assembleOperatorPrompt()`, not added as a labeled `role: 'user'` message. The LLM still reasons from it; the label disappears.
