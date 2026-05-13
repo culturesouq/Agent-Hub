@@ -423,6 +423,24 @@ F — **Nahil's 113 operator_kb chunks audit (separate task)**
 
 **Awaiting owner approval to start with any letter (A → F). Recommend starting with A (rag_dna cleanup) — biggest leak, lowest risk, no code touched.**
 
+---
+
+### Execution log — owner approved A→F sequentially 2026-05-13
+
+**A — rag_dna content cleanup — DONE**
+
+Set `is_active=false` on 92 architecture-describing entries:
+- 59 entries with source_name `OpSoul *` (Platform Core, Sovereign Policy, Identity Model, Agency Capabilities, Operator Lifecycle, Behavioral Framework, Deployment Architecture, Intelligence Architecture, Integration Reference, Security Architecture, Memory Architecture, Operator Principles, Platform Architecture, Platform Intelligence)
+- 33 entries with source_name `inbox:L4*` (Drift Detection and Soul Lock, Identity-First Principle)
+
+**Kept active** (5 entries, all legitimate content):
+- 4 `operator_intake` entries — UAE agriculture domain content (date palm heritage, falaj/oasis systems, ag stakeholder blending, UAE govt support)
+- 1 `inbox:L0_ AI BUILDER` entry — generic agent-building advice, not OpSoul-specific
+
+**Effect:** `chat.ts:1109-1114` pulls `WHERE is_active = true` ordered by confidence, limit 12. With 92 entries deactivated, the `[OPSOUL IDENTITY]` block content now contains only UAE agriculture + generic agent prose — no OpSoul internals. The label still appears (cosmetic — fixed in step C) but the patent-leak surface is gone.
+
+**Reversible:** All deactivated entries still in DB. To restore: `UPDATE rag_dna SET is_active=true WHERE id IN (...)`.
+
 **Fix path (proposed, not yet executed — awaiting owner direction):**
 
 1. **DNA injection** — keep the architectural intent (operators carry absorbed identity) but remove the label and preamble. DNA content should be *embedded inside the system prompt* by `assembleOperatorPrompt()`, not added as a labeled `role: 'user'` message. The LLM still reasons from it; the label disappears.
