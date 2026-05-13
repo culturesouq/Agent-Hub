@@ -441,6 +441,15 @@ Set `is_active=false` on 92 architecture-describing entries:
 
 **Reversible:** All deactivated entries still in DB. To restore: `UPDATE rag_dna SET is_active=true WHERE id IN (...)`.
 
+**B — Vael auto-import gating + chat.ts L4 filter — DONE (commit `325175c`)**
+
+Defense-in-depth against L4 platform-mechanics ever reaching operator prompts:
+
+1. **`chat.ts:1109-1118`** — added `ne(ragDnaTable.layer, 'l4_platform')` filter to the DNA pull. Imports updated (`ne` from drizzle-orm). Even if an L4 entry is mistakenly set `is_active=true` in the DB, this filter excludes it from the `[OPSOUL IDENTITY]` block.
+2. **`vaelEngine.ts` `validateEntry` prompt** — added Rule 6 to Vael's mandate: `"Architecture privacy — REJECT entries that describe OpSoul's internal mechanics (drift detection, soul lock, scope isolation, attention budget, layer architecture, GROW pipeline, memory engine internals, operator lifecycle, platform identity, sovereignty model)..."` Going forward, Vael will reject architecture-describing submissions before they enter rag_dna.
+
+**Effect:** Vael's auto-import cron is now structurally unable to repopulate the leak surface that A just cleared. chat.ts has a safety net. Both protections need the new image to take effect (pending build/deploy at end of A-E).
+
 **Fix path (proposed, not yet executed — awaiting owner direction):**
 
 1. **DNA injection** — keep the architectural intent (operators carry absorbed identity) but remove the label and preamble. DNA content should be *embedded inside the system prompt* by `assembleOperatorPrompt()`, not added as a labeled `role: 'user'` message. The LLM still reasons from it; the label disappears.
