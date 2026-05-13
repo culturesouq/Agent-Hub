@@ -75,6 +75,13 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   const op = await resolveOperator(req, res);
   if (!op) return;
 
+  // Owner workspace is strictly scope_id = "authenticated:<ownerId>". Any conversation
+  // with scope_type='authenticated' but a different scope_id (e.g. created via slot key
+  // with userId metadata that maps to a different scopeId — like `authenticated:farmer-test-42`)
+  // must NOT appear in the owner's Hub UI list. Otherwise the Hub picks the wrong conv as
+  // active and the subsequent POST to /messages 404s in chat.ts (which correctly filters
+  // by scope_id). The list endpoint and the messages endpoint must agree on the scope.
+  const ownerScope = buildOwnerScope(req.owner!.ownerId);
   const convs = await db
     .select()
     .from(conversationsTable)
@@ -82,7 +89,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
       and(
         eq(conversationsTable.operatorId, op.id),
         eq(conversationsTable.ownerId, req.owner!.ownerId),
-        eq(conversationsTable.scopeType, 'authenticated'),
+        eq(conversationsTable.scopeId, ownerScope.scopeId),
       ),
     )
     .orderBy(sql`${conversationsTable.lastMessageAt} DESC NULLS LAST`);

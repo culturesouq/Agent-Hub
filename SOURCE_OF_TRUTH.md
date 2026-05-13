@@ -150,7 +150,9 @@ The patent draft (IPPT-2026-000028, not yet filed) needs these reconciliations b
 | **UI/backend default model mismatch** | Open. `SettingsSection.tsx:416` reads `operator.defaultModel ?? "opsoul/auto"`. When `defaultModel` is NULL, the UI shows "OpSoul Auto" but the backend treats NULL as Sonnet (`chat.ts:833` falls back to `CHAT_MODEL`). If the owner clicks Save in Settings without changing the dropdown, the form submits `'opsoul/auto'` and silently flips the operator from Sonnet to auto-routing (which can downgrade to Haiku on short messages). Fix: make UI display match backend behavior — either NULL → Sonnet label, or NULL → genuinely auto on backend too. |
 | **OpenRouter credit monitoring** | Open. Low-credit conditions cause silent quirky behavior (model substitution, narration drift). Add a credit-balance check + UI banner when balance drops below a threshold. |
 | **Per-message model record** | Open. Currently no DB column captures which model handled which message — only console.log of auto-routing decisions. Hard to audit operator behavior after the fact. Add `model` column to `messages` table when migration window opens. |
-| **Universal temporal substrate** | **Shipped + hotfixed + verified 2026-05-13.** Every operator's system prompt now opens with `**Now:** <weekday, date, time> · GST (Asia/Dubai)`. Pure substrate, no instruction wrapper. Earlier version (`d5df3f8`) included `"Use this for any question that depends on the current date or time — never substitute training-era assumptions for 'now'"` — that clause was a **behavioral instruction in the system prompt** and directly violated § 4 line 93 ("No prescriptive behavioral rules in the system prompt"). The LLM interpreted it as a directive to call tools on every input — Vael's "hi" and Nahil's chat regressed into tool-loop soul failures within hours of the deploy. **Hotfix `42657dd` shipped same day as image `opsoul-api:hotfix-42657dd` (ACR Run `dg52`), revision `opsoul--0000039`.** Stripped the clause, kept only the fact. Layer 4's existing "guessing is not" rule handles the behavior; substrate just gives it the date it was missing. Live verified: Nahil "hi" → "Nahil here. What are we working on?" (clean, no soul-failure). Affects every operator (Vael, Nahil, Istishari, Bani, future) — same prompt builder. |
+| **Universal temporal substrate** | **Shipped 2026-05-13** (`d5df3f8`). Every operator's system prompt opens with `**Now:** <weekday, date, time> · GST (Asia/Dubai)`. First version included a behavioral clause (`"Use this for any question..."`) which violated § 4 line 93 — hotfix `42657dd` stripped it. Note: hotfix did NOT fix the Vael tool-loop issue that was observed concurrently — that issue has a separate, unrelated root cause (see "Vael tool-loop" below). Substrate itself works as intended; Nahil correctly reports today's date now. Live as image `hotfix-42657dd`, revision `opsoul--0000039`. |
+| **Vael "hi" → tool-loop soul-failure** | **Open, root cause not yet confirmed.** Vael "hi" returns the `soulFailureResponse(operator, 'execution', 'tool loop', 'No result was produced.')` string from `chat.ts:1926`. Hypothesis: Sonnet 4.5 streaming with 11 tools (web_search + kb_seed + 7 task tools + http_request — enabled because Vael has `SOVEREIGN_RAG_*` secrets) + 16-message history of past web_search calls → LLM tool-calls on the new "hi" without producing user text → MAX_ITER (8) hit → empty content → soul-failure. Not caused by temporal substrate (hotfix proved that — still fails after fix). Needs deeper investigation: reproduce on a fresh conversation, check if Vael's KB pushes tools, possibly trim Vael's history or reduce iter eagerness for short inputs. Do NOT modify Vael's soul/skills/identity. |
+| **Nahil "hi" → "Server error 404"** | **Root cause confirmed + fixed 2026-05-13.** Nahil's owner conv list contained a stray conversation (`cc494a1d`) I accidentally created at 10:30 today via a smoke test (POST /v1/chat with `userId: "farmer-test-42"`). That conv was stored with `owner_id = <real owner>` but `scope_id = "authenticated:farmer-test-42"`. The `/api/operators/:id/conversations` GET endpoint filtered by `owner_id` + `scope_type='authenticated'` but NOT by `scope_id`, so Hub UI received both convs, picked the newer one (the polluted one) as active. The subsequent POST to `/messages` was correctly rejected by `chat.ts:298` because the chat handler DOES filter by `scope_id` — returns 404 "Conversation not found" — and Hub UI displayed "Server error 404. Please try again." Two fixes: (a) deleted the stray conv row + its 2 messages via SQL admin op, (b) patched `conversations.ts` list query to filter `scope_id = buildOwnerScope().scopeId` exactly. List endpoint and messages endpoint now agree on the scope. Architectural fix — applies to every operator going forward. |
 
 ### Seeding cadence — one insight at a time (rule, 2026-05-11)
 
@@ -214,6 +216,40 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 ---
 
 ## 8. Commit History — newest first
+
+### 2026-05-13 — Fix conversations list scope filter + delete polluted Nahil conv (hash forthcoming, this commit)
+
+**What:** `conversations.ts` list endpoint (`GET /api/operators/:id/conversations`) was filtering by `owner_id` + `scope_type='authenticated'` but NOT `scope_id`. A smoke-test conversation created earlier today via `/v1/chat` with a non-owner `userId` (`farmer-test-42`) appeared in the owner's Hub UI list because it shared `owner_id` and `scope_type`, but its `scope_id` was `authenticated:farmer-test-42` instead of `authenticated:<ownerId>`. Hub UI picked the stray conv as `activeConvId` (newer by `last_message_at`), the subsequent POST to `/messages` was correctly rejected by `chat.ts:298` (which DOES filter scope_id), and Hub frontend showed "Server error 404. Please try again."
+
+**Fix:** patched list query to filter `scope_id = buildOwnerScope(ownerId).scopeId` exactly. The list endpoint and the messages endpoint now agree on the scope — no more cross-scope conversations leaking into the owner's Hub list. Architectural fix — applies to every operator.
+
+**Cleanup:** DELETE'd the stray conv `cc494a1d-0a64-48e9-bdea-23b0bd6efb0d` and its 2 messages (`11bf2fb3...`, `6b152b2c...`) directly via psql admin op. Nahil now has only the real owner conv `b38dda2c-...` (31 messages, scope `authenticated:f1a2b3c4-...`).
+
+**Why:** Nahil's owner-side chat was returning "Server error 404" since 10:30 UTC today. Funder visited around then. Root-caused by tracing the 404 string back through Hub frontend `ChatSection.tsx:472` → API response status → `chat.ts:298/299` → conversation lookup failing scope filter.
+
+**Files:** `artifacts/opsoul-api/src/routes/conversations.ts`, `SOURCE_OF_TRUTH.md`.
+
+**Deploy:** pending — build + roll in flight as `nahil-404-fix-<hash>`.
+
+### 2026-05-13 — Hotfix temporal substrate: strip behavioral clause (`42657dd`)
+
+**What:** Earlier today's commit `d5df3f8` added `buildTemporalContext()` to `systemPrompt.ts`, injected as the first line of every operator's prompt. Format included an instruction: `"Use this for any question that depends on the current date or time — never substitute training-era assumptions for 'now'."` That instruction violated § 4 line 93 ("No prescriptive behavioral rules in the system prompt"). Stripped the clause; kept only the fact: `**Now:** Wednesday, 13 May 2026 at 16:49 · GST (Asia/Dubai).`
+
+**Why:** Hypothesized this clause was triggering Vael's tool-loop soul-failure ("I tried a execution call to tool loop — it failed with: No result was produced."). Hotfix did NOT resolve Vael's issue — she still fails identically after the fix. So the behavioral clause wasn't the actual cause of the tool-loop, but it was still architecturally wrong and needed removal anyway. Vael's tool-loop has a separate root cause (see § 7).
+
+**Deploy:** Built as `opsoul-api:hotfix-42657dd` (ACR Run `dg52`). Rolled to revision `opsoul--0000039`.
+
+**Files:** `artifacts/opsoul-api/src/utils/systemPrompt.ts`, `SOURCE_OF_TRUTH.md`.
+
+### 2026-05-13 — Universal temporal substrate (`d5df3f8`)
+
+**What:** Added `buildTemporalContext(now?: Date)` to `systemPrompt.ts`. Injected as the first line of every operator's system prompt — universal across all operators (Vael, Nahil, Istishari, Bani, future). Output: `**Now (authoritative):** Wednesday, 13 May 2026 at 13:47 · GST (Asia/Dubai). Use this for any question...` (the trailing clause was hotfixed out same day — see above).
+
+**Why:** Nahil hallucinated `"recent ET of 1.3mm/day"` and `"mid-January, winter growing season"` in test answers on 2026-05-12 — Layer 4 says "guessing is not" but the LLM had no current date to ground itself. Substrate gives the LLM the fact. After hotfix: Nahil correctly answers "Wednesday, 13 May 2026", "mid-May", "winter season has ended, daytime 40-43°C" — temporal grounding is now reliable.
+
+**Deploy:** Built as `opsoul-api:temporal-d5df3f8` (ACR Run `dg4y`). Rolled to revision `opsoul--0000038` (later replaced by hotfix `0000039`).
+
+**Files:** `artifacts/opsoul-api/src/utils/systemPrompt.ts`, `SOURCE_OF_TRUTH.md`.
 
 ### 2026-05-10 — Filter web/URL/skill output before persisting to memory (`ae32a8a`)
 
