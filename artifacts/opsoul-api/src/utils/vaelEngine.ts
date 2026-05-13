@@ -114,6 +114,7 @@ Review against:
 3. Tone — absorbed knowledge, not rule-lists or commands
 4. Accuracy — specific and factually sound
 5. Consistency — not a duplicate or direct conflict with existing entries
+6. Architecture privacy — REJECT entries that describe OpSoul's internal mechanics (drift detection, soul lock, scope isolation, attention budget, layer architecture, GROW pipeline, memory engine internals, operator lifecycle, platform identity, sovereignty model). These are patent-protected. They must not enter the DNA library that gets fed to operators — operators carry identity, they should not be told *how* the platform works under the hood. If the submission is L4 platform-mechanics OR if any other layer's content slips into describing OpSoul internals, verdict = "reject" with reason "architecture-as-secret (SoT § 4)".
 
 Return JSON only:
 {

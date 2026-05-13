@@ -40,7 +40,7 @@ import { buildOwnerScope, type ValidatedScope } from '../utils/scopeResolver.js'
 import { scrapeUrl } from '../utils/urlScraper.js';
 import type { ContentPart } from '../utils/openrouter.js';
 import { verifyAndStore, persistKbSeedEntry } from '../utils/kbIntake.js';
-import { eq, and, asc, sql, desc } from 'drizzle-orm';
+import { eq, and, ne, asc, sql, desc } from 'drizzle-orm';
 import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
 import { isWebSearchAvailable, executeWebSearch } from '../utils/capabilityEngine.js';
 
@@ -1106,10 +1106,16 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   }
 
   // ── Inject OpSoul DNA — platform identity layer ───────────────────────────
+  // L4 (platform mechanics) is architecture-as-secret per § 4 SoT — never pull
+  // L4 entries into operator-facing prompt context. Defense-in-depth: even if
+  // an L4 entry is mistakenly set is_active=true, this filter excludes it.
   const dnaEntries = await db
     .select({ content: ragDnaTable.content })
     .from(ragDnaTable)
-    .where(eq(ragDnaTable.isActive, true))
+    .where(and(
+      eq(ragDnaTable.isActive, true),
+      ne(ragDnaTable.layer, 'l4_platform'),
+    ))
     .orderBy(desc(ragDnaTable.confidence))
     .limit(12);
 
