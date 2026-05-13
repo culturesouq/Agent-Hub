@@ -474,6 +474,23 @@ Net diff: 4 files changed, 76 insertions(+), 346 deletions(-). −270 lines.
 
 Needs build + deploy to take effect.
 
+**D — soft-delete hard-purge + admin metric fix — DONE (commit `3c4d2ea`)**
+
+Two parts:
+
+1. **DB purge (SQL admin op in a single transaction).** All 8 soft-deleted operators (Atlas, Nabeel, Zara, Sara, Reem, Istishari, Nahil ناهل, "No name provided") hard-deleted along with all child-table residue:
+   - 8 `operator_kb` chunks (Agency Core seeded at birth for each)
+   - 3 `operator_memory` rows (from "No name provided")
+   - 1 `conversations` row + 16 `messages` rows (also from "No name provided")
+   - 73 `grow_proposals` rows
+   - 8 `self_awareness_state` rows (one per operator)
+   - Total: 117 rows removed
+   - Other tables checked, no residue: capability_requests, grow_blocked_log, kb_verification_runs, operator_files, operator_integrations, ops_logs, owner_kb, support_tickets, tasks, operator_secrets, operator_main_memory, operator_skills, operator_deployment_slots
+
+2. **Code: `admin.ts:23-32` stats endpoint** — added `WHERE deleted_at IS NULL` filter to the `totalOperators` count query. Now consistent with the `/admin/operators` list endpoint (line 84) which already had this filter. Future soft-deletes won't re-confuse the metric.
+
+**After this:** operators table has exactly 2 rows (Vael + Nahil), admin metric shows 2 once new image deploys.
+
 **Fix path (proposed, not yet executed — awaiting owner direction):**
 
 1. **DNA injection** — keep the architectural intent (operators carry absorbed identity) but remove the label and preamble. DNA content should be *embedded inside the system prompt* by `assembleOperatorPrompt()`, not added as a labeled `role: 'user'` message. The LLM still reasons from it; the label disappears.
