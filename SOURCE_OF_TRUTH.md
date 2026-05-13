@@ -140,15 +140,76 @@ The patent draft (IPPT-2026-000028, not yet filed) needs these reconciliations b
 | Item | Status |
 |---|---|
 | **Phase 5 — Capability truth audit** | Initial fix shipped (`7051478` — archetype skills now actually execute). Full skill-by-skill walk against route implementations still owed. |
-| **Phase 9b — Vael `rag_sources` population** | Open. Vael needs ground truth to validate against. Drop documents/URLs through the Submit to VAEL panel. |
+| **Phase 9b — Vael `rag_sources` population** | **Vael connected (2026-05-11).** Continue dropping ground-truth documents through Submit to VAEL — **one at a time**, owner verifies Vael's review of each before the next (see "Seeding cadence" below). |
+| **Nahil operator — app wiring + first insight drops** | **Nahil operator created in OpSoul on 2026-05-11.** Tomorrow (2026-05-12): connect Nahil app's chat route to OpSoul (`OPSOUL_NAHIL_KEY` already in env), then begin one-at-a-time KB drops via Nahil Desk (EJFA → ICBA → ADAFSA). Same one-at-a-time rule as Vael — see "Seeding cadence" below. |
 | **Phase 10b — Tone refresh remainder** | Done in cleanup commit `fd20792`. (IdentitySection, KbSection, MemorySection, GrowSection, SkillsSection, OperatorCard, login all retoned.) |
 | **DB migration — `operator_main_memory`** | Schema in repo, NOT run on prod. Owner must approve and run `pnpm --filter opsoul-db push`. |
 | **DB migration — `operator_memory.scopeId`** | Default changed to `'legacy'`, NOT run. Safe (Postgres applies default to new rows only). |
 | **Known bugs (May 9 list)** | All 8 fixed and shipped. See history below. |
-| **LLM provider alternative — DeepSeek R + Kimi K2** | Open. Conversation started 2026-05-09 evening: explore replacing/supplementing OpenRouter with direct DeepSeek (reasoning) and Kimi (Moonshot) model access — both have free tiers usable for development and lower-cost paths for production. Never finished because the OpSoul cleanup work took over the session. Resume when stable. |
+| **LLM provider alternative — Kimi K2.6 + DeepSeek V3** | **Direction set 2026-05-11, validation pending.** See "LLM Routing Strategy" below this table. |
 | **UI/backend default model mismatch** | Open. `SettingsSection.tsx:416` reads `operator.defaultModel ?? "opsoul/auto"`. When `defaultModel` is NULL, the UI shows "OpSoul Auto" but the backend treats NULL as Sonnet (`chat.ts:833` falls back to `CHAT_MODEL`). If the owner clicks Save in Settings without changing the dropdown, the form submits `'opsoul/auto'` and silently flips the operator from Sonnet to auto-routing (which can downgrade to Haiku on short messages). Fix: make UI display match backend behavior — either NULL → Sonnet label, or NULL → genuinely auto on backend too. |
 | **OpenRouter credit monitoring** | Open. Low-credit conditions cause silent quirky behavior (model substitution, narration drift). Add a credit-balance check + UI banner when balance drops below a threshold. |
 | **Per-message model record** | Open. Currently no DB column captures which model handled which message — only console.log of auto-routing decisions. Hard to audit operator behavior after the fact. Add `model` column to `messages` table when migration window opens. |
+| **Universal temporal substrate** | **Shipped 2026-05-13.** Every operator's system prompt now opens with `**Now (authoritative):** <weekday, date, time> · GST (Asia/Dubai)`. Anchors the LLM in real time so "now" stops being a guess. Triggered by Nahil hallucinating "mid-January" + "ET 1.3mm/day" when it's May 2026 — Layer 4 already says "guessing is not" but the LLM had no substrate to know what "now" is. Implemented in `systemPrompt.ts` as `buildTemporalContext(now?: Date)`, injected unconditionally as the first line of every `buildSystemPrompt()` call. Helps every operator (Vael, Nahil, Istishari, Bani, future) without per-operator config. Timezone fixed Asia/Dubai — when multi-region happens, becomes per-operator setting. |
+
+### Seeding cadence — one insight at a time (rule, 2026-05-11)
+
+For every operator (Vael, Nahil, future), **knowledge is seeded one insight at a time**. The owner drops one document/URL, the operator reviews it (classify, approve/reject, score, atomize), the owner confirms the operator's review, and **only then** the next drop. No CSV imports, no batch URL lists, no parallel multi-article seeding into the operator-review step.
+
+The raw collection step (crawling, scraping, parsing) may be bulk — that's plumbing. The promotion step where the operator turns a raw item into a stored insight must be sequential and human-witnessed.
+
+**Why:** Owner stated 2026-05-11: bulk drops are confusing, the owner cannot verify each insight against the operator's understanding, and tone/framing drift goes undetected. Sequential seeding is a quality-control mechanism on the operator's growth, not a workflow preference. This is enforced for all operators.
+
+**How it shapes UI / tooling:** Nahil Desk and Submit-to-VAEL must present items one-at-a-time for review (not as a queue dashboard tempting the owner to mass-approve). If a queue view is ever built, "approve all" / "bulk approve" must be absent. SRAG promotion-to-insight inherits the same rule.
+
+### LLM Routing Strategy — pending validation (2026-05-11)
+
+Direction locked, not yet swapped in code. Trigger: Moonshot released **Kimi K2.6** on 2026-04-20 — open-weight 1T-param MoE, 256K context, with an **Agent Swarm system scaling to 300 sub-agents and 4,000 coordinated steps**. That swarm architecture is the closest external analogue to OpSoul's multi-role / multi-archetype framework (§5 item 3 + patent claims 13, 20), making it the right candidate to host operator brains at ~4× lower cost than Claude Sonnet 4.5.
+
+**OpenRouter pricing snapshot (2026-05-11):**
+
+| Model | Input $/M | Output $/M | Context | Role |
+|---|---|---|---|---|
+| Claude Sonnet 4.5 | $3.00 | $15.00 | 1M | current baseline for operator brains |
+| **Kimi K2.6** | $0.75 | $3.50 | 256K | target for operator brains (post-validation) |
+| **DeepSeek V3** | $0.32 | $0.89 | 164K | bulk / cheap tasks (distillation, classification) |
+| DeepSeek R1 | $0.70 | $2.50 | 64K | not selected — context too small for full prompt stack |
+
+**Target routing (post-validation):**
+
+1. **Operator brains** (chat, public-chat, telegram, whatsapp, action runs) → Kimi K2.6
+2. **Distillation jobs** (`distillRawContentForMemory`, `distillActionTaskPattern`, GROW summarization) → DeepSeek V3
+3. **Translation** (OpSoul does not own this — Authentic Tour does, stays on OpenAI free tier)
+4. **Sonnet** → kept as fallback flag per operator until Kimi K2.6 is proven on the dimensions below
+
+**Validation gate — must pass before any production swap:**
+
+The "no LLM fallbacks" rule and "no prompt changes without approval" rule together mean a cheaper model that flattens an operator is worse than an expensive one that holds. Validation runs against the four risk vectors specific to OpSoul:
+
+| Risk | Test |
+|---|---|
+| **Identity / soul fidelity** | Side-by-side: same Layer 0+1 prompt, 10 real user messages each for Vael, Istishari, Nahil, Bani. Sonnet vs Kimi K2.6. Owner reads both outputs. K2.6 must hold soul voice, not flatten to generic helpful-assistant tone. |
+| **Scope isolation** (§5 item 12 — patent claim) | K2.6's Agent Swarm explicitly *coordinates* across sub-agents — that is the architectural opposite of OpSoul's scope isolation. Need to confirm a single K2.6 call serving one operator/scope does not leak into another concurrent operator/scope. Run two operators in parallel on same K2.6 key, inspect for cross-bleed in memory + responses. |
+| **Arabic + cultural fidelity** | Chinese-origin model. Test Vael (Arabic-mode), Istishari, Nahil on real Arabic conversations. Compare against Sonnet baseline for dialect accuracy, cultural register, RTL formatting. |
+| **Tool use** (multi-step skill chains) | OpSoul's 11 built-in skills + archetype skills depend on function-calling fidelity. Test Bani spinning up an app (read_file → write_file → http_request chain) end-to-end on K2.6. |
+
+**Validation procedure (suggested):**
+
+1. Add Kimi K2.6 to the model dropdown in SettingsSection without touching any operator's `defaultModel`.
+2. Set Vael's `defaultModel = "moonshotai/kimi-k2.6"` only. Run for 1 week. Owner reviews.
+3. If pass → roll Istishari + Bani to Kimi K2.6. If fail → record failure mode in this doc, keep on Sonnet.
+4. Per-message model column (next row up in this table) must ship before/during this rollout so post-hoc audits can compare K2.6 vs Sonnet output on real conversations.
+
+**Not chosen, and why:**
+- **DeepSeek R1** — 64K context cannot hold full L0-L4 stack + recent memory + RAG hits without truncation. Reasoning model wastes output tokens you pay for.
+- **DeepSeek V3 for operator brains** — strong price/perf but no Agent Swarm coordination story; weaker on identity preservation than K2.6 in early reports. Reserved for distillation jobs where voice doesn't matter.
+
+**Implementation work owed (do not start until validation gate passes for at least Vael):**
+
+- Add Kimi K2.6 + DeepSeek V3 to the model catalog (`SettingsSection.tsx`, backend model registry).
+- Add a `distillModel` config separate from operator `defaultModel` so distillation calls can be routed to DeepSeek V3 independently.
+- Fix the existing UI/backend default-model mismatch (open items table above) before adding more options — otherwise the K2.6 rollout will inherit the same silent flip bug.
+- Ship the per-message `model` column before rollout so K2.6 vs Sonnet can be A/B'd post-hoc.
 
 ---
 

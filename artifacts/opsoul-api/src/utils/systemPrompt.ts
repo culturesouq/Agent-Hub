@@ -286,6 +286,36 @@ export interface BuildSystemPromptOpts {
   soulAnchorActive?: boolean;
   languageInstruction?: string;
   scopeLine?: string;
+  /** Override the "now" injected as temporal substrate. Defaults to current real time. */
+  now?: Date;
+}
+
+/**
+ * Temporal substrate — universal across all operators.
+ *
+ * LLMs don't natively know today's date. Without this, when a user asks anything
+ * time-relative ("right now", "this month", "today's weather"), the model falls
+ * back to its training-cutoff era's assumptions and confidently fabricates.
+ *
+ * Layer 4 already says "When you do not know something, say so. Guessing is not."
+ * but the LLM can't follow that rule about the current date if it has no current
+ * date to reason against. This line is the substrate — not a behavioral rule.
+ *
+ * Timezone is fixed to Asia/Dubai (GST, UTC+4, no DST) — operator deployment region.
+ * If we ever multi-region, this becomes per-operator config.
+ */
+export function buildTemporalContext(now: Date = new Date()): string {
+  const fmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Dubai',
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  return `**Now (authoritative):** ${fmt.format(now)} · GST (Asia/Dubai). Use this for any question that depends on the current date or time — never substitute training-era assumptions for "now".`;
 }
 
 export interface OperatorRowForPrompt {
@@ -343,7 +373,12 @@ export function buildSystemPrompt(
   const soul = operator.layer2Soul;
   const parts: string[] = [];
 
-  // Scope Engine — always the first line so the Operator knows its deployment context
+  // Temporal Substrate — the first line every operator sees, on every prompt.
+  // Anchors the LLM in real time so "now" is a known fact, not a guess.
+  parts.push(buildTemporalContext(opts?.now));
+  parts.push('');
+
+  // Scope Engine — the operator's deployment context (public / authenticated / action / channel)
   if (opts?.scopeLine) {
     parts.push(opts.scopeLine);
     parts.push('');
