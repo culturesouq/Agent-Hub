@@ -508,6 +508,23 @@ Two parts:
 - Tool-result labels in chat.ts:1947 onwards (`[Web Search]`, `[KB Seed Result]`, etc.) — operationally useful, low priority
 - `seedArchetypeDna.ts` and `seedBuilderDna.ts` scripts exist but never ran in production (0 rows) — could be deleted as dead code, but harmless if left
 
+**F — Nahil operator_kb audit — DONE (read-only)**
+
+Nahil has 113 operator_kb chunks. Breakdown:
+
+| Source | Count | Origin | Status |
+|---|---|---|---|
+| `_platform-kb` | 100 | `platformKbSeed.ts` (seeded at birth from `platformKbV1Data.ts`) — general agent best practices: HTTP, chunking, tagging, memory distillation, KB rules | Useful content but same platform-describing framing risk as Agency Core (e.g. PKB-048: *"Platform knowledge: provided by the platform to all operators..."*) |
+| Web-search results | 8 | Owner's own research drops (2026-05-09 / 10) on UAE date palms, food security, ADAFSA, falaj, etc. | Legitimate. Keep. |
+| `ai_distilled` | 4 | Vael cron output | Legitimate. Keep. |
+| `_agency-core` | 1 | (deleted in E, will re-seed clean) | n/a |
+
+**Why Vael only has 5 KB chunks but Nahil has 113:** Vael was born 2026-05-04, before `platformKbSeed.ts` was added. Nahil (born 05-09) got the full 100-chunk platform-kb seed.
+
+**Recommendation (deferred — not in F):** Apply the same Agency Core-style rewrite to all 100 `platformKbV1Data.ts` entries. Remove "the platform" / "the platform's foundational identity" framing while keeping the functional information. Bigger surgery (100 × ~500 chars to rewrite). Defer until E ships + verified.
+
+**Architectural decision needed:** Should every newly-born operator get 100 platform-kb chunks? With `platformKbSeed.ts` running at birth, yes. But this is exactly the kind of architecture-baked-into-each-operator pattern that violates § 4 (architecture-as-secret). Long-term, platform-kb should live somewhere the operator can REFERENCE (e.g., a separate shared corpus accessed via a skill) rather than be COPIED into each operator's personal KB. Flagged as next-phase architecture work.
+
 **Fix path (proposed, not yet executed — awaiting owner direction):**
 
 1. **DNA injection** — keep the architectural intent (operators carry absorbed identity) but remove the label and preamble. DNA content should be *embedded inside the system prompt* by `assembleOperatorPrompt()`, not added as a labeled `role: 'user'` message. The LLM still reasons from it; the label disappears.
