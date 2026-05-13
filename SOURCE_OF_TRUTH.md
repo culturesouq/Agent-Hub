@@ -283,6 +283,46 @@ Both commits **directly violated § 3 rule 10**: *"No BEHAVIOR_HOW_TO or SKILL_H
 
 **Architecture clarification — what rule 10 wants:** DNA content stays in `rag_dna_table` (already correct — Vael Desk manages it). At chat time, the *spirit* of the DNA should be woven into the operator's identity layers (Layer 0 / Layer 1 / Layer 2) inside `buildSystemPrompt()` — without labels, without `role: 'user'` exhibits. The operator carries the identity; the model never sees the label `[OPSOUL IDENTITY]`. Same for KB/memory: retrieved when relevant, framed as the operator's own recollection, not as labeled exhibits in the conversation.
 
+**Comprehensive audit (2026-05-13) — every labeled prompt injection across OpSoul:**
+
+| # | Severity | File:Line | Inject Label | Role | What leaks |
+|---|---|---|---|---|---|
+| 1 | 🔴 CRITICAL | `chat.ts:1117-1124` | `[OPSOUL IDENTITY]` + *"This is who you are and how OpSoul works"* | user | Platform DNA — patent core. Worst leak. |
+| 2 | 🔴 CRITICAL | `chat.ts:1133-1164` | `[OPERATOR STATE]` | user | KB count, memory count, skills + how-to instructions |
+| 3 | 🔴 CRITICAL | `chat.ts:1101-1106` | `[STATION]` | user | Integration state, stored secret LABELS (e.g. `NAHIL_APP_URL`, `NAHIL_API_KEY` names) |
+| 4 | 🟠 HIGH | `chat.ts:1085-1090` | `[CONTEXT]\nKnowledge retrieved...` | user | KB chunks framed as conversation exhibit |
+| 5 | 🟠 HIGH | `chat.ts:1092-1098` | `[CONTEXT]\nMemory recalled...` | user | Memory entries framed as exhibit |
+| 6 | 🟠 HIGH | `public-chat.ts:242` | `[CONTEXT]\nKnowledge retrieved...` | user | Same as #4 — slot-key path |
+| 7 | 🟠 HIGH | `public-chat.ts:250` | `[CONTEXT]\nMemory recalled...` | user | Same as #5 — slot-key path |
+| 8 | 🟠 HIGH | `telegram-webhook.ts:217` | `[KNOWLEDGE]` appended to scopeLine | (system) | KB context in webhook chat |
+| 9 | 🟠 HIGH | `telegram-webhook.ts:224` | `[MEMORY]` | system | Memory hits in webhook chat |
+| 10 | 🟠 HIGH | `whatsapp-webhook.ts:283` | `[KNOWLEDGE]` appended to scopeLine | (system) | KB context — WhatsApp |
+| 11 | 🟠 HIGH | `whatsapp-webhook.ts:290` | `[MEMORY]` | system | Memory hits — WhatsApp |
+| 12 | 🟠 HIGH | `tasksCron.ts:98` | `[CONTEXT]\nKnowledge retrieved for this task` | user | KB hits in scheduled-task path |
+| 13 | 🔴 HIGH | `tasksCron.ts:99` | `'Understood. I have absorbed the relevant knowledge.'` | **assistant** | **FAKE words in operator's mouth** — puts a phrase the operator never said into the conversation, conditions future replies on that artificial line |
+| 14 | 🟠 HIGH | `tasksCron.ts:104` | `[CONTEXT]\nMemory recalled...` | user | Memory in task path |
+| 15 | 🔴 HIGH | `tasksCron.ts:105` | `'Understood. I remember this context.'` | **assistant** | **FAKE words in operator's mouth** — same problem as #13 |
+| 16 | 🟡 MEDIUM | `tasksCron.ts:109-110` | `[SCHEDULED TASK: ${name}]\n${prompt}` | user | Task framing label — arguably useful for the operator to know it's automation, but still a label |
+| 17–29 | 🟡 MEDIUM | `chat.ts:1441, 1947, 2054, 2078, 2111, 2136, 2163, 2194, 2228, 2249, 2270, 2290, 2320, 2343` | `[URL Content]` / `[Web Search]` / `[KB Seed Result]` / `[File Created]` / `[File Read]` / `[Files in workspace]` / `[Task Scheduled \| Updated \| Paused \| Resumed \| Deleted]` / `[HTTP Response]` / `[Skill result]` | system | Tool results as labeled exhibits. Operator can name them back to user (e.g. *"I did a [Web Search] for…"*). Softer leak than #1-3 but still labeled. |
+| 30 | 🟡 MEDIUM | `operatorCapabilityLoop.ts:70` | `[Task completed — findings below]` | system | Skill output label in capability loop |
+| 31 | 🔴 CRITICAL | `seedAgencyCore.ts` content (KB seed at birth) | The Agency Core KB body says `"the platform resolves it server-side"`, `"You never see the actual value — the platform injects it at call time"`, `"# Agency Core — Operator Operating Manual"` | n/a (KB) | Every operator born after this code ran has KB chunks describing the platform mechanics. KB search retrieves them; operator can quote them back. |
+| 32 | 🟠 HIGH | `seedVaelScopingKb.ts` content (Vael KB seed) | `"Builder layer — the platform's foundational identity..."`, `"... every operator on the platform"` | n/a (KB) | Vael-specific KB describing platform internals |
+
+**Summary count:** 32 places leak architecture in some form. 5 are CRITICAL (platform DNA / counts / secret labels / fake-assistant words). 14 are HIGH (labeled retrieval exhibits). 13 are MEDIUM (tool-result labels — defensible but should drop the label framing).
+
+**Architectural shape of the fix (proposed, not executed):**
+
+1. **Eliminate all `role: 'user'` and `role: 'system'` labeled injections from prompt assembly.** KB / memory / DNA / station / state belong inside `assembleOperatorPrompt()` woven into Layer 1 / Layer 2 / Layer 3 *unlabeled*, or omitted entirely on inputs that don't need them.
+2. **Eliminate fake assistant turns** (`tasksCron.ts:99, 105`). Never put words the operator didn't actually say into the conversation. If the LLM needs to know context was just absorbed, the system prompt itself frames the task.
+3. **Tool-result labels** (#17-29) can stay functionally, but the framing should not surface to user. Move to a "results envelope" the LLM is trained to consume but not quote. Alternative: drop the `[Tool Name]` prefix and let the result be plain text in a `role: 'tool'` message keyed to the tool_call_id (more correct per OpenAI/Anthropic spec).
+4. **KB-seed content** (#31, #32): rewrite Agency Core + Vael scoping KB without "the platform" / "OpSoul" / "this is how it works" descriptions. Replace with operator-facing capability prose ("you have these tools, use them") without describing the architecture.
+5. **Input-aware gating** for greeting-class inputs (< 30 chars, no real intent): skip KB / memory / station / state retrieval entirely. Greet, respond.
+6. **Re-seed Agency Core** for all existing operators after #4 — old Agency Core KB chunks need to be deleted + replaced (this is a one-time DB op).
+
+**Why now:** rule 10 has been silently violated across 5 code paths + 2 KB seed files for months. User finally surfaced the leak when Nahil quoted the labels back. "Small things fire back" — exactly.
+
+**Awaiting owner approval (per § 3 rule 7) before any code change.**
+
 **Fix path (proposed, not yet executed — awaiting owner direction):**
 
 1. **DNA injection** — keep the architectural intent (operators carry absorbed identity) but remove the label and preamble. DNA content should be *embedded inside the system prompt* by `assembleOperatorPrompt()`, not added as a labeled `role: 'user'` message. The LLM still reasons from it; the label disappears.
