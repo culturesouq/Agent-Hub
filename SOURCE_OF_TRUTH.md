@@ -217,7 +217,9 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 ## 8. Commit History — newest first
 
-### 2026-05-13 — Fix conversations list scope filter + delete polluted Nahil conv (hash forthcoming, this commit)
+### 2026-05-13 — Fix conversations list scope filter + delete polluted Nahil conv (`784ce42`)
+
+**Deploy:** Built as `opsoul-api:nahil-404-fix-784ce42` (ACR Run `dg53`). Rolled to revision `opsoul--0000040`. Nahil owner-side chat 404 resolved (root cause: list endpoint not filtering scope_id, picked up smoke-test conv as active).
 
 **What:** `conversations.ts` list endpoint (`GET /api/operators/:id/conversations`) was filtering by `owner_id` + `scope_type='authenticated'` but NOT `scope_id`. A smoke-test conversation created earlier today via `/v1/chat` with a non-owner `userId` (`farmer-test-42`) appeared in the owner's Hub UI list because it shared `owner_id` and `scope_type`, but its `scope_id` was `authenticated:farmer-test-42` instead of `authenticated:<ownerId>`. Hub UI picked the stray conv as `activeConvId` (newer by `last_message_at`), the subsequent POST to `/messages` was correctly rejected by `chat.ts:298` (which DOES filter scope_id), and Hub frontend showed "Server error 404. Please try again."
 
