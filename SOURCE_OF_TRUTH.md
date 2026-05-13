@@ -245,6 +245,17 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 2. Nahil architecture leak — § 4 Architecture-as-Secret violation. Audit how internals reach the response.
 3. `.md` artifact leak — separate UI issue, likely related to KB chunk or attachment formatting.
 
+**Containment 2026-05-13 (after rollback + further investigation):**
+
+- Nahil's 3 deployment slot keys (`NAHIL_PUBLIC_API_KEY`, `NAHIL_AUTH_API_KEY`, `NAHIL_ACTION_API_KEY`) set `is_active=false` via SQL admin op. Nahil app calls to OpSoul now return 403 — Nahil app users see ai.js fallback string ("I'm having trouble connecting to Nahil right now") instead of the leaking operator. Reversible by `is_active=true` once leak is patched.
+
+- **Memory pollution from my 2026-05-13 10:30 smoke test confirmed.** I tested Nahil via `/v1/chat` with `userId='farmer-test-42'` asking about yellow tomato leaves. The memory engine correctly distilled patterns from that exchange into both Layer 1 (scope-bound, harmless) and Layer 2 (cross-scope, harmful). The "gardening" memory the owner observed leaking into chat was MINE — `0248215c` Layer 2 preference: "Agricultural or **gardening** users benefit from operators who systematically narrow down multi-cause problems..."
+  - Layer 1 residue (2 entries, scope `authenticated:farmer-test-42`): `bdb6ade6`, `76dff7d6`. Scope-isolated so harmless to owner but pollution.
+  - Layer 2 residue (3 entries, source_scope `authenticated:farmer-test-42`): `dbf6de71`, `0248215c` (the "gardening" one), `4f321043` (already platform_verdict='rejected').
+  - Architectural lesson: **smoke tests on operators must use a sandbox operator, never production operators.** Or use throwaway userIds and immediately purge Layer 2 entries before they GROW-eligible-aggregate. Adding this to conventions.
+
+- Operator alive on rollback image `memdistill-ae32a8a` (revision `0000041`) but is no longer reachable from Nahil app due to disabled slot keys.
+
 ### 2026-05-13 — Fix conversations list scope filter + delete polluted Nahil conv (`784ce42`)
 
 **Deploy:** Built as `opsoul-api:nahil-404-fix-784ce42` (ACR Run `dg53`). Rolled to revision `opsoul--0000040`. Nahil owner-side chat 404 resolved (root cause: list endpoint not filtering scope_id, picked up smoke-test conv as active).
