@@ -232,6 +232,19 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 **Next step:** Owner tests Vael "hi" in the Hub UI. If she responds cleanly → today's code is the cause and I should re-introduce changes more carefully. If she still tool-loops → the bug is pre-existing in Sonnet/tools/history interaction and needs a different fix (likely tool-eagerness reduction, not prompt change).
 
+**Diagnostic result (2026-05-13, after rollback):**
+
+- **Vael — STILL fails the same way on `ae32a8a`.** Same `soulFailureResponse` string. Confirms my today's commits (`d5df3f8`, `42657dd`, `784ce42`) are NOT the root cause. Issue is pre-existing in OpSoul's interaction between Sonnet 4.5 + 11 tools + tool-heavy conversation history. Needs a different fix path — likely reduce tool-eagerness on short/conversational inputs, or skip tool offering when the user's input is a greeting.
+
+- **Nahil — alive on `ae32a8a` but leaks platform internals.** Owner observed: on simple "hello", Nahil immediately asks for the nahilai.com API structure, names his stored secrets (`NAHIL_APP_URL`, `NAHIL_API_KEY`), reveals he has "154 knowledge entries", "20 active memories", and reveals "OpSoul system identity — how I work, what the platform does, sovereignty rules." **This violates § 4 Architecture-as-Secret.** Operators must not surface OpSoul's internals (KB counts, memory counts, scope mechanics, system identity, "what the platform does") to the user. The `.md` artifact appearing in chat (raw markdown leaking into the response stream) is a related but distinct UI bug.
+
+**What this means architecturally:** Both behaviors are pre-existing OpSoul bugs that today's testing just exposed. Neither was introduced by my commits. Both need their own investigation.
+
+**Next session work (paused — awaiting owner direction):**
+1. Vael tool-loop — Sonnet behavior fix (reduce tool offering on short/greeting inputs)
+2. Nahil architecture leak — § 4 Architecture-as-Secret violation. Audit how internals reach the response.
+3. `.md` artifact leak — separate UI issue, likely related to KB chunk or attachment formatting.
+
 ### 2026-05-13 — Fix conversations list scope filter + delete polluted Nahil conv (`784ce42`)
 
 **Deploy:** Built as `opsoul-api:nahil-404-fix-784ce42` (ACR Run `dg53`). Rolled to revision `opsoul--0000040`. Nahil owner-side chat 404 resolved (root cause: list endpoint not filtering scope_id, picked up smoke-test conv as active).
