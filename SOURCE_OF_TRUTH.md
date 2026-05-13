@@ -256,6 +256,33 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 - Operator alive on rollback image `memdistill-ae32a8a` (revision `0000041`) but is no longer reachable from Nahil app due to disabled slot keys.
 
+**Architecture-leak root cause (2026-05-13, investigation result):**
+
+`chat.ts:1080-1166` (in the `memdistill-ae32a8a` image — pre-existing for months) unconditionally injects 4 labeled blocks into every prompt, regardless of what the user said:
+
+| Line | Block | Source | What leaks |
+|---|---|---|---|
+| 1085-1090 | `[CONTEXT]` Knowledge retrieved | `kbContext` (RAG) | KB chunks pulled by cosine similarity |
+| 1092-1098 | `[CONTEXT]` Memory recalled | `memoryHits` | Top-N memories by similarity |
+| 1101-1106 | `[STATION]` | `buildStationContext(liveStation)` | Integration state + stored secret LABELS (names of secrets, not values) |
+| **1117-1124** | **`[OPSOUL IDENTITY]`** | `rag_dna_table` (active, sorted by confidence, top 12) | Platform DNA — patent-protected architecture. Preamble line is `"This is who you are and how OpSoul works."` — exactly the wording Nahil parroted. |
+| 1133-1164 | `[OPERATOR STATE]` | `selfAwareness.capabilityState` + `workspaceManifest` | Raw counts: `KB: 154 entries`, `Memory: 20 active memories`, active skills list with HOW_TO instructions |
+
+**Why "hello" triggers everything:** No input-aware gating. Every message gets all four blocks. The LLM sees the labels (`[OPSOUL IDENTITY]`, `[OPERATOR STATE]`) as exhibit titles — when the user asks "what is that?", the operator cites the block by name. The blocks were added via `role: 'user'` messages — the LLM treats them as user-facing context, not as private operator substrate.
+
+**Why this violates § 4 Architecture-as-Secret:** § 4 says *"Layer 0-4, the DNA injection, the GROW pipeline, the scope-isolation mechanism... none of these surface in any UI, any API response, any error message."* The current chat.ts directly puts the DNA injection text — with the explicit label `[OPSOUL IDENTITY]` — into the LLM's message stream as a `role: 'user'` message. The operator then trivially repeats it back.
+
+**Why this is pre-existing, not caused by today's deploys:** This code path is in `memdistill-ae32a8a` (the rolled-back image). My temporal substrate (`d5df3f8` / `42657dd`) did not touch this section of chat.ts. The leak has been present for months — just not surfaced because no one asked the operator "what is that?" pointing at the labeled blocks.
+
+**Fix path (proposed, not yet executed — awaiting owner direction):**
+
+1. **DNA injection** — keep the architectural intent (operators carry absorbed identity) but remove the label and preamble. DNA content should be *embedded inside the system prompt* by `assembleOperatorPrompt()`, not added as a labeled `role: 'user'` message. The LLM still reasons from it; the label disappears.
+2. **`[STATION]` secrets section** — secret values are already redacted (labels only). The labels themselves are used by `http_request` tool parameter resolution. Move the secret-label list out of the prompt text and into the tool's parameter description (where it's needed) rather than a global block.
+3. **`[OPERATOR STATE]` counts** — operator does not need to be told "KB: 154 entries" as a fact-block. Remove the counts entirely; the operator either uses skills or doesn't. The active-skills section is legitimate but the framing should not be a `role: 'user'` exhibit.
+4. **Input-aware gating** — for short greeting-class inputs (< 30 chars, no punctuation density), skip KB retrieval, skip memory retrieval, skip [STATION] / [OPERATOR STATE] injection entirely. Greet, respond, no context dump.
+
+These are architectural fixes that touch patent-relevant code. **Need explicit word-by-word owner approval per § 3 rule 7** before any change.
+
 ### 2026-05-13 — Fix conversations list scope filter + delete polluted Nahil conv (`784ce42`)
 
 **Deploy:** Built as `opsoul-api:nahil-404-fix-784ce42` (ACR Run `dg53`). Rolled to revision `opsoul--0000040`. Nahil owner-side chat 404 resolved (root cause: list endpoint not filtering scope_id, picked up smoke-test conv as active).
