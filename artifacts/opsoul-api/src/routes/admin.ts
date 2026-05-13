@@ -23,7 +23,12 @@ router.use(requireAdmin);
 router.get('/stats', async (_req: Request, res: Response): Promise<void> => {
   const [[ownerCount], [operatorCount], [msgCount], [driftCount]] = await Promise.all([
     db.select({ count: sql<number>`count(*)::int` }).from(ownersTable),
-    db.select({ count: sql<number>`count(*)::int` }).from(operatorsTable),
+    // Only count operators that are NOT soft-deleted. Without this filter the
+    // metric counts every operator row including terminated ones — confused the
+    // owner with "9 or 10 operators" when reality was 2 active + 8 soft-deleted.
+    db.select({ count: sql<number>`count(*)::int` })
+      .from(operatorsTable)
+      .where(isNull(operatorsTable.deletedAt)),
     db.select({ count: sql<number>`count(*)::int` }).from(messagesTable)
       .where(gte(messagesTable.createdAt, new Date(Date.now() - 86_400_000))),
     db.select({ count: sql<number>`count(*)::int` }).from(opsLogsTable)
