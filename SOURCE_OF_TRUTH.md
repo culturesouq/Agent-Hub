@@ -217,6 +217,21 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 ## 8. Commit History — newest first
 
+### 2026-05-13 — ROLLBACK to ground zero (no commit — image rollback only)
+
+**What:** Owner ("months of stability, then today's deploys") requested ground-zero rollback to isolate the Vael tool-loop root cause. Rolled the container app from image `nahil-404-fix-784ce42` back to `memdistill-ae32a8a` (the image that ran 2026-05-10 → 2026-05-13 09:54 UTC without issues). No code commits reverted; this is purely a deploy-time pin to the older image. Git `main` HEAD still points at `1977f9b` with all today's commits intact.
+
+**Why:** To answer the diagnostic question — is Vael's tool-loop caused by today's code changes (`d5df3f8` / `42657dd` / `784ce42`) or pre-existing Sonnet 4.5 + tools + history behavior?
+
+**Effect of this rollback:**
+- ❌ Lose: universal temporal substrate (Nahil will hallucinate "mid-January" again)
+- ❌ Lose: conversations list `scope_id` filter (but the polluted conv `cc494a1d` was already deleted by SQL admin op, so this doesn't matter operationally until another stray conv appears)
+- ✅ Restore: exactly the OpSoul that ran for the months before today
+
+**Deploy:** Revision `opsoul--0000041`. Image `opsoul-api:memdistill-ae32a8a`. 100% traffic.
+
+**Next step:** Owner tests Vael "hi" in the Hub UI. If she responds cleanly → today's code is the cause and I should re-introduce changes more carefully. If she still tool-loops → the bug is pre-existing in Sonnet/tools/history interaction and needs a different fix (likely tool-eagerness reduction, not prompt change).
+
 ### 2026-05-13 — Fix conversations list scope filter + delete polluted Nahil conv (`784ce42`)
 
 **Deploy:** Built as `opsoul-api:nahil-404-fix-784ce42` (ACR Run `dg53`). Rolled to revision `opsoul--0000040`. Nahil owner-side chat 404 resolved (root cause: list endpoint not filtering scope_id, picked up smoke-test conv as active).
