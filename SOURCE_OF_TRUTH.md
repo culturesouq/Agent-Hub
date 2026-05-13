@@ -525,6 +525,36 @@ Nahil has 113 operator_kb chunks. Breakdown:
 
 **Architectural decision needed:** Should every newly-born operator get 100 platform-kb chunks? With `platformKbSeed.ts` running at birth, yes. But this is exactly the kind of architecture-baked-into-each-operator pattern that violates § 4 (architecture-as-secret). Long-term, platform-kb should live somewhere the operator can REFERENCE (e.g., a separate shared corpus accessed via a skill) rather than be COPIED into each operator's personal KB. Flagged as next-phase architecture work.
 
+---
+
+### A-F final deploy summary — `cleanup-AF-53b93a8` LIVE
+
+**Built + deployed 2026-05-13:**
+- ACR Build: Run `dg54`, image `opsoul-api:cleanup-AF-53b93a8` from commit `53b93a8`
+- Container App revision: `opsoul--0000042` (100% traffic, Healthy)
+- Boot logs confirm: Agency Core re-seeded for Vael + Nahil + a fresh "Blank" system operator (intentional — `initSeed.ts` recreates the Blank template-operator at boot since D hard-deleted the previous one called "No name provided")
+
+**Operators table now (3 rows, all active, none soft-deleted):**
+- Vael (`8668f6c9-...`) — DNA-governance operator
+- Nahil (`37da8776-...`) — UAE agriculture operator
+- Blank (`eb70c409-...`) — system template, no archetype, clean foundation. Per § 5 item 8.
+
+**What's now structurally true on OpSoul:**
+
+1. `rag_dna` table has 5 active entries (4 UAE agriculture + 1 generic agent advice). No platform-architecture entries reachable. Even if Vael's cron somehow approves new L4 entries (which she won't, per B rule 6), `chat.ts:1112` filter blocks them from the operator prompt.
+2. No route file (`chat.ts`, `public-chat.ts`, `telegram-webhook.ts`, `whatsapp-webhook.ts`) pushes labeled `role:'user'`/`role:'system'` exhibits like `[CONTEXT]`, `[STATION]`, `[OPSOUL IDENTITY]`, `[OPERATOR STATE]`, `[KNOWLEDGE]`, `[MEMORY]` into the LLM's message stream. KB + memory + DNA spirit all woven into the system prompt unlabeled.
+3. Vael's mandate (Rule 6 in her validate prompt) rejects future architecture-describing DNA submissions.
+4. Agency Core KB (seeded to every operator at birth) is rewritten in first-person operator voice. No `"the platform"` references.
+5. Operator soft-deletes are properly purged. Admin metric correctly reports only non-deleted operators.
+
+**Nahil app slot keys remain disabled** (from earlier containment). Owner needs to re-enable when comfortable retesting:
+```sql
+UPDATE operator_deployment_slots SET is_active = true 
+WHERE operator_id = '37da8776-d1b3-4bf1-ae5e-d6e873840522';
+```
+
+**Owner should test:** in Hub UI, say "hi" to Vael or Nahil. The operator should NOT mention `[CONTEXT]`, `[STATION]`, `[OPSOUL IDENTITY]`, `[OPERATOR STATE]`, "the platform", "OpSoul mechanics", "KB entries stored", "active memories", or stored secret label names. If any of these surface, report which one — the leak surface should now be structurally closed.
+
 **Fix path (proposed, not yet executed — awaiting owner direction):**
 
 1. **DNA injection** — keep the architectural intent (operators carry absorbed identity) but remove the label and preamble. DNA content should be *embedded inside the system prompt* by `assembleOperatorPrompt()`, not added as a labeled `role: 'user'` message. The LLM still reasons from it; the label disappears.
