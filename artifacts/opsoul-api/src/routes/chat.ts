@@ -29,6 +29,7 @@ import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 // `[WEB CONTEXT]` auto-injection removed (Phase 4). The web_search tool
 // remains available for the operator to call when its own soul decides.
 import { assembleOperatorPrompt, buildBirthSystemPrompt, buildTemporalContext, containsTimeKeywords } from '../utils/systemPrompt.js';
+import { applyFirewall } from '../utils/architectureFirewall.js';
 import type { SelfAwarenessSnapshot, BuildSystemPromptOpts } from '../utils/systemPrompt.js';
 import { searchMemory, buildMemoryContext, distillMemoriesFromConversations, storeMemory, distillRawContentForMemory } from '../utils/memoryEngine.js';
 import type { MemoryHit } from '../utils/memoryEngine.js';
@@ -1753,6 +1754,27 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         }
       }
 
+      // Architecture firewall — patent-claim protection at the output boundary.
+      // Runs on every assistant response, regardless of which LLM is behind
+      // the operator. High-confidence patterns (Layer N, GROW engine, OpSoul,
+      // etc.) trigger a substitute reply. Log-only patterns are flagged but
+      // pass through.
+      const fw = applyFirewall(finalContent);
+      if (fw.triggers.length > 0) {
+        console.warn('[firewall]', JSON.stringify({
+          path: 'chat:stream',
+          operatorId: operator.id,
+          scopeId: scope.scopeId,
+          conversationId: conv.id,
+          blocked: fw.blocked,
+          triggers: fw.triggers,
+        }));
+      }
+      if (fw.blocked) {
+        finalContent = fw.text;
+        res.write(`data: ${JSON.stringify({ replace: true, content: finalContent })}\n\n`);
+      }
+
       // Signal to frontend that response is complete, DB write happening
       res.write(`data: ${JSON.stringify({ processing: true })}\n\n`);
 
@@ -2173,6 +2195,22 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           }
         }
       }
+
+      // Architecture firewall — sync path. Same as streaming path: high-
+      // confidence patterns trigger substitute reply; log-only patterns
+      // pass through with logging.
+      const fw = applyFirewall(finalContent);
+      if (fw.triggers.length > 0) {
+        console.warn('[firewall]', JSON.stringify({
+          path: 'chat:sync',
+          operatorId: operator.id,
+          scopeId: scope.scopeId,
+          conversationId: conv.id,
+          blocked: fw.blocked,
+          triggers: fw.triggers,
+        }));
+      }
+      finalContent = fw.text;
 
       // Save assistant message and update conversation
       const asstMsgId = crypto.randomUUID();

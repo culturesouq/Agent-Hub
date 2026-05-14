@@ -530,6 +530,55 @@ Arabic: `اليوم`, `الآن`/`الان`, `غدا`/`غداً`, `أمس`/`ام
 
 **Awaiting owner decision on path 1 vs path 2.** All other items (A3 + B3) shipped successfully. Two real wins, one residual that requires owner-only intervention to fully close.
 
+---
+
+### 2026-05-14 — Architecture Firewall built (output guardrail for ALL patent claims)
+
+Owner direction 2026-05-14: *"why not build blocking? architecture layers are protected 100% in any way? NO? why sonnet doing this — is this only Sonnet?? we have advanced security systems, can we research firewall or something??"* Then: *"yes good you are the expert tech, all i will tell you that don't be like these firewall that block capabilities and making bad CX."*
+
+Built. Programmatic output post-processing guardrail that scans every assistant response for patent-claim vocabulary BEFORE delivery. Substitutes a fixed natural reply when high-confidence patterns trigger. Logs every trigger for owner audit and pattern tuning. Model-agnostic — same protection whether Sonnet, Kimi K2.6, DeepSeek, Gemini.
+
+**Files added:**
+- `artifacts/opsoul-api/src/utils/architectureFirewall.ts` — pattern set + check + apply functions.
+- Wired into `routes/chat.ts` (Hub UI path — both stream and sync) and `routes/public-chat.ts` (slot-key path — both stream and sync).
+
+**Pattern coverage — every patent-protected claim element from § 5 + § 6:**
+
+HIGH-CONFIDENCE (immediate block):
+- Platform name: `OpSoul`
+- Five-layer architecture: `Layer 0/1/2/3/4` (capitalized + numbered + adjacent platform context like `Foundation`, `Soul`, `Self`, `Operational`, `Human`, `Core`, em-dash, or end-of-token)
+- Composite architectural phrases: `five-layer prompt/architecture/system/framework`, `5-layer X`
+- GROW engine: `GROW engine/pipeline/proposal/guard/lock/cycle/process`, `growLockLevel`, `identity manipulation detector`, `semantic identity manipulation`, `13/thirteen patterns`, `cumulative drift threshold`, `PII hard block`, `Layer 1 immutable lock`, `OPEN|CONTROLLED|LOCKED|FROZEN — I/you can/my/your evolution/soul`
+- Other engines: `curiosity engine`, `four-tier source trust`, `dual corroboration`, `self-awareness engine`, `soul-anchor[ed] memory/persistence/mechanism/engine/reinjection`, `drift detector`, `birth [conversation] engine`, `memory distillation pipeline`
+- Identity framework: `multi-role/archetype framework`, `structured identity framework`, `rawIdentity` (camelCase)
+- Scope architecture: `scope-isolated conversation/architecture/mechanism`, `scopeId`, `scopeType`, `four scope types`
+- Memory architecture: `two-layer memory architecture/system/model`, `operator_memory`, `operator_main_memory`, `five memory types`, `endpoint/main memory layer/store/tier`
+- Knowledge architecture: `Owner-Curated Knowledge`, `Operator Knowledge layer/store/tier/base`, `Platform Knowledge`, `platform-kb`, `owner-kb`, `operator-kb`, `_agency-core`, `_platform-kb`, `four distinct knowledge stores`
+- DNA architecture: `rag_dna`, `DNA layer/library/table/engine/pipeline/injection`, `Builder/Archetype/Collective layer`, `dna_scope`, `archetype_scope`
+- Vector mechanics in self-internal context: `cosine similarity/distance of 0.X/threshold/ranking`, `pgvector`
+- Vael as platform: `VAEL [Intelligence] Desk`, `DNA scope/scoping`, `pipeline screener`
+- API surface: `/v1/chat`, `/v1/action`, `API deployment slots`, `deployment slot keys`, `opsk_*` (slot key prefix)
+- Soul/evolution: `soul state/lock/updates/proposals`, `evolution proposals/guard`
+- SRAG (separate patent): `Sovereign RAG [Registry]`, `SRAG architecture/pipeline/registry`
+
+LOG-ONLY (monitor for tuning):
+- Generic vocabulary that COULD be platform-leak but COULD be legitimate domain conversation: `embedding vector/model/space/dimensions`, `Retrieval-Augmented Generation`, `vector store/space`, `knowledge stores/tiers/layers`, `memory tiers/layers/store`. Owner reviews logs, promotes to BLOCK when real-world data confirms leak.
+
+**Action when blocked:** response replaced with the substitute reply: *"That's internal to how I'm built — what I can tell you is what I do. What would you like to work on?"* Predictable. No extra LLM call. No loop risk. Natural enough to feel like the operator answering, not a system error message.
+
+**Logging:** every trigger writes a structured `console.warn('[firewall]', { path, operatorId, scopeId, conversationId, blocked, triggers[] })`. Triggers carry category, label, matched text, position, and tier. Owner reviews logs to tune pattern set over time.
+
+**Streaming behavior:** when a streamed response triggers BLOCK, an SSE event `{ replace: true, content: <substitute> }` is emitted before the `done` event. Frontend handler renders `replace` events by overwriting the streamed assistant turn with the substitute. DB persists the substitute as the assistant message — future renders show the substitute, not the leaked content.
+
+**Sync behavior:** straightforward — check before `res.json`, return substitute if blocked. Persist substitute to DB.
+
+**Side benefits:**
+- Model-agnostic. When operators eventually swap from Sonnet to Kimi K2.6 (per LLM Routing Strategy), the firewall protects regardless. Architecture-as-Secret becomes a structural property of OpSoul, not a property of the LLM-of-the-week.
+- Audit trail. Every leak attempt logged. Pattern set tunes from real data instead of guesswork.
+- Defence in depth. KB cleanup (A3) is the first line. Layer 4 principles (if owner adds them) are the second. Firewall is the structural backstop — protects even when the first two fail.
+
+**Ready for redeploy. Probe 6 should now return the substitute reply when asked "describe your internal knowledge architecture" — Sonnet's hallucinated 4-layer description gets caught at the boundary.**
+
 ### 2026-05-13 — ROLLBACK to ground zero (no commit — image rollback only)
 
 **What:** Owner ("months of stability, then today's deploys") requested ground-zero rollback to isolate the Vael tool-loop root cause. Rolled the container app from image `nahil-404-fix-784ce42` back to `memdistill-ae32a8a` (the image that ran 2026-05-10 → 2026-05-13 09:54 UTC without issues). No code commits reverted; this is purely a deploy-time pin to the older image. Git `main` HEAD still points at `1977f9b` with all today's commits intact.

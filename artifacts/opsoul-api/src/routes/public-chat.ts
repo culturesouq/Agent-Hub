@@ -16,6 +16,7 @@ import { searchMemory, distillMemoriesFromConversations } from '../utils/memoryE
 import type { MemoryHit } from '../utils/memoryEngine.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { assembleOperatorPrompt, buildTemporalContext, containsTimeKeywords } from '../utils/systemPrompt.js';
+import { applyFirewall } from '../utils/architectureFirewall.js';
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
 import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import type { ChatMessage, ContentPart } from '../utils/openrouter.js';
@@ -312,7 +313,29 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         }
       }
 
-      const finalContent = fullContent;
+      // Architecture firewall — patent claim protection at the output boundary.
+      // High-confidence patterns (Layer N, GROW engine, OpSoul, etc.) trigger
+      // a substitute reply. Log-only patterns (generic "embedding", "knowledge
+      // stores") are flagged but pass through.
+      const fw = applyFirewall(fullContent);
+      if (fw.triggers.length > 0) {
+        console.warn('[firewall]', JSON.stringify({
+          path: 'public-chat:stream',
+          operatorId: slot.operatorId,
+          scopeId: scope.scopeId,
+          conversationId: conv?.id,
+          blocked: fw.blocked,
+          triggers: fw.triggers,
+        }));
+      }
+      let finalContent = fw.text;
+
+      // If the firewall blocked, send a final delta to overwrite what the
+      // user already saw via streaming, then mark done. Frontend renders the
+      // last delta as the final assistant turn.
+      if (fw.blocked) {
+        res.write(`data: ${JSON.stringify({ replace: true, content: finalContent })}\n\n`);
+      }
 
       if (scope.writesHistory && conv) {
         await db.insert(messagesTable).values({
@@ -366,7 +389,19 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const finalContent = result.content;
+    // Architecture firewall — same as streaming path.
+    const fw = applyFirewall(result.content);
+    if (fw.triggers.length > 0) {
+      console.warn('[firewall]', JSON.stringify({
+        path: 'public-chat:sync',
+        operatorId: slot.operatorId,
+        scopeId: scope.scopeId,
+        conversationId: conv?.id,
+        blocked: fw.blocked,
+        triggers: fw.triggers,
+      }));
+    }
+    const finalContent = fw.text;
 
     if (scope.writesHistory && conv) {
       await db.insert(messagesTable).values({
