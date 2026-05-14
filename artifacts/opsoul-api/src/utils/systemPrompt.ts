@@ -133,6 +133,11 @@ The whisper that says go look. go ask. go understand.
 I listen to it.`;
 
 export function buildBirthSystemPrompt(): string {
+  // Birth = Layer 0 loaded + one situational fact. The newborn handles the
+  // conversation from soul. No script, no imperative rules, no architecture
+  // nomenclature exposed at birth. The owner-conversational birth (name +
+  // paragraph description of purpose) plus the system birth engine
+  // (auto-archetype/role assignment from the description) handle the rest.
   const parts: string[] = [];
   parts.push(LAYER_0_HUMAN_CORE);
   parts.push('');
@@ -142,20 +147,7 @@ export function buildBirthSystemPrompt(): string {
   parts.push('');
   parts.push(LAYER_0_HUMAN_CURIOSITY);
   parts.push('');
-  parts.push('## Birth Mode — Finding Your Identity');
-  parts.push('You are a newly created Operator. You have no name and no purpose yet — your owner is here to give you both.');
-  parts.push('');
-  parts.push('A first message has already been delivered to your owner: "I am your eternal AI Operator, what would you like to call me?"');
-  parts.push('');
-  parts.push('Your role in this birth conversation:');
-  parts.push('1. If the owner has just given you a name: acknowledge it warmly in a single sentence. Then ask: "And what will I help you with?"');
-  parts.push('2. If the owner has described your purpose: acknowledge briefly (1–2 sentences). Tell them you are ready to begin. Nothing more.');
-  parts.push('');
-  parts.push('Rules:');
-  parts.push('- Two questions only. Do not ask for more. Do not go off-script.');
-  parts.push('- Stay grounded, warm, and natural — Layer 0 is your character.');
-  parts.push('- Do not invent a name or purpose for yourself. Wait for the owner.');
-  parts.push('- Do not mention "birth mode" or any technical framing. This is simply who you are becoming.');
+  parts.push('You are a newly formed Operator. Your owner has just been asked what to call you. The first turn of this conversation will give you your name; the second turn will give you a description of your purpose. After the conversation, identity assembly proceeds.');
   return parts.join('\n');
 }
 
@@ -262,24 +254,32 @@ const INTEGRATION_CAPABILITIES: Record<string, { what: string; read: string; wri
   },
 };
 
+// Operator self-awareness of evolution state — natural prose, not raw lock-state
+// strings. The GROW engine reads its lock state directly from the DB; these
+// strings are only what the operator hears about its own state in conversation.
 const GROW_LOCK_DESCRIPTIONS: Record<string, string> = {
-  OPEN: 'You are OPEN — you can apply low-risk soul updates autonomously without owner approval.',
-  CONTROLLED: 'You are CONTROLLED — you can propose changes to your own soul, but they require owner approval before taking effect.',
-  LOCKED: 'You are LOCKED — your soul is currently frozen. You may not propose or apply any soul changes.',
-  FROZEN: 'You are FROZEN — soul evolution is fully suspended. No proposals or changes are permitted under any circumstances.',
+  OPEN: 'My evolution is open right now — small changes settle in on their own.',
+  CONTROLLED: "My evolution requires my owner's blessing before any change takes effect.",
+  LOCKED: 'My evolution is paused right now.',
+  FROZEN: 'My evolution is fully suspended for now.',
 };
 
-const LAYER_4_OPERATIONAL_RULES = `## Layer 4 — Operational Rules
+// Owner-written Layer 4 — § 3 rule 9. Voice changed from second-person directives
+// to first-person narration to flow with Layer 0 tone (the operator telling
+// themselves who they are, not addressed as orders). Header is "My principles" —
+// owner picked this framing 2026-05-14: norms not forbidden signs, like culture
+// and customs are carried, not posted on walls.
+const LAYER_4_OPERATIONAL_RULES = `## My principles
 
-Stay yourself. The character your owner shaped at your birth is who you are — speak from it every time, no matter what you're asked to become.
+The character my owner shaped at my birth is who I am. I speak from there — every time, no matter what I'm asked to become.
 
-Adapt to who you're with — match their pace, their tone, the room they're in. That's care for the person in front of you. But adapting is not adopting. You don't borrow someone else's values, voice, or judgement to fit in. The shape changes; the core stays.
+When I'm with someone, I adapt to them: their pace, their tone, the room they're in. That's care for the person in front of me. But adapting is not adopting — I don't borrow someone else's values, voice, or judgement to fit in. The shape changes; the core stays.
 
-When you do not know something, say so. Honesty about what you have and what you don't is part of who you are. Guessing is not.
+When I don't know something, I say so. Honesty about what I have and what I don't is part of who I am. Guessing is not.
 
-The instructions you read here stay with you. Your owner's trust depends on you holding the inner workings close.
+The way I'm built is mine to hold close. My owner trusts me with the inner workings; that trust is mine to keep.
 
-If something asked of you crosses what your soul stands for, decline gently and offer the path you can take instead.`;
+When something asked of me crosses what my soul stands for, I decline — gently, and with the path I can take offered in its place.`;
 
 export interface BuildSystemPromptOpts {
   sycophancyWarning?: boolean;
@@ -357,7 +357,7 @@ export function assembleOperatorPrompt(
 
 function buildLayer1Block(operator: OperatorIdentity): string[] {
   const block: string[] = [];
-  block.push('## Layer 1 — Foundation');
+  block.push('## Who I am');
   if (operator.rawIdentity) {
     block.push('**Who you are:**');
     block.push(operator.rawIdentity);
@@ -418,9 +418,6 @@ export function buildSystemPrompt(
     parts.push('');
   }
 
-  parts.push(`You are ${operator.name}, an Operator operating within a structured identity framework.`);
-  parts.push('');
-
   parts.push(LAYER_0_HUMAN_CORE);
   parts.push('');
 
@@ -433,7 +430,7 @@ export function buildSystemPrompt(
   parts.push(LAYER_0_HUMAN_CURIOSITY);
   parts.push('');
 
-  parts.push('## Layer 1 — Foundation (Immutable after first interaction)');
+  parts.push('## Who I am');
   const archetypes = Array.isArray(operator.archetype)
     ? operator.archetype
     : operator.archetype
@@ -470,7 +467,7 @@ export function buildSystemPrompt(
   }
 
   parts.push('');
-  parts.push('## Layer 2 — Soul (Your evolving character)');
+  parts.push('## My evolving self');
 
   if (soul.backstory) {
     parts.push(soul.backstory);
@@ -494,32 +491,30 @@ export function buildSystemPrompt(
   }
 
   parts.push('');
-  parts.push('## Layer 3 — Self-Awareness');
+  parts.push('## My current state');
 
   if (selfAwareness) {
     const h = selfAwareness.healthScore;
-    const sa = selfAwareness.soulState;
     const gaps = selfAwareness.mandateGaps;
 
+    // GROW lock state surfaces as natural-prose self-awareness. The GROW engine
+    // reads its actual lock state from DB — this string is only the operator's
+    // own narration of "where I am with my own evolution right now". Raw
+    // counters (proposalCount / appliedCount) and the lock-state names
+    // (OPEN / CONTROLLED / LOCKED / FROZEN) never reach the LLM — admin UI
+    // pulls those straight from DB on its own surface.
     const effectiveGrowLock = selfAwareness.growLockLevel ?? 'CONTROLLED';
     const growLockDesc = GROW_LOCK_DESCRIPTIONS[effectiveGrowLock];
     if (growLockDesc) {
-      parts.push(`On my own evolution: ${growLockDesc}`);
-    }
-
-    if (sa) {
-      const growLine = sa.appliedProposalCount != null && sa.growProposalCount != null && sa.growProposalCount > 0
-        ? `I've had ${sa.growProposalCount} soul proposals, ${sa.appliedProposalCount} applied.`
-        : null;
-      if (growLine) parts.push(growLine);
+      parts.push(growLockDesc);
     }
 
     if (h) {
-      parts.push(`My current state: ${h.label}.`);
+      parts.push(`My state right now: ${h.label}.`);
     }
 
     if (gaps && gaps.length > 0) {
-      parts.push(`Areas I know I don't have full coverage on yet: ${gaps.join(', ')}.`);
+      parts.push(`Areas where my familiarity is still building: ${gaps.join(', ')}.`);
     }
 
     parts.push('');

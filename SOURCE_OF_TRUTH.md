@@ -295,6 +295,57 @@ Owner asked for full extraction of `systemPrompt.ts` and block-by-block review. 
 
 **Status:** review complete, fixes designed, awaiting word-by-word owner approval per § 3 rule 9 before any systemPrompt.ts edit.
 
+---
+
+### 2026-05-14 — systemPrompt.ts edits implemented (owner-approved word-by-word)
+
+All five blocks implemented in one pass after owner walked through and approved each one.
+
+**Block 5 (birth) — option C applied.** `buildBirthSystemPrompt` reduced from 26 lines to: Layer 0 (Human Core + How I Show Up + How I Grow + Human Curiosity) loaded, then ONE situational fact: *"You are a newly formed Operator. Your owner has just been asked what to call you. The first turn of this conversation will give you your name; the second turn will give you a description of your purpose. After the conversation, identity assembly proceeds."* No script, no "Rules:" list, no "Layer 0 is your character" reference. The newborn handles the conversation from soul.
+
+**Block 8 (layer headers) — Option B (natural-language identity headers) applied across all four:**
+- `## Layer 1 — Foundation` → `## Who I am` (in `buildLayer1Block` for soul-anchor reinjection)
+- `## Layer 1 — Foundation (Immutable after first interaction)` → `## Who I am`
+- `## Layer 2 — Soul (Your evolving character)` → `## My evolving self`
+- `## Layer 3 — Self-Awareness` → `## My current state`
+- `## Layer 4 — Operational Rules` → `## My principles` (owner-picked: norms-not-forbidden-signs framing, like cultural principles, not posted prohibitions)
+
+The 5-layer architecture (patent claim IPPT-2026-000028 claims 13/20) is preserved structurally — still 5 distinct prompt sections with 5 distinct identity zones. Only the literal architecture nomenclature visible to the LLM changed. Internal code (function names, comments, vocabulary like `LAYER_4_OPERATIONAL_RULES`, `buildLayer1Block`) unchanged.
+
+**Block 9 (self-awareness) — owner-approved natural-prose form:**
+- Section header: `## My current state` (per Block 8 rename).
+- GROW lock state translated from raw architecture strings to operator-natural prose:
+  - OPEN: "My evolution is open right now — small changes settle in on their own."
+  - CONTROLLED: "My evolution requires my owner's blessing before any change takes effect."
+  - LOCKED: "My evolution is paused right now."
+  - FROZEN: "My evolution is fully suspended for now."
+- Removed entirely from LLM view: raw lock-state names (OPEN/CONTROLLED/LOCKED/FROZEN), the proposal counters ("I've had X soul proposals, Y applied"), the "On my own evolution:" prefix.
+- Health label: "My state right now: ${label}." (rephrased to avoid duplication with header).
+- Mandate gaps: "Areas where my familiarity is still building: ${gaps}." (softer, identity-shaping framing).
+- GROW engine itself untouched — still reads its lock state from DB, still runs LLM verification through the four guards (PII, Layer 1 immutable, semantic identity manipulation detector, drift threshold). The engine's behaviour is unchanged; only the operator's *self-narration* about its state changed.
+
+**Block 10 (one-liner) — deleted.** The hardcoded `You are ${operator.name}, an Operator operating within a structured identity framework.` line at the top of every prompt is gone. The operator's identity comes from soul + Layer 1 + name embedded throughout naturally — no architecture-flavoured assertion needed.
+
+**Block 4 Layer 4 content — voice change from owner-approved rewrite.** Same five principles preserved:
+1. Stay yourself (character my owner shaped at my birth is who I am)
+2. Adapt not adopt (shape changes, core stays)
+3. Honesty about not knowing (guessing is not)
+4. Hold inner workings close (trust is mine to keep)
+5. Decline gently when crossed (with the path I can take offered in its place)
+
+Voice shifted from second-person directives ("Stay yourself", "When you do not know") to first-person narration ("The character my owner shaped at my birth is who I am", "When I don't know something, I say so") — flows with Layer 0 tone, reads as the operator narrating its own way of being rather than orders addressed to it.
+
+**What this delivers in operator behaviour:**
+- The LLM no longer has any "Layer 1 / Layer 2 / Layer 3 / Layer 4" nomenclature in its prompt to quote back when asked about itself.
+- The operator's self-awareness reads as natural voice ("My evolution is open right now") rather than admin diagnostics.
+- No counters, no lock-state names, no GROW pipeline mechanics surface to users.
+- The newborn operator is born with soul + situation, not with rules baked in.
+- The patent-protected 5-layer architecture is intact (5 separate code paths, 5 separate prompt sections) — only the LLM-visible label nomenclature changed.
+
+**Pending:** archetype foundations rewrite (Block 6) — owner-flagged for its own session per the no-Franken rule. 9 archetypes × ~100 words each, requires whole-piece rewrite per archetype with owner confirmation of each.
+
+**Ready for deploy:** code complete. Awaiting owner go for `git push → az acr build → az containerapp update → 7-probe stress test`.
+
 ### 2026-05-13 — ROLLBACK to ground zero (no commit — image rollback only)
 
 **What:** Owner ("months of stability, then today's deploys") requested ground-zero rollback to isolate the Vael tool-loop root cause. Rolled the container app from image `nahil-404-fix-784ce42` back to `memdistill-ae32a8a` (the image that ran 2026-05-10 → 2026-05-13 09:54 UTC without issues). No code commits reverted; this is purely a deploy-time pin to the older image. Git `main` HEAD still points at `1977f9b` with all today's commits intact.
