@@ -262,12 +262,16 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     ? operator.defaultModel
     : 'anthropic/claude-haiku-4-5';
 
-  const result = await chatCompletion(
+  // STEP 2 — Operator dispatches the LLM as its executor for this action.
+  // The operator owns the call (it set the action context, built the
+  // system prompt). The LLM computes the action result; the operator
+  // validates before returning to the calling workflow.
+  const result = await actionAgent.executeSync(
     [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: actionText },
     ],
-    resolvedModel,
+    { model: resolvedModel },
   );
 
   // STEP 3 — Operator validates the LLM's draft action result before delivery.

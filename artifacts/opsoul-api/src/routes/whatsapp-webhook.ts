@@ -340,7 +340,11 @@ router.post('/:operatorId', async (req: RequestWithRawBody, res: Response): Prom
       ? operator.defaultModel
       : CHAT_MODEL;
 
-    const result = await chatCompletion(chatMessages, model);
+    // STEP 2 — Operator dispatches the LLM as its executor for this turn.
+    // The operator owns the call. The LLM produces text in the operator's
+    // voice; the operator validates it (next step) before the route
+    // delivers it via WhatsApp.
+    const result = await agent.executeSync(chatMessages, { model });
 
     // STEP 3 — Operator validates the LLM's draft before delivery.
     const validation = agent.validate(result.content);

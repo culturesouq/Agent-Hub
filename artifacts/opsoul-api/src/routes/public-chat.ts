@@ -380,7 +380,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     let fullContent = '';
 
     try {
-      for await (const chunk of streamChat(messages, model)) {
+      // STEP 2 — Operator dispatches the LLM as streaming executor for
+      // this turn. The operator owns the call; the LLM's voice is
+      // established by the operator's identity in the system prompt;
+      // chunks stream to the user under the operator's name.
+      for await (const chunk of agent.executeStreaming(messages, { model })) {
         if (chunk.delta) {
           fullContent += chunk.delta;
           res.write(`data: ${JSON.stringify({ delta: chunk.delta })}\n\n`);
@@ -453,7 +457,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   } else {
     let result;
     try {
-      result = await chatCompletion(messages, model);
+      // STEP 2 — Operator dispatches the LLM as its executor for this turn.
+      result = await agent.executeSync(messages, { model });
     } catch (llmErr: unknown) {
       const status = (llmErr as { status?: number })?.status;
       if (status === 402) {

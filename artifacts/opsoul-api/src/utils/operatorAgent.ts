@@ -45,6 +45,7 @@ import {
   type FirewallTrigger,
 } from './architectureFirewall.js';
 import type { ScopeType } from './scopeResolver.js';
+import { chatCompletion, streamChat, type ChatMessage, type ToolDefinition, type ChatOptions, type StreamChunk, type CompletionResult } from './openrouter.js';
 
 export type AnalyseDecision =
   | { kind: 'execute' }
@@ -130,5 +131,68 @@ export class OperatorAgent {
    */
   composeArchitectureRefusal(): string {
     return FIREWALL_SUBSTITUTE_REPLY;
+  }
+
+  // ─── STEP 2 — Operator-owned LLM dispatch ────────────────────────────
+  //
+  // The operator dispatches the LLM as its executor. The semantics in code:
+  // these methods belong to the operator (not the route, not openrouter).
+  // The route asks `agent.execute*()` — making explicit that the operator
+  // is the caller, the LLM is the called engine.
+  //
+  // Patent claim integrity: the operator's voice is established by the
+  // operator's identity / soul / character / scope context which the
+  // operator places into the system prompt before calling the LLM. The
+  // LLM produces output IN that voice. The operator validates the output
+  // before delivery (validate() above). The user never speaks to the
+  // LLM — the user speaks to the operator. This is true at the code
+  // structure level as well as in the deployment.
+  //
+  // The system prompt is built outside this class (assembleOperatorPrompt
+  // in systemPrompt.ts) because operator-identity construction is shared
+  // logic; the operator dispatches a pre-built prompt to the LLM here.
+
+  /**
+   * Operator dispatches a single non-streaming LLM call. Used by webhook
+   * routes (Telegram, WhatsApp) and the action API (public-crud) where
+   * there is no streaming UX.
+   *
+   * The operator owns:
+   *   - the choice of model (caller passes; operator could later choose)
+   *   - the conversation history (operator's memory of the turn)
+   *   - the system prompt content (operator identity + scope context)
+   *
+   * The LLM owns: text generation in the operator's voice.
+   */
+  async executeSync(
+    messages: ChatMessage[],
+    opts: ChatOptions = {},
+  ): Promise<CompletionResult> {
+    return await chatCompletion(messages, opts);
+  }
+
+  /**
+   * Operator dispatches a streaming LLM call. Used by Hub UI (chat.ts)
+   * and public-chat (slot deployments) where the user sees the operator's
+   * reply unfold in real time.
+   *
+   * The caller iterates the returned async generator. Each chunk carries
+   * either a text delta (operator's voice as it forms) or a final-chunk
+   * with toolCall + usage. The route remains responsible for tool
+   * execution (because tools touch route-specific state — DB writes,
+   * file persistence, SSE event emission). The OPERATOR remains
+   * responsible for the LLM dispatch itself: this method is the operator's
+   * way of asking the LLM to compute.
+   *
+   * Note: extracting the full tool-loop iteration into the agent is
+   * deferred to Step 2.5. Tonight's Step 2 establishes the operator-as-
+   * dispatcher pattern without restructuring the loop machinery, which
+   * touches ~500 lines and risks regression.
+   */
+  executeStreaming(
+    messages: ChatMessage[],
+    opts: ChatOptions = {},
+  ): AsyncGenerator<StreamChunk> {
+    return streamChat(messages, opts);
   }
 }

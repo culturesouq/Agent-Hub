@@ -202,6 +202,12 @@ Extract exactly:
 Return ONLY valid JSON, no markdown, no explanation:
 {"name":"...","rawIdentity":"...","archetype":["..."],"roles":["..."],"mandate":"..."}`;
 
+  // Birth-extraction is internal operator-formation logic invoked AFTER the
+  // turn (from runPostResponseTasks). It runs outside the route handler's
+  // `agent` scope, so it calls chatCompletion directly. The operator that
+  // is being formed cannot dispatch its own birth-extraction LLM call —
+  // the platform extracts the operator's identity from the birth
+  // conversation transcript on the operator's behalf.
   const result = await chatCompletion(
     [
       { role: 'system', content: 'You extract structured identity data from conversations. Return only valid JSON, no markdown, no explanation.' },
@@ -1328,7 +1334,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           tools: iterTools.length > 0 ? iterTools : undefined,
         };
 
-        for await (const chunk of streamChat(loopMessages, iterOpts)) {
+        // STEP 2 — Operator dispatches the LLM as streaming executor for
+        // each tool-loop iteration. The operator owns the call (model,
+        // tool catalog, system prompt all set by the operator). The LLM
+        // produces text + optional tool call. The operator decides what
+        // to do with each chunk via the loop body below.
+        for await (const chunk of agent.executeStreaming(loopMessages, iterOpts)) {
           if (chunk.delta) {
             iterContent += chunk.delta;
             fullContent += chunk.delta;
@@ -1823,7 +1834,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
                 { role: 'assistant', content: finalContent },
                 { role: 'system', content: `[Skill result — ${trigger.name}]\n${skillResult.output}` },
               ];
-              const secondResult = await chatCompletion(secondMsgs, chatOpts).catch(() => null);
+              const secondResult = await agent.executeSync(secondMsgs, chatOpts).catch(() => null);
               if (secondResult?.content && secondResult.content.trim().length > 0) {
                 res.write(`data: ${JSON.stringify({ clear: true })}\n\n`);
                 res.write(`data: ${JSON.stringify({ delta: secondResult.content })}\n\n`);
@@ -1934,7 +1945,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       syncTools.push(deleteTaskTool);
       if (httpRequestTool) syncTools.push(httpRequestTool);
       const syncOpts = { ...chatOpts, tools: syncTools.length > 0 ? syncTools : undefined };
-      const result = await chatCompletion(messages, syncOpts);
+      const result = await agent.executeSync(messages, syncOpts);
 
       let finalContent = result.content;
       let finalPromptTokens = result.promptTokens;
@@ -1956,7 +1967,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
               ...messages,
               { role: 'system', content: `[Web Search] ${searchQuery}\n${capResult.output}` },
             ];
-            const secondResult = await chatCompletion(toolResultMessages, chatOpts);
+            const secondResult = await agent.executeSync(toolResultMessages, chatOpts);
             finalContent = secondResult.content;
             finalPromptTokens = secondResult.promptTokens;
             finalCompletionTokens = secondResult.completionTokens;
@@ -1980,7 +1991,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             ...messages,
             { role: 'system', content: `[KB Seed Result]\n${toolResultText}` },
           ];
-          const secondResult = await chatCompletion(seedMessages, chatOpts);
+          const secondResult = await agent.executeSync(seedMessages, chatOpts);
           finalContent = secondResult.content;
           finalPromptTokens = secondResult.promptTokens;
           finalCompletionTokens = secondResult.completionTokens;
@@ -2013,7 +2024,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             ...messages,
             { role: 'system', content: `[File Created]\n${toolResultText}` },
           ];
-          const secondResult = await chatCompletion(fileMessages, chatOpts);
+          const secondResult = await agent.executeSync(fileMessages, chatOpts);
           finalContent = secondResult.content;
           finalPromptTokens = secondResult.promptTokens;
           finalCompletionTokens = secondResult.completionTokens;
@@ -2038,7 +2049,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             ...messages,
             { role: 'system', content: `[File Read]\n${toolResultText}` },
           ];
-          const secondResult = await chatCompletion(readMessages, chatOpts);
+          const secondResult = await agent.executeSync(readMessages, chatOpts);
           finalContent = secondResult.content;
           finalPromptTokens = secondResult.promptTokens;
           finalCompletionTokens = secondResult.completionTokens;
@@ -2065,7 +2076,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           ...messages,
           { role: 'system', content: `[Files in workspace]\n${toolResultText}` },
         ];
-        const secondResult = await chatCompletion(listMessages, chatOpts);
+        const secondResult = await agent.executeSync(listMessages, chatOpts);
         finalContent = secondResult.content;
         finalPromptTokens = secondResult.promptTokens;
         finalCompletionTokens = secondResult.completionTokens;
@@ -2088,7 +2099,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           ...messages,
           { role: 'system', content: `[Current time]\n${toolResultText}` },
         ];
-        const secondResult = await chatCompletion(timeMessages, chatOpts);
+        const secondResult = await agent.executeSync(timeMessages, chatOpts);
         finalContent = secondResult.content;
         finalPromptTokens = secondResult.promptTokens;
         finalCompletionTokens = secondResult.completionTokens;
@@ -2119,7 +2130,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             ...messages,
             { role: 'system', content: `[Task Scheduled]\n${toolResultText}` },
           ];
-          const secondResult = await chatCompletion(taskMessages, chatOpts);
+          const secondResult = await agent.executeSync(taskMessages, chatOpts);
           finalContent = secondResult.content;
           finalPromptTokens = secondResult.promptTokens;
           finalCompletionTokens = secondResult.completionTokens;
@@ -2152,7 +2163,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           }
           capabilityFired = true;
           const updMessages: ChatMessage[] = [...messages, { role: 'system', content: `[Task Updated]\n${toolResultText}` }];
-          const secondResult = await chatCompletion(updMessages, chatOpts);
+          const secondResult = await agent.executeSync(updMessages, chatOpts);
           finalContent = secondResult.content;
           finalPromptTokens = secondResult.promptTokens;
           finalCompletionTokens = secondResult.completionTokens;
@@ -2173,7 +2184,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             ? `Task "${p.name}" paused.`
             : `No task named "${p.name}" found in your station.`;
           const pauseMessages: ChatMessage[] = [...messages, { role: 'system', content: `[Task Paused]\n${toolResultText}` }];
-          const secondResult = await chatCompletion(pauseMessages, chatOpts);
+          const secondResult = await agent.executeSync(pauseMessages, chatOpts);
           finalContent = secondResult.content;
           finalPromptTokens = secondResult.promptTokens;
           finalCompletionTokens = secondResult.completionTokens;
@@ -2194,7 +2205,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             ? `Task "${r.name}" resumed.`
             : `No task named "${r.name}" found in your station.`;
           const resMessages: ChatMessage[] = [...messages, { role: 'system', content: `[Task Resumed]\n${toolResultText}` }];
-          const secondResult = await chatCompletion(resMessages, chatOpts);
+          const secondResult = await agent.executeSync(resMessages, chatOpts);
           finalContent = secondResult.content;
           finalPromptTokens = secondResult.promptTokens;
           finalCompletionTokens = secondResult.completionTokens;
@@ -2214,7 +2225,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             ? `Task "${d.name}" deleted.`
             : `No task named "${d.name}" found in your station.`;
           const delMessages: ChatMessage[] = [...messages, { role: 'system', content: `[Task Deleted]\n${toolResultText}` }];
-          const secondResult = await chatCompletion(delMessages, chatOpts);
+          const secondResult = await agent.executeSync(delMessages, chatOpts);
           finalContent = secondResult.content;
           finalPromptTokens = secondResult.promptTokens;
           finalCompletionTokens = secondResult.completionTokens;
@@ -2245,7 +2256,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             ...messages,
             { role: 'system', content: `[HTTP Response]\n${httpResult}` },
           ];
-          const secondResult = await chatCompletion(httpMessages, chatOpts);
+          const secondResult = await agent.executeSync(httpMessages, chatOpts);
           finalContent = secondResult.content;
           finalPromptTokens = secondResult.promptTokens;
           finalCompletionTokens = secondResult.completionTokens;
@@ -2268,7 +2279,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
                 { role: 'assistant', content: finalContent },
                 { role: 'system', content: `[Skill result — ${trigger.name}]\n${skillResult.output}` },
               ];
-              const secondResult = await chatCompletion(secondMsgs, chatOpts).catch(() => null);
+              const secondResult = await agent.executeSync(secondMsgs, chatOpts).catch(() => null);
               if (secondResult?.content && secondResult.content.trim().length > 0) {
                 finalContent = secondResult.content;
                 finalPromptTokens = secondResult.promptTokens;

@@ -275,7 +275,12 @@ router.post('/:operatorId', async (req: Request, res: Response): Promise<void> =
       ? operator.defaultModel
       : CHAT_MODEL;
 
-    const result = await chatCompletion(chatMessages, model);
+    // STEP 2 — Operator dispatches the LLM as its executor for this turn.
+    // The operator owns the call (it chose the model, built the messages,
+    // assembled the system prompt with its identity + scope context).
+    // The LLM produces text in the operator's voice; the operator validates
+    // it (next step) before the route delivers it via Telegram.
+    const result = await agent.executeSync(chatMessages, { model });
 
     // STEP 3 — Operator validates the LLM's draft before delivery.
     const validation = agent.validate(result.content);
