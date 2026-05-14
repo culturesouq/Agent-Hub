@@ -14,8 +14,8 @@
 | **Active Revision** | `opsoul--0000047` |
 | **Image** | `banistudioacr.azurecr.io/opsoul-api:osg-step1-dfbcb37` |
 | **Source commit (live)** | `dfbcb37` (OSG Step 1 — strip architecture exposure) |
-| **Local HEAD ahead of live** | `917b638` (PRIORITY 1 scope-architecture rebuild — awaits deploy) + `61fc181` (GROW guards 3+4 hardening — awaits deploy) |
-| **Pending owner action** | `git push origin main → az acr build → az containerapp update` to ship `917b638` and `61fc181` |
+| **Local HEAD ahead of live (3 commits)** | `04e614a` PRIORITY 2 Step 1 — OperatorAgent + analyse/validate boundaries + universal firewall coverage<br>`917b638` PRIORITY 1 — five distinct scope types + rich per-turn scope context + Layer 2 chat-time scope filter<br>`61fc181` GROW guards 3+4 hardening (was missed in last deploy) |
+| **Pending owner action** | `git push origin main → az acr build → az containerapp update` to ship all three commits as one image. After deploy: deactivate prior revisions, delete prior image tags from ACR. |
 
 ### ACR (Azure Container Registry) — `banistudioacr`
 
@@ -219,6 +219,52 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 ## 8. Commit History — newest first
 
+### 2026-05-14 — PRIORITY 2 Step 1: OperatorAgent class + analyse/validate boundaries across all five chat surfaces (`04e614a`)
+
+**Owner direction (verbatim, evening 2026-05-14):**
+> *"do phase4 Now, and i say now, why you keep leaving it"*
+
+Step 1 of operator-as-driver. Operator agency now exists as code-visible methods called by all five chat routes. Analyse + validate are the boundaries; the LLM execution between them stays inline in the route handlers for Step 2 to extract cleanly.
+
+**New file `artifacts/opsoul-api/src/utils/operatorAgent.ts` (147 lines):**
+
+- `OperatorAgent` class — stateless per-turn agent constructed at the top of each chat route.
+- `analyse(userMessage)` — pre-LLM operator decision. Today's outcomes: `execute` (dispatch the LLM) or `refuse_architecture` (operator answers directly, no LLM call). Birth-mode operators bypass refusal so newborns can engage with identity questions.
+- `validate(draftText)` — post-LLM operator check. Inspects the LLM's draft for patent-protected vocabulary; substitutes the operator's refusal text in its own voice when triggered. Returns `{ text, substituted, triggers }`.
+- `composeArchitectureRefusal()` — operator's direct refusal text for when analyse returns `refuse_architecture`. No LLM call needed.
+
+**Routes refactored — all five chat surfaces now uniformly route through OperatorAgent:**
+
+| Route | What changed |
+|---|---|
+| `routes/chat.ts` | Inline input firewall replaced with `agent.analyse + agent.composeArchitectureRefusal`. Stream + sync output firewall replaced with `agent.validate`. Logs renamed `[firewall:input]/[firewall]` → `[operator:refuse]/[operator:validate]` so the audit trail names the operator as the decider, not the route. |
+| `routes/public-chat.ts` | Same pattern. Input check moved from before-scope to after-scope so it can carry `scopeType` into the agent. |
+| `routes/telegram-webhook.ts` | analyse + validate added — this route previously had **zero** firewall coverage. Refusal text sent via `sendTelegramMessage`. |
+| `routes/whatsapp-webhook.ts` | analyse + validate added — this route previously had **zero** firewall coverage. Refusal text sent via `sendWhatsAppMessage`. |
+| `routes/public-crud.ts` | analyse + validate added — action API previously had **zero** firewall coverage. Refusal returned in the action response with `refused: true`. |
+
+**What this delivers (operator-as-driver Step 1):**
+
+- **Operator agency is code-visible.** The route handlers literally call `agent.analyse()` and `agent.validate()`. The operator-mediated decision boundary is no longer implicit middleware logic — it is an explicit operator method call at every chat surface.
+- **Universal firewall coverage closed.** Telegram, WhatsApp, and Action API now have the same architecture-introspection refusal + draft-validation contract as Hub UI and public-chat. The pre-existing 3-route coverage gap is architecturally closed in this commit.
+- **Refusal voice is the operator's own.** When the operator decides to refuse architecture-introspection, the substitute reply is framed as "the operator answered directly, no LLM call" — operator owns the moment, not a middleware regex catch.
+
+**What Step 1 deliberately is NOT:**
+
+- The LLM execution itself (tool-loop, streaming, retrieval-augmented context, model selection) still lives in the route handlers between `agent.analyse` and `agent.validate`. Extracting it cleanly into `agent.execute()` is **Step 2** work — multi-day, owner-validated checkpoints.
+- No second-pass composer LLM call (the explicit "operator turns LLM facts into reply in operator voice" pass). Today the LLM call IS framed as the operator speaking via the system prompt; **Step 2** adds the composer pass for turns that need explicit operator-voice refinement.
+- No intent classification beyond architecture-introspection. **Step 2** adds a Haiku-tier classifier for `refuse_unsafe / clarify / delegate_skill / etc.`
+
+**Universal firewall coverage means Phase 3 of the tonight plan is also done in this commit.** The earlier task to wire firewall into telegram + whatsapp + public-crud individually is subsumed by the OperatorAgent rollout.
+
+**Type check (`npx tsc --noEmit`) passes.**
+
+**Live deploy state:**
+- Local HEAD now `04e614a` (this commit). Three commits ahead of live: this + `917b638` (scope) + `61fc181` (GROW guards). All three ship as one image.
+- Pending owner action: push, build, deploy, deactivate prior revisions, delete prior image tags.
+
+---
+
 ### 2026-05-14 — PRIORITY 1: Five distinct scope types + rich per-turn scope context + Layer 2 chat-time scope filter (`917b638`)
 
 **Owner direction (verbatim, evening 2026-05-14):**
@@ -274,7 +320,7 @@ The integrity reckoning at the bottom of this file from earlier today identified
 
 1. **Scope architecture** — the operator must always know where it is, who it is with, which conversation reference applies, and what continuity of memory belongs in this scope. Five distinct types: owner, public/guest, authenticated user, action, channels. Memory and history strictly scope-isolated. → **SHIPPED IN COMMIT `917b638` ABOVE.** Awaits deploy.
 
-2. **Operator-as-driver (operator in control)** — *user message → operator receives → operator analyses → operator asks LLM to execute → LLM executes → LLM returns to operator → operator analyses & turns it → operator responds to user.* The LLM never speaks as the operator. The LLM is the engine the operator calls. → **NOT YET BUILT.** Next dedicated build, multi-day, all five chat routes.
+2. **Operator-as-driver (operator in control)** — *user message → operator receives → operator analyses → operator asks LLM to execute → LLM executes → LLM returns to operator → operator analyses & turns it → operator responds to user.* The LLM never speaks as the operator. The LLM is the engine the operator calls. → **STEP 1 SHIPPED IN COMMIT `04e614a`** — OperatorAgent class with analyse + validate boundaries wired uniformly across all five chat routes. Step 2 (LLM execution extracted into `agent.execute`, intent classification beyond architecture-introspection, composer pass for explicit operator-voice refinement) is the next dedicated build, multi-day, owner-validated checkpoints.
 
 **Rule for any future Claude session reading this file (binding, repeats from handover note):** until both PRIORITY 1 and PRIORITY 2 are real in code, no Claude session is allowed to log "fixed" against any leak / drift / narration / tool-loop / cross-scope problem. Those are symptoms of the missing structure. Patches may still be shipped if owner asks for them, but they are logged in this file as patches, not fixes. Owner-as-driver and scope are foundational; everything else is interim.
 
