@@ -5,17 +5,22 @@
 
 ---
 
-## 1. Live Deployment (verified against Azure 2026-05-14 evening)
+## 1. Live Deployment (verified against Azure 2026-05-14 18:00 GST)
 
 | What | Value |
 |---|---|
-| **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` |
+| **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` (HTTP 200, 92ms) |
 | **Container App** | `opsoul` (resource group `bani-studio-rg`, region `uaenorth`) |
-| **Active Revision** | `opsoul--0000047` |
-| **Image** | `banistudioacr.azurecr.io/opsoul-api:osg-step1-dfbcb37` |
-| **Source commit (live)** | `dfbcb37` (OSG Step 1 — strip architecture exposure) |
-| **Local HEAD ahead of live (4 code commits)** | `5bf5e9b` Infra: per-message model column + UI/backend default-model honesty + smoke-test sandbox enforcement + frontend race fix + Layer 2 reset SQL<br>`04e614a` PRIORITY 2 Step 1 — OperatorAgent + analyse/validate boundaries + universal firewall coverage<br>`917b638` PRIORITY 1 — five distinct scope types + rich per-turn scope context + Layer 2 chat-time scope filter<br>`61fc181` GROW guards 3+4 hardening (was missed in last deploy) |
-| **Pending owner action** | (1) `git push origin main → az acr build → az containerapp update` to ship all four commits as one image. (2) After deploy: `pnpm --filter opsoul-db push` to apply DB schema changes (new `model` column on `messages`, new `operator_main_memory` table). (3) Run `artifacts/opsoul-api/src/scripts/cleanLayer2.sql` to drop pollution from `operator_main_memory` + `operator_memory`. (4) ACR cleanup: deactivate prior revisions, delete prior image tags. (5) Set `SANDBOX_OPERATOR_ID` env var on the container app pointing at a dedicated sandbox operator (or leave unset — sandbox-shaped userIds are then rejected on every operator). |
+| **Active Revision** | `opsoul--0000048` (Healthy, 100% traffic) |
+| **Image** | `banistudioacr.azurecr.io/opsoul-api:scope-driver-079c62a` |
+| **Image digest** | `sha256:fd95b4304551c3abbc32ba3ccb3ed8ad76173364a4e091abba85f9f2b1f198ed` |
+| **Source commit (live)** | `079c62a` (HEAD of `main` — includes all four code commits below) |
+| **ACR build** | Run ID `dg5b` (2m 8s, 2026-05-14) |
+| **Code commits in this image** | `5bf5e9b` infra bundle · `04e614a` PRIORITY 2 Step 1 · `917b638` PRIORITY 1 · `61fc181` GROW guards 3+4 hardening |
+| **DB migration applied** | `messages.model` column added · `operator_main_memory` table verified · `operator_memory.scope_id` default = `'legacy'` |
+| **DB cleanup applied** | `operator_main_memory` 12 rows → 0 · `operator_memory` 34 rows → 0 (smoke-test pollution dropped) |
+| **ACR cleanup applied** | 10 prior image tags deleted (only `scope-driver-079c62a` remains in `opsoul-api` repo). Other repos (authentic-tour, bani-studio, foundermoment, hafeet-tutoring, nahilai, sovereign-rag) untouched. Prior revisions auto-pruned by Azure. |
+| **Optional next step** | Set `SANDBOX_OPERATOR_ID` env var on the container app pointing at a dedicated sandbox operator. If unset, sandbox-shaped userIds (`smoke-` / `test-` / `sandbox-` / `debug-`) are rejected on every operator — also fine. |
 
 ### ACR (Azure Container Registry) — `banistudioacr`
 
