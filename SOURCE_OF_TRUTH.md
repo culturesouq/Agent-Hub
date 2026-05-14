@@ -11,10 +11,11 @@
 |---|---|
 | **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` (HTTP 200, 93ms) |
 | **Container App** | `opsoul` (resource group `bani-studio-rg`, region `uaenorth`) |
-| **Active Revision** | `opsoul--0000050` (Healthy, 100% traffic) |
+| **Active Revision** | `opsoul--0000051` (Healthy, 100% traffic — env-var change `VAEL_INBOX_ENABLED=true`) |
 | **Image** | `banistudioacr.azurecr.io/opsoul-api:vael-id-fix-d394985` (only image in `opsoul-api` repo) |
 | **Source commit (live)** | `d394985` (Vael id resolved dynamically — kills stale-id ghost) |
 | **ACR build** | Run ID `dg5d` (2m 8s, 2026-05-14) |
+| **Notable env vars** | `VAEL_INBOX_ENABLED=true` (Vael's inbox-processing gate now open per owner direction) |
 | **Code commits in this image** | `d394985` Vael dynamic id · `30686b1` operator-as-driver Step 2 · `5bf5e9b` infra bundle · `04e614a` operator-as-driver Step 1 · `917b638` scope architecture · `61fc181` GROW guards 3+4 hardening |
 | **DB state** | Schema migrated · clean (0 Layer 1, 0 Layer 2, 0 orphan skills, 5 active rag_dna only — 172 deactivated entries dropped) |
 | **Operators in DB** | 3: Vael (`8668f6c9-...`), Nahil (`37da8776-...`), Operator/Blank (`eb70c409-...`). No orphans, no soft-deleted, no ghosts. |
@@ -222,6 +223,25 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 ---
 
 ## 8. Commit History — newest first
+
+### 2026-05-14 — Late-evening operations log (no commit; env-var + DB ops only)
+
+**1. Vael's inbox gate opened.** `VAEL_INBOX_ENABLED=true` set on the container app via `az containerapp update --set-env-vars`. New revision `opsoul--0000051` (Healthy, 100% traffic, same image `vael-id-fix-d394985`). Prior revision `0000050` deactivated. Vael's full sweep cron now processes `./knowledge_inbox/` files in addition to `rag_sources` URLs.
+
+**2. Vael KB pollution cleaned.** Two operator_kb chunks misplaced into Vael's KB (UAE date palm cultivation + ADAFSA agriculture authority) DELETED — those belong to Nahil's domain, and Nahil already has equivalent UAE agri knowledge. Vael's KB now contains only her job-relevant knowledge: 83 platform-kb + 1 agency-core + 2 entries about being the RAG gatekeeper (verified knowledge base RAG gatekeeper audit pipeline, first sovereign verified RAG system 2024). 86 chunks total, all on-mandate.
+
+**3. Vael processed 5 Anthropic doc URLs → 27 rag_dna entries.** Owner triggered Vael with 5 Anthropic URLs (tool use, computer use, extended thinking, Messages API, prompt engineering overview). Vael verified the source as official, extracted 27 candidate insights, all marked `is_active=true` with `knowledge_status='current'`. Quality is mixed — most ARE genuine agent-skill knowledge (constraints, capabilities, mechanisms, security patterns), but ~5 read as news/marketing (e.g., "Computer use achieves state-of-the-art on WebArena benchmark", "Claude Console offers generative prompt tooling"). Owner's note: "she only verified the content is from official sources, anyway this for tomorrow." No deletes tonight — owner triages tomorrow.
+
+---
+
+### Open items for tomorrow's session
+
+1. **Vael extraction prompt tightening.** `utils/vaelEngine.ts` `EXTRACT_SYSTEM` constant — adjust to weight skill / capability / constraint / mechanism / API-rule patterns OVER news / benchmark / product-mention patterns. Re-run extraction on the 5 URLs, compare output, owner approves.
+2. **Owner-triage the 27 rag_dna entries from tonight's run.** Owner reviews titles, marks news-shaped ones `is_active=false` (or DELETE). Skill-shaped ones stay `current` and get archetype-scoped via Vael Desk.
+3. **Mount persistent Azure Files volume at `/app/knowledge_inbox`.** Today's inbox path is on the container's ephemeral filesystem — every revision change wipes uploaded `.md` files. Mount an Azure Files share so the Vael Desk inbox UI persists across deploys/restarts/scale events. ~30 min Azure config.
+4. **First-message-duplicate bug live reproduction** (deferred from earlier today). Frontend auto-Thread race was removed in `5bf5e9b`; if duplicate still appears on new operator creation, owner provides screenshot + repro steps.
+
+---
 
 ### 2026-05-14 — Vael dynamic-id resolver kills stale-id ghost (`d394985`, LIVE on revision 0000050)
 
