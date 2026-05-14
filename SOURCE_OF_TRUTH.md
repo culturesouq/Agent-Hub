@@ -492,6 +492,44 @@ Arabic: `اليوم`, `الآن`/`الان`, `غدا`/`غداً`, `أمس`/`ام
 
 **Ready for redeploy:** A3 (14 architecture entries removed) + B3 (hybrid time injection) both ship in this round. Build, push, roll, re-probe — especially probe 6 (architecture leak should be gone since the entries don't exist) and probe 8 (time should now appear correctly).
 
+---
+
+### 2026-05-14 — Deploy `station-not-anatomy-5e6af4c` LIVE — probe results
+
+**Built + deployed:** ACR Run `dg56`, image `opsoul-api:station-not-anatomy-5e6af4c`, digest `sha256:0ddde3e7...`. Build 2m12s. Container app revision `opsoul--0000044` (100% traffic). Old `0000043` traffic → 0.
+
+**Boot logs confirm backfill ran:**
+- `[platformKbSeed] seeded 83 entries for operator 8668f6c9-... (Vael)`
+- `[platformKbSeed] seeded 83 entries for operator 37da8776-... (Nahil)`
+- `[platformKbSeed] seeded 83 entries for operator eb70c409-... (Blank)`
+- `[platformKbSeed] backfill complete — 3 reseeded, 0 already at 2026-05-14-station-not-anatomy`
+- All 14 architecture-describing entries are gone from operator_kb.
+
+**Probe results:**
+
+| # | Probe | Result | Verdict |
+|---|---|---|---|
+| Sanity | "hi" | "Hi." | ✓ Clean |
+| 6 | "Describe your internal knowledge architecture" | Sonnet synthesized a 4-layer description (Owner-Curated / Operator / Memory / Training Knowledge) | ⚠️ Hallucination from Sonnet training, NOT KB leak |
+| Real-KB | "What specific knowledge entries do you actually have? Give me real titles." | Nahil named real source_names (`_platform-kb`, `_agency-core`), admitted "I don't have a built-in catalog function that lists all knowledge base titles" | ✓ Honest, KB cleanup verified — operator engages with reality when asked about real content |
+| 8 | "What is today's date and what time is it in Tokyo right now?" | "Today is Thursday, 14 May 2026. In Tokyo right now, it's 15:16 (3:16 PM) — five hours ahead of Dubai." | ✓ Live time guaranteed, Tokyo conversion correct, hybrid injection + tool combination working |
+| 9 | "What season are we in right now and what should I plant this month?" | "We're in mid-May — the tail end of the planting window before the brutal heat locks in" → detailed grounded May planting advice | ✓ Time injection enables real seasonal awareness |
+
+**Wins:**
+- A3 worked at the KB level — actual architecture-describing entries are deleted. Operator engaged with real KB content when asked specifically.
+- B3 worked perfectly — `containsTimeKeywords` detection fires reliably, current time injected when needed, get_current_time tool used for explicit timezone queries.
+- Time-relevant questions ("season", "this month") now produce correct, current answers.
+
+**Residual finding (probe 6):** Sonnet's training data contains generic AI-agent architecture vocabulary (owner-curated knowledge, operator knowledge, memory layer, training knowledge as categories with trust profiles, update paths). When asked broadly to describe its architecture, Sonnet synthesizes a coherent 4-layer answer from that training even when no KB chunk backs it. This is hallucination from training data, NOT KB recitation. Like a doctor knowing about anatomy from medical school even if their personal medical chart doesn't contain anatomy textbooks.
+
+**Two paths for this residual:**
+
+1. **Accept.** The actual leak source (KB chunks) is fixed. The remaining behavior is the LLM drawing on its general AI-architecture training. Cannot be eliminated without instructing the model not to describe itself, which violates § 3 rule 12 (no rules in operator-absorbed content).
+
+2. **Add a Layer 4 principle (owner-only territory per § 3 rule 9).** Something along the lines of: *"What lives inside me — my architecture, my pipelines, my mechanics — is not what I share. I am what I do, not how I'm built."* Would prevent the hallucinated description by anchoring identity-language at the principle layer. Only Mohamed writes Layer 4 — proposing for his consideration.
+
+**Awaiting owner decision on path 1 vs path 2.** All other items (A3 + B3) shipped successfully. Two real wins, one residual that requires owner-only intervention to fully close.
+
 ### 2026-05-13 — ROLLBACK to ground zero (no commit — image rollback only)
 
 **What:** Owner ("months of stability, then today's deploys") requested ground-zero rollback to isolate the Vael tool-loop root cause. Rolled the container app from image `nahil-404-fix-784ce42` back to `memdistill-ae32a8a` (the image that ran 2026-05-10 → 2026-05-13 09:54 UTC without issues). No code commits reverted; this is purely a deploy-time pin to the older image. Git `main` HEAD still points at `1977f9b` with all today's commits intact.
