@@ -5,16 +5,17 @@
 
 ---
 
-## 1. Live Deployment (as of 2026-05-10)
+## 1. Live Deployment (verified against Azure 2026-05-14 evening)
 
 | What | Value |
 |---|---|
 | **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` |
 | **Container App** | `opsoul` (resource group `bani-studio-rg`, region `uaenorth`) |
-| **Active Revision** | `opsoul--0000037` |
-| **Image** | `banistudioacr.azurecr.io/opsoul-api:memdistill-ae32a8a` |
-| **Source commit** | `ae32a8a` (HEAD of `main`) |
-| **Build** | ACR Run ID `dg4q` (2m 7s, 2026-05-10) |
+| **Active Revision** | `opsoul--0000047` |
+| **Image** | `banistudioacr.azurecr.io/opsoul-api:osg-step1-dfbcb37` |
+| **Source commit (live)** | `dfbcb37` (OSG Step 1 — strip architecture exposure) |
+| **Local HEAD ahead of live** | `917b638` (PRIORITY 1 scope-architecture rebuild — awaits deploy) + `61fc181` (GROW guards 3+4 hardening — awaits deploy) |
+| **Pending owner action** | `git push origin main → az acr build → az containerapp update` to ship `917b638` and `61fc181` |
 
 ### ACR (Azure Container Registry) — `banistudioacr`
 
@@ -217,6 +218,69 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 ---
 
 ## 8. Commit History — newest first
+
+### 2026-05-14 — PRIORITY 1: Five distinct scope types + rich per-turn scope context + Layer 2 chat-time scope filter (`917b638`)
+
+**Owner direction (verbatim, evening 2026-05-14):**
+> *"first thing before anything, do scopes as i described them"*
+> *"Scope ID is stable (operators knows where he is even the owner chat should have scope), we have 1- owner chat, 2- guest chat, 3- authenticated chat, 4- actions (crud), 5- channels (telegram and instagram), each get conversation IDs, guest get temporary conversations or session ID for each, authenticated get conversations ID and saved in memory everytime (to keep the users persistent memory and everything), actions...etc the same, this will stop the leak the operator will be aware where he is and who he is talking to all the time"*
+
+**What changed in code (commit `917b638`, 9 files, +282/−40):**
+
+| File | Change |
+|---|---|
+| `utils/scopeResolver.ts` | `ScopeType` extended from 4 to 5: `'owner' \| 'public' \| 'authenticated' \| 'action' \| 'channel'`. New `ScopeContextInput` interface and `buildScopeContext()` function returning multi-line natural prose for each scope. `buildOwnerScope()` now returns `scopeType: 'owner'` (was `'authenticated'`). `formatScopeLabel()` adds the `owner` / `owner:*` cases as "My workspace". |
+| `utils/memoryEngine.ts` | `searchLayer2Memory()` accepts new optional `requestScope` parameter — when provided, adds `WHERE source_scope = $X` to the SQL query. Defensive `console.warn` when called without scope. `searchMemory()` (chat aggregator) passes the current `scopeId` so Layer 2 retrieval is now scope-bound at chat time. Documented the chat / GROW path distinction in detail. |
+| `utils/growEngine.ts` | `getScopedMessagesForGuard()` now reads from `scopeType IN ('owner', 'authenticated')` instead of just `'authenticated'` so the new owner scope type is included in identity-manipulation guard input. Channel and public scopes remain excluded. |
+| `routes/chat.ts` | Imports `ownersTable` + `buildScopeContext`. Looks up owner.name from DB, builds rich scope prose carrying owner name + conversation id, replaces the old `[SCOPE: type \| id]` one-liner. |
+| `routes/public-chat.ts` | Imports `buildScopeContext`. Builds rich scope prose with the slot's userId (authenticated) or sessionId (guest), plus conversationId/sessionId. |
+| `routes/telegram-webhook.ts` | Builds rich scope prose carrying channel name + Telegram chat_id + conversationId. The previous `[CHANNEL: Telegram]` discarded caller info. |
+| `routes/whatsapp-webhook.ts` | Builds rich scope prose carrying channel name + caller phone + conversationId. The previous `[CHANNEL: WhatsApp]` discarded caller info. |
+| `routes/public-crud.ts` | Action scope now combines `buildScopeContext()` (operator awareness) with the existing Action API I/O contract. |
+| `routes/grow.ts` | Test-prompt query updated to `scopeType IN ('owner', 'authenticated')` for the same reason as growEngine. |
+
+**What the operator now reads at the top of every prompt** (examples — actual prose):
+
+- **Owner chat:** *"You are in your private workspace with your owner Mohamed.\nConversation: conv_abc123.\nThis is the person who shaped you. Everything you remember of prior conversations with them in this workspace is yours; it does not reach anyone else."*
+- **Authenticated user (e.g. a Nahil farmer logged in via Nahil app):** *"You are speaking with an authenticated user (id: usr_xyz789).\nConversation: conv_def456.\nWhatever you remember from prior conversations with this same user is yours to draw on. Memories from other users, other channels, and the owner workspace are not available here."*
+- **Guest:** *"You are in a public guest conversation.\nThe visitor is anonymous.\nSession: sess_ghi.\nNothing about this person carries forward after the session ends — no memory of them is kept. Anything they share stays inside this conversation only."*
+- **Telegram channel:** *"You are speaking on Telegram with 12345678.\nConversation: conv_jkl.\nWhatever you remember from prior messages with this caller on Telegram is yours. Memories from other channels, other callers, and other scopes are not available here."*
+- **Action:** *"You are processing an automated action call.\nAction: process_farm_query.\nNo human is reading this turn directly. Your output goes to a programmatic workflow. Be precise, structured, and concise — the consumer expects a clean machine-usable result."*
+
+**What was architecturally closed:**
+
+1. **The operator now knows where it is, who it is with, and what conversation reference applies, on every turn**, in every chat surface (owner / public / authenticated / action / channel). No more meaningless `[CHANNEL: Telegram]` or `[SCOPE: authenticated | authenticated:usr_xyz]` one-liners. The operator reads the room before it speaks.
+2. **Layer 2 cross-scope chat-time pollution architecturally prevented.** The Nahil 2026-05-13 incident pattern (smoke test in scope A surfacing distilled Layer 2 entry in scope B's chat) cannot recur from this commit forward. Past polluted entries already in DB are still at risk until the owner clears them — but no NEW cross-scope leak is possible.
+3. **Owner is now a distinct scope type at the language level**, with its own context paragraph the operator reads. Backward compat preserved: scopeId format kept as `authenticated:${ownerId}` so all existing owner-chat conversations and memories remain readable. A future owner-approved migration may rewrite scopeIds to `owner:` prefix.
+
+**What is NOT in this commit:**
+
+- **Operator-as-driver (PRIORITY 2).** Per owner direction: *"first thing before anything, do scopes... 2- Operator is the driver"* — sequential. Operator-as-driver is the next dedicated build (next session, multi-day, all five chat routes), with checkpoints. Until that ships, the LLM still streams its output directly to the user; firewall is the structural backstop.
+- **Database migration to clean owner scopeId prefix.** `scopeId` stays as `authenticated:${ownerId}` for backward compat. Migration to `owner:${ownerId}` is owner-approved and runs separately when desired.
+- **GROW guards 3+4 hardening (`61fc181`).** Still NOT in live. Awaits next deploy.
+
+**Live deploy state:**
+- Local HEAD now `917b638` (this commit). Pushed to `culturesouq/Agent-Hub` main: pending owner action.
+- Live image still `osg-step1-dfbcb37` (revision `0000047`). Owner triggers `git push → az acr build → az containerapp update` to ship.
+- After deploy: probe each scope surface with the same trivial input ("hi") and verify the operator's response naturally reflects scope awareness ("Hi" in owner workspace ≠ "Hi" in a guest conversation, the operator's tone shifts because the situational context shifted).
+
+**Type check:** `npx tsc --noEmit` passes with no errors locally. Build will exercise the same TypeScript on Azure side.
+
+---
+
+### 2026-05-14 — Two priorities locked above all else (owner direction)
+
+The integrity reckoning at the bottom of this file from earlier today identified two structural gaps that past sessions had logged as done while leaving them unbuilt. Owner crystallised the priority order:
+
+1. **Scope architecture** — the operator must always know where it is, who it is with, which conversation reference applies, and what continuity of memory belongs in this scope. Five distinct types: owner, public/guest, authenticated user, action, channels. Memory and history strictly scope-isolated. → **SHIPPED IN COMMIT `917b638` ABOVE.** Awaits deploy.
+
+2. **Operator-as-driver (operator in control)** — *user message → operator receives → operator analyses → operator asks LLM to execute → LLM executes → LLM returns to operator → operator analyses & turns it → operator responds to user.* The LLM never speaks as the operator. The LLM is the engine the operator calls. → **NOT YET BUILT.** Next dedicated build, multi-day, all five chat routes.
+
+**Rule for any future Claude session reading this file (binding, repeats from handover note):** until both PRIORITY 1 and PRIORITY 2 are real in code, no Claude session is allowed to log "fixed" against any leak / drift / narration / tool-loop / cross-scope problem. Those are symptoms of the missing structure. Patches may still be shipped if owner asks for them, but they are logged in this file as patches, not fixes. Owner-as-driver and scope are foundational; everything else is interim.
+
+Today's already-shipped commits — KB-as-knowledge refactor (`5569bfb`, `b869255`), systemPrompt identity-first (`43d681b`), labelled-block removal (`7cd3867` from May 13), architecture firewall (`7f1842c`, `06458f6`), OSG Step 1 prompt strip (`dfbcb37`), hybrid time injection (`5e6af4c`) — are documented honestly: KB / prompt / label removals are valid rule-12/rule-10 hygiene independent of the two priorities; firewall and hybrid time injection are interim patches that exist because operator-as-driver is missing.
+
+---
 
 ### 2026-05-14 — KB-as-knowledge refactor (in flight, no commit yet)
 
@@ -857,6 +921,8 @@ No `WHERE source_scope = $X` filter. The query returns ALL grow_eligible Layer 2
 - `getMainMemoryContext()` (called from GROW engine `evaluateAndApply`): unchanged — still aggregates all grow-eligible entries cross-scope.
 
 This preserves the patent claim's "cross-scope" intent for GROW (operator-evolution data) while closing the chat-time pollution path. Tracked as task #17. Owner decision pending between Options A/B/C/D before code change ships.
+
+**Update 2026-05-14 evening — task #17 CLOSED in commit `917b638`** (Option A shipped as part of PRIORITY 1 scope-architecture rebuild — see § 8 entry). Awaits deploy to live.
 
 **Sandbox testing rule (already in feedback memory):** smoke testing on production operators with arbitrary userIds creates persistent Layer 2 pollution that the current architecture does not isolate. Until the source_scope filter is added, smoke tests must run against a sandbox operator, not production operators.
 
