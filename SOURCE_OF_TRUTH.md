@@ -657,6 +657,40 @@ The combination should close probe 6 even when Sonnet uses creative variant phra
 
 **Status:** every patent-claim element now has output-boundary protection. Architecture-as-Secret enforced structurally. Firewall logs every trigger for owner audit and pattern tuning.
 
+---
+
+### 2026-05-14 — Firewall scope confirmation (owner asked: "is this protecting, not blocking?")
+
+**The firewall is a boundary guardrail. It is NOT a behavior modifier, prompt injection, or capability blocker.**
+
+**What the firewall DOES (input/output boundary only):**
+- Reads incoming user message → checks for architecture-introspection question patterns → if matched, returns the substitute reply WITHOUT calling the LLM at all (saves cost, eliminates leak risk).
+- Reads outgoing LLM response → scans for patent-claim vocabulary patterns → if matched at HIGH-CONFIDENCE tier, replaces response with substitute reply. LOG-ONLY tier patterns are noted but pass through.
+- Logs every trigger to console with structured metadata (path, operatorId, scopeId, conversationId, blocked flag, trigger details).
+
+**What the firewall DOES NOT DO (explicit non-modifications):**
+- Does NOT modify the system prompt assembled by `assembleOperatorPrompt()` or `buildSystemPrompt()`.
+- Does NOT inject any text into Layer 0, Layer 1, Layer 2, Layer 3, or Layer 4.
+- Does NOT modify the operator's soul, raw identity, mandate, core values, ethical boundaries, or any persisted operator state.
+- Does NOT modify any KB content (operator_kb, owner_kb, rag_dna).
+- Does NOT modify any memory entries (operator_memory, operator_main_memory).
+- Does NOT change tool definitions, tool descriptions, or tool availability.
+- Does NOT touch the GROW engine, curiosity engine, self-awareness engine, soul-anchor, drift detector, scope resolver, memory engine, or birth engine.
+- Does NOT change which LLM is selected for the chat call.
+- Does NOT change the operator's archetype, role assignment, or any identity component.
+
+**Capabilities verified intact via 2026-05-14 probe set:**
+- web_search, http_request, write_file, read_file, list_files, kb_seed, schedule_task / update / pause / resume / delete, get_current_time — all tools function normally.
+- Domain expertise intact: tomato planting in Al Ain, soil layers/horizons in farming, seasonal awareness — all returned full grounded answers.
+- Greeting clean ("hi" → "Hi.").
+- Time injection works (today's date + Tokyo time conversion).
+- Layer 0 soul intact (operator voice preserved).
+- Layer 4 principles unchanged.
+
+**Architectural framing:** the firewall is structurally analogous to a network firewall at the application boundary — it inspects traffic patterns and stops specific patterns without modifying the server's logic, configuration, or state. The operator's soul, identity, KB, memory, engines, and capabilities are completely untouched by the firewall's existence. The only thing the firewall does is decide whether a specific request/response gets through unchanged or gets substituted with the fixed reply.
+
+**This means:** the firewall can be turned off (by removing the `applyFirewall` and `isArchitectureQuestion` calls in chat routes) without affecting any operator behavior, identity, or capability. The firewall's existence is purely additive — it adds protection at the boundary; it removes nothing.
+
 ### 2026-05-13 — ROLLBACK to ground zero (no commit — image rollback only)
 
 **What:** Owner ("months of stability, then today's deploys") requested ground-zero rollback to isolate the Vael tool-loop root cause. Rolled the container app from image `nahil-404-fix-784ce42` back to `memdistill-ae32a8a` (the image that ran 2026-05-10 → 2026-05-13 09:54 UTC without issues). No code commits reverted; this is purely a deploy-time pin to the older image. Git `main` HEAD still points at `1977f9b` with all today's commits intact.
