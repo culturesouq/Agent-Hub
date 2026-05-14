@@ -68,6 +68,32 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
+  // ── Smoke-test sandbox enforcement ───────────────────────────────────
+  // Prior incident (2026-05-13): a smoke test against a production
+  // operator with userId="farmer-test-42" wrote distillation-quality
+  // entries into the operator's Layer 2 main memory under a fake user
+  // identifier. Layer 2 is GROW-eligible and feeds the operator's
+  // evolution; polluted entries surface in chat for other users until
+  // manually purged. Architecturally prevent the pattern: any userId
+  // matching a sandbox prefix (smoke- / test- / sandbox- / debug-) is
+  // accepted only against the SANDBOX_OPERATOR_ID env operator (if set).
+  // For all other operators it is rejected at the boundary.
+  const SANDBOX_USERID_PATTERN = /^(smoke|test|sandbox|debug)[-_]/i;
+  if (userId && SANDBOX_USERID_PATTERN.test(userId)) {
+    const sandboxOperatorId = process.env.SANDBOX_OPERATOR_ID;
+    if (!sandboxOperatorId || sandboxOperatorId !== slot.operatorId) {
+      console.warn('[sandbox-guard] rejected sandbox-shaped userId on production operator', {
+        operatorId: slot.operatorId,
+        userId,
+        sandboxOperatorId: sandboxOperatorId ?? '(not set)',
+      });
+      res.status(403).json({
+        error: 'Sandbox-shaped userIds (smoke-, test-, sandbox-, debug-) may only be used against the SANDBOX_OPERATOR_ID. Run smoke tests against a dedicated sandbox operator.',
+      });
+      return;
+    }
+  }
+
   // ── Load operator ──
   const [operator] = await db
     .select()
@@ -392,6 +418,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           operatorId: slot.operatorId,
           role: 'assistant',
           content: finalContent,
+          model: validation.substituted ? 'operator-validate' : model,
         });
         await db.update(conversationsTable)
           .set({ messageCount: sql`message_count + 2`, lastMessageAt: new Date() })
@@ -458,6 +485,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         operatorId: slot.operatorId,
         role: 'assistant',
         content: finalContent,
+        model: validation.substituted ? 'operator-validate' : model,
       });
       await db.update(conversationsTable)
         .set({ messageCount: sql`message_count + 2`, lastMessageAt: new Date() })

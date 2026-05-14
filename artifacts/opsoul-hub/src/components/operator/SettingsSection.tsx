@@ -413,7 +413,13 @@ export default function SettingsSection({ operator, section }: { operator: Opera
   const [safeMode, setSafeMode] = useState(operator.safeMode ?? false);
   const [freeRoaming, setFreeRoaming] = useState(operator.freeRoaming ?? false);
 
-  const defaultModelId = operator.defaultModel ?? "opsoul/auto";
+  // When operator.defaultModel is NULL the backend uses Claude Sonnet 4.5
+  // (see chat.ts: `operator.defaultModel || CHAT_MODEL`). The UI must reflect
+  // that — previously it read "opsoul/auto" for NULL, which meant clicking
+  // Save without changing the dropdown silently flipped the operator from
+  // Sonnet to auto-routing. The dropdown now shows the actual default the
+  // backend would use; Auto is opt-in by explicit selection.
+  const defaultModelId = operator.defaultModel ?? "anthropic/claude-sonnet-4-5";
   const [selectedModel, setSelectedModel] = useState<string>(defaultModelId);
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [showKey, setShowKey] = useState(false);

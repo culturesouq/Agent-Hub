@@ -840,6 +840,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       operatorId: operator.id,
       role: 'assistant',
       content: refusalText,
+      model: 'operator-direct',
     });
     await db.update(conversationsTable)
       .set({ messageCount: sql`message_count + 2`, lastMessageAt: new Date() })
@@ -1860,7 +1861,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       // Signal to frontend that response is complete, DB write happening
       res.write(`data: ${JSON.stringify({ processing: true })}\n\n`);
 
-      // Save assistant message and update conversation
+      // Save assistant message and update conversation. Persist the actual
+      // model used so post-hoc audits can compare model behaviour over time.
       messageSaved = true;
       const asstMsgId = crypto.randomUUID();
       await db.insert(messagesTable).values({
@@ -1870,6 +1872,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         role: 'assistant',
         content: finalContent,
         tokenCount: finalTokens || null,
+        model: validation.substituted ? 'operator-validate' : chatModel,
       });
 
       await db.update(conversationsTable)
@@ -2293,7 +2296,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       }
       finalContent = validation.text;
 
-      // Save assistant message and update conversation
+      // Save assistant message and update conversation. Persist the actual
+      // model used so post-hoc audits can compare model behaviour over time.
       const asstMsgId = crypto.randomUUID();
       await db.insert(messagesTable).values({
         id: asstMsgId,
@@ -2302,6 +2306,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         role: 'assistant',
         content: finalContent,
         tokenCount: finalCompletionTokens || null,
+        model: validation.substituted ? 'operator-validate' : chatModel,
       });
 
       await db.update(conversationsTable)

@@ -297,6 +297,7 @@ router.post('/:operatorId', async (req: RequestWithRawBody, res: Response): Prom
       conversationId: conv.id,
       role: 'assistant',
       content: refusalText,
+      model: 'operator-direct',
     });
     await sendWhatsAppMessage(accessToken, phoneNumberId, from, refusalText);
     return;
@@ -361,6 +362,7 @@ router.post('/:operatorId', async (req: RequestWithRawBody, res: Response): Prom
       conversationId: conv.id,
       role: 'assistant',
       content: finalContent,
+      model: validation.substituted ? 'operator-validate' : model,
     });
 
     await db

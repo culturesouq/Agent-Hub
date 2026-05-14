@@ -336,11 +336,14 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     if (convosArray.length > 0 && !activeConvId) setActiveConvId(convosArray[0].id);
   }, [convosArray, activeConvId]);
 
-  useEffect(() => {
-    if (!convosLoading && convosArray.length === 0 && !createConv.isPending && !activeConvId) {
-      createConv.mutate("Thread");
-    }
-  }, [convosLoading, convosArray.length, createConv.isPending, activeConvId]);
+  // Auto-create-Thread effect removed (2026-05-14). It was a race condition:
+  // for a freshly created operator, there is a small window where the
+  // conversations cache is briefly empty before the Birth conversation loads
+  // from the server. The effect could fire in that window and create a stray
+  // "Thread" conversation that competed with the Birth conversation. Now,
+  // missing-conversation creation is only triggered explicitly by the user
+  // ("New conversation" button) — the operator's existing conversations
+  // (Birth or otherwise) load from the server without auto-creation.
 
   const authFetch = async (url: string, init: RequestInit): Promise<Response> => {
     let token = localStorage.getItem("opsoul_token");

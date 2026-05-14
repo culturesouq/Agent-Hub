@@ -232,6 +232,7 @@ router.post('/:operatorId', async (req: Request, res: Response): Promise<void> =
       conversationId: conv.id,
       role: 'assistant',
       content: refusalText,
+      model: 'operator-direct',
     });
     await sendTelegramMessage(botToken, chatId, refusalText);
     return;
@@ -296,6 +297,7 @@ router.post('/:operatorId', async (req: Request, res: Response): Promise<void> =
       conversationId: conv.id,
       role: 'assistant',
       content: finalContent,
+      model: validation.substituted ? 'operator-validate' : model,
     });
 
     await db
