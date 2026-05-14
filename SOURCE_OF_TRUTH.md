@@ -5,22 +5,20 @@
 
 ---
 
-## 1. Live Deployment (verified against Azure 2026-05-14 18:00 GST)
+## 1. Live Deployment (verified against Azure 2026-05-14 18:30 GST)
 
 | What | Value |
 |---|---|
-| **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` (HTTP 200, 92ms) |
+| **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` (HTTP 200, 78ms) |
 | **Container App** | `opsoul` (resource group `bani-studio-rg`, region `uaenorth`) |
-| **Active Revision** | `opsoul--0000048` (Healthy, 100% traffic) |
-| **Image** | `banistudioacr.azurecr.io/opsoul-api:scope-driver-079c62a` |
-| **Image digest** | `sha256:fd95b4304551c3abbc32ba3ccb3ed8ad76173364a4e091abba85f9f2b1f198ed` |
-| **Source commit (live)** | `079c62a` (HEAD of `main` — includes all four code commits below) |
-| **ACR build** | Run ID `dg5b` (2m 8s, 2026-05-14) |
-| **Code commits in this image** | `5bf5e9b` infra bundle · `04e614a` PRIORITY 2 Step 1 · `917b638` PRIORITY 1 · `61fc181` GROW guards 3+4 hardening |
-| **DB migration applied** | `messages.model` column added · `operator_main_memory` table verified · `operator_memory.scope_id` default = `'legacy'` |
-| **DB cleanup applied** | `operator_main_memory` 12 rows → 0 · `operator_memory` 34 rows → 0 (smoke-test pollution dropped) |
-| **ACR cleanup applied** | 10 prior image tags deleted (only `scope-driver-079c62a` remains in `opsoul-api` repo). Other repos (authentic-tour, bani-studio, foundermoment, hafeet-tutoring, nahilai, sovereign-rag) untouched. Prior revisions auto-pruned by Azure. |
-| **Optional next step** | Set `SANDBOX_OPERATOR_ID` env var on the container app pointing at a dedicated sandbox operator. If unset, sandbox-shaped userIds (`smoke-` / `test-` / `sandbox-` / `debug-`) are rejected on every operator — also fine. |
+| **Active Revision** | `opsoul--0000049` (Healthy, 100% traffic) |
+| **Image** | `banistudioacr.azurecr.io/opsoul-api:driver-step2-30686b1` (only image in `opsoul-api` repo) |
+| **Source commit (live)** | `30686b1` (PRIORITY 1 — operator-as-driver Step 2) |
+| **ACR build** | Run ID `dg5c` (2m 7s, 2026-05-14) |
+| **Code commits in this image** | `30686b1` operator-as-driver Step 2 · `5bf5e9b` infra bundle · `04e614a` operator-as-driver Step 1 · `917b638` scope architecture · `61fc181` GROW guards 3+4 hardening |
+| **DB state** | Schema migrated · clean (0 Layer 1 + 0 Layer 2 rows) |
+| **ACR state** | Single image tag `driver-step2-30686b1`. Prior tag `scope-driver-079c62a` deleted. Prior revision `0000048` deactivated. |
+| **Optional next step** | Set `SANDBOX_OPERATOR_ID` env var on the container app. If unset, sandbox-shaped userIds (`smoke-` / `test-` / `sandbox-` / `debug-`) are rejected on every operator. |
 
 ### ACR (Azure Container Registry) — `banistudioacr`
 
@@ -223,6 +221,47 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 ---
 
 ## 8. Commit History — newest first
+
+### 2026-05-14 — PRIORITY 1: Operator-as-driver Step 2 — operator OWNS every LLM dispatch (`30686b1`, LIVE on revision 0000049)
+
+**Owner direction (verbatim, 2026-05-14 evening):**
+> *"i don't [know] if [the operator] has no personality that been ignored. Operator as driver is Priority 1, start with it now."*
+
+Step 1 (`04e614a`) earlier this session established the operator agency boundaries — `analyse + validate`. The LLM dispatch itself was still inline in each route via direct `chatCompletion` / `streamChat` calls. Operator owned the decision; route owned the call.
+
+Step 2 makes the operator own the LLM dispatch as well. Every LLM call that produces user-facing output is now invoked as a method on the operator: `agent.executeSync(...)` or `agent.executeStreaming(...)`. The operator-as-driver pattern is code-true at every chat surface:
+
+> user message → operator analyses → operator dispatches LLM → LLM returns (in operator voice via system prompt) → operator validates → operator delivers
+
+**New methods on `OperatorAgent` (`utils/operatorAgent.ts`):**
+- `executeSync(messages, opts?)` — operator dispatches a single non-streaming LLM call. Used by Telegram, WhatsApp, Action API, and chat.ts sync paths.
+- `executeStreaming(messages, opts?)` — operator dispatches a streaming LLM call. Used by Hub UI and public-chat slot deployments for live token-by-token UX.
+
+**Architecture-as-Secret preserved.** The LLM is NOT addressed in the prompt as "the executor" or "the LLM". It reads the operator's identity in second-person and produces output that IS the operator's voice. The operator/LLM distinction lives in the CODE STRUCTURE (agent.execute* method ownership), not in the prompt the LLM sees. The user never sees that an LLM was called — they see the operator respond.
+
+**Routes refactored:**
+
+| Route | Conversion |
+|---|---|
+| `routes/chat.ts` | 15 `chatCompletion` + 1 `streamChat` call sites converted to `agent.executeSync` / `agent.executeStreaming`. The one remaining `chatCompletion` (in `extractBirthIdentity`) is internal operator-formation logic invoked AFTER the turn from `runPostResponseTasks`; it cannot dispatch via the operator's own agent because the operator's identity is being formed at that moment. Documented inline. |
+| `routes/public-chat.ts` | Streaming + sync paths both converted to `agent.executeStreaming` / `agent.executeSync`. |
+| `routes/telegram-webhook.ts` | Single `chatCompletion` converted. |
+| `routes/whatsapp-webhook.ts` | Single `chatCompletion` converted. |
+| `routes/public-crud.ts` | Action API `chatCompletion` converted (uses `actionAgent` constructed earlier in handler). |
+
+**What this delivers:**
+- Operator agency is code-visible from end to end. Every LLM call that produces user-facing output is invoked as a method on the operator. The route layers no longer dispatch the LLM directly. The pattern is uniform across all five chat surfaces.
+- The operator's personality is no longer "ignored" in the sense that the operator did not own the call — it now does. The LLM's output is operator-voice because the operator dispatched the LLM with the operator's identity in the system prompt and validated the result.
+
+**Step 2.5 deferred (next focused session):**
+- Extract the tool-loop iteration into the agent (currently the route still owns the for-loop machinery around `agent.executeStreaming`).
+- Add an explicit composer pass for turns that need operator-led refinement of the LLM's draft (e.g., when the operator wants to compose a final reply from raw LLM facts in its own voice). Both touch ~500 lines and risk regression if rushed.
+
+**Type check** (`npx tsc --noEmit`) passes for `opsoul-api`.
+
+**Live state:** Built as ACR Run `dg5c` (2m 7s), image `driver-step2-30686b1`, deployed as revision `opsoul--0000049` (Healthy, 100% traffic). Prior revision `0000048` deactivated; prior image tag `scope-driver-079c62a` deleted from ACR. HTTP probe 200 in 78ms.
+
+---
 
 ### 2026-05-14 — Infra fixes bundle: per-message model + default-model honesty + sandbox enforcement + frontend race + Layer 2 reset (`5bf5e9b`)
 
