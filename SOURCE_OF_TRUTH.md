@@ -277,6 +277,24 @@ All local code changes complete. No git commit yet. No Azure deploy yet.
 
 **Awaiting owner go for:** `git add -A && git commit && git push origin main && az acr build && az containerapp update`. Once deployed, the 7-probe stress test confirms whether systemPrompt header rename is needed (step 6) or whether the leak is fully closed by the KB rewrite alone.
 
+---
+
+### 2026-05-14 — systemPrompt.ts joint review session (no code changes yet)
+
+Owner asked for full extraction of `systemPrompt.ts` and block-by-block review. Five problem blocks identified with owner direction captured:
+
+**Block 5 — Birth prompt (lines 135-160).** Currently includes a hardcoded conversational script ("If the owner has just given you a name: acknowledge it warmly... Then ask: 'And what will I help you with?'") + an explicit "Rules:" list with four "Do not" imperatives + literal "Layer 0 is your character" exposing architecture nomenclature at birth. Violates § 3 rule 12 (KB-as-knowledge). Owner direction: birth should be ONLY (a) Layer 0 loaded, (b) one factual situational note. The newborn handles the conversation naturally from soul. The system birth engine (separate code path) handles archetype/role assignment outside the prompt.
+
+**Block 6 — Archetype foundations (lines 162-220).** Nine archetype identity descriptions, each ~100 words in second-person form. Mostly clean character description (e.g., Advisor's "young in energy, deep in curiosity"), but each one ends with imperative fragments ("you do not deflect", "when asked for a recommendation, give one"). Owner direction: rewrite each archetype WHOLE — never patch fragments while leaving the rest. Saved as feedback memory `feedback_no_franken_rewrites`. Treat archetype rewrite as its own session (9 × ~100 words = significant identity work).
+
+**Block 8 — Section header labels.** Five literal headers in the LLM's view: `## Layer 1 — Foundation`, `## Layer 1 — Foundation (Immutable after first interaction)`, `## Layer 2 — Soul (Your evolving character)`, `## Layer 3 — Self-Awareness`, `## Layer 4 — Operational Rules`. Owner clarified: **the 5-layer architecture IS the patent claim (IPPT-2026-000028, claims 13/20). Removing the layered structure entirely would breach the patent.** But there is a distinction the owner accepted: REMOVE the layered structure (breach) vs RENAME the visible labels while preserving the structural separation (safe). The 5 layers remain as 5 distinct code paths and 5 distinct prompt sections — only the literal nomenclature ("Layer N — ...") changes. Per § 3 rule 9 the Layer 4 header rename specifically requires Mohamed's word-by-word approval since Layer 4 is owner-only territory.
+
+**Block 9 — Self-Awareness section (lines 497-525).** Currently emits raw counters ("I've had 12 soul proposals, 7 applied"), GROW_LOCK_DESCRIPTIONS strings ("You are OPEN — you can apply low-risk soul updates autonomously without owner approval"), and labeled "## Layer 3 — Self-Awareness" header. Owner direction: the internal voice MUST stay (operator needs self-awareness in conversation), but format must be natural prose (not raw data), and infrastructure must protect against leaks. Approved approach: prompt-builder converts the same DB-sourced self-awareness rows into natural prose before injection (current state as feeling, areas of growth as character-shaping facts, NO counters, NO GROW lock state, NO architectural labels). Admin UI reads raw data straight from DB on its own — no overlap with the LLM-facing prose.
+
+**Block 10 — One-liner (line 421).** Hardcoded sentence "You are ${operator.name}, an Operator operating within a structured identity framework." This is the only place this phrasing appears, and it's pure architecture leak ("an Operator operating within a structured identity framework"). Owner asked "what is that??" — confirmed it shouldn't exist. Direction: delete the line entirely. Operator's identity comes from soul + Layer 1 + name embedded throughout, not from this redundant assertion.
+
+**Status:** review complete, fixes designed, awaiting word-by-word owner approval per § 3 rule 9 before any systemPrompt.ts edit.
+
 ### 2026-05-13 — ROLLBACK to ground zero (no commit — image rollback only)
 
 **What:** Owner ("months of stability, then today's deploys") requested ground-zero rollback to isolate the Vael tool-loop root cause. Rolled the container app from image `nahil-404-fix-784ce42` back to `memdistill-ae32a8a` (the image that ran 2026-05-10 → 2026-05-13 09:54 UTC without issues). No code commits reverted; this is purely a deploy-time pin to the older image. Git `main` HEAD still points at `1977f9b` with all today's commits intact.
