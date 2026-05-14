@@ -14,8 +14,8 @@
 | **Active Revision** | `opsoul--0000047` |
 | **Image** | `banistudioacr.azurecr.io/opsoul-api:osg-step1-dfbcb37` |
 | **Source commit (live)** | `dfbcb37` (OSG Step 1 — strip architecture exposure) |
-| **Local HEAD ahead of live (3 commits)** | `04e614a` PRIORITY 2 Step 1 — OperatorAgent + analyse/validate boundaries + universal firewall coverage<br>`917b638` PRIORITY 1 — five distinct scope types + rich per-turn scope context + Layer 2 chat-time scope filter<br>`61fc181` GROW guards 3+4 hardening (was missed in last deploy) |
-| **Pending owner action** | `git push origin main → az acr build → az containerapp update` to ship all three commits as one image. After deploy: deactivate prior revisions, delete prior image tags from ACR. |
+| **Local HEAD ahead of live (4 code commits)** | `5bf5e9b` Infra: per-message model column + UI/backend default-model honesty + smoke-test sandbox enforcement + frontend race fix + Layer 2 reset SQL<br>`04e614a` PRIORITY 2 Step 1 — OperatorAgent + analyse/validate boundaries + universal firewall coverage<br>`917b638` PRIORITY 1 — five distinct scope types + rich per-turn scope context + Layer 2 chat-time scope filter<br>`61fc181` GROW guards 3+4 hardening (was missed in last deploy) |
+| **Pending owner action** | (1) `git push origin main → az acr build → az containerapp update` to ship all four commits as one image. (2) After deploy: `pnpm --filter opsoul-db push` to apply DB schema changes (new `model` column on `messages`, new `operator_main_memory` table). (3) Run `artifacts/opsoul-api/src/scripts/cleanLayer2.sql` to drop pollution from `operator_main_memory` + `operator_memory`. (4) ACR cleanup: deactivate prior revisions, delete prior image tags. (5) Set `SANDBOX_OPERATOR_ID` env var on the container app pointing at a dedicated sandbox operator (or leave unset — sandbox-shaped userIds are then rejected on every operator). |
 
 ### ACR (Azure Container Registry) — `banistudioacr`
 
@@ -218,6 +218,43 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 ---
 
 ## 8. Commit History — newest first
+
+### 2026-05-14 — Infra fixes bundle: per-message model + default-model honesty + sandbox enforcement + frontend race + Layer 2 reset (`5bf5e9b`)
+
+**Owner direction (verbatim, evening 2026-05-14):**
+> *"memories and operators aren't important, what's important is infrastructure. We don't have any users, so no need to keep any. Fix all as you see possible and not conflict with anything else."*
+
+Five infrastructure improvements bundled. None touch operator identity, soul, prompts, archetypes, KB content. Patent architecture untouched. All five close known open items from § 7.
+
+**1. Per-message `model` column on `messages` table.**
+- Schema: `lib/db/src/schema/messages.ts` adds `model text` (NULL for user/system rows, set for assistant rows).
+- All four chat routes that write to `messages` updated to persist `chatModel` on assistant inserts. Special values: `'operator-direct'` for refuse-architecture path (no LLM call), `'operator-validate'` for post-validation substitutions.
+- Closes the "no per-message model record" open item.
+- Requires `pnpm --filter opsoul-db push` after deploy.
+
+**2. UI/backend default-model mismatch fixed (silent flip closed).**
+- `SettingsSection.tsx:416` previously read `operator.defaultModel ?? "opsoul/auto"` while backend used `operator.defaultModel || CHAT_MODEL` (Sonnet). Save without changing dropdown silently flipped operator from Sonnet to auto-routing.
+- Now: NULL → dropdown shows the actual default the backend would use (Claude Sonnet 4.5). Auto is opt-in by explicit selection only.
+
+**3. Smoke-test sandbox enforcement at API boundary.**
+- New: `routes/public-chat.ts` rejects userIds matching `/^(smoke|test|sandbox|debug)[-_]/i` with HTTP 403 unless `SANDBOX_OPERATOR_ID === slot.operatorId`.
+- Architecturally prevents the 2026-05-13 Nahil pollution incident from recurring: smoke-shaped userIds cannot reach Layer 2 distillation on production operators.
+- Owner sets `SANDBOX_OPERATOR_ID` env var to a dedicated sandbox operator's id; if unset, sandbox-shaped userIds are rejected on every operator.
+
+**4. Frontend auto-Thread race condition removed.**
+- `ChatSection.tsx` previously had a `useEffect` that auto-created a "Thread" conversation when the conversation list briefly appeared empty during the cache-refresh window after operator creation. Removed.
+- Likely source of the historic "first message in new operator conversations is duplicated" bug (logged in old memory note `project_opsoul_operators` from 2026-05-11). After this commit, missing-conversation creation is only triggered explicitly by the user.
+
+**5. Layer 2 + Layer 1 reset SQL script.**
+- New: `artifacts/opsoul-api/src/scripts/cleanLayer2.sql` — drops every row in `operator_main_memory` AND `operator_memory`. Idempotent.
+- Per owner direction: no users on the system, so prior distilled memories (including the 2026-05-13 smoke-test pollution rows `0248215c`, `dbf6de71`, `4f321043`) are noise. Clean slate.
+- Conversations + message history are NOT touched by this script.
+
+**Type check** (`npx tsc --noEmit`) passes for both `opsoul-api` and `opsoul-hub`.
+
+**Ships in unified deploy with `61fc181` + `917b638` + `04e614a`.**
+
+---
 
 ### 2026-05-14 — PRIORITY 2 Step 1: OperatorAgent class + analyse/validate boundaries across all five chat surfaces (`04e614a`)
 
