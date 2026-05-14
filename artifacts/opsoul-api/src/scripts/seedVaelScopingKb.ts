@@ -1,10 +1,9 @@
 import { db } from '@workspace/db';
-import { operatorKbTable } from '@workspace/db';
+import { operatorKbTable, operatorsTable } from '@workspace/db';
+import { eq, asc } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { embed } from '@workspace/opsoul-utils/ai';
-
-const VAEL_OPERATOR_ID = 'a826164f-3111-4cc9-8f3c-856ecc589d77';
-const VAEL_OWNER_ID = '63833cb8-0b52-4a25-8828-2777cdcc95db';
+import { getVaelOperatorId } from '../utils/vaelOperatorId.js';
 
 const entries = [
   {
@@ -60,6 +59,24 @@ From a validation perspective, this creates an asymmetric audit surface. Content
 async function main() {
   console.log('[seedVaelScopingKb] Seeding DNA architecture knowledge into Vael KB...');
 
+  // Resolve Vael by name (id was previously hardcoded and went stale).
+  const vaelOperatorId = await getVaelOperatorId();
+  if (!vaelOperatorId) {
+    console.error('[seedVaelScopingKb] No operator named "Vael" found in DB. Aborting.');
+    process.exit(1);
+  }
+  // Read Vael's owner_id from the operators table — also dynamic.
+  const [vaelRow] = await db
+    .select({ ownerId: operatorsTable.ownerId })
+    .from(operatorsTable)
+    .where(eq(operatorsTable.id, vaelOperatorId))
+    .limit(1);
+  if (!vaelRow) {
+    console.error('[seedVaelScopingKb] Vael id resolved but row not found. Aborting.');
+    process.exit(1);
+  }
+  const vaelOwnerId = vaelRow.ownerId;
+
   for (const entry of entries) {
     console.log(`  → Embedding: ${entry.sourceName}`);
     let embedding: number[] | undefined;
@@ -71,8 +88,8 @@ async function main() {
 
     await db.insert(operatorKbTable).values({
       id: randomUUID(),
-      operatorId: VAEL_OPERATOR_ID,
-      ownerId: VAEL_OWNER_ID,
+      operatorId: vaelOperatorId,
+      ownerId: vaelOwnerId,
       content: entry.content,
       embedding: embedding ?? null,
       sourceName: entry.sourceName,

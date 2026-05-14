@@ -5,6 +5,7 @@ import { eq, and, isNull, isNotNull, inArray, desc } from 'drizzle-orm';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { chatCompletion } from './openrouter.js';
 import { verifyAndStore } from './kbIntake.js';
+import { getVaelOperatorId } from './vaelOperatorId.js';
 
 export const MEMORY_TOP_N = 8;
 export const MEMORY_MIN_SIMILARITY = 0.55;
@@ -298,12 +299,15 @@ export async function storeMainMemory(
 
   // Platform candidate: fact/pattern/context with high confidence qualify for
   // Vael's intake pipeline. preference/interaction stay private to the operator.
+  // Vael id resolved dynamically by name from the operators table — the prior
+  // hardcoded id was stale (Vael was recreated but the constant was never
+  // updated, so the guard below was silently skipping the wrong operator).
   const PLATFORM_ELIGIBLE_TYPES: MemoryType[] = ['fact', 'pattern', 'context'];
-  const VAEL_OPERATOR_ID = 'a826164f-3111-4cc9-8f3c-856ecc589d77';
+  const vaelOperatorId = await getVaelOperatorId();
   const isPlatformCandidate =
     confidence >= 0.85 &&
     PLATFORM_ELIGIBLE_TYPES.includes(memoryType) &&
-    operatorId !== VAEL_OPERATOR_ID;
+    operatorId !== vaelOperatorId;
 
   const [memory] = await db.insert(operatorMainMemoryTable).values({
     id: crypto.randomUUID(),

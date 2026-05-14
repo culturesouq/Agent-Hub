@@ -5,16 +5,21 @@ import { validateEntry, extractEntriesFromSource } from '../utils/vaelEngine.js'
 import { fetchSource } from '../utils/ragSourceFetcher.js';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { chatCompletion, KB_MODEL } from '../utils/openrouter.js';
+import { getVaelOperatorId } from '../utils/vaelOperatorId.js';
 import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 
-const VAEL_OPERATOR_ID = 'a826164f-3111-4cc9-8f3c-856ecc589d77';
+// Vael id resolved dynamically by name from operators table — see
+// utils/vaelOperatorId.ts. Prior hardcoded id was stale; cron has been
+// silently no-op-ing against a non-existent operator.
 
 async function recordVaelRun(taskType: 'full_sweep' | 'validation', summary: string, durationSec: number): Promise<void> {
   try {
+    const vaelOperatorId = await getVaelOperatorId();
+    if (!vaelOperatorId) return;
     const rows = await db.select().from(tasksTable).where(
-      and(eq(tasksTable.operatorId, VAEL_OPERATOR_ID))
+      and(eq(tasksTable.operatorId, vaelOperatorId))
     );
     const task = rows.find(r => (r.payload as any)?.vaelTaskType === taskType);
     if (!task) return;
@@ -101,6 +106,17 @@ async function runOperatorKnowledgeIntake(timer: BudgetTimer): Promise<{
 }> {
   const stats = { reviewed: 0, approved: 0, rejected: 0 };
 
+  const vaelOperatorId = await getVaelOperatorId();
+
+  // Exclude Vael's own memories from intake (Vael reviews other operators,
+  // not itself). If Vael cannot be resolved, fall back to including all —
+  // better to over-review than to drop intake entirely.
+  const baseWhere = and(
+    eq(operatorMainMemoryTable.platformCandidate, true),
+    isNull(operatorMainMemoryTable.platformReviewedAt),
+    isNull(operatorMainMemoryTable.archivedAt),
+  );
+
   const candidates = await db
     .select({
       id:         operatorMainMemoryTable.id,
@@ -110,12 +126,9 @@ async function runOperatorKnowledgeIntake(timer: BudgetTimer): Promise<{
       confidence: operatorMainMemoryTable.confidence,
     })
     .from(operatorMainMemoryTable)
-    .where(and(
-      eq(operatorMainMemoryTable.platformCandidate, true),
-      isNull(operatorMainMemoryTable.platformReviewedAt),
-      ne(operatorMainMemoryTable.operatorId, VAEL_OPERATOR_ID),
-      isNull(operatorMainMemoryTable.archivedAt),
-    ))
+    .where(vaelOperatorId
+      ? and(baseWhere, ne(operatorMainMemoryTable.operatorId, vaelOperatorId))
+      : baseWhere)
     .limit(30);
 
   if (candidates.length === 0) return stats;
