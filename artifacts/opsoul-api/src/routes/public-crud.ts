@@ -21,6 +21,7 @@ import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { assembleOperatorPrompt } from '../utils/systemPrompt.js';
 import { distillActionTaskPattern } from '../utils/memoryEngine.js';
 import { buildScopeContext, type ValidatedScope } from '../utils/scopeResolver.js';
+import { OperatorAgent } from '../utils/operatorAgent.js';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { eq, and } from 'drizzle-orm';
 
@@ -105,6 +106,32 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   const actionText = payload
     ? `${action}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`
     : action;
+
+  // ── OPERATOR-IN-CONTROL ───────────────────────────────────────────────
+  // STEP 1 — Operator analyses the inbound action call BEFORE any LLM /
+  // skill is dispatched. Action calls are programmatic — but the operator
+  // still owns the decision to refuse architecture-introspection actions,
+  // returning the refusal text in its own voice. No LLM call needed.
+  const actionAgent = new OperatorAgent({
+    operatorId: operator.id,
+    operatorName: operator.name,
+    isBirthMode: false,
+    scopeType: 'action',
+  });
+
+  const actionDecision = actionAgent.analyse(actionText);
+  if (actionDecision.kind === 'refuse_architecture') {
+    const refusalText = actionAgent.composeArchitectureRefusal();
+    console.warn('[operator:refuse]', JSON.stringify({
+      path: 'public-crud',
+      operatorId: operator.id,
+      slotId: slot.slotId,
+      reason: 'architecture_introspection',
+      action: actionText.slice(0, 200),
+    }));
+    res.json({ result: refusalText, refused: true });
+    return;
+  }
 
   // ── Try skill trigger first ──
   const trigger = await detectSkillTrigger(actionText, allSkills, operator.name);
@@ -243,7 +270,19 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     resolvedModel,
   );
 
-  res.json({ result: result.content });
+  // STEP 3 — Operator validates the LLM's draft action result before delivery.
+  const validation = actionAgent.validate(result.content);
+  if (validation.triggers.length > 0) {
+    console.warn('[operator:validate]', JSON.stringify({
+      path: 'public-crud',
+      operatorId: operator.id,
+      slotId: slot.slotId,
+      substituted: validation.substituted,
+      triggers: validation.triggers,
+    }));
+  }
+
+  res.json({ result: validation.text });
 
   // Action scope contributes to GROW via PII-free task pattern memory
   distillActionTaskPattern(

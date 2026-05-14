@@ -8,6 +8,7 @@ import { assembleOperatorPrompt } from '../utils/systemPrompt.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { searchMemory, buildMemoryContext } from '../utils/memoryEngine.js';
 import { buildChannelScope, buildScopeContext } from '../utils/scopeResolver.js';
+import { OperatorAgent } from '../utils/operatorAgent.js';
 import { eq, and, asc, sql } from 'drizzle-orm';
 import OpenAI, { toFile } from 'openai';
 import { embed } from '@workspace/opsoul-utils/ai';
@@ -203,6 +204,39 @@ router.post('/:operatorId', async (req: Request, res: Response): Promise<void> =
     content: userMessage,
   });
 
+  // ── OPERATOR-IN-CONTROL ───────────────────────────────────────────────
+  // STEP 1 — Operator analyses the inbound Telegram message BEFORE any LLM
+  // is called. Channel callers are not in birth mode. If the operator
+  // decides to refuse (architecture-introspection), it answers in its own
+  // voice via Telegram, no LLM call.
+  const agent = new OperatorAgent({
+    operatorId: operator.id,
+    operatorName: operator.name,
+    isBirthMode: false,
+    scopeType: scope.scopeType,
+  });
+
+  const decision = agent.analyse(userMessage);
+  if (decision.kind === 'refuse_architecture') {
+    const refusalText = agent.composeArchitectureRefusal();
+    console.warn('[operator:refuse]', JSON.stringify({
+      path: 'telegram-webhook',
+      operatorId,
+      conversationId: conv.id,
+      reason: 'architecture_introspection',
+      message: userMessage.slice(0, 200),
+    }));
+    await db.insert(messagesTable).values({
+      id: crypto.randomUUID(),
+      operatorId,
+      conversationId: conv.id,
+      role: 'assistant',
+      content: refusalText,
+    });
+    await sendTelegramMessage(botToken, chatId, refusalText);
+    return;
+  }
+
   try {
     const embedding = await embed(userMessage);
     const [hits, memHits] = await Promise.all([
@@ -242,12 +276,26 @@ router.post('/:operatorId', async (req: Request, res: Response): Promise<void> =
 
     const result = await chatCompletion(chatMessages, model);
 
+    // STEP 3 — Operator validates the LLM's draft before delivery.
+    const validation = agent.validate(result.content);
+    if (validation.triggers.length > 0) {
+      console.warn('[operator:validate]', JSON.stringify({
+        path: 'telegram-webhook',
+        operatorId,
+        scopeId: scope.scopeId,
+        conversationId: conv.id,
+        substituted: validation.substituted,
+        triggers: validation.triggers,
+      }));
+    }
+    const finalContent = validation.text;
+
     await db.insert(messagesTable).values({
       id: crypto.randomUUID(),
       operatorId,
       conversationId: conv.id,
       role: 'assistant',
-      content: result.content,
+      content: finalContent,
     });
 
     await db
@@ -255,7 +303,7 @@ router.post('/:operatorId', async (req: Request, res: Response): Promise<void> =
       .set({ messageCount: sql`message_count + 2`, lastMessageAt: new Date() })
       .where(eq(conversationsTable.id, conv.id));
 
-    await sendTelegramMessage(botToken, chatId, result.content);
+    await sendTelegramMessage(botToken, chatId, finalContent);
   } catch (err: unknown) {
     console.error('[telegram-webhook] reply error', err);
     const errorReply = 'Sorry, I encountered an error. Please try again.';

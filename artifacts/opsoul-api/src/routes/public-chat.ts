@@ -17,6 +17,7 @@ import type { MemoryHit } from '../utils/memoryEngine.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { assembleOperatorPrompt, buildTemporalContext, containsTimeKeywords } from '../utils/systemPrompt.js';
 import { applyFirewall, isArchitectureQuestion, FIREWALL_SUBSTITUTE_REPLY } from '../utils/architectureFirewall.js';
+import { OperatorAgent } from '../utils/operatorAgent.js';
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
 import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import type { ChatMessage, ContentPart } from '../utils/openrouter.js';
@@ -78,34 +79,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  // ── INPUT FIREWALL ──
-  // Architecture-introspection questions get the substitute reply BEFORE
-  // the LLM is called. Saves an LLM call, eliminates the leak risk, and
-  // gives a consistent natural reply. Output firewall remains as backstop.
-  if (isArchitectureQuestion(message)) {
-    console.warn('[firewall:input]', JSON.stringify({
-      path: 'public-chat',
-      operatorId: slot.operatorId,
-      message: message.slice(0, 200),
-    }));
-    if (stream) {
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache, no-transform');
-      res.setHeader('Connection', 'keep-alive');
-      res.flushHeaders?.();
-      res.write(`data: ${JSON.stringify({ delta: FIREWALL_SUBSTITUTE_REPLY })}\n\n`);
-      res.write(`data: ${JSON.stringify({ done: true, conversationId: conversationId ?? crypto.randomUUID(), scopeId: 'firewall' })}\n\n`);
-      res.end();
-    } else {
-      res.json({
-        conversationId: conversationId ?? crypto.randomUUID(),
-        message: { role: 'assistant', content: FIREWALL_SUBSTITUTE_REPLY },
-        scopeId: 'firewall',
-      });
-    }
-    return;
-  }
-
   // ── Resolve scope ──
   const scope = buildSlotScope(
     slot.surfaceType,
@@ -113,6 +86,45 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     slot.slotId,
     slot.surfaceType === 'authenticated' ? userId : undefined,
   );
+
+  // ── OPERATOR-IN-CONTROL ───────────────────────────────────────────────
+  // STEP 1 — Operator analyses the user message BEFORE any LLM is called.
+  // Public-chat operators are not in birth mode (birth happens in the
+  // owner workspace only). The OperatorAgent owns the decision; this
+  // route just executes what the operator decides.
+  const agent = new OperatorAgent({
+    operatorId: operator.id,
+    operatorName: operator.name,
+    isBirthMode: false,
+    scopeType: scope.scopeType,
+  });
+
+  const decision = agent.analyse(message);
+  if (decision.kind === 'refuse_architecture') {
+    const refusalText = agent.composeArchitectureRefusal();
+    console.warn('[operator:refuse]', JSON.stringify({
+      path: 'public-chat',
+      operatorId: slot.operatorId,
+      reason: 'architecture_introspection',
+      message: message.slice(0, 200),
+    }));
+    if (stream) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders?.();
+      res.write(`data: ${JSON.stringify({ delta: refusalText })}\n\n`);
+      res.write(`data: ${JSON.stringify({ done: true, conversationId: conversationId ?? crypto.randomUUID(), scopeId: 'operator-direct' })}\n\n`);
+      res.end();
+    } else {
+      res.json({
+        conversationId: conversationId ?? crypto.randomUUID(),
+        message: { role: 'assistant', content: refusalText },
+        scopeId: 'operator-direct',
+      });
+    }
+    return;
+  }
 
   // ── Find or create conversation (DB-backed for persistent scopes only) ──
   let conv: typeof conversationsTable.$inferSelect | undefined;
@@ -350,26 +362,26 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       }
 
       // Architecture firewall — patent claim protection at the output boundary.
-      // High-confidence patterns (Layer N, GROW engine, OpSoul, etc.) trigger
-      // a substitute reply. Log-only patterns (generic "embedding", "knowledge
-      // stores") are flagged but pass through.
-      const fw = applyFirewall(fullContent);
-      if (fw.triggers.length > 0) {
-        console.warn('[firewall]', JSON.stringify({
+      // STEP 3 — Operator validates the LLM's streamed draft before delivery.
+      // High-confidence patterns trigger a substitute in the operator's voice;
+      // log-only patterns are flagged but pass through.
+      const validation = agent.validate(fullContent);
+      if (validation.triggers.length > 0) {
+        console.warn('[operator:validate]', JSON.stringify({
           path: 'public-chat:stream',
           operatorId: slot.operatorId,
           scopeId: scope.scopeId,
           conversationId: conv?.id,
-          blocked: fw.blocked,
-          triggers: fw.triggers,
+          substituted: validation.substituted,
+          triggers: validation.triggers,
         }));
       }
-      let finalContent = fw.text;
+      let finalContent = validation.text;
 
-      // If the firewall blocked, send a final delta to overwrite what the
+      // If the operator substituted, send a final delta to overwrite what the
       // user already saw via streaming, then mark done. Frontend renders the
       // last delta as the final assistant turn.
-      if (fw.blocked) {
+      if (validation.substituted) {
         res.write(`data: ${JSON.stringify({ replace: true, content: finalContent })}\n\n`);
       }
 
@@ -425,19 +437,19 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Architecture firewall — same as streaming path.
-    const fw = applyFirewall(result.content);
-    if (fw.triggers.length > 0) {
-      console.warn('[firewall]', JSON.stringify({
+    // STEP 3 — Operator validates the LLM's draft (sync path).
+    const validation = agent.validate(result.content);
+    if (validation.triggers.length > 0) {
+      console.warn('[operator:validate]', JSON.stringify({
         path: 'public-chat:sync',
         operatorId: slot.operatorId,
         scopeId: scope.scopeId,
         conversationId: conv?.id,
-        blocked: fw.blocked,
-        triggers: fw.triggers,
+        substituted: validation.substituted,
+        triggers: validation.triggers,
       }));
     }
-    const finalContent = fw.text;
+    const finalContent = validation.text;
 
     if (scope.writesHistory && conv) {
       await db.insert(messagesTable).values({

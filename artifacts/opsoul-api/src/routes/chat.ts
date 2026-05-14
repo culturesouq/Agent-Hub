@@ -31,6 +31,7 @@ import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 // remains available for the operator to call when its own soul decides.
 import { assembleOperatorPrompt, buildBirthSystemPrompt, buildTemporalContext, containsTimeKeywords } from '../utils/systemPrompt.js';
 import { applyFirewall, isArchitectureQuestion, FIREWALL_SUBSTITUTE_REPLY } from '../utils/architectureFirewall.js';
+import { OperatorAgent } from '../utils/operatorAgent.js';
 import type { SelfAwarenessSnapshot, BuildSystemPromptOpts } from '../utils/systemPrompt.js';
 import { searchMemory, buildMemoryContext, distillMemoriesFromConversations, storeMemory, distillRawContentForMemory } from '../utils/memoryEngine.js';
 import type { MemoryHit } from '../utils/memoryEngine.js';
@@ -807,16 +808,29 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   const isBirthMode = !operator.rawIdentity;
 
   // ── INPUT FIREWALL ──
-  // Architecture-introspection questions get the substitute reply BEFORE
-  // the LLM is called. Saves an LLM call, eliminates the leak risk, and
-  // gives a consistent natural reply. Output firewall remains as backstop.
-  // Skip in birth mode (newborn operator should be able to engage with
-  // identity questions during birth).
-  if (!isBirthMode && isArchitectureQuestion(message)) {
-    console.warn('[firewall:input]', JSON.stringify({
+  // ── OPERATOR-IN-CONTROL ───────────────────────────────────────────────
+  // STEP 1 — Operator analyses the user message BEFORE any LLM is called.
+  // The OperatorAgent owns the decision; this route just executes what
+  // the operator decides. Today's analyse() returns either 'execute'
+  // (dispatch the LLM) or 'refuse_architecture' (operator handles the
+  // refusal directly in its own voice). See utils/operatorAgent.ts for
+  // the full contract and Step 2 plans.
+  const agent = new OperatorAgent({
+    operatorId: operator.id,
+    operatorName: operator.name,
+    isBirthMode,
+    scopeType: scope.scopeType,
+  });
+
+  const decision = agent.analyse(message);
+
+  if (decision.kind === 'refuse_architecture') {
+    const refusalText = agent.composeArchitectureRefusal();
+    console.warn('[operator:refuse]', JSON.stringify({
       path: 'chat',
       operatorId: operator.id,
       conversationId: conv.id,
+      reason: 'architecture_introspection',
       message: message.slice(0, 200),
     }));
     const subId = crypto.randomUUID();
@@ -825,7 +839,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       conversationId: conv.id,
       operatorId: operator.id,
       role: 'assistant',
-      content: FIREWALL_SUBSTITUTE_REPLY,
+      content: refusalText,
     });
     await db.update(conversationsTable)
       .set({ messageCount: sql`message_count + 2`, lastMessageAt: new Date() })
@@ -835,18 +849,22 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       res.setHeader('Cache-Control', 'no-cache, no-transform');
       res.setHeader('Connection', 'keep-alive');
       res.flushHeaders?.();
-      res.write(`data: ${JSON.stringify({ delta: FIREWALL_SUBSTITUTE_REPLY })}\n\n`);
+      res.write(`data: ${JSON.stringify({ delta: refusalText })}\n\n`);
       res.write(`data: ${JSON.stringify({ done: true, messageId: subId })}\n\n`);
       res.end();
     } else {
       res.json({
         messageId: subId,
-        content: FIREWALL_SUBSTITUTE_REPLY,
-        model: 'firewall',
+        content: refusalText,
+        model: 'operator-direct',
       });
     }
     return;
   }
+  // STEP 2 — Operator dispatches the LLM as executor (the existing chat
+  // pipeline below: tool-loop, streaming, retrieval-augmented context).
+  // STEP 3 — Operator validates the LLM's draft (applyFirewall calls
+  // below) before delivery to the user.
 
   let systemPrompt = isBirthMode
     ? buildBirthSystemPrompt()
@@ -1819,21 +1837,23 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       // Architecture firewall — patent-claim protection at the output boundary.
       // Runs on every assistant response, regardless of which LLM is behind
       // the operator. High-confidence patterns (Layer N, GROW engine, OpSoul,
-      // etc.) trigger a substitute reply. Log-only patterns are flagged but
-      // pass through.
-      const fw = applyFirewall(finalContent);
-      if (fw.triggers.length > 0) {
-        console.warn('[firewall]', JSON.stringify({
+      // STEP 3 — Operator validates the LLM's streamed draft before delivery.
+      // The operator inspects the final draft for patent-protected vocabulary
+      // and substitutes a refusal in its own voice when triggered. See
+      // utils/operatorAgent.ts validate() for the contract.
+      const validation = agent.validate(finalContent);
+      if (validation.triggers.length > 0) {
+        console.warn('[operator:validate]', JSON.stringify({
           path: 'chat:stream',
           operatorId: operator.id,
           scopeId: scope.scopeId,
           conversationId: conv.id,
-          blocked: fw.blocked,
-          triggers: fw.triggers,
+          substituted: validation.substituted,
+          triggers: validation.triggers,
         }));
       }
-      if (fw.blocked) {
-        finalContent = fw.text;
+      if (validation.substituted) {
+        finalContent = validation.text;
         res.write(`data: ${JSON.stringify({ replace: true, content: finalContent })}\n\n`);
       }
 
@@ -2258,21 +2278,20 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         }
       }
 
-      // Architecture firewall — sync path. Same as streaming path: high-
-      // confidence patterns trigger substitute reply; log-only patterns
-      // pass through with logging.
-      const fw = applyFirewall(finalContent);
-      if (fw.triggers.length > 0) {
-        console.warn('[firewall]', JSON.stringify({
+      // STEP 3 — Operator validates the LLM's draft before delivery (sync path).
+      // Same contract as the streaming path above; see utils/operatorAgent.ts.
+      const validation = agent.validate(finalContent);
+      if (validation.triggers.length > 0) {
+        console.warn('[operator:validate]', JSON.stringify({
           path: 'chat:sync',
           operatorId: operator.id,
           scopeId: scope.scopeId,
           conversationId: conv.id,
-          blocked: fw.blocked,
-          triggers: fw.triggers,
+          substituted: validation.substituted,
+          triggers: validation.triggers,
         }));
       }
-      finalContent = fw.text;
+      finalContent = validation.text;
 
       // Save assistant message and update conversation
       const asstMsgId = crypto.randomUUID();
