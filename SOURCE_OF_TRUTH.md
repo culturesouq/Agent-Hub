@@ -348,6 +348,14 @@ Voice shifted from second-person directives ("Stay yourself", "When you do not k
 
 ---
 
+### 2026-05-14 — Two open items closed before deploy (owner decisions)
+
+**Skill execution instructions (was task 9): KEEP AS-IS.** Owner confirmed 2026-05-14: "skills are normal agent skills so they are normal." The ~25 "Do not / Always / Never" patterns inside `seedSkills.ts`, `seed-new-archetype-skills.ts`, and `initSeed.ts` skill execution briefs are not knowledge that the operator absorbs as identity — they are the explicit contract for what each archetype skill (Action Extractor, Decision Framework, Deep Research, etc.) produces when invoked. Conventional skill-brief format. The knowledge-not-instructions principle (§ 3 rule 12) applies to operator-absorbed identity content (KB, soul prose, capability descriptions surfaced to the LLM as background) — not to discrete skill output contracts. No rewrite.
+
+**Archetype foundations rewrite (was Block 6): DEFERRED INDEFINITELY.** Owner confirmed 2026-05-14: "i never liked them and not my writing, now you know my style but still this time they are proffissional blocks so let them be." The 9 archetype foundation prose blocks (Advisor / Executor / Expert / Connector / Creator / Guardian / Builder / Catalyst / Analyst, ~100 words each) in `systemPrompt.ts` lines 162-220 currently use second-person directive voice ("You are the co-founder...", "You never push") rather than the owner's preferred first-person identity narration. Owner acknowledges the mismatch but accepts them as functional professional content for now. Do NOT rewrite without explicit owner instruction at a future date. Per § 3 rule 7 (no code changes without explicit owner approval, word by word) the archetypes stay as written.
+
+---
+
 ### 2026-05-14 — Time substrate shifted from auto-injection to retrievable tool
 
 Owner-directed (afternoon, 2026-05-14): "check about the timing clock in their head injecting to them the actual time around the world hahha — retrievable not injected." Architectural shift to align with the broader "knowledge accessible, not forced into soul" principle: most conversations don't need current time; auto-injecting it on every prompt forces a piece of data into every interaction whether the operator needs it or not.
