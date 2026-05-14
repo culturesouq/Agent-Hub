@@ -862,6 +862,26 @@ This preserves the patent claim's "cross-scope" intent for GROW (operator-evolut
 
 ---
 
+### 2026-05-14 — DIFFERENT BUG identified: guest chat continuity (Nahil-side, fixed)
+
+Owner clarified after Layer 2 audit report: "having memory later in guest to bring it back isn't the issue now, the issue he lost context and memory in the same conversation like 2 lines earlier." Different bug than the Layer 2 cross-scope pollution. Diagnosed and fixed in the Nahil repo (not OpSoul).
+
+**Root cause:** Nahil's `/api/chat` route at `nahil_2/server/routes.js:306-339` only persisted conversationId for authenticated users (`if (req.session.userId)` block). For guest users, OpSoul's returned conversationId was discarded. Every guest message was therefore a fresh OpSoul session — the operator literally had no record of the previous turn because no continuity key was being passed back to the client.
+
+**OpSoul side:** Working correctly. `public-chat.ts:93` generates a random sessionId when no conversationId is provided, stores history in `sessionStore.ts` in-memory map keyed by sessionId, and returns the sessionId as `conversationId` in the response (`public-chat.ts` end of stream/sync). The 30-minute TTL was correctly applied.
+
+**Nahil side:** Bug. `server/ai.js` chat() function dropped OpSoul's returned conversationId from its response shape. `server/routes.js /api/chat` had logic that only created/used convId for authenticated users; guests fell through with `convId = undefined` and the response sent that undefined back to the client. Client (`GuestChatWidget.jsx:60`) correctly persists conversationId in component state IF received — it just never received one.
+
+**Fix (Nahil repo, commit `049e176`, deployed as `nahilai--0000044`):**
+- `server/ai.js`: chat() now returns `result.conversationId` (extracted from OpSoul response) alongside content and model.
+- `server/routes.js /api/chat`: for guest users (no `req.session.userId`), capture `response.conversationId` and return to client.
+
+**Live verified end-to-end:** Turn 1 ("I'm Ahmad with 5-hectare date palm farm in Liwa") → conversationId returned. Turn 2 with same conversationId ("What size is my farm and where?") → operator answered correctly from turn 1 context. Multi-turn guest memory restored.
+
+**OpSoul-side note:** the Layer 2 cross-scope filter gap (task #17) is still open but owner deprioritized — not the issue they were experiencing. The within-conversation continuity bug was the real problem and has been fixed at the Nahil-server boundary.
+
+---
+
 ### 2026-05-14 — OSG Step 1 LIVE — `osg-step1-dfbcb37` deployed (revision 0000047)
 
 **Built:** ACR Run `dg59`, image `opsoul-api:osg-step1-dfbcb37`. Boot logs confirmed:
