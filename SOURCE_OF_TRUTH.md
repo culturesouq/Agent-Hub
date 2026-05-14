@@ -5,20 +5,21 @@
 
 ---
 
-## 1. Live Deployment (verified against Azure 2026-05-14 18:30 GST)
+## 1. Live Deployment (verified against Azure 2026-05-14 19:00 GST)
 
 | What | Value |
 |---|---|
-| **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` (HTTP 200, 78ms) |
+| **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` (HTTP 200, 93ms) |
 | **Container App** | `opsoul` (resource group `bani-studio-rg`, region `uaenorth`) |
-| **Active Revision** | `opsoul--0000049` (Healthy, 100% traffic) |
-| **Image** | `banistudioacr.azurecr.io/opsoul-api:driver-step2-30686b1` (only image in `opsoul-api` repo) |
-| **Source commit (live)** | `30686b1` (PRIORITY 1 — operator-as-driver Step 2) |
-| **ACR build** | Run ID `dg5c` (2m 7s, 2026-05-14) |
-| **Code commits in this image** | `30686b1` operator-as-driver Step 2 · `5bf5e9b` infra bundle · `04e614a` operator-as-driver Step 1 · `917b638` scope architecture · `61fc181` GROW guards 3+4 hardening |
-| **DB state** | Schema migrated · clean (0 Layer 1 + 0 Layer 2 rows) |
-| **ACR state** | Single image tag `driver-step2-30686b1`. Prior tag `scope-driver-079c62a` deleted. Prior revision `0000048` deactivated. |
-| **Optional next step** | Set `SANDBOX_OPERATOR_ID` env var on the container app. If unset, sandbox-shaped userIds (`smoke-` / `test-` / `sandbox-` / `debug-`) are rejected on every operator. |
+| **Active Revision** | `opsoul--0000050` (Healthy, 100% traffic) |
+| **Image** | `banistudioacr.azurecr.io/opsoul-api:vael-id-fix-d394985` (only image in `opsoul-api` repo) |
+| **Source commit (live)** | `d394985` (Vael id resolved dynamically — kills stale-id ghost) |
+| **ACR build** | Run ID `dg5d` (2m 8s, 2026-05-14) |
+| **Code commits in this image** | `d394985` Vael dynamic id · `30686b1` operator-as-driver Step 2 · `5bf5e9b` infra bundle · `04e614a` operator-as-driver Step 1 · `917b638` scope architecture · `61fc181` GROW guards 3+4 hardening |
+| **DB state** | Schema migrated · clean (0 Layer 1, 0 Layer 2, 0 orphan skills, 5 active rag_dna only — 172 deactivated entries dropped) |
+| **Operators in DB** | 3: Vael (`8668f6c9-...`), Nahil (`37da8776-...`), Operator/Blank (`eb70c409-...`). No orphans, no soft-deleted, no ghosts. |
+| **ACR state** | Single image tag `vael-id-fix-d394985`. Prior tag `driver-step2-30686b1` deleted. Prior revision `0000049` deactivated. |
+| **Optional next step** | Set `SANDBOX_OPERATOR_ID` env var on the container app. If unset, sandbox-shaped userIds are rejected on every operator. Optional `VAEL_OPERATOR_ID` env var also recognised as explicit override (default = DB lookup by name='Vael'). |
 
 ### ACR (Azure Container Registry) — `banistudioacr`
 
@@ -221,6 +222,46 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 ---
 
 ## 8. Commit History — newest first
+
+### 2026-05-14 — Vael dynamic-id resolver kills stale-id ghost (`d394985`, LIVE on revision 0000050)
+
+**Owner direction (verbatim, 2026-05-14 evening):**
+> *"there are some operators deleted but seem they are still in the background, also something inside, this must go, must clean the dead operators."*
+
+**Root cause found.** Three files hardcoded `VAEL_OPERATOR_ID = 'a826164f-3111-4cc9-8f3c-856ecc589d77'`:
+
+| File | Line | Effect of stale id |
+|---|---|---|
+| `utils/memoryEngine.ts` | 302 | "Don't promote Vael's own memories to platform candidates" guard checked the wrong id → REAL Vael's memories were being incorrectly marked platform-eligible |
+| `cron/vaelCron.ts` | 12, 17, 121 | Vael cron jobs were running queries against a non-existent operator id → silently no-op-ing every scheduled run |
+| `scripts/seedVaelScopingKb.ts` | 6 | Seed wrote KB rows to ghost id → real Vael never received its scoping knowledge |
+
+The stale id existed in code only — it never existed in the operators table. Real Vael is `8668f6c9-f7cf-4c65-a36e-7dd278005950` (recreated some time ago without updating constants). This was the "dead operator in background" the owner sensed.
+
+**New file `utils/vaelOperatorId.ts`:**
+- `getVaelOperatorId(): Promise<string | null>` — resolves Vael by `name='Vael'` from operators table, cached for process lifetime, honours `VAEL_OPERATOR_ID` env var as explicit override, de-duplicates concurrent callers.
+- `getVaelOperatorIdCached(): string | null` — sync best-effort accessor.
+- `resetVaelOperatorIdCache(): void` — test/admin helper.
+
+**Replacements:**
+- `memoryEngine.ts`: hardcoded constant replaced with `await getVaelOperatorId()` inside `storeMainMemory()`. Real Vael's memories will no longer be incorrectly promoted.
+- `vaelCron.ts`: hardcoded constant replaced. `recordVaelRun` early-returns if Vael cannot be resolved. `runOperatorKnowledgeIntake` falls back to including all operators if Vael cannot be resolved (better to over-review than to drop intake entirely).
+- `seedVaelScopingKb.ts`: resolves Vael id via lookup, then reads Vael's `owner_id` from the operators row (was also hardcoded). Aborts cleanly if Vael is missing.
+
+**DB cleanup applied (separate from this commit, run-once via SQL):**
+
+```
+DELETE FROM operator_skills WHERE operator_id NOT IN (SELECT id FROM operators);  -- 3 orphan rows
+DELETE FROM rag_dna WHERE is_active = false;                                       -- 172 deactivated entries
+```
+
+**DB end state (verified):** 3 operators (Vael, Nahil, Blank). 5 active `rag_dna` entries (Vael Desk approved set). 0 orphans across all child tables. 0 soft-deleted operators.
+
+**Type check** (`npx tsc --noEmit`) passes for `opsoul-api`.
+
+**Live state:** Built as ACR Run `dg5d` (2m 8s), image `vael-id-fix-d394985`, deployed as revision `opsoul--0000050` (Healthy, 100% traffic). Prior revision `0000049` deactivated; prior image tag `driver-step2-30686b1` deleted from ACR. HTTP probe 200 in 93ms.
+
+---
 
 ### 2026-05-14 — PRIORITY 1: Operator-as-driver Step 2 — operator OWNS every LLM dispatch (`30686b1`, LIVE on revision 0000049)
 
