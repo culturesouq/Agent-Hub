@@ -28,7 +28,7 @@ import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 // self-awareness layer initiates curiosity, not the chat route. Silent
 // `[WEB CONTEXT]` auto-injection removed (Phase 4). The web_search tool
 // remains available for the operator to call when its own soul decides.
-import { assembleOperatorPrompt, buildBirthSystemPrompt, buildTemporalContext } from '../utils/systemPrompt.js';
+import { assembleOperatorPrompt, buildBirthSystemPrompt, buildTemporalContext, containsTimeKeywords } from '../utils/systemPrompt.js';
 import type { SelfAwarenessSnapshot, BuildSystemPromptOpts } from '../utils/systemPrompt.js';
 import { searchMemory, buildMemoryContext, distillMemoriesFromConversations, storeMemory, distillRawContentForMemory } from '../utils/memoryEngine.js';
 import type { MemoryHit } from '../utils/memoryEngine.js';
@@ -288,6 +288,9 @@ function extractUrls(text: string): string[] {
   const matches = text.match(urlRegex) ?? [];
   return [...new Set(matches)].slice(0, 2);
 }
+
+// containsTimeKeywords moved to ../utils/systemPrompt.js — shared with
+// public-chat.ts and any other route that needs hybrid time injection.
 
 async function persistUrlScrapedResult(
   operatorId: string,
@@ -782,9 +785,23 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // BIRTH MODE — operator has no identity yet; use birth system prompt instead of Layer 1
   const isBirthMode = !operator.rawIdentity;
 
-  const systemPrompt = isBirthMode
+  let systemPrompt = isBirthMode
     ? buildBirthSystemPrompt()
     : assembleOperatorPrompt(operator, selfAwareness, promptOpts);
+
+  // ── HYBRID TIME INJECTION ────────────────────────────────────────────────
+  // Owner direction 2026-05-14: live time is non-negotiable. Sonnet did not
+  // reliably reach for the get_current_time tool when needed (probe 8
+  // hallucinated January 2025). The hybrid approach: detect time-relevant
+  // keywords in the current user message; when found, prepend the current
+  // time as a fact to the prompt. The get_current_time tool stays available
+  // for explicit timezone queries ("what time in Tokyo"). For the 90% of
+  // conversations that do not reference time, the prompt carries no time
+  // line at all — preserves the "knowledge accessible, not forced into soul"
+  // principle. The clock comes out of the pocket only when needed.
+  if (!isBirthMode && containsTimeKeywords(message)) {
+    systemPrompt = `**Current time:** ${buildTemporalContext(new Date())}.\n\n${systemPrompt}`;
+  }
 
   // Build user content — plain string or multimodal array when attachments present
   let userContent: string | ContentPart[] = message;

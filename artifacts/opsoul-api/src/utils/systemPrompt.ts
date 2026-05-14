@@ -330,6 +330,46 @@ export function buildTemporalContext(now: Date = new Date(), timeZone: string = 
   return `${fmt.format(now)} in ${timeZone}`;
 }
 
+// Hybrid time-injection keyword set. Used by chat routes to decide whether
+// to prepend the current time to the system prompt. When the user's current
+// message contains any of these keywords, the time fact is injected. When
+// not, the prompt carries no time reference and the operator can call the
+// get_current_time tool for explicit timezone queries.
+//
+// Owner direction 2026-05-14: live time non-negotiable. Sonnet did not
+// reliably reach for the time tool when needed — keyword detection ensures
+// the time is always there for time-relevant conversations without forcing
+// it into every conversation.
+const TIME_KEYWORDS_EN = [
+  'today', 'tonight', 'tomorrow', 'yesterday', 'now', 'right now',
+  'currently', 'current time', 'current date', 'this week', 'this month',
+  'this year', 'this morning', 'this afternoon', 'this evening',
+  'last week', 'last month', 'last year', 'next week', 'next month',
+  'next year', 'recent', 'recently', 'lately', 'latest', 'just now',
+  'what time', 'what day', 'what date', 'what month', 'what year',
+  'season', 'seasonal', 'this season', 'date today',
+];
+const TIME_KEYWORDS_AR = [
+  'اليوم', 'الآن', 'الان', 'غدا', 'غداً', 'أمس', 'امس',
+  'هذا الأسبوع', 'هذا الاسبوع', 'هذا الشهر', 'هذه السنة', 'هذا العام',
+  'الأسبوع الماضي', 'الاسبوع الماضي', 'الشهر الماضي', 'السنة الماضية',
+  'الأسبوع القادم', 'الاسبوع القادم', 'الشهر القادم', 'السنة القادمة',
+  'مؤخرا', 'مؤخراً', 'حديثا', 'حديثاً', 'الآونة', 'حاليا', 'حالياً',
+  'أي يوم', 'اي يوم', 'أي تاريخ', 'اي تاريخ', 'كم الساعة', 'كم الوقت',
+  'ما تاريخ', 'الموسم', 'هذا الموسم',
+];
+export function containsTimeKeywords(message: string): boolean {
+  if (!message) return false;
+  const lower = message.toLowerCase();
+  for (const kw of TIME_KEYWORDS_EN) {
+    if (lower.includes(kw)) return true;
+  }
+  for (const kw of TIME_KEYWORDS_AR) {
+    if (message.includes(kw)) return true;
+  }
+  return false;
+}
+
 export interface OperatorRowForPrompt {
   name: string | null;
   archetype: unknown;

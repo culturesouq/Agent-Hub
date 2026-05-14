@@ -15,7 +15,7 @@ import { appendToSession, getSessionMessages } from '../utils/sessionStore.js';
 import { searchMemory, distillMemoriesFromConversations } from '../utils/memoryEngine.js';
 import type { MemoryHit } from '../utils/memoryEngine.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
-import { assembleOperatorPrompt } from '../utils/systemPrompt.js';
+import { assembleOperatorPrompt, buildTemporalContext, containsTimeKeywords } from '../utils/systemPrompt.js';
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
 import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import type { ChatMessage, ContentPart } from '../utils/openrouter.js';
@@ -229,11 +229,19 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // § 3 rule 10 + § 4 architecture-as-secret). Operator carries them as
   // absorbed knowledge, not as labeled role:'user' exhibits the LLM might
   // quote back to users.
-  const systemPrompt = assembleOperatorPrompt(
+  let systemPrompt = assembleOperatorPrompt(
     operator,
     null,
     { scopeLine: `[SCOPE: ${scope.scopeType} | ${scope.scopeId}]` },
   );
+
+  // Hybrid time injection — same logic as chat.ts route. When the user
+  // message contains time-relevant words, prepend the current time as a
+  // prompt fact. Otherwise the prompt carries no time reference. See
+  // chat.ts containsTimeKeywords() for the keyword set.
+  if (containsTimeKeywords(message)) {
+    systemPrompt = `**Current time:** ${buildTemporalContext(new Date())}.\n\n${systemPrompt}`;
+  }
 
   const promptSections: string[] = [systemPrompt];
   if (ragContext && ragContext.trim()) {
