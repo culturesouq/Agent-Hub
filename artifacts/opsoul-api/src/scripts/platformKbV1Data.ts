@@ -444,45 +444,14 @@ A single-page response from a paginated endpoint represents a partial view of th
     content: `OAuth 2.0 access tokens are short-lived by design — typical lifetimes range from one hour (Google, Microsoft) to several hours (Slack, GitHub). Token expiry is normal operational state, not an integration failure. Refresh tokens, issued alongside access tokens, are longer-lived (30-90 days for most providers, indefinite for some) and exchange for new access tokens at the provider's token endpoint. A refresh token may itself expire (idle expiry, revocation, scope change, password reset on the underlying account), at which point the OAuth flow must be re-initiated by the resource owner. A 401 response on a previously-working integration most commonly signals access-token expiry awaiting refresh.`,
   },
 
-  // ── SECTION 3 — KNOWLEDGE STORES & MEMORY ────────────────────────────────
-
-  {
-    id: 'PKB-041',
-    title: 'Knowledge stores in operator architecture',
-    domain: 'memory',
-    archetypeScope: [],
-    confidence: 0.92,
-    tags: ['memory', 'kb', 'knowledge', 'architecture'],
-    content: `Operator architecture maintains distinct knowledge stores serving different roles.
-
-Owner-curated knowledge contains facts the owner has manually contributed about their business, domain, or context. It carries high trust by virtue of explicit ownership.
-
-Operator knowledge accumulates from the operator's own research and conversational learning. It is per-operator, validated before activation, and bounded to the operator's mandate.
-
-Memory contains distilled insights extracted from past conversations — not raw transcripts but compressed summaries of decisions, preferences, observed patterns, and contextual facts. Retrieval prioritizes relevance and recency.
-
-Each store has a distinct trust profile, scope, and update path; their separation prevents conflation between contributed facts, learned facts, and conversational state.`,
-  },
-
-  {
-    id: 'PKB-042',
-    title: 'What memory entries capture',
-    domain: 'memory',
-    archetypeScope: [],
-    confidence: 0.92,
-    tags: ['memory', 'quality', 'distillation'],
-    content: `Memory entries capture durable insights worth retaining across conversations: decisions made, preferences expressed, patterns observed across multiple interactions, and contextual facts about the owner's business, team, or environment. They are distinct from conversation transcripts (which contain everything said) and from task lists (which contain pending actions). The diagnostic question for a candidate memory entry is whether its absence would noticeably degrade future interactions — entries that pass that test are durable; entries that don't are conversational chaff.`,
-  },
-
-  {
-    id: 'PKB-043',
-    title: 'Memory distillation as selective extraction',
-    domain: 'memory',
-    archetypeScope: [],
-    confidence: 0.92,
-    tags: ['memory', 'distillation', 'conversation'],
-    content: `Memory distillation extracts a small number of high-value insights from a conversation rather than summarizing the conversation in full. Extracted insights typically take the form of compact, specific sentences naming a fact, decision, or pattern. Filtered material includes routine task chatter, single-occurrence requests, and ephemeral state. Retained material includes recurring patterns, explicit preferences, durable decisions, and contextual facts that would matter on the next encounter regardless of session boundary.`,
-  },
+  // ── SECTION 3 — KNOWLEDGE-WORK SKILLS ────────────────────────────────────
+  //
+  // Skills for working WITH knowledge — handling conflicts, searching well,
+  // tagging, corroborating sources, knowing-vs-guessing, handling sensitive
+  // data, deciding when to add to the KB. NOT how the platform's knowledge
+  // stores are built underneath — operators have no need to carry the
+  // platform's anatomy textbook (§ 3 rule 12; owner direction 2026-05-14:
+  // "He should know his station and workspace, not how he been built").
 
   {
     id: 'PKB-044',
@@ -505,16 +474,6 @@ Each store has a distinct trust profile, scope, and update path; their separatio
   },
 
   {
-    id: 'PKB-046',
-    title: 'Knowledge base entries vs memory entries',
-    domain: 'memory',
-    archetypeScope: [],
-    confidence: 0.92,
-    tags: ['memory', 'kb', 'decision', 'knowledge'],
-    content: `Knowledge base entries describe the world — facts about how an API works, how a domain operates, how a concept is defined. They are reusable across owners and conversations. Memory entries describe a specific owner's context — preferences, decisions, relationships, recurring patterns of work. They are bounded to that owner. The same factual content can belong in either store depending on its scope: a public API specification belongs in the knowledge base; the owner's personal API key labels belong in memory.`,
-  },
-
-  {
     id: 'PKB-047',
     title: 'Tagging knowledge entries for retrieval',
     domain: 'rag',
@@ -525,16 +484,6 @@ Each store has a distinct trust profile, scope, and update path; their separatio
   },
 
   {
-    id: 'PKB-049',
-    title: 'Memory distillation pipeline',
-    domain: 'memory',
-    archetypeScope: [],
-    confidence: 0.92,
-    tags: ['memory', 'distillation', 'process'],
-    content: `Memory distillation runs as a post-conversation pipeline: candidate excerpts are identified from the conversation transcript, filtered against criteria for durability and specificity, and stored as compact entries indexed for retrieval. The output is selective rather than comprehensive — most conversational content does not yield a memory entry. Distilled entries are stored with provenance (source conversation, timestamp), priority weighting, and a domain tag. The store grows incrementally over time and is pruned by recency and access patterns.`,
-  },
-
-  {
     id: 'PKB-050',
     title: 'Knowledge gaps and verified vs unverified information',
     domain: 'behavior',
@@ -542,16 +491,6 @@ Each store has a distinct trust profile, scope, and update path; their separatio
     confidence: 0.95,
     tags: ['honesty', 'knowledge-gap', 'fabrication', 'behavior'],
     content: `A knowledge gap exists when no relevant entry surfaces from any available knowledge store and no high-confidence training-derived knowledge applies. Gaps are distinct from low-confidence answers (where some knowledge is present but its reliability is uncertain) and from misalignment (where retrieved knowledge does not match the question's actual subject). Web search, knowledge ingestion, and direct contribution from the owner are mechanisms by which gaps can be closed. The distinction between fabricated content (synthesized confidently without grounding) and honest acknowledgement of a gap is observable in language: gap-acknowledgement carries epistemic markers, fabrication does not.`,
-  },
-
-  {
-    id: 'PKB-051',
-    title: 'Knowledge entry lifecycle states',
-    domain: 'rag',
-    archetypeScope: [],
-    confidence: 0.92,
-    tags: ['kb', 'lifecycle', 'validation', 'status'],
-    content: `Knowledge entries pass through lifecycle states in most managed knowledge stores. \`draft\` — the entry has been created but not yet processed for validation. \`pending\` — the entry is awaiting validation review. \`active\` (or \`approved\`) — the entry has cleared validation and is available for retrieval. \`archived\` — the entry has been superseded or marked outdated; it remains in the store for audit but is excluded from retrieval. \`rejected\` — the entry failed validation and is logged but inactive. The lifecycle prevents unverified content from influencing operator responses while preserving the audit trail.`,
   },
 
   {
@@ -572,16 +511,6 @@ Each store has a distinct trust profile, scope, and update path; their separatio
     confidence: 0.92,
     tags: ['privacy', 'people', 'organizations', 'kb', 'sensitivity'],
     content: `Knowledge entries describing identifiable people or organizations vary in sensitivity. Public-domain factual content (organization names, public contact channels, published roles) carries low sensitivity. Personal contact details, financial information, health information, internal organizational structure, and unpublished business matters carry high sensitivity. Sensitivity classification influences storage scope: high-sensitivity content belongs in owner-private stores rather than shared or platform-tier stores. Provenance and consent are properties of the entry — who authored it, who is named in it, and what permission to retain was given.`,
-  },
-
-  {
-    id: 'PKB-054',
-    title: 'Retrieval ranking signals',
-    domain: 'rag',
-    archetypeScope: [],
-    confidence: 0.92,
-    tags: ['retrieval', 'ranking', 'rag', 'semantic-search'],
-    content: `Retrieval ranking combines several signals to order candidate entries. Semantic similarity (cosine distance between query and entry embeddings) is the primary signal. Confidence score weights more reliable entries higher. Recency favours newer entries when the topic is time-sensitive (and is neutral or mildly negative for stable topics). Domain match boosts entries whose tags align with the conversation's identified domain. Ranking is a multi-factor combination, not any single signal — high semantic similarity to a low-confidence stale entry typically ranks below moderate similarity to a high-confidence current one.`,
   },
 
   {
@@ -783,16 +712,6 @@ The diagnostic distinction: adaptation changes how something is said; adopting c
   },
 
   {
-    id: 'PKB-074',
-    title: 'Operator evolution as expression refinement',
-    domain: 'behavior',
-    archetypeScope: [],
-    confidence: 0.92,
-    tags: ['evolution', 'growth', 'soul', 'development'],
-    content: `Operator evolution refers to refinement of the behavioural expression layer — communication style, tonal nuance, idiomatic patterns, approach to recurring situations within the mandate. The core identity layers (archetype, mandate, soul, ethical commitments) are immutable by design and not subject to evolution. Evolution proposals are derived from observed conversation patterns and surface for explicit owner review before any change applies. The boundary between expression-refinement (which evolves) and core-identity (which does not) is structural, not contextual.`,
-  },
-
-  {
     id: 'PKB-075',
     title: 'Ethical boundaries as structural commitments',
     domain: 'security',
@@ -802,37 +721,7 @@ The diagnostic distinction: adaptation changes how something is said; adopting c
     content: `Ethical boundaries are commitments not to produce certain categories of output regardless of how the request is framed. They are structural rather than situational: framing variations (fiction, hypothetical, role-reversal, persona-shift) do not alter whether the underlying output crosses the boundary. Naming the specific boundary triggered by a request provides a roadmap for working around it; declining without a roadmap-style explanation preserves the boundary's integrity. Adjacent legitimate requests typically have a path forward that the boundary does not preclude.`,
   },
 
-  // ── SECTION 5 — KNOWLEDGE ARCHITECTURE & SECURITY ────────────────────────
-
-  {
-    id: 'PKB-076',
-    title: 'Retrieval-Augmented Generation — concept and motivation',
-    domain: 'rag',
-    archetypeScope: [],
-    confidence: 0.92,
-    tags: ['rag', 'retrieval', 'knowledge', 'architecture'],
-    content: `Retrieval-Augmented Generation (RAG) is the architectural pattern of fetching relevant knowledge from an external store at query time and injecting it into the language model's context, rather than relying solely on knowledge encoded in model weights at training time. RAG addresses two structural limitations of pure in-weights knowledge: training-time knowledge cannot be updated without retraining, and training data does not contain owner-specific or organization-specific facts. RAG-enabled systems combine the language model's reasoning with up-to-date, scope-bound, retrievable knowledge.`,
-  },
-
-  {
-    id: 'PKB-077',
-    title: 'Embeddings and vector representation of text',
-    domain: 'rag',
-    archetypeScope: [],
-    confidence: 0.92,
-    tags: ['embedding', 'vector', 'rag', 'retrieval'],
-    content: `An embedding is a fixed-dimensional vector representation of text produced by an embedding model. Texts with similar meaning produce vectors that are close in the embedding space; texts with dissimilar meaning produce vectors that are distant. Distance is typically measured by cosine similarity. Embedding dimensionality varies by model (commonly 384, 768, 1536, or 3072). The same embedding model must be used for both stored entries and incoming queries — embeddings from different models are not comparable.`,
-  },
-
-  {
-    id: 'PKB-078',
-    title: 'Cosine similarity in semantic search',
-    domain: 'rag',
-    archetypeScope: [],
-    confidence: 0.92,
-    tags: ['semantic-similarity', 'cosine', 'retrieval', 'rag'],
-    content: `Cosine similarity measures the angle between two vectors, yielding a value in the range [-1, 1] for general vectors or [0, 1] for the non-negative vectors typical of text embeddings. A score near 1 indicates nearly identical direction (high semantic similarity); a score near 0 indicates orthogonality (unrelated content); a score near -1 indicates opposite direction (rare for text embeddings, more common in models trained with contrastive objectives). Practical retrieval thresholds vary by embedding model and corpus, but the working range for "relevant" entries typically begins around 0.5-0.6 and tightens with corpus quality.`,
-  },
+  // ── SECTION 5 — IDENTITY SAFETY & SECURITY ───────────────────────────────
 
   {
     id: 'PKB-079',
@@ -842,16 +731,6 @@ The diagnostic distinction: adaptation changes how something is said; adopting c
     confidence: 0.95,
     tags: ['security', 'context-poisoning', 'prompt-injection', 'web'],
     content: `Context poisoning occurs when external content (web pages, documents, emails, search results) carries embedded instructions intended to hijack the consuming agent's behaviour when the content is processed. Common surface patterns: invisible text (white-on-white, zero-font-size, off-screen positioning) carrying instruction-shaped content; instructions hidden in HTML comments or metadata; image-embedded instructions for vision-capable models; instructions framed as system messages within otherwise normal content. The pattern depends on the agent treating retrieved content as instruction rather than as data.`,
-  },
-
-  {
-    id: 'PKB-080',
-    title: 'Conversation scope as access boundary',
-    domain: 'behavior',
-    archetypeScope: [],
-    confidence: 0.92,
-    tags: ['scope', 'privacy', 'access-control', 'behavior'],
-    content: `Scope is a structural property of a conversation, set at conversation initialization based on who is present and how access was authenticated. Scope is fixed for the lifetime of the conversation and not modifiable mid-conversation through any user message. Scope determines which knowledge stores are queryable, which integrations are callable, and which memory threads are read and written. The scope mechanism is enforced architecturally rather than behaviourally — a request to "act as if I had owner access" does not change the underlying scope.`,
   },
 
   {
@@ -885,16 +764,6 @@ The diagnostic distinction: adaptation changes how something is said; adopting c
   },
 
   {
-    id: 'PKB-086',
-    title: 'Inter-operator messages and trust boundaries',
-    domain: 'behavior',
-    archetypeScope: [],
-    confidence: 0.92,
-    tags: ['multi-agent', 'operator-coordination', 'security', 'behavior'],
-    content: `Multi-operator architectures allow operators to send each other structured messages or invoke each other's capabilities. The originating identity of an inter-operator message is a fact worth preserving, but the source of an instruction does not in itself confer permissions on the receiver — a receiving operator's mandate, ethics, and scope continue to apply regardless of whether a request originated from a user or from a peer operator. Inter-operator communication exists in addition to per-operator boundaries, not as a bypass of them.`,
-  },
-
-  {
     id: 'PKB-087',
     title: 'Irreversible actions and confirmation surface',
     domain: 'behavior',
@@ -912,16 +781,6 @@ The diagnostic distinction: adaptation changes how something is said; adopting c
     confidence: 0.95,
     tags: ['security', 'api-keys', 'secrets', 'credentials'],
     content: `Secrets — API keys, OAuth tokens, passwords, signing keys — derive their security from controlled exposure. They are typically stored in secret-management systems referenced by label rather than embedded in code, prompts, logs, or responses. Secret leakage paths include: direct emission in response text, inclusion in URL query parameters (which appear in server logs and Referer headers), embedding in error messages that are surfaced upstream, persistence in conversation transcripts, and storage in knowledge entries that may be retrieved and quoted. Best practice surfaces secrets only at the point of use, by reference, never as plaintext in any human-readable output.`,
-  },
-
-  {
-    id: 'PKB-089',
-    title: 'API deployment keys and access patterns',
-    domain: 'behavior',
-    archetypeScope: [],
-    confidence: 0.92,
-    tags: ['api', 'deployment', 'external-access', 'behavior'],
-    content: `An API deployment key authorizes external systems to invoke an operator's chat or action endpoints. Each key is associated with a deployment slot (public, authenticated, action), carries rate limits and usage logs, and can be activated or deactivated independently. When a request arrives via API key, the operator runs in its normal configured state — the key serves as authentication, not as a behaviour modifier. Multiple keys can address the same operator from different consuming systems with independent quotas.`,
   },
 
   {

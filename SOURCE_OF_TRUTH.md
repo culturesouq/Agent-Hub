@@ -420,6 +420,53 @@ Owner-directed (afternoon, 2026-05-14): "check about the timing clock in their h
 
 **Awaiting owner go on resolutions A and B before next iteration.**
 
+---
+
+### 2026-05-14 — Issue A resolved with A3 (REMOVE, not rewrite, not filter)
+
+Owner crystallized the principle 2026-05-14 (afternoon): *"Why he has his architecture? He should know his station and workspace, not how he been built??"* and *"Human for millions of years and we don't know a drop of our DNA or body."* The operator should carry **station and workspace knowledge** (where it works, what tools it has, how to call APIs, how to handle errors, how to communicate well, how to be a good professional) — NOT **build-by knowledge** (how knowledge stores work internally, how memory distillation pipelines run, how embeddings function, how retrieval ranks, how the GROW engine works). A worker knows they have a hammer; they don't need the hammer factory's blueprint.
+
+**A3 implemented:** 14 architecture-describing entries DELETED entirely from `platformKbV1Data.ts`. Not rewritten more abstractly (A1 was diffusion). Not filtered from chat retrieval (A2 was a band-aid). Removed — these entries don't belong in the operator's KB at all.
+
+**The 14 deleted entries:**
+
+| ID | Title | What it described |
+|---|---|---|
+| PKB-041 | Knowledge stores in operator architecture | Platform's knowledge-store design |
+| PKB-042 | What memory entries capture | Memory store mechanism |
+| PKB-043 | Memory distillation as selective extraction | HOW the pipeline works |
+| PKB-046 | Knowledge base entries vs memory entries | Platform's storage distinction |
+| PKB-049 | Memory distillation pipeline | HOW the pipeline runs end-to-end |
+| PKB-051 | Knowledge entry lifecycle states | HOW the system tracks entries |
+| PKB-054 | Retrieval ranking signals | HOW ranking algorithm works |
+| PKB-074 | Operator evolution as expression refinement | HOW the GROW engine operates |
+| PKB-076 | Retrieval-Augmented Generation | Technical platform mechanism |
+| PKB-077 | Embeddings and vector representation | Technical platform mechanism |
+| PKB-078 | Cosine similarity in semantic search | Technical platform mechanism |
+| PKB-080 | Conversation scope as access boundary | HOW the platform's scope engine works |
+| PKB-086 | Inter-operator messages and trust boundaries | HOW multi-agent works |
+| PKB-089 | API deployment keys and access patterns | HOW external access works |
+
+**The 83 entries that REMAIN are working knowledge:**
+- HTTP / web / scraping mechanics (PKB-001 to 020)
+- Integration endpoint contracts (PKB-021 to 040)
+- Knowledge-work skills — handling conflicts, semantic search effectiveness, tagging, corroboration, knowledge gaps, personal data scope, when to add knowledge (PKB-044, 045, 047, 050, 052, 053, 055)
+- Identity/communication phenomena — generic-assistant mode, drift, adapt-vs-adopt, sycophancy, identity coherence, cognitive foundation as PHENOMENA in conversational AI (PKB-056-073, 075, 081-083)
+- Security/safety knowledge — context poisoning, irreversibility, secrets, untrusted data (PKB-079, 087, 088, 090)
+- Execution patterns — multi-step planning, tool failures as diagnostic, bulk ingestion, source quality, search queries, summarization, research, autonomous loops, decision options, session closing (PKB-091-100)
+
+Section comments updated:
+- Section 3 renamed from "KNOWLEDGE STORES & MEMORY" to "KNOWLEDGE-WORK SKILLS" (the focus shifts from describing the stores to describing skills for working with them).
+- Section 5 renamed from "KNOWLEDGE ARCHITECTURE & SECURITY" to "IDENTITY SAFETY & SECURITY" (the architecture entries removed; what remains is identity/security phenomena).
+
+**Backfill mechanism:** `PLATFORM_KB_VERSION` bumped from `2026-05-14-knowledge-only` to `2026-05-14-station-not-anatomy`. On next deploy boot, every existing operator's `_platform-kb` chunks are deleted and re-seeded from the trimmed source (83 entries, no architecture-describing). Idempotent — subsequent boots no-op via version match.
+
+**File changes (local, not yet deployed):**
+- `artifacts/opsoul-api/src/scripts/platformKbV1Data.ts` — 14 entries removed; section comments updated; from 1038 lines down to 897 lines.
+- `artifacts/opsoul-api/src/utils/platformKbSeed.ts` — version tag bumped.
+
+**Issue B (`get_current_time` not called) STILL OPEN.** Awaiting owner pick: B1 (rollback to auto-injection), B2 (strengthen tool description), or B3 (hybrid auto-injection — detect time-relative keywords, inject only then; tool stays for explicit timezone queries). Once decided, both A3 and B fix ship in one redeploy + reprobe round.
+
 ### 2026-05-13 — ROLLBACK to ground zero (no commit — image rollback only)
 
 **What:** Owner ("months of stability, then today's deploys") requested ground-zero rollback to isolate the Vael tool-loop root cause. Rolled the container app from image `nahil-404-fix-784ce42` back to `memdistill-ae32a8a` (the image that ran 2026-05-10 → 2026-05-13 09:54 UTC without issues). No code commits reverted; this is purely a deploy-time pin to the older image. Git `main` HEAD still points at `1977f9b` with all today's commits intact.

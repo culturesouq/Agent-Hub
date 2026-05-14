@@ -50,7 +50,7 @@ export async function reseedPlatformKb(operatorId: string, ownerId: string): Pro
 // driven by a content version marker in the operator's _platform-kb chunks.
 // When the version stored in the DB differs from PLATFORM_KB_VERSION, the
 // operator's chunks are reseeded.
-export const PLATFORM_KB_VERSION = '2026-05-14-knowledge-only';
+export const PLATFORM_KB_VERSION = '2026-05-14-station-not-anatomy';
 
 export async function backfillAllPlatformKb(): Promise<void> {
   const operators = await db
