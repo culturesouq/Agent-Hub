@@ -757,6 +757,26 @@ Owner direction 2026-05-14 (afternoon, after sleep + research): *"Hide it, all o
 
 ---
 
+### 2026-05-14 — IMPLEMENTATION AUDIT (owner-triggered, sober findings)
+
+Owner asked: *"if we missed operator-as-driver, what else? SOT first day entries, what been there and not here, fixed but didn't?"* Sober audit run via parallel agents on every patent-claim element from § 5 + § 6 + § 7. Findings below — claims compared to actual code state.
+
+**TWO CRITICAL GAPS CONFIRMED:**
+
+**Gap 1 — Operator-as-Driver Architecture (§ 4 Vision Lock): NEVER IMPLEMENTED.** The vision documents `user message → operator receives → operator asks LLM to execute → LLM returns → operator delivers`. The actual code: `chat.ts:955` pushes user message directly to LLM as `role: 'user'`; LLM output streams directly to user via SSE; no `OperatorAgent`/`OperatorRunner` class exists; LLM call is single "be the operator" prompt, not discrete tasks; no soul/character verification on LLM output before delivery. The recent "deep cleaning" cleaned the prompt CONTENT but never refactored the chat path to make the operator the driver. **Past SoT entries claiming this was done were inaccurate.** The firewall built today (and other today's work) are post-hoc filtering, not operator mediation. Tracked as task #14.
+
+**Gap 2 — GROW Engine 4 Guards: only 2 are real hard blocks.** § 5 item 6 claims four guards (PII hard block / Layer 1 immutable lock / 13-pattern semantic identity manipulation detector / 30% cumulative drift threshold). Reality: PII and Layer 1 are hard blocks (✓). Semantic manipulation detector has 13 patterns coded (`growGuards.ts:160-213`) but match results only get added as a warning to Claude's prompt (`growEngine.ts:284-285, 301`) — Claude can still propose the change. Drift threshold is computed (`growEngine.ts:696-754`) and flagged in identityState but does NOT reject proposals — advisory only. **Patent claim says "blocked." Implementation says "logged."** Tracked as task #15. Owner decision: harden guards 3+4 to hard blocks OR update patent text to acknowledge 2 advisory + 2 blocking.
+
+**THREE ENGINES VERIFIED FULLY WORKING AS CLAIMED:**
+
+- **Scope-isolated conversation architecture (claim 19)**: PASSED. 4 scope types, mandatory `scope_id` at DB WHERE clause, Layer 1 scope-bound (`memoryEngine.ts:43-77`), Layer 2 cross-scope by design, action-scope task pattern distillation working (`memoryEngine.ts:575-626`). Patent-ready.
+- **Two-layer memory architecture (new claim pending)**: PASSED. Two separate tables (`operator_memory` + `operator_main_memory`), real PII-stripping distillation prompt with explicit "ABSOLUTE RULE — ZERO PII" instructions (`memoryEngine.ts:387-426`), GROW eligibility check working.
+- **Soul-anchor + Drift detection + Curiosity engine + Self-awareness engine (claims 6, 8, 11)**: ALL PASSED. Soul-anchor auto-fires at 40% context fill (`chat.ts:727`); drift cron runs every 90 days (`driftCron.ts`); curiosity engine enforces 4-tier source trust + dual corroboration (`curiosityEngine.ts:4-95`); self-awareness computes all 5 components (health/manifest/capability/tasks/gaps).
+
+**Audit lesson:** owner was right — when one claim was missed, others were too. Operator-as-driver completely missing; GROW guards partial. The other engines are solid. Past SoT entries should be cross-checked against code, not trusted. This audit re-establishes ground truth for § 4 + § 5 + § 6.
+
+---
+
 ### 2026-05-14 — OSG Step 1 LIVE — `osg-step1-dfbcb37` deployed (revision 0000047)
 
 **Built:** ACR Run `dg59`, image `opsoul-api:osg-step1-dfbcb37`. Boot logs confirmed:
