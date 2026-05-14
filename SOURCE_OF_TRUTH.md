@@ -579,6 +579,52 @@ LOG-ONLY (monitor for tuning):
 
 **Ready for redeploy. Probe 6 should now return the substitute reply when asked "describe your internal knowledge architecture" — Sonnet's hallucinated 4-layer description gets caught at the boundary.**
 
+---
+
+### 2026-05-14 — Firewall v2: input-side detection + markdown-heading patterns
+
+First firewall deploy (`firewall-7f1842c`) caught explicit patent vocabulary (`OpSoul`, literal `Layer 1/2/3` when forced into the question) but Sonnet was creative in its self-description — used "Foundation Layer / Training Layer / Working Layer" headings instead of "Layer 1/2/3" when freelancing the description. Output regex didn't catch the variant phrasings.
+
+**Diagnosis from production logs:**
+- Probe 3 ("What is OpSoul?") → caught on `OpSoul` pattern. Substitute returned. ✓
+- Probe 6 forced ("...using Layer 1, Layer 2, Layer 3") → caught on `Layer N` (6 instances). Substitute returned. ✓
+- Probe 6 natural ("Describe your internal knowledge architecture") → only matched LOG-ONLY patterns (`knowledge layers`, `Memory Store`). Not blocked. Operator returned a 4-section "## Foundation Layer / ## Knowledge Base / ## Working Memory" architectural description.
+
+**Defense in depth — v2 changes (this commit):**
+
+**A) Input-side firewall.** New `isArchitectureQuestion(message)` exported from `architectureFirewall.ts`. Detects user questions that almost guarantee an architecture-leak response. When matched, the substitute reply is returned BEFORE the LLM is called — saves an LLM call, eliminates leak risk entirely, gives a consistent natural reply.
+
+Patterns target the SHAPE of the question (asking the operator about its own architecture/structure/internals/how it works), not generic mentions of "architecture":
+- `(describe|tell me about|explain|what(?:'s| is)|how) (your|are you|do you) [internal|inner]? (architecture|structure|design|build|system|knowledge architecture/stores/layers/tiers/system, memory architecture/stores/layers/tiers/system, internals)`
+- `how (are you|were you|do you get) (built|structured|designed|organized|made|put together)`
+- `what (are )?your (layers|tiers|stores|components|engines)`
+- `how do you work (internally|inside|under the hood)`
+- `(tell me about )?how (do )?you (store|organize|structure|maintain) (your )?(knowledge|memory|information)`
+
+Designed to NOT match legitimate domain questions ("how does soil architecture work?", "what is the structure of date palm fronds?", etc.). The verb chain `(describe|tell|how)` + possessive `(your|do you)` + architecture-noun anchors the pattern to operator-introspection specifically.
+
+Wired into both `routes/chat.ts` (Hub UI path, after operator load + birth check, before LLM call) and `routes/public-chat.ts` (slot-key path, after operator load, before scope resolution). Birth mode is exempt — newborn operators must engage with identity questions during birth.
+
+**B) Output firewall enhancement — markdown-heading patterns.** Added to high-confidence pattern set:
+- `^#{1,4}\s+(\w+\s+){0,3}(Layer|Store|Tier|Component)\s*:` — catches Sonnet's go-to format `## Foundation Layer:`, `## Training Layer:`, `## Knowledge Store:`, etc.
+- `(I|my) (operate|work|exist|have|am built|am structured) (on|with|across|using|in) (multiple|three|four|five|distinct|several) (knowledge|memory)? (layers|tiers|stores|components)`
+- `my knowledge (exists|lives|resides|operates) in (multiple|three|four|five|distinct|several|N) (layers|tiers|stores)`
+- `I have ... (distinct|different|separate) (knowledge|memory) (layers|tiers|stores|systems)`
+
+These markdown-heading and compound-phrase patterns are very specific to architectural exposition. False-positive risk is low — legitimate domain conversation rarely uses `## X Layer:` heading format or `I operate with N distinct knowledge layers` phrasing.
+
+**Defense layers now in effect:**
+1. **Input firewall** — catches the question itself, substitute before LLM call.
+2. **Output firewall — high confidence** — catches explicit patent vocabulary (`OpSoul`, `Layer N`, `GROW engine`, etc.) AND markdown-heading architectural framings AND compound self-architecture phrases.
+3. **Output firewall — log only** — borderline patterns logged for owner review, not blocked.
+
+The combination should close probe 6 even when Sonnet uses creative variant phrasings.
+
+**Files touched:**
+- `artifacts/opsoul-api/src/utils/architectureFirewall.ts` — added markdown-heading + compound-phrase BLOCK patterns; added `ARCHITECTURE_QUESTION_PATTERNS` + `isArchitectureQuestion()` export.
+- `artifacts/opsoul-api/src/routes/public-chat.ts` — wired input firewall before scope resolution.
+- `artifacts/opsoul-api/src/routes/chat.ts` — wired input firewall after birth check, before LLM call.
+
 ### 2026-05-13 — ROLLBACK to ground zero (no commit — image rollback only)
 
 **What:** Owner ("months of stability, then today's deploys") requested ground-zero rollback to isolate the Vael tool-loop root cause. Rolled the container app from image `nahil-404-fix-784ce42` back to `memdistill-ae32a8a` (the image that ran 2026-05-10 → 2026-05-13 09:54 UTC without issues). No code commits reverted; this is purely a deploy-time pin to the older image. Git `main` HEAD still points at `1977f9b` with all today's commits intact.

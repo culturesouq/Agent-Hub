@@ -16,7 +16,7 @@ import { searchMemory, distillMemoriesFromConversations } from '../utils/memoryE
 import type { MemoryHit } from '../utils/memoryEngine.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { assembleOperatorPrompt, buildTemporalContext, containsTimeKeywords } from '../utils/systemPrompt.js';
-import { applyFirewall } from '../utils/architectureFirewall.js';
+import { applyFirewall, isArchitectureQuestion, FIREWALL_SUBSTITUTE_REPLY } from '../utils/architectureFirewall.js';
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
 import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import type { ChatMessage, ContentPart } from '../utils/openrouter.js';
@@ -75,6 +75,34 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   if (!operator) {
     res.status(404).json({ error: 'Operator not found' });
+    return;
+  }
+
+  // ── INPUT FIREWALL ──
+  // Architecture-introspection questions get the substitute reply BEFORE
+  // the LLM is called. Saves an LLM call, eliminates the leak risk, and
+  // gives a consistent natural reply. Output firewall remains as backstop.
+  if (isArchitectureQuestion(message)) {
+    console.warn('[firewall:input]', JSON.stringify({
+      path: 'public-chat',
+      operatorId: slot.operatorId,
+      message: message.slice(0, 200),
+    }));
+    if (stream) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders?.();
+      res.write(`data: ${JSON.stringify({ delta: FIREWALL_SUBSTITUTE_REPLY })}\n\n`);
+      res.write(`data: ${JSON.stringify({ done: true, conversationId: conversationId ?? crypto.randomUUID(), scopeId: 'firewall' })}\n\n`);
+      res.end();
+    } else {
+      res.json({
+        conversationId: conversationId ?? crypto.randomUUID(),
+        message: { role: 'assistant', content: FIREWALL_SUBSTITUTE_REPLY },
+        scopeId: 'firewall',
+      });
+    }
     return;
   }
 

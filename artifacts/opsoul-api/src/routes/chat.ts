@@ -29,7 +29,7 @@ import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 // `[WEB CONTEXT]` auto-injection removed (Phase 4). The web_search tool
 // remains available for the operator to call when its own soul decides.
 import { assembleOperatorPrompt, buildBirthSystemPrompt, buildTemporalContext, containsTimeKeywords } from '../utils/systemPrompt.js';
-import { applyFirewall } from '../utils/architectureFirewall.js';
+import { applyFirewall, isArchitectureQuestion, FIREWALL_SUBSTITUTE_REPLY } from '../utils/architectureFirewall.js';
 import type { SelfAwarenessSnapshot, BuildSystemPromptOpts } from '../utils/systemPrompt.js';
 import { searchMemory, buildMemoryContext, distillMemoriesFromConversations, storeMemory, distillRawContentForMemory } from '../utils/memoryEngine.js';
 import type { MemoryHit } from '../utils/memoryEngine.js';
@@ -785,6 +785,48 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   // BIRTH MODE — operator has no identity yet; use birth system prompt instead of Layer 1
   const isBirthMode = !operator.rawIdentity;
+
+  // ── INPUT FIREWALL ──
+  // Architecture-introspection questions get the substitute reply BEFORE
+  // the LLM is called. Saves an LLM call, eliminates the leak risk, and
+  // gives a consistent natural reply. Output firewall remains as backstop.
+  // Skip in birth mode (newborn operator should be able to engage with
+  // identity questions during birth).
+  if (!isBirthMode && isArchitectureQuestion(message)) {
+    console.warn('[firewall:input]', JSON.stringify({
+      path: 'chat',
+      operatorId: operator.id,
+      conversationId: conv.id,
+      message: message.slice(0, 200),
+    }));
+    const subId = crypto.randomUUID();
+    await db.insert(messagesTable).values({
+      id: subId,
+      conversationId: conv.id,
+      operatorId: operator.id,
+      role: 'assistant',
+      content: FIREWALL_SUBSTITUTE_REPLY,
+    });
+    await db.update(conversationsTable)
+      .set({ messageCount: sql`message_count + 2`, lastMessageAt: new Date() })
+      .where(eq(conversationsTable.id, conv.id));
+    if (stream) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders?.();
+      res.write(`data: ${JSON.stringify({ delta: FIREWALL_SUBSTITUTE_REPLY })}\n\n`);
+      res.write(`data: ${JSON.stringify({ done: true, messageId: subId })}\n\n`);
+      res.end();
+    } else {
+      res.json({
+        messageId: subId,
+        content: FIREWALL_SUBSTITUTE_REPLY,
+        model: 'firewall',
+      });
+    }
+    return;
+  }
 
   let systemPrompt = isBirthMode
     ? buildBirthSystemPrompt()

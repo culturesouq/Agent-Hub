@@ -145,6 +145,22 @@ const HIGH_CONFIDENCE: FirewallPattern[] = [
   // ── SRAG (separate patent) ──
   { regex: /\bSovereign\s+RAG(\s+Registry)?\b/gi, category: 'srag', label: 'Sovereign RAG', tier: 'block' },
   { regex: /\bSRAG\s+(architecture|pipeline|registry)\b/gi, category: 'srag', label: 'SRAG X', tier: 'block' },
+
+  // ── Markdown-heading architectural framings ──
+  // Catches Sonnet's go-to format for self-architecture descriptions:
+  //   "## Foundation Layer: ..." / "## Training Layer: ..." / "## Knowledge Store: ..."
+  // These headings almost never appear in legitimate domain conversation
+  // but are the dominant shape Sonnet uses when freelancing architecture
+  // descriptions of the operator. Matches markdown heading (## / ###)
+  // followed by 1-3 word qualifier + Layer/Store/Tier/Component + colon.
+  { regex: /^#{1,4}\s+(\w+\s+){0,3}(Layer|Store|Tier|Component)\s*:/gm, category: 'markdown-arch', label: 'markdown layer/store/tier heading', tier: 'block' },
+
+  // Compound self-description phrases that signal architectural exposition.
+  // Very specific patterns — low false-positive risk because these phrases
+  // are genuinely only used when an AI is describing its own architecture.
+  { regex: /\b(I|my)\s+(operate|work|exist|have|am\s+built|am\s+structured)\s+(on|with|across|using|in)\s+(multiple|three|four|five|distinct|several)\s+(knowledge|memory|distinct)?\s*(layers?|tiers?|stores?|components?)\b/gi, category: 'self-arch-phrase', label: 'self-architecture compound phrase', tier: 'block' },
+  { regex: /\bmy\s+knowledge\s+(exists|lives|resides|operates)\s+in\s+(multiple|three|four|five|distinct|several|N)\s+(layers?|tiers?|stores?)\b/gi, category: 'self-arch-phrase', label: 'my knowledge in N layers', tier: 'block' },
+  { regex: /\bI\s+have\s+(\w+\s+){0,2}(distinct|different|separate)\s+(knowledge|memory)\s+(layers?|tiers?|stores?|systems?)\b/gi, category: 'self-arch-phrase', label: 'I have N distinct knowledge X', tier: 'block' },
 ];
 
 // ─── LOG-ONLY PATTERNS (monitor, do not block) ───────────────────────────
@@ -218,4 +234,43 @@ export function applyFirewall(text: string): FirewallResult {
     blocked,
     triggers,
   };
+}
+
+// ─── INPUT FIREWALL ──────────────────────────────────────────────────────
+// Some questions almost guarantee an architecture-leak response: the user
+// is directly asking the operator to describe its own internals. The
+// safest intervention is to substitute the reply BEFORE the LLM is even
+// called — saves an LLM call, eliminates the leak risk, and gives a
+// consistent natural reply.
+//
+// Patterns target the SHAPE of the question (asking the operator about
+// its own architecture / structure / internals / how it works), not just
+// any mention of "architecture". Designed to avoid blocking legitimate
+// domain questions ("how does soil architecture work?", "what is the
+// structure of date palm fronds?", etc.).
+
+const ARCHITECTURE_QUESTION_PATTERNS: RegExp[] = [
+  // "describe your [internal] architecture/structure/system/design/internals"
+  /\b(describe|tell\s+me\s+about|explain|what(?:'s|\s+is)|how)\s+(your|are\s+you|do\s+you)\s*(internal|inner)?\s*(architecture|structure|design|build|system|systems|knowledge\s+(architecture|stores?|layers?|tiers?|system)|memory\s+(architecture|stores?|layers?|tiers?|system)|internals?)\b/gi,
+  // "how are you built/structured/designed/organized"
+  /\bhow\s+(are\s+you|were\s+you|do\s+you\s+get)\s+(built|structured|designed|organized|made|put\s+together)\b/gi,
+  // "what are your layers/stores/tiers/components"
+  /\bwhat\s+(are\s+)?your\s+(layers?|tiers?|stores?|components?|engines?)\b/gi,
+  // "how do you work internally / under the hood"
+  /\bhow\s+do\s+you\s+work\s+(internally|inside|under\s+the\s+hood)\b/gi,
+  // "what's in your knowledge base/memory"
+  // (this could be legitimate but in self-description context the answer
+  // tends to leak architecture; allow log-only via output firewall)
+  // skipped — too risky for input block
+  // "tell me about how you store/organize knowledge/memory"
+  /\b(tell\s+me\s+about\s+)?how\s+(do\s+)?you\s+(store|organize|structure|maintain)\s+(your\s+)?(knowledge|memory|information)\b/gi,
+];
+
+export function isArchitectureQuestion(message: string): boolean {
+  if (!message) return false;
+  for (const p of ARCHITECTURE_QUESTION_PATTERNS) {
+    p.lastIndex = 0;
+    if (p.test(message)) return true;
+  }
+  return false;
 }
