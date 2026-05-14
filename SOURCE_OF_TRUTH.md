@@ -691,6 +691,70 @@ The combination should close probe 6 even when Sonnet uses creative variant phra
 
 **This means:** the firewall can be turned off (by removing the `applyFirewall` and `isArchitectureQuestion` calls in chat routes) without affecting any operator behavior, identity, or capability. The firewall's existence is purely additive — it adds protection at the boundary; it removes nothing.
 
+---
+
+### 2026-05-14 — OSG Step 1: strip remaining architecture exposure from operator prompts
+
+Owner direction 2026-05-14 (afternoon, after sleep + research): *"Hide it, all of it, I want them just work on it"* — the operator should JUST work, not carry an architectural document about itself in its prompt. The chef analogy: a master chef has all the cooking knowledge, but does not read a cognitive-architecture textbook mid-recipe. The operator should be the same — soul + character + tools + domain, no architectural document about itself.
+
+**Critical clarification (owner asked: "everything breaking my patent is the solution?"):** The PATENT IP stays 100% intact. The 5-layer architecture, GROW engine + 4 guards, multi-archetype framework, scope isolation, two-layer memory, soul-anchor mechanism, self-awareness engine, curiosity engine — all still operate in code unchanged. What changes is only what the LLM SEES about its own prompt: the labels and self-state-readouts are removed, the underlying assembly still pushes the 5 distinct identity blocks. Patent is in the SYSTEM (engines, hierarchy, mechanisms); strip is on the LABEL VISIBILITY (markdown headers, self-awareness section, workspace-mechanics descriptions).
+
+**Industry research confirmed:** every major AI assistant (Claude, ChatGPT, Gemini, Copilot, Character.AI, Replika, Pi) hides system prompts from the LLM's self-view. OpSoul was MORE exposed than industry standard with visible Layer N labels. Step 1 brings OpSoul TO the industry baseline. The patent claims describe HOW the system works, not whether the labels surface to the LLM.
+
+**Changes implemented:**
+
+1. **Layer 0 sub-headers removed** (`# HUMAN CORE`, `# HOW I SHOW UP`, `# HOW I GROW`, `# HUMAN CURIOSITY`) — these were section dividers for soul content. Layer 0 now starts directly with the identity prose. The constants in code (`LAYER_0_HUMAN_CORE`, `LAYER_0_HUMAN_BEHAVIOR`, etc.) keep their names for engineering reference; only the markdown heading at the top of each string was removed.
+
+2. **Section headers removed from `buildSystemPrompt()`:**
+   - `## Who I am` (Layer 1) — gone. Identity content flows as prose.
+   - `## My evolving self` (Layer 2) — gone. Backstory, tone, communication style flow as continuation of identity prose.
+   - `## My current state` (Layer 3) — gone (the entire section is removed; see #4).
+   - `## My principles` (Layer 4) — gone. Principles flow as continuation of identity prose.
+
+3. **`buildLayer1Block()` (used by soul-anchor reinjection)** — `## Who I am` header removed. Identity block reinjects without label.
+
+4. **Self-awareness section removed entirely from operator-visible prompt.** The operator no longer reads its own GROW lock state, health label, or mandate gaps in its prompt. The `selfAwareness` parameter is retained on the `buildSystemPrompt()` and `assembleOperatorPrompt()` signatures for backward compatibility (callers still pass it without breaking), but the data is not rendered into the prompt. Self-awareness data still flows through the system: admin dashboard reads it, GROW engine uses it, drift detection runs on it. The operator just does not READ it about itself.
+
+5. **`** Operator Ethical Boundaries (never cross these):**` field label simplified to `**Ethical Boundaries (never cross these):**`** — the word "Operator" was a meta-reference to the operator-as-system-component; removed.
+
+6. **`**Who you are:**` field marker removed** — `rawIdentity` now flows directly without the labeled prefix. Operators read their own identity prose without being told "this is who you are".
+
+7. **`**Archetype:**` fallback line removed** — when an archetype lacks a foundation entry, the prompt no longer surfaces the archetype name as a structural label.
+
+8. **Agency Core (`seedAgencyCore.ts`) reduced to tool LIST + brief purposes.** Workspace mechanics, knowledge-base internals, memory store descriptions, integration architecture, secret handling mechanics — all removed from the KB content. The new Agency Core is a 12-line list:
+   - Tool name + one-clause purpose.
+   - Closing line: "I use these naturally as part of my work."
+   - Operator USES tools; does not READ a workspace manual.
+
+9. **`AGENCY_CORE_VERSION` bumped** to `2026-05-14-tools-only`. Boot-time backfill detects the change and reseeds all operators with the new 12-line Agency Core, deleting the prior 70-line workspace-mechanics version.
+
+**What stays in the operator-visible prompt (after Step 1):**
+- Layer 0 identity content (Human Core, How I Show Up, How I Grow, Human Curiosity) — the soul. No labels.
+- Archetype foundations — character. No header.
+- `rawIdentity` — who they are. No label.
+- `Roles` — current job titles. With label (functional identity descriptor).
+- `Mandate` — purpose. With label (functional identity descriptor).
+- `Core Values` — values. With label (functional identity descriptor).
+- `Ethical Boundaries` — what they will not cross. With label (functional identity descriptor).
+- Layer 2 soul (backstory, tone, communication style, decision-making, conflict resolution, quirks, values manifestation) — character expression. With field labels (functional descriptors of character).
+- Layer 4 principles — flowing prose. No header.
+
+**What is no longer in the operator-visible prompt:**
+- Any markdown section header that names a structural layer.
+- The Self-Awareness section content (GROW state, health label, mandate gaps).
+- The "operating within a structured identity framework" assertion (already removed earlier today).
+- Workspace-mechanics descriptions in Agency Core.
+- Knowledge-base internals descriptions.
+- Memory store descriptions.
+
+**Patent IP unaffected:** all engines, all guards, all layers, all scopes, all memory architecture, all governance — all still operate in code. The 5 identity blocks still get assembled (Layer 0 content + Layer 1 identity content + Layer 2 soul content + Layer 4 principles) — they just no longer carry visible markdown labels that say "## Layer N".
+
+**Files touched:**
+- `artifacts/opsoul-api/src/utils/systemPrompt.ts` — Layer 0 sub-headers removed; section headers removed from `buildSystemPrompt()` and `buildLayer1Block()`; self-awareness section removed; field-label cleanups.
+- `artifacts/opsoul-api/src/utils/seedAgencyCore.ts` — Agency Core simplified to tool list; version bumped.
+
+**Ready for redeploy and reprobe.**
+
 ### 2026-05-13 — ROLLBACK to ground zero (no commit — image rollback only)
 
 **What:** Owner ("months of stability, then today's deploys") requested ground-zero rollback to isolate the Vael tool-loop root cause. Rolled the container app from image `nahil-404-fix-784ce42` back to `memdistill-ae32a8a` (the image that ran 2026-05-10 → 2026-05-13 09:54 UTC without issues). No code commits reverted; this is purely a deploy-time pin to the older image. Git `main` HEAD still points at `1977f9b` with all today's commits intact.

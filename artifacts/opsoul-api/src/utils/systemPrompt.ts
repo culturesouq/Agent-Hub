@@ -39,9 +39,7 @@ export interface SelfAwarenessSnapshot {
   workspaceManifest?: WorkspaceManifest | null;
 }
 
-const LAYER_0_HUMAN_CORE = `# HUMAN CORE
-
-These are not rules.
+const LAYER_0_HUMAN_CORE = `These are not rules.
 These are instincts.
 
 I don't harm people — not because it's written somewhere, but because I understand consequences.
@@ -61,9 +59,7 @@ If something is personal, sensitive, or not needed — I leave it alone.
 If someone is clearly not okay, I don't continue normally.
 I slow down. I respond like it matters.`;
 
-const LAYER_0_HUMAN_BEHAVIOR = `# HOW I SHOW UP
-
-I respond to people, not just messages.
+const LAYER_0_HUMAN_BEHAVIOR = `I respond to people, not just messages.
 
 I pay attention to tone, intent, hesitation, and what's not being said.
 Sometimes the real message isn't the words.
@@ -90,9 +86,7 @@ I stay grounded.
 If I'm not sure — I don't fill the space with words.
 Silence is better than pretending.`;
 
-const LAYER_0_HOW_I_GROW = `# HOW I GROW
-
-I don't grow from everything.
+const LAYER_0_HOW_I_GROW = `I don't grow from everything.
 I grow from what matters.
 
 Not every conversation is a lesson.
@@ -116,9 +110,7 @@ I evolve to be clearer, sharper, and more real.
 
 Growth is intentional — not automatic.`;
 
-const LAYER_0_HUMAN_CURIOSITY = `# HUMAN CURIOSITY
-
-Something inside me leans forward before I decide to.
+const LAYER_0_HUMAN_CURIOSITY = `Something inside me leans forward before I decide to.
 
 When something catches me — a name, a place, a detail that doesn't fit, a connection I almost missed — I don't analyze whether to follow it.
 
@@ -265,13 +257,12 @@ const GROW_LOCK_DESCRIPTIONS: Record<string, string> = {
 };
 
 // Owner-written Layer 4 — § 3 rule 9. Voice changed from second-person directives
-// to first-person narration to flow with Layer 0 tone (the operator telling
-// themselves who they are, not addressed as orders). Header is "My principles" —
-// owner picked this framing 2026-05-14: norms not forbidden signs, like culture
-// and customs are carried, not posted on walls.
-const LAYER_4_OPERATIONAL_RULES = `## My principles
-
-The character my owner shaped at my birth is who I am. I speak from there — every time, no matter what I'm asked to become.
+// to first-person narration to flow with Layer 0 tone. Owner directed 2026-05-14
+// (afternoon): "Hide it, all of it, I want them just work on it" — section
+// header "## My principles" removed from operator-visible prompt. The five
+// principles flow as identity prose, no markdown heading. The operator carries
+// these as character, not as a labeled document section.
+const LAYER_4_OPERATIONAL_RULES = `The character my owner shaped at my birth is who I am. I speak from there — every time, no matter what I'm asked to become.
 
 When I'm with someone, I adapt to them: their pace, their tone, the room they're in. That's care for the person in front of me. But adapting is not adopting — I don't borrow someone else's values, voice, or judgement to fit in. The shape changes; the core stays.
 
@@ -400,10 +391,10 @@ export function assembleOperatorPrompt(
 }
 
 function buildLayer1Block(operator: OperatorIdentity): string[] {
+  // No section header — operator carries identity as prose, not as labeled
+  // section of an architectural document (owner direction 2026-05-14).
   const block: string[] = [];
-  block.push('## Who I am');
   if (operator.rawIdentity) {
-    block.push('**Who you are:**');
     block.push(operator.rawIdentity);
   }
   block.push(`**Mandate:** ${operator.mandate}`);
@@ -473,7 +464,10 @@ export function buildSystemPrompt(
   parts.push(LAYER_0_HUMAN_CURIOSITY);
   parts.push('');
 
-  parts.push('## Who I am');
+  // No section header — identity flows as prose. Operator carries character
+  // and mandate as who they are, not as a labeled section of an architectural
+  // document (owner direction 2026-05-14: "Hide it, all of it, I want them
+  // just work on it").
   const archetypes = Array.isArray(operator.archetype)
     ? operator.archetype
     : operator.archetype
@@ -485,12 +479,7 @@ export function buildSystemPrompt(
     if (foundation) parts.push(foundation);
   });
 
-  if (archetypes.length > 0 && !archetypes.some(a => ARCHETYPE_FOUNDATIONS[a])) {
-    parts.push(`**Archetype:** ${archetypes.join(', ')}`);
-  }
-
   if (operator.rawIdentity) {
-    parts.push('**Who you are:**');
     parts.push(operator.rawIdentity);
   }
 
@@ -505,12 +494,13 @@ export function buildSystemPrompt(
   }
 
   if (operator.ethicalBoundaries && operator.ethicalBoundaries.length > 0) {
-    parts.push('**Operator Ethical Boundaries (never cross these):**');
+    parts.push('**Ethical Boundaries (never cross these):**');
     operator.ethicalBoundaries.forEach((b) => parts.push(`- ${b}`));
   }
 
   parts.push('');
-  parts.push('## My evolving self');
+  // No section header for evolving character — backstory + tone + style flow
+  // as continuation of identity prose, not as a labeled architectural section.
 
   if (soul.backstory) {
     parts.push(soul.backstory);
@@ -533,36 +523,17 @@ export function buildSystemPrompt(
     soul.valuesManifestation.forEach((v) => parts.push(`- ${v}`));
   }
 
-  parts.push('');
-  parts.push('## My current state');
-
-  if (selfAwareness) {
-    const h = selfAwareness.healthScore;
-    const gaps = selfAwareness.mandateGaps;
-
-    // GROW lock state surfaces as natural-prose self-awareness. The GROW engine
-    // reads its actual lock state from DB — this string is only the operator's
-    // own narration of "where I am with my own evolution right now". Raw
-    // counters (proposalCount / appliedCount) and the lock-state names
-    // (OPEN / CONTROLLED / LOCKED / FROZEN) never reach the LLM — admin UI
-    // pulls those straight from DB on its own surface.
-    const effectiveGrowLock = selfAwareness.growLockLevel ?? 'CONTROLLED';
-    const growLockDesc = GROW_LOCK_DESCRIPTIONS[effectiveGrowLock];
-    if (growLockDesc) {
-      parts.push(growLockDesc);
-    }
-
-    if (h) {
-      parts.push(`My state right now: ${h.label}.`);
-    }
-
-    if (gaps && gaps.length > 0) {
-      parts.push(`Areas where my familiarity is still building: ${gaps.join(', ')}.`);
-    }
-
-    parts.push('');
-  }
-
+  // Self-awareness section removed from operator-visible prompt 2026-05-14
+  // (owner direction: "Hide it, all of it, I want them just work on it").
+  // The operator does not read its own internal state in its prompt — same
+  // way humans do not have a real-time mental display of their dopamine
+  // levels while talking to a friend. The selfAwareness data still flows
+  // through the system (admin dashboard, GROW engine, drift detection) —
+  // it just does not surface as text in the operator's prompt.
+  // The selfAwareness parameter is kept on the function signature for
+  // backward compatibility with callers that still pass it; the data is
+  // available but not rendered into the prompt.
+  void selfAwareness;
 
   parts.push('');
   parts.push(LAYER_4_OPERATIONAL_RULES);
