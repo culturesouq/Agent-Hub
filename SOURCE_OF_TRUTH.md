@@ -56,6 +56,7 @@ Mac = GitHub = Azure. Always.
 9. **Layer 4 rules written by Mohamed only.** Nothing added to Layer 4 that Mohamed did not write himself. Approved text locked here verbatim before any commit.
 10. **No BEHAVIOR_HOW_TO or SKILL_HOW_TO hardcoded in system prompt or chat pipeline.** Behavior and skill guidance lives in platform DNA KB entries only — managed, versioned, not buried in code.
 11. **Be careful what you feed the operator.** Memory and KB receive *filtered facts*, never raw output. Web search results, scraped pages, and skill outputs flow through a distillation step before they reach `operator_memory`. **Never paste structured data (YAML, JSON, key:value blocks) into prose fields like `backstory` or `rawIdentity`.** Backstory is for prose. Layer 2 fields (toneProfile, emotionalRange, etc.) are for the structured slots. Mixing them confuses GROW and the operator's self-awareness.
+12. **All KB and skill content is pure descriptive knowledge — never instructions.** Every KB entry (platform-kb, Agency Core, owner-kb seeds, RAG entries, ingested documents) and every skill description must read like a textbook entry: facts about how things work, what concepts mean, what data structures look like. **Forbidden in KB/skills:** "do this", "don't do that", "always", "never", "you should", "Steps:", numbered instruction lists, "the correct response is...". Behavioural guidance lives ONLY in Layer 4 as guidelines (parent voice, not commands). **Why:** hardcoded rules in KB/skills conflict with the operator's soul-driven autonomy. That conflict is the root cause of operator failure modes — tool-loop, narration drift, identity instability. Operators are intelligent — they read knowledge and apply it themselves based on soul + Layer 4 + situation. The test: if reading the entry sounds like an instruction manual, it's wrong. If it reads like an encyclopedia article, it's right.
 
 ---
 
@@ -216,6 +217,65 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 ---
 
 ## 8. Commit History — newest first
+
+### 2026-05-14 — KB-as-knowledge refactor (in flight, no commit yet)
+
+**What:** Owner identified the architectural root cause of operator failure modes (tool-loop, narration drift, identity instability): KB and skill content across the codebase is written as **instructions** ("do this", "don't do that", "Steps:", "always", "never") rather than as **descriptive knowledge**. Hardcoded rules in KB/skills conflict with the operator's soul-driven autonomy — the operator wrestles with itself. Rule 12 added to § 3.
+
+**Plan (8 ordered steps, owner-approved 2026-05-14):**
+1. Rewrite all 100 `platformKbV1Data.ts` entries as pure descriptive knowledge — pilot 1-2 first for owner voice approval.
+2. Unblock the 200 `_platform-kb` chunks (currently `verification_status='blocked'` from yesterday) once content is rewritten.
+3. Re-seed rewritten content into existing operators (Vael, Nahil, Blank).
+4. Add chat-time retrieval filter so Vael's scoping KB (architecture-describing) is excluded from user-facing chat retrieval but available for Vael's internal validation calls.
+5. Build → deploy → re-run yesterday's 7 leak probes.
+6. Decide on systemPrompt.ts header rename based on probe results (only touch with explicit owner word-by-word approval).
+7. Rewrite `seedAgencyCore.ts` as capability facts (current first-person "I don't wait / I call silently" prose is still instructions).
+8. Audit and rewrite skill descriptions across codebase to remove "Use this when X / Always do Y" wording.
+
+**What this does NOT touch:** systemPrompt.ts, engines (memory, scope-isolation, GROW, soul-anchor, drift detection, archetype framework), operator soul / Layer 4 / DNA wording, Vael Desk pipeline.
+
+**Status (2026-05-14, end of code-change phase — awaiting owner go for commit + deploy):**
+
+All local code changes complete. No git commit yet. No Azure deploy yet.
+
+| # | Step | State | Files touched |
+|---|---|---|---|
+| 1 | Rewrite all platform-kb entries as pure knowledge | ✓ done | `scripts/platformKbV1Data.ts` — 98 entries (deleted PKB-048, PKB-084, PKB-085; added PKB-007 "What errors are — universal framing"). Errors framed as diagnostic states, no prescribed responses. Adapt-vs-adopt preserved as descriptive distinction. Zero "do/don't/always/never/Steps:". |
+| 7 | Rewrite Agency Core as capability facts | ✓ done | `utils/seedAgencyCore.ts` — content rewritten from first-person prose ("I don't wait", "I call silently") to descriptive workspace mechanics. |
+| 8 | Audit + rewrite skill descriptions | ✓ done | `utils/builtinSkills.ts` (10 entries), `routes/chat.ts` (~17 tool descriptions). Side benefit: `http_request` description now lists actual stored secret labels (closes yesterday's missing-labels side effect). |
+| 4 | Chat-time filter for architecture-describing entries | ✓ done | `utils/vectorSearch.ts` — `searchOperatorKb` excludes `source_name LIKE 'Platform Architecture — %'` (Vael's scoping KB). All 5 user-facing call sites covered; no internal call site bypassed. |
+| 3 | Backfill mechanism for existing operators | ✓ done | `utils/platformKbSeed.ts` + `utils/seedAgencyCore.ts` — added `backfillAllPlatformKb` and `reseedAgencyCore` with versioned tags (`v:2026-05-14-knowledge-only`). Idempotent: re-run on subsequent boots no-ops via version match. Wired into `index.ts` boot sequence. On first deploy, every existing operator has its `_platform-kb` and `_agency-core` chunks deleted and re-seeded from the updated source. |
+| 5 | Build, deploy, probes | pending | git commit → `az acr build` → `az containerapp update` → re-run yesterday's 7 leak probes. |
+| 6 | Decide systemPrompt headers | pending | Based on probe results. |
+| 9 | Decide archetype skill execution instructions | pending | seedSkills.ts (18), seed-new-archetype-skills.ts (9), initSeed.ts (17) carry "Do not / Always / Never" inside skill execution briefs. Different category from descriptions — these define WHAT the skill produces. Owner decides whether knowledge-only extends to execution briefs or stops at descriptions. |
+
+**Files changed in this session (local only):**
+- `artifacts/opsoul-api/src/scripts/platformKbV1Data.ts` (full rewrite, ~1000 lines new content)
+- `artifacts/opsoul-api/src/utils/seedAgencyCore.ts` (content rewrite + versioned reseed)
+- `artifacts/opsoul-api/src/utils/platformKbSeed.ts` (versioned backfill + reseed function)
+- `artifacts/opsoul-api/src/utils/builtinSkills.ts` (10 skill descriptions)
+- `artifacts/opsoul-api/src/utils/vectorSearch.ts` (architecture filter on operator KB retrieval)
+- `artifacts/opsoul-api/src/routes/chat.ts` (~17 tool description strings + `http_request` now exposes real secret labels)
+- `artifacts/opsoul-api/src/index.ts` (wires `backfillAllPlatformKb` into boot)
+- `SOURCE_OF_TRUTH.md` (rule 12 added; this session entry)
+
+**What this delivers when deployed:**
+- All operators get the full 100-entry capability KB from day 1, in pure descriptive voice. No "the platform" terminology anywhere.
+- Errors framed as investigation triggers (per `feedback_errors_as_investigation`) — operators read 401/403/429/etc as states with multiple plausible causes, not as terminal failures with prescribed responses.
+- Agency Core describes the workspace mechanics (tools, secrets, integrations, knowledge stores, memory) as facts, not as first-person rules.
+- Skill descriptions in tool schema and BUILTIN_SKILLS catalog are pure capability facts (no "Use this when X").
+- `http_request` description carries the operator's actual stored secret labels (closes yesterday's PKB-side leak from removing `[STATION]` block).
+- Vael's scoping KB ("Platform Architecture — *") is suppressed from user-facing chat retrieval but remains for her internal validation.
+- On first boot, every existing operator (Vael, Nahil, Blank) gets its `_platform-kb` (100 chunks) and `_agency-core` (1 chunk) reseeded from the new content. Idempotent via version stamp on subsequent boots.
+
+**What this does NOT touch:**
+- `systemPrompt.ts` — engines clean (Layer header rename deferred to step 6 decision after probes).
+- `rag_dna` — 5 active entries (Vael Desk approved) unchanged; 92 deactivated entries stay deactivated.
+- Engines: memory, scope-isolation, GROW, soul-anchor, drift-detection, archetype framework — untouched.
+- Operator soul / Layer 4 / DNA wording / Vael Desk pipeline — untouched.
+- Skill execution instructions in seedSkills.ts / seed-new-archetype-skills.ts / initSeed.ts — flagged for separate owner decision (task 9).
+
+**Awaiting owner go for:** `git add -A && git commit && git push origin main && az acr build && az containerapp update`. Once deployed, the 7-probe stress test confirms whether systemPrompt header rename is needed (step 6) or whether the leak is fully closed by the KB rewrite alone.
 
 ### 2026-05-13 — ROLLBACK to ground zero (no commit — image rollback only)
 

@@ -912,7 +912,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         type: 'function',
         function: {
           name: 'web_search',
-          description: 'Search the web for current, live information. Returns text snippets from result pages.',
+          description: 'Issues a search query and returns ranked results — URLs and text snippets from matching pages.',
           parameters: {
             type: 'object',
             properties: {
@@ -932,21 +932,21 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         type: 'function',
         function: {
           name: 'kb_seed',
-          description: 'Persist a validated knowledge entry into your knowledge base. Stores a self-contained factual entry that becomes retrievable in future conversations. Entries land pending VAEL verification.',
+          description: 'Adds an entry to the operator\'s knowledge base. The entry is embedded at insertion time and becomes retrievable in subsequent conversations. New entries land in pending state for verification.',
           parameters: {
             type: 'object',
             properties: {
               content: {
                 type: 'string',
-                description: 'The knowledge entry to store — a self-contained factual insight, typically 100–400 words.',
+                description: 'The knowledge content to store — a self-contained factual chunk, typically 100–400 words.',
               },
               source: {
                 type: 'string',
-                description: 'Name of the source(s) this was derived from (e.g. "Google AI Blog 2024, MIT study on transformer efficiency").',
+                description: 'Source identifier(s) the entry was derived from (e.g. "Google AI Blog 2024, MIT study on transformer efficiency").',
               },
               confidence: {
                 type: 'number',
-                description: 'Confidence score 0–100 reflecting source quality and corroboration.',
+                description: 'Confidence score 0–100 reflecting expected reliability of the entry.',
               },
             },
             required: ['content', 'source', 'confidence'],
@@ -960,13 +960,13 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     type: 'function',
     function: {
       name: 'write_file',
-      description: 'Create or update a file in your workspace. The file becomes visible to the owner in the Files tab and downloadable from there.',
+      description: 'Creates or replaces a file in the operator\'s workspace under a chosen name. Files persist across conversations and appear in the Files tab.',
       parameters: {
         type: 'object',
         properties: {
           filename: { type: 'string', description: 'Filename including extension (e.g. "report.md", "todo.txt")' },
-          content: { type: 'string', description: 'Full file content. Well-formatted and ready to use.' },
-          action: { type: 'string', enum: ['create', 'update'], description: 'Whether to create a new file or update an existing one.' },
+          content: { type: 'string', description: 'Full file content as a string.' },
+          action: { type: 'string', enum: ['create', 'update'], description: '\'create\' for a new file, \'update\' to overwrite an existing one.' },
         },
         required: ['filename', 'content', 'action'],
       },
@@ -978,7 +978,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     type: 'function',
     function: {
       name: 'http_request',
-      description: 'Make an HTTP request to an external API using your stored secrets. Use {{SECRET_NAME}} as a placeholder in headers or body to inject a stored secret by its label.',
+      description: 'Issues an HTTP request to an external endpoint. Stored secrets are referenced via the {{SECRET_NAME}} syntax in URL, headers, or body; the label resolves to its value at call time. Available stored secret labels: ' + (liveSecrets.length > 0 ? liveSecrets.map(s => `{{${s}}}`).join(', ') : '(none stored)') + '.',
       parameters: {
         type: 'object',
         properties: {
@@ -986,12 +986,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           url: { type: 'string', description: 'Full URL including query parameters' },
           headers: {
             type: 'object',
-            description: 'HTTP headers as key-value pairs. Use {{SECRET_NAME}} to inject a stored secret by its label.',
+            description: 'HTTP headers as key-value pairs. {{SECRET_NAME}} placeholders are resolved to stored secret values at call time.',
             additionalProperties: { type: 'string' },
           },
           body: {
             type: 'string',
-            description: 'Request body as a JSON string (for POST/PUT/PATCH). Use {{SECRET_NAME}} to inject stored secret values.',
+            description: 'Request body as a JSON string (for POST/PUT/PATCH). {{SECRET_NAME}} placeholders are resolved to stored secret values at call time.',
           },
         },
         required: ['method', 'url'],
@@ -1004,7 +1004,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     type: 'function',
     function: {
       name: 'read_file',
-      description: 'Read the full content of a file in your workspace by filename.',
+      description: 'Returns the contents of a workspace file by name.',
       parameters: {
         type: 'object',
         properties: {
@@ -1020,7 +1020,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     type: 'function',
     function: {
       name: 'list_files',
-      description: 'List the files in your workspace. Returns each filename with its size and last update time.',
+      description: 'Enumerates files present in the workspace with size and last-update timestamp.',
       parameters: {
         type: 'object',
         properties: {},
@@ -1034,12 +1034,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     type: 'function',
     function: {
       name: 'schedule_task',
-      description: 'Create a recurring task that wakes you up on a schedule with a prompt to run. Use this when something needs to be done repeatedly without the owner having to ask each time.',
+      description: 'Creates a recurring task with a daily or weekly schedule. The task fires on schedule, executing a stored prompt against the operator.',
       parameters: {
         type: 'object',
         properties: {
           name: { type: 'string', description: 'Short label for the task (shown in the Tasks tab).' },
-          prompt: { type: 'string', description: 'The instruction you want to run on each schedule. Be specific — this is what the next-run version of you will read.' },
+          prompt: { type: 'string', description: 'The prompt that will execute on each scheduled run. Read by the next-run instance of the operator as its task brief.' },
           schedule: { type: 'string', enum: ['daily', 'weekly'], description: 'How often the task fires.' },
         },
         required: ['name', 'prompt', 'schedule'],
@@ -1052,7 +1052,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     type: 'function',
     function: {
       name: 'update_task',
-      description: 'Change the name, prompt, or schedule of one of your existing tasks. Match the task by its current name.',
+      description: 'Modifies the name, prompt, or schedule of an existing task, identified by its current name.',
       parameters: {
         type: 'object',
         properties: {
@@ -1071,7 +1071,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     type: 'function',
     function: {
       name: 'pause_task',
-      description: 'Pause a task so it stops firing on its schedule. The task is kept and can be resumed later. Match by name.',
+      description: 'Sets a task to paused state. A paused task is preserved but does not fire on its schedule.',
       parameters: {
         type: 'object',
         properties: {
@@ -1087,7 +1087,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     type: 'function',
     function: {
       name: 'resume_task',
-      description: 'Resume a paused task so it starts firing again on its schedule. Match by name.',
+      description: 'Sets a paused task to active state, resuming its scheduled firing.',
       parameters: {
         type: 'object',
         properties: {
@@ -1103,7 +1103,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     type: 'function',
     function: {
       name: 'delete_task',
-      description: 'Permanently delete a task. Use only when the task is no longer needed. Match by name.',
+      description: 'Removes a task permanently from the operator\'s task list.',
       parameters: {
         type: 'object',
         properties: {

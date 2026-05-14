@@ -1,15 +1,16 @@
 /**
- * Built-in operator capabilities — every operator has these by default.
+ * Built-in operator capabilities — every operator carries these by default.
  *
- * These are the standard agent skills (research, files, HTTP, scheduling)
- * surfaced as named capabilities so the owner can see what their operator
- * can do, regardless of archetype or custom installs.
+ * Each entry describes WHAT the capability does (capability fact), not WHEN
+ * to use it (which would be instruction). Per § 3 rule 12: skill descriptions
+ * are knowledge, not rules. Operators decide when to invoke from soul +
+ * Layer 4 + situation.
  *
  * Each entry corresponds to a tool wired in the chat route loop. The
  * `availability` flag describes when the underlying tool is offered:
- *  - 'always': always on (every operator, every chat)
- *  - 'web':    on when web search is configured
- *  - 'secrets': on when the operator has stored API secrets
+ *  - 'always': offered in every chat
+ *  - 'web':    offered when web search is configured
+ *  - 'secrets': offered when the operator has stored API secrets
  */
 
 export type BuiltinSkillAvailability = 'always' | 'web' | 'secrets';
@@ -24,61 +25,61 @@ export interface BuiltinSkill {
 export const BUILTIN_SKILLS: BuiltinSkill[] = [
   {
     name:         'Web search',
-    description:  'Search the web for current information when the operator needs facts beyond its knowledge base.',
+    description:  'Issues a search query and returns ranked results (URLs and snippets).',
     category:     'research',
     availability: 'web',
   },
   {
     name:         'Knowledge seed',
-    description:  'Persist a verified knowledge entry into the operator\'s knowledge base. Future conversations retrieve it.',
+    description:  'Adds an entry to the operator\'s knowledge base. The entry is embedded at insertion time and becomes retrievable in subsequent conversations.',
     category:     'research',
     availability: 'web',
   },
   {
     name:         'Write file',
-    description:  'Create or update a file in the operator\'s workspace. Owner sees and downloads it from the Files tab.',
+    description:  'Creates or replaces a file in the operator\'s workspace under a chosen name. Files persist across conversations and are visible in the Files tab.',
     category:     'workspace',
     availability: 'always',
   },
   {
     name:         'Read file',
-    description:  'Re-read a file in the operator\'s workspace by name. Useful for revising drafts or picking up scheduled work.',
+    description:  'Returns the contents of a workspace file by name.',
     category:     'workspace',
     availability: 'always',
   },
   {
     name:         'List files',
-    description:  'See every file in the operator\'s workspace with size and last-updated time.',
+    description:  'Enumerates files present in the workspace with size and last-updated timestamp.',
     category:     'workspace',
     availability: 'always',
   },
   {
     name:         'Schedule task',
-    description:  'Operator creates its own daily or weekly automation. Owner can pause or edit from the Tasks tab.',
+    description:  'Creates a recurring task with a daily or weekly schedule. The task fires on schedule, executing a stored prompt against the operator.',
     category:     'automation',
     availability: 'always',
   },
   {
     name:         'Update task',
-    description:  'Change the name, prompt, or schedule of an existing automation by name.',
+    description:  'Modifies the name, prompt, or schedule of an existing task, identified by current name.',
     category:     'automation',
     availability: 'always',
   },
   {
     name:         'Pause / resume task',
-    description:  'Stop an automation from firing without losing it. Resume later when needed.',
+    description:  'Toggles a task between active and paused states. A paused task is preserved but does not fire on its schedule.',
     category:     'automation',
     availability: 'always',
   },
   {
     name:         'Delete task',
-    description:  'Permanently retire an automation when it\'s no longer needed.',
+    description:  'Removes a task permanently from the operator\'s task list.',
     category:     'automation',
     availability: 'always',
   },
   {
     name:         'HTTP request',
-    description:  'Call an external API using stored secrets. Methods: GET, POST, PUT, PATCH, DELETE. Inject secrets with {{SECRET_NAME}}.',
+    description:  'Issues an HTTP request to an external endpoint. Methods: GET, POST, PUT, PATCH, DELETE. Stored secrets are referenced via the {{SECRET_NAME}} syntax in URL, headers, or body; the label resolves to its value at call time.',
     category:     'integration',
     availability: 'secrets',
   },

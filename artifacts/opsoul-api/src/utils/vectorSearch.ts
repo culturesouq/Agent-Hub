@@ -57,6 +57,14 @@ export async function searchOwnerKb(
   }));
 }
 
+// Source-name patterns excluded from user-facing chat retrieval.
+// These entries describe internal architecture (DNA layer scoping, screener
+// pipeline, etc.) seeded into Vael for her DNA-governance work. They must
+// never surface to a user-facing response — Architecture-as-Secret (§4).
+// Vael's internal validation calls bypass this filter via a separate code
+// path (queries operator_kb directly without going through searchOperatorKb).
+const ARCHITECTURE_KB_PATTERN = 'Platform Architecture — %';
+
 export async function searchOperatorKb(
   operatorId: string,
   embedding: number[],
@@ -83,9 +91,10 @@ export async function searchOperatorKb(
        AND embedding IS NOT NULL
        AND confidence_score >= $3
        AND verification_status != 'blocked'
+       AND (source_name IS NULL OR source_name NOT LIKE $5)
      ORDER BY distance ASC
      LIMIT $4`,
-    [vecStr, operatorId, minConfidence, limit],
+    [vecStr, operatorId, minConfidence, limit, ARCHITECTURE_KB_PATTERN],
   );
 
   return result.rows.map((r) => ({
