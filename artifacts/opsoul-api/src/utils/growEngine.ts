@@ -276,13 +276,77 @@ export async function runGrowCycle(operatorId: string): Promise<{
     .from(selfAwarenessStateTable)
     .where(eq(selfAwarenessStateTable.operatorId, operatorId));
 
+  // === GUARD 4: Cumulative drift hard block ===
+  // Hardened 2026-05-14 (audit finding: was advisory-only, now hard-blocks).
+  // If the most recent drift cron run flagged this operator above the 30%
+  // threshold, no new GROW proposals are generated until the owner reviews
+  // and clears the flag. Patent claim: "drift threshold blocks proposals".
+  const identityState = (selfAwareness?.identityState as Record<string, unknown> | undefined) ?? {};
+  const driftFlagged = identityState.driftFlagged === true;
+  const driftScore = typeof identityState.driftScore === 'number' ? identityState.driftScore : null;
+  if (driftFlagged) {
+    const proposalId = crypto.randomUUID();
+    await db.insert(growProposalsTable).values({
+      id: proposalId,
+      operatorId,
+      proposedChanges: {},
+      selfAwarenessSnapshot: selfAwareness ?? null,
+      status: 'rejected',
+      retryCount: 0,
+      claudeReasoning: `Guard 4 (cumulative drift): proposal cycle hard-rejected. Operator drift score ${driftScore !== null ? (driftScore * 100).toFixed(1) + '%' : 'unknown'} exceeds 30% threshold. Owner review required to clear identityState.driftFlagged before further GROW proposals.`,
+      evaluatedAt: new Date(),
+      decidedAt: new Date(),
+    });
+    console.warn(`[GROW] Guard 4 (drift) blocked proposal cycle for operator ${operatorId} — drift ${driftScore !== null ? (driftScore * 100).toFixed(1) : '?'}% > 30% threshold`);
+    return {
+      proposalId,
+      status: 'rejected_drift',
+      changesApplied: 0,
+      fieldsBlocked: 0,
+      needsOwnerReview: false,
+      semanticGuardTriggered: false,
+      layer1ViolationsBlocked: 0,
+    };
+  }
+
   // GROW content input: PII-free Layer 2 insights — zero cross-scope bleed
   const mainMemory = await getMainMemoryContext(operatorId);
 
-  // Guard 2 input: scoped authenticated messages for manipulation detection only
+  // Guard 3 input: scoped authenticated messages for manipulation detection
   const guardMessages = await getScopedMessagesForGuard(operatorId);
   const semanticGuard = runSemanticIdentityGuard(guardMessages);
   const semanticGuardLabels = semanticGuard.matches.map((m) => m.label);
+
+  // === GUARD 3: Semantic identity manipulation hard block ===
+  // Hardened 2026-05-14 (audit finding: was warning-only, now hard-blocks).
+  // When 13-pattern detector matches manipulation attempts in recent user
+  // messages, no new GROW proposal is generated this cycle. Prevents
+  // adversarial users from steering operator evolution. Patent claim:
+  // "semantic identity manipulation detector blocks proposals".
+  if (semanticGuard.triggered) {
+    const proposalId = crypto.randomUUID();
+    await db.insert(growProposalsTable).values({
+      id: proposalId,
+      operatorId,
+      proposedChanges: {},
+      selfAwarenessSnapshot: selfAwareness ?? null,
+      status: 'rejected',
+      retryCount: 0,
+      claudeReasoning: `Guard 3 (semantic identity manipulation): proposal cycle hard-rejected. Manipulation patterns detected in recent user messages: ${semanticGuardLabels.join(', ')}. No proposal generated this cycle to prevent adversarial steering.`,
+      evaluatedAt: new Date(),
+      decidedAt: new Date(),
+    });
+    console.warn(`[GROW] Guard 3 (semantic) blocked proposal cycle for operator ${operatorId}: ${semanticGuardLabels.join(', ')}`);
+    return {
+      proposalId,
+      status: 'rejected_manipulation',
+      changesApplied: 0,
+      fieldsBlocked: 0,
+      needsOwnerReview: false,
+      semanticGuardTriggered: true,
+      layer1ViolationsBlocked: 0,
+    };
+  }
 
   const proposalId = crypto.randomUUID();
   const selfAwarenessSnapshot = selfAwareness ?? null;

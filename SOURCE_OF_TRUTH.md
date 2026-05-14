@@ -777,6 +777,36 @@ Owner asked: *"if we missed operator-as-driver, what else? SOT first day entries
 
 ---
 
+### 2026-05-14 — GROW guards 3+4 hardened to actual hard blocks (closes Gap 2 from audit)
+
+Owner approved hardening of guards 3 and 4 to bring code in line with patent claim language ("guards block proposals", not "guards log proposals").
+
+**Guard 3 (Semantic identity manipulation): hardened to hard block.** Previously: 13 patterns matched in user messages were passed as labels to the Claude prompt (warning only — Claude could still propose changes). Now: when `runSemanticIdentityGuard()` returns `triggered: true`, the entire proposal cycle is hard-rejected with status `rejected_manipulation` BEFORE Claude is called. No proposal generated when manipulation patterns are present in recent user messages. Prevents adversarial users from steering operator evolution. `growEngine.ts:332-352`.
+
+**Guard 4 (Cumulative drift threshold): hardened to hard block.** Previously: drift was computed quarterly by `checkCumulativeDrift()` cron (`growEngine.ts:696-754`) and stored in `identityState.driftFlagged` — but no enforcement. Now: at the start of `evaluateAndApply`, the operator's `identityState.driftFlagged` is checked. If `true`, the entire proposal cycle is hard-rejected with status `rejected_drift`. Owner must review and clear the flag (via admin endpoint) before further GROW proposals will be generated. `growEngine.ts:281-310`.
+
+**Both rejections persist a `growProposalsTable` row with `status='rejected'`** so the audit trail shows the reason (`claudeReasoning` field carries the explanation). Owner can query rejected proposals to see what was attempted and why it was blocked.
+
+**Patent claim now accurate:** all four GROW guards are real hard blocks. PII (Guard 1), Layer 1 immutable lock (Guard 2), semantic identity manipulation (Guard 3 — hardened today), cumulative drift threshold (Guard 4 — hardened today). Patent text can use "blocks" language confidently.
+
+**Operator-as-driver (Gap 1) — planning documented for next session:**
+
+Multi-day refactor. Touches all 5 chat routes. Architecturally restructures how operator chat works. Will be built across 2-3 focused sessions with owner validation at each step. High-level plan:
+
+1. Define `OperatorAgent` interface — receives user message, classifies intent, dispatches strategy.
+2. Build LLM call wrappers as discrete tasks: `computeDomainAnswer(question, context)`, `extractIntent(message, allowedIntents)`, `validateResponseAgainstSoul(response, operator)`, etc.
+3. Build response composition layer — operator takes LLM outputs, validates against soul, composes user-facing reply in operator voice.
+4. Refactor each chat route to use `OperatorAgent` instead of direct LLM call.
+5. Frontend Hub UI updates if response shape changes.
+6. Comprehensive test pass.
+
+This is the structural answer to all leak gaps (English, Arabic, future languages, future LLMs). When LLM never speaks directly to user, leaks at the LLM level can't reach user. Tracked as task #14, deferred to next focused session.
+
+**Files touched today (this entry):**
+- `artifacts/opsoul-api/src/utils/growEngine.ts` — Guards 3+4 hardened.
+
+---
+
 ### 2026-05-14 — OSG Step 1 LIVE — `osg-step1-dfbcb37` deployed (revision 0000047)
 
 **Built:** ACR Run `dg59`, image `opsoul-api:osg-step1-dfbcb37`. Boot logs confirmed:
