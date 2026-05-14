@@ -28,7 +28,7 @@ import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 // self-awareness layer initiates curiosity, not the chat route. Silent
 // `[WEB CONTEXT]` auto-injection removed (Phase 4). The web_search tool
 // remains available for the operator to call when its own soul decides.
-import { assembleOperatorPrompt, buildBirthSystemPrompt } from '../utils/systemPrompt.js';
+import { assembleOperatorPrompt, buildBirthSystemPrompt, buildTemporalContext } from '../utils/systemPrompt.js';
 import type { SelfAwarenessSnapshot, BuildSystemPromptOpts } from '../utils/systemPrompt.js';
 import { searchMemory, buildMemoryContext, distillMemoriesFromConversations, storeMemory, distillRawContentForMemory } from '../utils/memoryEngine.js';
 import type { MemoryHit } from '../utils/memoryEngine.js';
@@ -1029,6 +1029,28 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     },
   };
 
+  // get_current_time tool — always offered; operator pulls current time when
+  // a time-relative question arises. Replaces the previous always-on temporal
+  // substrate auto-injection. Operator carries no time in its head; calls the
+  // tool when it needs to know.
+  const getCurrentTimeTool: ToolDefinition = {
+    type: 'function',
+    function: {
+      name: 'get_current_time',
+      description: 'Returns the current date and time. Defaults to Asia/Dubai (GST). Optional timezone parameter accepts an IANA timezone identifier (e.g. "America/New_York", "Asia/Tokyo", "Europe/London", "UTC") for time elsewhere in the world.',
+      parameters: {
+        type: 'object',
+        properties: {
+          timezone: {
+            type: 'string',
+            description: 'IANA timezone identifier. Defaults to Asia/Dubai when omitted.',
+          },
+        },
+        required: [],
+      },
+    },
+  };
+
   // schedule_task tool — always offered; operator can create its own automations
   const scheduleTaskTool: ToolDefinition = {
     type: 'function',
@@ -1195,6 +1217,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         iterTools.push(writeFileTool);
         iterTools.push(readFileTool);
         iterTools.push(listFilesTool);
+        iterTools.push(getCurrentTimeTool);
         iterTools.push(scheduleTaskTool);
         iterTools.push(updateTaskTool);
         iterTools.push(pauseTaskTool);
@@ -1452,6 +1475,32 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
               role: 'assistant',
               content: iterContent || '',
               tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'list_files', arguments: iterToolCall.args } }],
+            },
+            { role: 'tool', content: toolResultText, tool_call_id: iterToolCall.id },
+          );
+          continue;
+        }
+
+        // ── GET CURRENT TIME TOOL CALL ─────────────────────────────────────
+        if (iterToolCall?.name === 'get_current_time') {
+          let timeArgs: { timezone?: string } = {};
+          try { timeArgs = JSON.parse(iterToolCall.args); } catch { /* default to Asia/Dubai */ }
+          const tz = timeArgs.timezone || 'Asia/Dubai';
+          console.log(`[agency] loop iter ${iter} — get_current_time (${tz})`);
+          res.write(`data: ${JSON.stringify({ checking_time: tz })}\n\n`);
+
+          let toolResultText: string;
+          try {
+            toolResultText = buildTemporalContext(new Date(), tz);
+          } catch (err: any) {
+            toolResultText = `Invalid timezone "${tz}". The timezone parameter accepts IANA identifiers such as "Asia/Dubai", "America/New_York", "Europe/London", "UTC".`;
+          }
+
+          loopMessages.push(
+            {
+              role: 'assistant',
+              content: iterContent || '',
+              tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'get_current_time', arguments: iterToolCall.args } }],
             },
             { role: 'tool', content: toolResultText, tool_call_id: iterToolCall.id },
           );
@@ -1753,6 +1802,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       syncTools.push(writeFileTool);
       syncTools.push(readFileTool);
       syncTools.push(listFilesTool);
+      syncTools.push(getCurrentTimeTool);
       syncTools.push(scheduleTaskTool);
       syncTools.push(updateTaskTool);
       syncTools.push(pauseTaskTool);
@@ -1892,6 +1942,29 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           { role: 'system', content: `[Files in workspace]\n${toolResultText}` },
         ];
         const secondResult = await chatCompletion(listMessages, chatOpts);
+        finalContent = secondResult.content;
+        finalPromptTokens = secondResult.promptTokens;
+        finalCompletionTokens = secondResult.completionTokens;
+      }
+
+      // Get current time — operator called get_current_time tool (sync path)
+      if (!capabilityFired && result.toolCall && result.toolCall.name === 'get_current_time') {
+        let timeArgs: { timezone?: string } = {};
+        try { timeArgs = JSON.parse(result.toolCall.args); } catch { /* default tz */ }
+        const tz = timeArgs.timezone || 'Asia/Dubai';
+        console.log(`[agency] get_current_time (sync): ${tz}`);
+        capabilityFired = true;
+        let toolResultText: string;
+        try {
+          toolResultText = buildTemporalContext(new Date(), tz);
+        } catch {
+          toolResultText = `Invalid timezone "${tz}". The timezone parameter accepts IANA identifiers such as "Asia/Dubai", "America/New_York", "Europe/London", "UTC".`;
+        }
+        const timeMessages: ChatMessage[] = [
+          ...messages,
+          { role: 'system', content: `[Current time]\n${toolResultText}` },
+        ];
+        const secondResult = await chatCompletion(timeMessages, chatOpts);
         finalContent = secondResult.content;
         finalPromptTokens = secondResult.promptTokens;
         finalCompletionTokens = secondResult.completionTokens;

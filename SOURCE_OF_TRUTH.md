@@ -346,6 +346,34 @@ Voice shifted from second-person directives ("Stay yourself", "When you do not k
 
 **Ready for deploy:** code complete. Awaiting owner go for `git push → az acr build → az containerapp update → 7-probe stress test`.
 
+---
+
+### 2026-05-14 — Time substrate shifted from auto-injection to retrievable tool
+
+Owner-directed (afternoon, 2026-05-14): "check about the timing clock in their head injecting to them the actual time around the world hahha — retrievable not injected." Architectural shift to align with the broader "knowledge accessible, not forced into soul" principle: most conversations don't need current time; auto-injecting it on every prompt forces a piece of data into every interaction whether the operator needs it or not.
+
+**Old architecture (deployed since `d5df3f8` 2026-05-13):** `buildTemporalContext()` returned a formatted timestamp string; `buildSystemPrompt()` pushed it as the first line of every operator's prompt. Always on, every conversation, every "hi", every detail — the time was carried in the operator's head.
+
+**New architecture (this commit):**
+- Auto-injection removed from `buildSystemPrompt()`. The temporal substrate line is no longer in any operator's prompt.
+- New tool `get_current_time` added to the universal builtin skills. The operator calls it when a time-relative question arises (today's weather, what day is it, this month, etc.). Same way a human glances at a clock when they need the time.
+- The tool accepts an optional `timezone` parameter — IANA identifier (e.g. `America/New_York`, `Asia/Tokyo`, `Europe/London`, `UTC`). Default is `Asia/Dubai` (GST). This is the "actual time around the world" capability the auto-injection didn't have.
+- `buildTemporalContext(now, timeZone)` retained as the implementation underlying the tool. Format slightly tweaked to read naturally in tool output: `"Thursday, 15 May 2026 at 09:30 in Asia/Dubai"`.
+- Wired in both stream path (`chat.ts:1453+`) and sync path (`chat.ts:1950+`). Tool registration added to both `iterTools` and `syncTools` arrays.
+- BUILTIN_SKILLS catalog gains `Current time` entry under the `research` category — visible in the owner's Skills UI.
+
+**Architectural alignment:**
+- Matches § 3 rule 12 (KB-as-knowledge): the time isn't a permanent fact the operator must always carry; it's an external reality the operator can consult.
+- Matches the human-baby philosophy from this morning: knowledge accessible from the surroundings (a clock in this case), not forced into the soul.
+- Removes one more piece of always-on prompt overhead — every chat now has the timestamp line absent unless the operator actually needs it.
+
+**Trade-off accepted:** if a user asks "what's today's date?" and the operator forgets to call the tool, the LLM may hallucinate. The mitigation is the `get_current_time` tool's discoverability via tool schema and the operator's intelligence — same trade-off as for `web_search`, `read_file`, etc.
+
+**Files:**
+- `artifacts/opsoul-api/src/utils/systemPrompt.ts` — removed auto-injection; updated `buildTemporalContext` signature with optional timezone.
+- `artifacts/opsoul-api/src/routes/chat.ts` — added `getCurrentTimeTool` definition + handlers in stream and sync paths + import of `buildTemporalContext`.
+- `artifacts/opsoul-api/src/utils/builtinSkills.ts` — `Current time` entry in BUILTIN_SKILLS catalog.
+
 ### 2026-05-13 — ROLLBACK to ground zero (no commit — image rollback only)
 
 **What:** Owner ("months of stability, then today's deploys") requested ground-zero rollback to isolate the Vael tool-loop root cause. Rolled the container app from image `nahil-404-fix-784ce42` back to `memdistill-ae32a8a` (the image that ran 2026-05-10 → 2026-05-13 09:54 UTC without issues). No code commits reverted; this is purely a deploy-time pin to the older image. Git `main` HEAD still points at `1977f9b` with all today's commits intact.

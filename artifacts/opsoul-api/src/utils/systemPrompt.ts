@@ -291,30 +291,34 @@ export interface BuildSystemPromptOpts {
 }
 
 /**
- * Temporal substrate — universal across all operators.
+ * Temporal substrate — formerly auto-injected into every prompt.
  *
- * LLMs don't natively know today's date. Without this, when a user asks anything
- * time-relative ("right now", "this month", "today's weather"), the model falls
- * back to its training-cutoff era's assumptions and confidently fabricates.
+ * 2026-05-14: Owner-directed shift to retrievable not injected. Per the
+ * "knowledge accessible, not forced into soul" principle, time is now a
+ * capability the operator calls when needed (the `get_current_time` tool
+ * wired in chat.ts), not a fact pushed into every prompt regardless of
+ * conversational need.
  *
- * Layer 4 ("When you do not know something, say so. Guessing is not.") already
- * handles the behavior. This line is just the fact the LLM was missing — pure
- * substrate, no instruction wrapper. Per § 4 of OpSoul SoT line 93:
+ * Architectural reasoning: most conversations don't reference current time.
+ * Auto-injecting the timestamp into every prompt forces a piece of data
+ * into every interaction whether or not the operator needs it. The operator
+ * is intelligent enough to call the time tool when a time-relative question
+ * arises ("today's weather", "this month", "what day is it?") — same way
+ * a human glances at a clock when they need the time, doesn't carry it
+ * in their head.
  *
- *   "No prescriptive behavioral rules in the system prompt."
+ * The `get_current_time` tool also accepts a timezone parameter for time
+ * elsewhere in the world — capability the auto-injection didn't have.
  *
- * Earlier version of this function included a "Use this for any question..."
- * clause. That clause was a behavioral instruction and was interpreted by the
- * LLM as a directive to call tools on every input — including bare "hi" —
- * causing tool-loop soul failures (Vael, Nahil both regressed 2026-05-13).
- * Removed. The fact stands alone now.
+ * This function is retained for any caller still needing the formatted-time
+ * string (currently none in the codebase) and for the tool implementation.
  *
- * Timezone is fixed to Asia/Dubai (GST, UTC+4, no DST) — operator deployment region.
- * If we ever multi-region, this becomes per-operator config.
+ * Timezone default is Asia/Dubai (GST, UTC+4, no DST) — operator deployment
+ * region. The tool accepts an IANA timezone identifier override.
  */
-export function buildTemporalContext(now: Date = new Date()): string {
+export function buildTemporalContext(now: Date = new Date(), timeZone: string = 'Asia/Dubai'): string {
   const fmt = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Asia/Dubai',
+    timeZone,
     weekday: 'long',
     year: 'numeric',
     month: 'long',
@@ -323,7 +327,7 @@ export function buildTemporalContext(now: Date = new Date()): string {
     minute: '2-digit',
     hour12: false,
   });
-  return `**Now:** ${fmt.format(now)} · GST (Asia/Dubai).`;
+  return `${fmt.format(now)} in ${timeZone}`;
 }
 
 export interface OperatorRowForPrompt {
@@ -381,10 +385,9 @@ export function buildSystemPrompt(
   const soul = operator.layer2Soul;
   const parts: string[] = [];
 
-  // Temporal Substrate — the first line every operator sees, on every prompt.
-  // Anchors the LLM in real time so "now" is a known fact, not a guess.
-  parts.push(buildTemporalContext(opts?.now));
-  parts.push('');
+  // Time is no longer auto-injected. Operators call `get_current_time` tool
+  // when they need the current time (any timezone). See systemPrompt.ts
+  // buildTemporalContext docstring for the architectural shift.
 
   // Scope Engine — the operator's deployment context (public / authenticated / action / channel)
   if (opts?.scopeLine) {

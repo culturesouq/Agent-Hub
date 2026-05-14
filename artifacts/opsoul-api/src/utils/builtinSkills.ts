@@ -54,6 +54,12 @@ export const BUILTIN_SKILLS: BuiltinSkill[] = [
     availability: 'always',
   },
   {
+    name:         'Current time',
+    description:  'Returns the current date and time for any timezone (IANA identifier). Defaults to Asia/Dubai (GST).',
+    category:     'research',
+    availability: 'always',
+  },
+  {
     name:         'Schedule task',
     description:  'Creates a recurring task with a daily or weekly schedule. The task fires on schedule, executing a stored prompt against the operator.',
     category:     'automation',
