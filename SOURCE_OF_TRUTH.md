@@ -807,6 +807,61 @@ This is the structural answer to all leak gaps (English, Arabic, future language
 
 ---
 
+### 2026-05-14 — DEEPER SCOPE AUDIT: Layer 2 chat retrieval has NO source_scope filter (Nahil bug can recur)
+
+Owner asked: *"check the scopes public authenticated and channels also missed and we saw it with Nahil memory in the app."* Deeper audit triggered. Earlier audit (this morning) verified scope isolation at Layer 1 level — that finding stands. But the Layer 2 picture is broken.
+
+**Finding: Layer 2 chat retrieval ignores source_scope. The Nahil cross-scope pollution bug from 2026-05-13 can recur as-coded.**
+
+**Evidence (memoryEngine.ts:93-103):**
+```sql
+SELECT id, content, memory_type, confidence, created_at,
+       (embedding <=> $1::vector) AS distance
+FROM operator_main_memory
+WHERE operator_id = $2
+  AND embedding IS NOT NULL
+  AND archived_at IS NULL
+  AND grow_eligible = TRUE
+  AND (1 - (embedding <=> $1::vector)) >= $3
+ORDER BY distance ASC
+LIMIT $4
+```
+
+No `WHERE source_scope = $X` filter. The query returns ALL grow_eligible Layer 2 entries for an operator, regardless of which scope created them.
+
+**Source scope IS tracked but dead for retrieval:**
+- Schema (`lib/db/src/schema/main_memory.ts:10-28`): `sourceScope: text('source_scope').notNull()` — column exists.
+- Insert (`memoryEngine.ts:273-278` in `storeMainMemory`): `sourceScope` is correctly persisted with each entry.
+- Retrieval (`memoryEngine.ts:93-103` in `searchLayer2Memory`): `source_scope` is never read or filtered.
+
+**Reproducibility of the Nahil bug:**
+
+1. Smoke test on production Nahil with `userId='farmer-test-42'` (authenticated scope).
+2. Distillation creates Layer 2 entry with `source_scope='authenticated:farmer-test-42'`, `grow_eligible=true` (confidence ≥ 0.80).
+3. Owner chats with Nahil as `authenticated:owner-id`.
+4. `searchLayer2Memory()` filters on `operator_id` and `grow_eligible` only — NOT on source_scope.
+5. Owner retrieves farmer-test-42's "gardening" memory in their context.
+6. Operator response leaks the pollution.
+
+**Affected scope crossings (all leak):**
+- Authenticated user A → surfaces to authenticated user B (the Nahil scenario).
+- Public/guest → surfaces to authenticated users and other guests.
+- Channel (Telegram, WhatsApp) → surfaces to other channels and to owner.
+- Action-scope task patterns (e.g., "Generates marketing copy") → surfaces to ANY chat user, exposing the operator's action capability schema.
+
+**Architectural tension:** Patent claim § 5 item 9 + § 6 item 4 says Layer 2 is "PII-stripped, cross-scope by design." Intent: operator learns generic patterns across all interactions for GROW eligibility. But the design has TWO consumers of Layer 2: (a) the GROW engine reads main memory to feed evolution proposals — needs cross-scope aggregation; (b) chat retrieval reads main memory to inject context into responses — should be scope-bound to prevent pollution.
+
+**Proposed fix (Option A, owner-recommended): add scope-ID exact match for CHAT retrieval; leave GROW retrieval unchanged.**
+
+- `searchLayer2Memory()` (called from chat routes via `searchMemory()`): add `WHERE source_scope = $request_scope_id` clause. Same isolation as Layer 1.
+- `getMainMemoryContext()` (called from GROW engine `evaluateAndApply`): unchanged — still aggregates all grow-eligible entries cross-scope.
+
+This preserves the patent claim's "cross-scope" intent for GROW (operator-evolution data) while closing the chat-time pollution path. Tracked as task #17. Owner decision pending between Options A/B/C/D before code change ships.
+
+**Sandbox testing rule (already in feedback memory):** smoke testing on production operators with arbitrary userIds creates persistent Layer 2 pollution that the current architecture does not isolate. Until the source_scope filter is added, smoke tests must run against a sandbox operator, not production operators.
+
+---
+
 ### 2026-05-14 — OSG Step 1 LIVE — `osg-step1-dfbcb37` deployed (revision 0000047)
 
 **Built:** ACR Run `dg59`, image `opsoul-api:osg-step1-dfbcb37`. Boot logs confirmed:
