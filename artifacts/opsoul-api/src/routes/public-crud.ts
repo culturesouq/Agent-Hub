@@ -20,6 +20,7 @@ import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { assembleOperatorPrompt } from '../utils/systemPrompt.js';
 import { distillActionTaskPattern } from '../utils/memoryEngine.js';
+import { buildScopeContext, type ValidatedScope } from '../utils/scopeResolver.js';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { eq, and } from 'drizzle-orm';
 
@@ -201,12 +202,27 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     customInstructions: s.customInstructions ?? undefined,
   }));
 
+  // Action-scope context: tells the operator they are processing an automated
+  // action call (no human reading directly). buildScopeContext provides the
+  // scope awareness; the action contract (request shape, expected response
+  // shape) is appended as the I/O contract for this surface.
+  const actionScope: ValidatedScope = {
+    scopeId:        `action:${slot.slotId}`,
+    scopeType:      'action',
+    scopeTrust:     'authenticated',
+    writesHistory:  false,
+    persistsLayer1: false,
+  };
+  const scopeAwareness = buildScopeContext({
+    scope: actionScope,
+    actionName: action,
+  });
   const crudScopeLine = [
-    `Surface: Action API (CRUD deployment) — slot "${slot.slotId}"`,
-    `You are receiving a structured action request, not a conversation message.`,
-    `Your job: execute the action described, use your knowledge and skills, and return a clear structured result.`,
-    `Format: respond with JSON when the action implies data, plain text when it implies explanation, or a mix when both are needed.`,
-    `Schema — action: string describing what to do | payload: optional object containing input data.`,
+    scopeAwareness,
+    '',
+    `Action API contract for slot "${slot.slotId}":`,
+    `- Request shape: { action: string describing what to do, payload?: object containing input data }`,
+    `- Response shape: JSON when the action implies data, plain text when it implies explanation, a mix when both apply`,
   ].join('\n');
 
   const systemPrompt = assembleOperatorPrompt(

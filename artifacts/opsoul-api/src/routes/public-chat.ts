@@ -10,7 +10,7 @@ import {
   platformSkillsTable,
 } from '@workspace/db';
 import { requireSlotKey } from '../middleware/requireSlotKey.js';
-import { buildSlotScope } from '../utils/scopeResolver.js';
+import { buildSlotScope, buildScopeContext } from '../utils/scopeResolver.js';
 import { appendToSession, getSessionMessages } from '../utils/sessionStore.js';
 import { searchMemory, distillMemoriesFromConversations } from '../utils/memoryEngine.js';
 import type { MemoryHit } from '../utils/memoryEngine.js';
@@ -258,10 +258,18 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // § 3 rule 10 + § 4 architecture-as-secret). Operator carries them as
   // absorbed knowledge, not as labeled role:'user' exhibits the LLM might
   // quote back to users.
+  // Scope context: tell the operator they are speaking with an authenticated
+  // user (with the user's id) or an anonymous guest (with the session id), and
+  // which conversation reference applies. Memory continuity language is
+  // scope-bound — Layer 2 retrieval above is also scope-filtered.
+  const scopeLine = buildScopeContext({
+    scope,
+    conversationId: scope.writesHistory ? (conv?.id ?? null) : sessionId,
+  });
   let systemPrompt = assembleOperatorPrompt(
     operator,
     null,
-    { scopeLine: `[SCOPE: ${scope.scopeType} | ${scope.scopeId}]` },
+    { scopeLine },
   );
 
   // Hybrid time injection — same logic as chat.ts route. When the user

@@ -73,7 +73,11 @@ async function getMainMemoryContext(operatorId: string): Promise<{
 /**
  * Guard 2 input only: scans recent user messages for identity manipulation patterns.
  * Used exclusively by runSemanticIdentityGuard — NOT fed into GROW's content prompt.
- * Scoped to authenticated conversations to avoid cross-scope reads.
+ * Scoped to owner + authenticated user conversations only — channel messages
+ * (Telegram/WhatsApp) and public guest sessions are excluded so external
+ * adversarial inputs can't steer the operator's evolution checks. Owner
+ * conversations are included because owner-shaping is the intended path,
+ * but adversarial patterns from owner experiments still want surfacing.
  */
 async function getScopedMessagesForGuard(operatorId: string): Promise<{ role: string; content: string }[]> {
   const convs = await db
@@ -82,7 +86,7 @@ async function getScopedMessagesForGuard(operatorId: string): Promise<{ role: st
     .where(
       and(
         eq(conversationsTable.operatorId, operatorId),
-        eq(conversationsTable.scopeType, 'authenticated'),
+        inArray(conversationsTable.scopeType, ['owner', 'authenticated']),
       ),
     )
     .orderBy(desc(conversationsTable.lastMessageAt))

@@ -15,6 +15,7 @@ import {
   operatorDeploymentSlotsTable,
   operatorSecretsTable,
   ragDnaTable,
+  ownersTable,
 } from '@workspace/db';
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
 import { detectSkillTrigger } from '../utils/skillTriggerEngine.js';
@@ -37,7 +38,7 @@ import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import { decryptToken, encryptToken } from '@workspace/opsoul-utils/crypto';
 import type { ChatMessage, ToolDefinition } from '../utils/openrouter.js';
-import { buildOwnerScope, type ValidatedScope } from '../utils/scopeResolver.js';
+import { buildOwnerScope, buildScopeContext, type ValidatedScope } from '../utils/scopeResolver.js';
 import { scrapeUrl } from '../utils/urlScraper.js';
 import type { ContentPart } from '../utils/openrouter.js';
 import { verifyAndStore, persistKbSeedEntry } from '../utils/kbIntake.js';
@@ -732,7 +733,26 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     ? 'The user is writing in Arabic. Respond in Arabic. Match their dialect if possible.'
     : undefined;
 
-  const scopeLine = `[SCOPE: ${conv.scopeType} | ${conv.scopeId}]`;
+  // Owner-scope context: tell the operator they are in their private workspace
+  // with their owner (named when available), and which conversation reference
+  // applies. The operator reads this BEFORE its own identity, knowledge, or
+  // character — same way a person reads the room before they speak.
+  let ownerName: string | null = null;
+  try {
+    const [ownerRow] = await db
+      .select({ name: ownersTable.name })
+      .from(ownersTable)
+      .where(eq(ownersTable.id, req.owner!.ownerId));
+    ownerName = ownerRow?.name ?? null;
+  } catch {
+    // non-fatal — fall back to "your owner" without a name
+    ownerName = null;
+  }
+  const scopeLine = buildScopeContext({
+    scope,
+    conversationId: conv.id,
+    ownerName,
+  });
   const promptOpts: BuildSystemPromptOpts = { sycophancyWarning, soulAnchorActive, languageInstruction, scopeLine };
 
   // Merge archetype-born skills with owner-installed skills.

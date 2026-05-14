@@ -7,7 +7,7 @@ import { chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import { assembleOperatorPrompt } from '../utils/systemPrompt.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { searchMemory, buildMemoryContext } from '../utils/memoryEngine.js';
-import { buildChannelScope } from '../utils/scopeResolver.js';
+import { buildChannelScope, buildScopeContext } from '../utils/scopeResolver.js';
 import { eq, and, asc, sql } from 'drizzle-orm';
 import OpenAI, { toFile } from 'openai';
 import { embed } from '@workspace/opsoul-utils/ai';
@@ -216,8 +216,15 @@ router.post('/:operatorId', async (req: Request, res: Response): Promise<void> =
     // KB hits + memory hits woven into system prompt unlabeled per § 3 rule 10
     // + § 4 architecture-as-secret. No more [KNOWLEDGE] / [MEMORY] labels in
     // the operator's prompt — operator carries them as absorbed knowledge.
+    // Scope context: tell the operator which channel they are on, who the
+    // caller is, and which conversation reference applies. Caller identifier
+    // is the Telegram chat_id — server-trusted via webhook secret.
+    const scopeLine = buildScopeContext({
+      scope,
+      conversationId: conv.id,
+    });
     const promptSections: string[] = [
-      assembleOperatorPrompt(operator, null, { scopeLine: '[CHANNEL: Telegram]' }),
+      assembleOperatorPrompt(operator, null, { scopeLine }),
     ];
     if (ragCtx) promptSections.push(ragCtx);
     if (memCtx) promptSections.push(memCtx);

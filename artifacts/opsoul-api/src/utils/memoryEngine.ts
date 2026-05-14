@@ -76,32 +76,70 @@ export async function searchLayer1Memory(
   }));
 }
 
-// ─── LAYER 2 — Main Memory (cross-scope, PII-free, GROW-eligible) ─────────────
+// ─── LAYER 2 — Main Memory (PII-free, GROW-eligible) ─────────────
+//
+// Two consumers of Layer 2 with different scope semantics:
+//
+//   1. CHAT path (this function, called via `searchMemory`): MUST be
+//      scope-bound. The Layer 2 entry was distilled from a specific
+//      conversation in a specific scope; it must not surface back to a
+//      different scope in chat. Otherwise a memory distilled from a
+//      Nahil farmer's conversation could appear in the owner's workspace,
+//      or a memory from the WhatsApp channel could appear in a Hub UI
+//      chat. That is the cross-scope pollution incident category.
+//
+//      → When `requestScope` is provided, restrict to entries whose
+//        `source_scope` matches exactly. When not provided (legacy
+//        callers, defensive default), no scope restriction is applied
+//        and the function logs a warning.
+//
+//   2. GROW path (`getMainMemoryContext` in growEngine.ts): genuinely
+//      cross-scope by design. GROW aggregates patterns from all scopes
+//      to evolve the operator. That function does NOT call this one and
+//      runs its own un-scoped query — see growEngine.ts.
 
 export async function searchLayer2Memory(
   operatorId: string,
   embedding: number[],
   topN: number = MEMORY_TOP_N,
   minSimilarity: number = MEMORY_MIN_SIMILARITY,
+  requestScope?: string,
 ): Promise<MemoryHit[]> {
   const vecStr = `[${embedding.join(',')}]`;
 
-  const result = await pool.query<{
-    id: string; content: string; memory_type: string;
-    confidence: number; created_at: Date | null; distance: number;
-  }>(
-    `SELECT id, content, memory_type, confidence, created_at,
+  if (!requestScope) {
+    console.warn('[searchLayer2Memory] called without requestScope — falling back to operator-wide query (no scope isolation). Caller should pass current scopeId.');
+  }
+
+  const baseSql = `SELECT id, content, memory_type, confidence, created_at,
             (embedding <=> $1::vector) AS distance
      FROM operator_main_memory
      WHERE operator_id = $2
        AND embedding IS NOT NULL
        AND archived_at IS NULL
        AND grow_eligible = TRUE
-       AND (1 - (embedding <=> $1::vector)) >= $3
-     ORDER BY distance ASC
-     LIMIT $4`,
-    [vecStr, operatorId, minSimilarity, topN],
-  );
+       AND (1 - (embedding <=> $1::vector)) >= $3`;
+
+  const result = requestScope
+    ? await pool.query<{
+        id: string; content: string; memory_type: string;
+        confidence: number; created_at: Date | null; distance: number;
+      }>(
+        `${baseSql}
+         AND source_scope = $5
+         ORDER BY distance ASC
+         LIMIT $4`,
+        [vecStr, operatorId, minSimilarity, topN, requestScope],
+      )
+    : await pool.query<{
+        id: string; content: string; memory_type: string;
+        confidence: number; created_at: Date | null; distance: number;
+      }>(
+        `${baseSql}
+         ORDER BY distance ASC
+         LIMIT $4`,
+        [vecStr, operatorId, minSimilarity, topN],
+      );
 
   return result.rows.map((r) => ({
     id: r.id, content: r.content, memoryType: r.memory_type,
@@ -128,7 +166,11 @@ export async function searchMemory(
     hasRealScope
       ? searchLayer1Memory(operatorId, scopeId!, embedding, topN, minSimilarity, minWeight)
       : Promise.resolve([] as MemoryHit[]),
-    searchLayer2Memory(operatorId, embedding, topN, minSimilarity),
+    // Pass the current scopeId so Layer 2 retrieval is scope-bound at chat time.
+    // Cross-scope pollution (one scope's memory surfacing in another scope's
+    // chat) is architecturally prevented here. GROW retrieval has its own
+    // path in growEngine.ts that intentionally aggregates across scopes.
+    searchLayer2Memory(operatorId, embedding, topN, minSimilarity, scopeId),
   ]);
 
   // Merge, deduplicate by id, rank by similarity descending
