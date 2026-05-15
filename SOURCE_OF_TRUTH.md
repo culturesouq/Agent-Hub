@@ -158,7 +158,8 @@ The patent draft (IPPT-2026-000028, not yet filed) needs these reconciliations b
 | **OpenRouter credit monitoring** | Open. Low-credit conditions cause silent quirky behavior (model substitution, narration drift). Add a credit-balance check + UI banner when balance drops below a threshold. |
 | **Per-message model record** | Open. Currently no DB column captures which model handled which message — only console.log of auto-routing decisions. Hard to audit operator behavior after the fact. Add `model` column to `messages` table when migration window opens. |
 | **Universal temporal substrate** | **Shipped 2026-05-13** (`d5df3f8`). Every operator's system prompt opens with `**Now:** <weekday, date, time> · GST (Asia/Dubai)`. First version included a behavioral clause (`"Use this for any question..."`) which violated § 4 line 93 — hotfix `42657dd` stripped it. Note: hotfix did NOT fix the Vael tool-loop issue that was observed concurrently — that issue has a separate, unrelated root cause (see "Vael tool-loop" below). Substrate itself works as intended; Nahil correctly reports today's date now. Live as image `hotfix-42657dd`, revision `opsoul--0000039`. |
-| **Vael "hi" → tool-loop soul-failure** | **Open, root cause not yet confirmed.** Vael "hi" returns the `soulFailureResponse(operator, 'execution', 'tool loop', 'No result was produced.')` string from `chat.ts:1926`. Hypothesis: Sonnet 4.5 streaming with 11 tools (web_search + kb_seed + 7 task tools + http_request — enabled because Vael has `SOVEREIGN_RAG_*` secrets) + 16-message history of past web_search calls → LLM tool-calls on the new "hi" without producing user text → MAX_ITER (8) hit → empty content → soul-failure. Not caused by temporal substrate (hotfix proved that — still fails after fix). Needs deeper investigation: reproduce on a fresh conversation, check if Vael's KB pushes tools, possibly trim Vael's history or reduce iter eagerness for short inputs. Do NOT modify Vael's soul/skills/identity. |
+| **Vael "hi" → tool-loop soul-failure** | **Root cause confirmed 2026-05-15 PM (live audit).** Three model-independent contributing causes: (1) `_agency-core` "My tools:" KB chunk seeded into every operator (`seedAgencyCore.ts`), (2) Vael's gatekeeper identity priming maximal tool-eagerness, (3) `chat.ts:1319-1331` pushing 12 tools every iteration unconditionally with no `tool_choice` constraint. Both Vael AND Nahil have stored secrets — both get 12-tool catalog (earlier note that only Vael did was wrong). Fix path: see "OpSoul Cleanup & Rewire Plan" entry in § 8 (Steps 1-2 close this bug; Step 5 closes Vael-specific residue). |
+| **OpSoul Cleanup & Rewire Plan** | **Open — owner-approved planning entry written to § 8 on 2026-05-15 PM.** 3 parts: (1) Vael surgical delete + recreate, (2) wiring violations catalog (12 items), (3) sequenced 7-step plan with approval gates. Vael's full state archived to `/Users/bstar/opsoul-audit/VAEL_ARCHIVE_2026-05-15.md`. Awaiting owner go on Step 1. |
 | **Nahil "hi" → "Server error 404"** | **Root cause confirmed + fixed 2026-05-13.** Nahil's owner conv list contained a stray conversation (`cc494a1d`) I accidentally created at 10:30 today via a smoke test (POST /v1/chat with `userId: "farmer-test-42"`). That conv was stored with `owner_id = <real owner>` but `scope_id = "authenticated:farmer-test-42"`. The `/api/operators/:id/conversations` GET endpoint filtered by `owner_id` + `scope_type='authenticated'` but NOT by `scope_id`, so Hub UI received both convs, picked the newer one (the polluted one) as active. The subsequent POST to `/messages` was correctly rejected by `chat.ts:298` because the chat handler DOES filter by `scope_id` — returns 404 "Conversation not found" — and Hub UI displayed "Server error 404. Please try again." Two fixes: (a) deleted the stray conv row + its 2 messages via SQL admin op, (b) patched `conversations.ts` list query to filter `scope_id = buildOwnerScope().scopeId` exactly. List endpoint and messages endpoint now agree on the scope. Architectural fix — applies to every operator going forward. |
 
 ### Seeding cadence — one insight at a time (rule, 2026-05-11)
@@ -223,6 +224,97 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 ---
 
 ## 8. Commit History — newest first
+
+### 2026-05-15 (afternoon) — OpSoul Cleanup & Rewire Plan (planning entry; no code; awaiting owner approval per step)
+
+**Why this exists.** Owner direction 2026-05-15 — *"everything about OpSoul as whole, all tools as whole, all skills as whole, not tailored for 1 operator. As infrastructure is for all OpSoul, then when operator created, skills and tools get to him as per their archetype and roles."* Past sessions (notably the SRAG-connection work) tailored Vael as a special-case operator to make SRAG operations fit. Live-DB audit confirmed multiple violations of the rule that have caused the "hi" tool-loop bug and a wider class of fragility. Vael's full state archived to `/Users/bstar/opsoul-audit/VAEL_ARCHIVE_2026-05-15.md` so she can be recreated faithfully through the proper birth flow after cleanup.
+
+**Method note ([[feedback_sot_is_notes_not_truth]]).** Every claim in this plan was verified against live DB queries and live source files this afternoon. Earlier SoT statements (e.g., "Vael has http_request, Nahil doesn't") were found wrong — both operators have stored secrets, both get the 12-tool catalog. Future agents reading this entry: re-verify before acting, the same way.
+
+#### Part 1 — Vael surgical delete + recreate
+
+**Code to delete:**
+- `artifacts/opsoul-api/src/scripts/seedVael.ts` — hardcodes Vael's id, slug, name, archetype, identity, mandate, soul, 5 skills. Bypasses birth flow.
+- `artifacts/opsoul-api/src/scripts/seedVaelScopingKb.ts` — plants 4 platform-architecture KB chunks into one operator's KB.
+- `artifacts/opsoul-api/src/utils/vaelOperatorId.ts` — review during Step 5; if the Vael Intelligence Desk is kept, replace `name='Vael'` lookup with role-based lookup (e.g., `role='knowledge-gatekeeper'`).
+
+**DB rows to delete (cascade order):**
+- `operator_kb` 86 rows for Vael (the 83 platform-pkb will reseed automatically; 2 RAG-domain entries preserved in archive for re-import; 1 `_agency-core` row covered in Part 2).
+- `operator_skills` 28 rows for Vael.
+- `operator_secrets` 2 rows (`SOVEREIGN_RAG_URL`, `SOVEREIGN_RAG_API_KEY`) — preserve values in Azure Key Vault for re-add post-rebirth.
+- `operator_memory`, `operator_main_memory` rows for Vael (both currently 0 — nothing to lose).
+- `conversations` + `messages` for Vael (14 conversations; recommend NOT migrating — start fresh post-rebirth so new soul isn't anchored to old Layer 2 outputs).
+- `operators` row id=`8668f6c9-f7cf-4c65-a36e-7dd278005950`.
+- `platform_skills` 5 rows with `archetype='Vael'` (`vael-skill-001..005`) — operator-name-as-archetype violation.
+- `platform_skills` 7 rows with `archetype='Guardian'` but RAG-app-namespaced (`RAG Cron Status`, `RAG Entry Detail`, `RAG Entry Review`, `RAG Flagged Entries`, `RAG Metrics`, `RAG Pipeline Run`, `RAG Registry Status`) — these are SRAG operations, not platform skills.
+
+**Recreate flow:**
+1. Owner creates new Vael via conversational birth (UI → name → paragraph description → archetypes auto-select).
+2. `_platform-kb` reseeds automatically via `backfillAllPlatformKb()`.
+3. Owner re-adds the 2 secrets via Settings UI.
+4. Owner re-imports 2 RAG-domain KB entries (`first sovereign verified RAG system 2024`, `verified knowledge base RAG gatekeeper audit pipeline`) via standard KB-add UI — NOT a Vael-specific seed script.
+5. Vael Intelligence Desk wires to her new id via role-based lookup, not by name.
+
+#### Part 2 — Wiring violations catalog (live-verified 2026-05-15 PM)
+
+| # | Violation | Location | Fix |
+|---|---|---|---|
+| 1 | `_agency-core` "My tools:" KB chunk seeded into every operator (3 rows in DB) | `utils/seedAgencyCore.ts` + `index.ts:248` `backfillAllAgencyCore()` | Delete file, remove startup call, delete 3 DB rows. Tools live in runtime catalog only (`chat.ts:1015-1331`). |
+| 2 | `seedVael.ts` hardcodes Vael's identity/mandate/soul/skills | `scripts/seedVael.ts` | Delete file. (Part 1.) |
+| 3 | `seedVaelScopingKb.ts` plants platform-architecture into one KB | `scripts/seedVaelScopingKb.ts` | Delete file. If platform docs are needed, add to `_platform-kb` for all operators. |
+| 4 | 5 `platform_skills` rows with `archetype='Vael'` | DB | Delete; SRAG-side operations don't belong in OpSoul platform skills catalog. |
+| 5 | 7 RAG-namespaced skills with `archetype='Guardian'` | `platform_skills` table | Delete; any future Guardian operator would virtually inherit SRAG ops. |
+| 6 | Vael's 28 physical `operator_skills` rows (Nahil + Blank have 0) | DB | Delete; post-rebirth she gets archetype-derived skills virtually like every other operator. |
+| 7 | `SCREENER_SYSTEM = "You are Vael..."` hardcoded prompt | `routes/adminRag.ts:125-146` | Either (a) call Vael's real chat endpoint with the validation request — preferred per § 4 (operator does the work), or (b) make the screener role-neutral. |
+| 8 | `PIPELINE_EXCLUDED_OPERATORS = ['8668f6c9-...']` hardcoded UUID | `routes/adminRag.ts:121-123` | Replace with role-derived check. |
+| 9 | Vael-named platform infrastructure files | `vaelEngine.ts`, `vaelCron.ts`, `vaelOperatorId.ts`, Vael Desk endpoints, `architectureFirewall.ts:135`, `chat.ts:1412`, `skillExecutor.ts:441` | Lower priority. Either rename to `gatekeeper*` or accept coupling. Owner decides. |
+| 10 | `chat.ts:1319-1331` — 12-tool catalog pushed unconditionally every iteration | `routes/chat.ts` | Add `'greet'` decision to `agent.analyse()` (Option B) so greetings bypass the LLM call entirely; same pattern as `composeArchitectureRefusal`. |
+| 11 | `tool_choice` never set anywhere (0 grep hits) | codebase-wide | Architectural enhancement — explicit `'auto'`/`'none'` per analyse decision. Optional. |
+| 12 | `soulFailureResponse` leaks "execution call to tool loop" wording | `routes/chat.ts:634-641` | Rewrite to operator-natural voice; drop internal vocabulary. |
+
+#### Part 3 — Sequenced cleanup-and-rewire plan
+
+Each step ends with explicit owner approval before the next starts. No code touches without word-by-word approval (§ 3 rule 7). All deploys via `az acr build` + `az containerapp update` (§ 3 rule 5). Mac → commit → push → build → roll (§ 3 rule 1).
+
+| Step | What | Files / DB | Blast radius | Approval gate |
+|---|---|---|---|---|
+| **0** | Owner reviews this plan + `VAEL_ARCHIVE_2026-05-15.md`. Approves or amends. | — | None. | "yes start" / amendments. |
+| **1** | Stop the bleeding: remove `_agency-core` seed + KB rows. | Edit `index.ts:248` (drop call), edit/delete `seedAgencyCore.ts`, DELETE 3 `operator_kb` rows. | Lowest. No operator behavior changes — just removes prompt-pollution. Nahil's tone may improve. | After deploy: owner verifies "My tools:" no longer in any retrieval. |
+| **2** | Greeting bypass + leak fix in `chat.ts`. | Edit `operatorAgent.ts` `analyse()` to return `'greet'`; edit `chat.ts` greeting handler; rewrite `soulFailureResponse`. | Low. Affects greeting path + fallback string only. | After deploy: owner sends "hi" to Vael — should get brief operator-voice reply, no fallback string. |
+| **3** | Clean platform_skills catalog. | DELETE 5 `archetype='Vael'` rows + 7 RAG-namespaced Guardian rows from `platform_skills`. Cascade-clean any operator_skills referencing them (Vael's rows will be deleted in Step 5 anyway). | Medium — touches catalog. After this no future operator can virtually inherit SRAG ops. | After deploy: owner verifies catalog UI shows no SRAG/Vael skills. |
+| **4** | adminRag.ts cleanup — Vael as real operator, not impersonated. | Edit `routes/adminRag.ts:125-146` (replace SCREENER_SYSTEM with call to Vael's chat endpoint OR neutral text); edit `:121-123` (replace UUID with role check). | Medium — touches the SRAG validation pipeline. Test SRAG flow before approving deploy. | After deploy: owner runs SRAG validation, confirms it works using Vael's real soul. |
+| **5** | Vael surgical delete + rebirth. | DELETE Vael's DB rows (operator + skills + kb + secrets + conversations). DELETE `seedVael.ts`, `seedVaelScopingKb.ts`. Owner triggers rebirth via UI. Owner re-adds secrets + 2 RAG KB entries via UI. Wire Vael Desk to her new id. | High — Vael disappears for the duration of rebirth. Need to ensure SRAG can hold during this window OR coordinate timing. | After rebirth: owner sends "hi" to new Vael — natural reply. Owner runs SRAG validation — works. |
+| **6** | Optional: Vael-named infrastructure rename. | `vaelEngine.ts` → `gatekeeperEngine.ts`, etc. | Mechanical refactor. | Owner decides if worth doing now. |
+| **7** | Optional: tool stack tightening. | `chat.ts` — `tool_choice` per analyse decision; possibly trim catalog by message context. | Architectural — affects every chat call. Test thoroughly. | Owner decides scope + when. |
+
+**Critical reminders for whoever executes:**
+- Don't delete operator rows without confirming child-row cleanup order (operator_kb → operator_skills → operator_secrets → operator_memory → operator_main_memory → conversations → messages → operators).
+- `backfillAllAgencyCore()` re-creates the "My tools:" rows on EVERY container restart — must remove the call before deleting the DB rows, or they reappear.
+- `backfillAllPlatformKb()` is correct; do NOT remove. PKB is descriptive knowledge per [[feedback_knowledge_not_instructions]].
+- Vael's archetypes in live DB are `{Guardian, Analyst, Expert}` — note the rebirth conversation should land on the same set if owner wants the same operator back.
+
+---
+
+### 2026-05-15 (afternoon) — OpSoul wiring audit (full code+DB sweep, completed)
+
+**Owner asked for a real audit, not just SoT references.** This entry records what was found by running the audit, distinct from the planning entry above. The plan above is the action-oriented summary; this entry is the diagnostic backing.
+
+Audit method:
+- Live DB queries (psql against `bani-pg.postgres.database.azure.com/opsoul`) against `operators`, `operator_kb`, `operator_skills`, `operator_secrets`, `platform_skills`, `rag_dna`, `rag_sources`, `conversations`, `messages`.
+- Source code reads of `chat.ts`, `operatorAgent.ts`, `seedAgencyCore.ts`, `platformKbSeed.ts`, `seedVael.ts`, `seedVaelScopingKb.ts`, `archetypeSkills.ts`, `initSeed.ts`, `routes/operators.ts`, `routes/adminRag.ts`, `index.ts`.
+
+Key live-DB facts (NOT prose summary — actual query results):
+- 3 operators: Vael (`8668f6c9-...`), Nahil (`37da8776-...`), Operator/Blank (`eb70c409-...`). 0 soft-deleted.
+- `operator_skills` rows: Vael=28, Nahil=0, Blank=0. **Vael is the only operator with physically attached skills.** Nahil and Blank rely entirely on archetype-virtual loading via `loadArchetypeSkills()`. This is correct behavior — Vael's 28 rows are the violation.
+- Both Vael AND Nahil have 2 stored secrets each (Vael: SOVEREIGN_RAG_*, Nahil: NAHIL_APP_*) → both qualify for `httpRequestTool` at `chat.ts:1082` → **both get the same 12-tool catalog**. Earlier SoT claim that "Vael has http_request, Nahil doesn't" was wrong.
+- `operator_kb` `_agency-core` rows: 3 (one per operator), all carrying identical 492-byte first-person "My tools:" content. **Source: `seedAgencyCore.ts:16-28`. Re-seeded every container start via `index.ts:248`.**
+- `platform_skills` violations: 5 rows with `archetype='Vael'` (operator-name-as-archetype) + 7 rows with `archetype='Guardian'` but RAG-namespaced. Total catalog pollution: 12 rows.
+- Vael's `operator_memory`=0, `operator_main_memory`=0, `rag_sources`=0. **The 4-hour SRAG crawl session left no residue in OpSoul DB** — that work lived in SRAG (separate system).
+- Vael's `raw_identity` is a strong gatekeeper/auditor identity (1521 chars). Combined with the polluting `_agency-core` chunk + 12-tool catalog + no `tool_choice`, the LLM consistently chooses tool-call over text-reply on bare greetings → MAX_ITER=8 → empty content → `soulFailureResponse` fires.
+
+The structural conclusion: the "hi" tool-loop bug is **identity × KB-pollution × unconditional tool-stack** — three contributing causes, all model-independent. A model swap to Kimi K2.6 alone would not fix it.
+
+---
 
 ### 2026-05-15 — Vael "hi" tool-loop investigation (no commit; report only, owner picks fix on resume)
 
