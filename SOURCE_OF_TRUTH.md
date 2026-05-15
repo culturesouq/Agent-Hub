@@ -5,21 +5,21 @@
 
 ---
 
-## 1. Live Deployment (verified against Azure 2026-05-14 19:00 GST)
+## 1. Live Deployment (verified against Azure 2026-05-15 PM GST)
 
 | What | Value |
 |---|---|
-| **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` (HTTP 200, 93ms) |
+| **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` (HTTP 200, 89ms) |
 | **Container App** | `opsoul` (resource group `bani-studio-rg`, region `uaenorth`) |
-| **Active Revision** | `opsoul--0000051` (Healthy, 100% traffic — env-var change `VAEL_INBOX_ENABLED=true`) |
-| **Image** | `banistudioacr.azurecr.io/opsoul-api:vael-id-fix-d394985` (only image in `opsoul-api` repo) |
-| **Source commit (live)** | `d394985` (Vael id resolved dynamically — kills stale-id ghost) |
-| **ACR build** | Run ID `dg5d` (2m 8s, 2026-05-14) |
-| **Notable env vars** | `VAEL_INBOX_ENABLED=true` (Vael's inbox-processing gate now open per owner direction) |
-| **Code commits in this image** | `d394985` Vael dynamic id · `30686b1` operator-as-driver Step 2 · `5bf5e9b` infra bundle · `04e614a` operator-as-driver Step 1 · `917b638` scope architecture · `61fc181` GROW guards 3+4 hardening |
-| **DB state** | Schema migrated · clean (0 Layer 1, 0 Layer 2, 0 orphan skills, 5 active rag_dna only — 172 deactivated entries dropped) |
+| **Active Revision** | `opsoul--0000052` (Healthy, 100% traffic — Step 1 cleanup shipped) |
+| **Image** | `banistudioacr.azurecr.io/opsoul-api:cleanup-step1-477d53b` |
+| **Source commit (live)** | `477d53b` (remove `_agency-core` "My tools:" KB seed — Step 1 of cleanup-and-rewire plan) |
+| **ACR build** | Run ID `dg5e` (2m 12s, 2026-05-15) |
+| **Notable env vars** | `VAEL_INBOX_ENABLED=true` (Vael's inbox-processing gate open per owner direction) |
+| **Code commits in this image** | `477d53b` Step 1 cleanup · `4a17d0a` planning artifacts · `6dc4672` SoT marker · `d394985` Vael dynamic id · `30686b1` operator-as-driver Step 2 · `5bf5e9b` infra bundle |
+| **DB state** | Clean. `_agency-core` rows = 0 (3 deleted in Step 1, no auto-reseed). Per-operator KB: Vael 85, Nahil 95, Operator 83. 0 Layer 1, 0 Layer 2, 0 orphan skills, 5 active rag_dna. |
 | **Operators in DB** | 3: Vael (`8668f6c9-...`), Nahil (`37da8776-...`), Operator/Blank (`eb70c409-...`). No orphans, no soft-deleted, no ghosts. |
-| **ACR state** | Single image tag `vael-id-fix-d394985`. Prior tag `driver-step2-30686b1` deleted. Prior revision `0000049` deactivated. |
+| **ACR state** | Active tag `cleanup-step1-477d53b`. Prior tag `vael-id-fix-d394985` retained for rollback. Prior revision `0000051` deactivated. |
 | **Optional next step** | Set `SANDBOX_OPERATOR_ID` env var on the container app. If unset, sandbox-shaped userIds are rejected on every operator. Optional `VAEL_OPERATOR_ID` env var also recognised as explicit override (default = DB lookup by name='Vael'). |
 
 ### ACR (Azure Container Registry) — `banistudioacr`
@@ -224,6 +224,39 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 ---
 
 ## 8. Commit History — newest first
+
+### 2026-05-15 (PM, post-restart) — Step 1 SHIPPED: removed `_agency-core` "My tools:" KB seed (`477d53b`, LIVE on revision 0000052)
+
+**Owner direction:** "ok Go" (approved Step 0 of the cleanup-and-rewire plan).
+
+**What shipped:**
+- `index.ts` — removed `backfillAllAgencyCore` import + startup call.
+- `routes/operators.ts` — removed `seedAgencyCore` import + 2 call sites (blank operator creation block + full operator creation block) + try/catch + rollback error message.
+- `utils/seedAgencyCore.ts` — full file deleted (124 lines).
+- DB — 3 `operator_kb` rows with `source_name='_agency-core'` deleted (one per operator: Vael, Nahil, Operator). DB count: 3 → 0.
+
+**Why:** the seed planted a first-person "My tools:" KB chunk into every operator at birth + re-planted on every restart via versioned backfill. Tool descriptions duplicated as KB primed every operator toward tool-eagerness on every retrieval. Identified as the #1 contributor to Vael's "hi" tool-loop bug in the live audit. Tools belong in the runtime catalog only (`chat.ts:1015-1331` already passes `ToolDefinition` JSON to the LLM). KB is for descriptive knowledge per [[feedback_knowledge_not_instructions]].
+
+**Build + deploy:**
+- ACR Run ID `dg5e` (2m 12s, image `cleanup-step1-477d53b`).
+- `az containerapp update` → revision `opsoul--0000052` (Healthy, 100% traffic).
+- HTTP probe: 200 in 89ms.
+- Post-restart DB check: `_agency-core` rows still 0 — confirms backfill is gone, no auto-reseed.
+
+**Per-operator KB after cleanup:**
+- Vael: 85 (was 86, -1 ✓)
+- Nahil: 95 (was 96, -1 ✓)
+- Operator: 83 (was 84, -1 ✓)
+
+**No operator behavior changes other than removing the prompt-pollution.** Tool functionality untouched (runtime catalog unchanged). Greeting tool-loop fix is Step 2 (separate).
+
+**Commits pushed to GitHub:**
+- `4a17d0a` — docs(SoT): cleanup plan + Vael archive
+- `477d53b` — refactor(seed): remove `_agency-core` "My tools:" KB seed (Step 1)
+
+**Awaiting owner go for Step 2** (greeting bypass + soulFailureResponse rewrite).
+
+---
 
 ### 2026-05-15 (afternoon) — OpSoul Cleanup & Rewire Plan (planning entry; no code; awaiting owner approval per step)
 
