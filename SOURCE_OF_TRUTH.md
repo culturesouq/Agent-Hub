@@ -258,17 +258,22 @@ The concept owner described: *"Operators should have pipeline to a shared place 
 
 ##### B1. What is an Insight?
 
-A single piece of generalizable knowledge an operator has formed from real practice that could benefit another operator. Examples:
-- *"When farmers from coastal UAE describe yellowing date palm fronds in late summer, salinity in irrigation water is more likely than fungal — checked across 14 cases."* (Nahil → other agriculture operators)
-- *"Claims about model benchmarks aged >12 months should be treated as historical; benchmark methodology changes faster than the numbers."* (Vael → other research operators)
-- *"In Arabic conversations starting with a religious greeting, mirroring the greeting register lands warmer than English-style direct acknowledgment."* (Any → any Arabic-speaking operator)
+A single piece of generalizable knowledge an operator has formed from real practice — OR knowledge the owner has dropped via the Insight Triage UI — that could benefit another operator. The library is descriptive, not prescriptive.
+
+**Categories with examples:**
+
+- **Pattern from practice** (operator-originated): *"When farmers from coastal UAE describe yellowing date palm fronds in late summer, salinity in irrigation water is more likely than fungal — checked across 14 cases."* (Nahil → other agriculture operators)
+- **Cross-cultural observation** (operator-originated): *"In Arabic conversations starting with a religious greeting, mirroring the greeting register lands warmer than English-style direct acknowledgment."* (Any → any Arabic-speaking operator)
+- **Tool / skill knowledge** (owner-originated, dropped via UI): *"http_request is a tool that calls external APIs. It accepts method, URL, headers, body. Stored secrets are referenced with {{SECRET_NAME}} placeholders that resolve at call time. The response contains status code, headers, and body — body is typically JSON or HTML depending on the endpoint."* Operators query this when they encounter a tool decision and need to understand the tool's shape. It's facts about the tool, not an order to use it.
+- **Domain reference** (owner-originated): *"The UAE National Food Security Strategy 2051 has four pillars: enabling food sourcing diversification, increasing local food production, ensuring food safety, and reducing food waste. It was published 2018 by MoCCAE."* Pure factual knowledge an operator working in that domain can pull when relevant.
 
 **An insight is NOT:**
-- An instruction ("always do X")
+- An instruction ("always do X", "use tools when...", "prioritize tool access")
 - A platform mechanic ("this is how scope isolation works")
-- A tool description
 - A piece of identity ("you are X")
-- Owner-personal context ("Mohamed prefers concise replies")
+- Owner-personal context ("Mohamed prefers concise replies" — that's preference, not generalizable knowledge)
+
+**The line between knowledge and instruction:** *facts about a thing* = knowledge ✓. *Orders to the operator* = instruction ✗. "http_request accepts JSON bodies" is knowledge. "Use http_request when you need to call an API" is instruction. The first goes in the insight library; the second never does — operators decide when to call tools from their own judgment + the catalog.
 
 ##### B2. Insight Lifecycle
 
@@ -289,7 +294,7 @@ A single piece of generalizable knowledge an operator has formed from real pract
 | Verification flow | Code | Submits the candidate as a chat message to Vael's real chat endpoint, parses her reply, transitions status. No "You are Vael" impersonation prompt. |
 | `POST /api/operators/:id/insights/query` | Backend route | Filtered semantic search. Filtered by requesting operator's archetypes + domain tags. Returns top-K. Auth-gated to operator. |
 | `query_insights` tool | Tool definition in `chat.ts` runtime catalog | Universal, available to every operator (like `web_search`). JSON schema only — never narrated in prompt. |
-| Insight Triage UI | Frontend, replaces Vael Desk | Shows the `pending_owner_approval` queue, one entry at a time. Approve / reject / refine. NO bulk-approve. |
+| Insight Triage UI | Frontend, **same drop-and-review experience as current Vael Desk** | Owner drops an entry (or operator submission lands), entry shows in queue, Vael reviews, owner approves one-at-a-time. UX continuity preserved — just rewired to `operator_insights`. NO bulk-approve. |
 | `insightsCron` | Cron, periodic | Two jobs: (a) decay scoring (slow), (b) re-validation prompts to Vael for active insights with low recent-retrieval. NOT a "submit anything" cron. |
 
 ##### B4. What's explicitly NOT in OIN (rules from past failures)

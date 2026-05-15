@@ -9,7 +9,7 @@ export interface VectorHit {
   chunkIndex: number | null;
   distance: number;
   similarity: number;
-  kbSource: 'owner' | 'operator' | 'dna';
+  kbSource: 'owner' | 'operator';
   confidenceScore?: number;
   verificationStatus?: string;
 }
@@ -117,80 +117,20 @@ export async function searchOperatorKb(
 // builder entries      → all operators, always
 // archetype entries    → operators whose archetype array includes this entry's archetype
 // collective/general   → archetypeScope is empty (universal) OR overlaps operator archetypes
-// collective/specialty → operator domainTags overlaps entry's domainTags
-//
-export async function searchDnaKb(
-  archetypes: string[],
-  domainTags: string[],
-  embedding: number[],
-  limit: number = 4,
-): Promise<VectorHit[]> {
-  const vecStr = `[${embedding.join(',')}]`;
-
-  const result = await pool.query<{
-    id: string;
-    content: string;
-    layer: string;
-    source_name: string | null;
-    confidence: number | null;
-    knowledge_status: string;
-    distance: number;
-  }>(
-    `SELECT id, content, layer, source_name, confidence, knowledge_status,
-            (embedding <=> $1::vector) AS distance
-     FROM rag_dna
-     WHERE is_active = true
-       AND embedding IS NOT NULL
-       AND knowledge_status IN ('current', 'upgraded')
-       AND (embedding <=> $1::vector) < $2
-       AND (
-         layer = 'builder'
-         OR (layer = 'archetype' AND archetype = ANY($3::text[]))
-         OR (
-           layer = 'collective' AND dna_scope = 'general' AND (
-             archetype_scope = '{}'
-             OR archetype_scope && $3::text[]
-           )
-         )
-         OR (
-           layer = 'collective' AND dna_scope = 'specialty'
-           AND cardinality($4::text[]) > 0
-           AND domain_tags && $4::text[]
-         )
-       )
-     ORDER BY distance ASC
-     LIMIT ${limit}`,
-    [vecStr, 0.88, archetypes, domainTags],
-  );
-
-  return result.rows.map((r) => ({
-    id: r.id,
-    content: r.content,
-    sourceUrl: null,
-    sourceName: r.source_name ?? `dna:${r.layer}`,
-    sourceType: `dna:${r.layer}`,
-    chunkIndex: null,
-    distance: Number(r.distance),
-    similarity: 1 - Number(r.distance),
-    kbSource: 'dna' as const,
-  }));
-}
-
 export async function searchBothKbs(
   operatorId: string,
   embedding: number[],
   topN: number = KB_TOP_N_CHUNKS,
   minConfidence: number = KB_RETRIEVAL_MIN_CONFIDENCE,
-  archetypes: string[] = [],
-  domainTags: string[] = [],
+  _archetypes: string[] = [],
+  _domainTags: string[] = [],
 ): Promise<VectorHit[]> {
-  const [ownerHits, operatorHits, dnaHits] = await Promise.all([
+  const [ownerHits, operatorHits] = await Promise.all([
     searchOwnerKb(operatorId, embedding, topN),
     searchOperatorKb(operatorId, embedding, topN, minConfidence),
-    searchDnaKb(archetypes, domainTags, embedding, 4),
   ]);
 
-  const merged = [...ownerHits, ...operatorHits, ...dnaHits];
+  const merged = [...ownerHits, ...operatorHits];
   merged.sort((a, b) => a.distance - b.distance);
   return merged.slice(0, topN);
 }

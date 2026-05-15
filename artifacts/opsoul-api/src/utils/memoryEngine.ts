@@ -5,7 +5,6 @@ import { eq, and, isNull, isNotNull, inArray, desc } from 'drizzle-orm';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { chatCompletion } from './openrouter.js';
 import { verifyAndStore } from './kbIntake.js';
-import { getVaelOperatorId } from './vaelOperatorId.js';
 
 export const MEMORY_TOP_N = 8;
 export const MEMORY_MIN_SIMILARITY = 0.55;
@@ -297,17 +296,15 @@ export async function storeMainMemory(
     return existing;
   }
 
-  // Platform candidate: fact/pattern/context with high confidence qualify for
-  // Vael's intake pipeline. preference/interaction stay private to the operator.
-  // Vael id resolved dynamically by name from the operators table — the prior
-  // hardcoded id was stale (Vael was recreated but the constant was never
-  // updated, so the guard below was silently skipping the wrong operator).
+  // Platform-candidate flag retained on the row for the future Operator Insight
+  // Network. The old Vael-id exclusion guard was removed alongside the rag_dna
+  // teardown (2026-05-15); every operator is now eligible to surface memories
+  // as platform candidates. OIN handles scoping + verification at query time,
+  // not by excluding source operators here.
   const PLATFORM_ELIGIBLE_TYPES: MemoryType[] = ['fact', 'pattern', 'context'];
-  const vaelOperatorId = await getVaelOperatorId();
   const isPlatformCandidate =
     confidence >= 0.85 &&
-    PLATFORM_ELIGIBLE_TYPES.includes(memoryType) &&
-    operatorId !== vaelOperatorId;
+    PLATFORM_ELIGIBLE_TYPES.includes(memoryType);
 
   const [memory] = await db.insert(operatorMainMemoryTable).values({
     id: crypto.randomUUID(),

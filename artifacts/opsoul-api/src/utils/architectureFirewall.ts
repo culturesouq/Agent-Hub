@@ -131,11 +131,6 @@ const HIGH_CONFIDENCE: FirewallPattern[] = [
   { regex: /\bcosine\s+(similarity|distance)\s+(of\s+0\.\d|threshold|ranking)\b/gi, category: 'vector-mechanic', label: 'cosine internals', tier: 'block' },
   { regex: /\bpgvector\b/gi, category: 'vector-mechanic', label: 'pgvector', tier: 'block' },
 
-  // ── Vael as platform intelligence ──
-  { regex: /\bVAEL\s+(Intelligence\s+)?Desk\b/g, category: 'vael-platform', label: 'VAEL Desk', tier: 'block' },
-  { regex: /\bDNA\s+(scope|scoping)\b/gi, category: 'vael-platform', label: 'DNA scoping', tier: 'block' },
-  { regex: /\bpipeline\s+screener\b/gi, category: 'vael-platform', label: 'pipeline screener', tier: 'block' },
-
   // ── API surface internals ──
   { regex: /\/v1\/(chat|action)\b/g, category: 'api-internal', label: 'internal endpoints', tier: 'block' },
   { regex: /\bAPI\s+deployment\s+slots?\b/gi, category: 'api-internal', label: 'API slots', tier: 'block' },

@@ -14,7 +14,6 @@ import {
   operatorFilesTable,
   operatorDeploymentSlotsTable,
   operatorSecretsTable,
-  ragDnaTable,
   ownersTable,
 } from '@workspace/db';
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
@@ -953,33 +952,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   }
 
   // ── System prompt is built unlabeled (per § 3 rule 10). KB hits + memory
-  // hits + DNA spirit get woven into the system prompt as the operator's
-  // absorbed knowledge — never as labeled role:'user' exhibits. Counts of
-  // KB/memory are operator metadata (not for the operator's mouth) — omitted.
-  // [STATION] block removed: operator can call list_files / list_secrets /
-  // similar skills on demand. The tools array passed to streamChat already
-  // gives the LLM functional info about available tools — duplicating it as
-  // a prompt exhibit only created labels the LLM quoted back to users.
-  //
-  // The DNA pull stays (operator carries absorbed identity from approved DNA
-  // entries), but it's now mixed into the system prompt without the
-  // "[OPSOUL IDENTITY]" label and without the "This is who you are and how
-  // OpSoul works" preamble (which the LLM treated as user-facing context).
-  const dnaEntries = await db
-    .select({ content: ragDnaTable.content })
-    .from(ragDnaTable)
-    .where(and(
-      eq(ragDnaTable.isActive, true),
-      ne(ragDnaTable.layer, 'l4_platform'),
-    ))
-    .orderBy(desc(ragDnaTable.confidence))
-    .limit(12);
-
+  // hits get woven into the system prompt as the operator's absorbed
+  // knowledge. Counts of KB/memory are operator metadata (not for the
+  // operator's mouth) — omitted. The tools array passed to streamChat already
+  // gives the LLM functional info about available tools.
   const promptSections: string[] = [systemPrompt];
-
-  if (dnaEntries.length > 0) {
-    promptSections.push(dnaEntries.map((e) => e.content).join('\n\n'));
-  }
 
   if (kbContext && kbContext.trim()) {
     promptSections.push(kbContext.trim());
