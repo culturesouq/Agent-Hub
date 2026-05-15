@@ -13,7 +13,6 @@ import {
 } from '../validation/operator.js';
 import { chatCompletion, MODEL_OPTIONS, CHAT_MODEL } from '../utils/openrouter.js';
 import { recomputeSelfAwareness } from '../utils/selfAwarenessEngine.js';
-import { seedAgencyCore } from '../utils/seedAgencyCore.js';
 import { seedPlatformKb } from '../utils/platformKbSeed.js';
 import { encryptToken, decryptToken } from '@workspace/opsoul-utils/crypto';
 import { eq, and, isNull } from 'drizzle-orm';
@@ -278,14 +277,6 @@ router.post('/blank', async (req: Request, res: Response): Promise<void> => {
   };
 
   try {
-    await seedAgencyCore(op.id, ownerId);
-  } catch (err) {
-    await rollbackAll('seedAgencyCore failed', err);
-    res.status(500).json({ error: 'Operator creation failed during agency seed. No record created.' });
-    return;
-  }
-
-  try {
     await seedPlatformKb(op.id, ownerId);
   } catch (err) {
     await rollbackAll('seedPlatformKb failed', err);
@@ -331,7 +322,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     toolUsePolicy: data.toolUsePolicy,
   }).returning();
 
-  seedAgencyCore(op.id, ownerId).catch((err) => console.error('[agency-core] seed failed:', err));
   seedPlatformKb(op.id, ownerId).catch((err) => console.warn('[platformKbSeed]', err?.message));
 
   res.status(201).json(serializeOperator(op));

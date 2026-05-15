@@ -45,7 +45,6 @@ import { startTelegramWebhookRetryCron } from './cron/telegramWebhookRetryCron.j
 import { startVaelCron } from './cron/vaelCron.js';
 import { runInitSeed } from './utils/initSeed.js';
 import { backfillIntegrationSkills } from './utils/autoInstallIntegrationSkills.js';
-import { backfillAllAgencyCore } from './utils/seedAgencyCore.js';
 import { backfillAllPlatformKb } from './utils/platformKbSeed.js';
 import { backfillTelegramWebhookSecrets } from './utils/backfillTelegramSecrets.js';
 import { backfillWhatsAppAppSecrets } from './utils/backfillWhatsAppSecrets.js';
@@ -245,7 +244,6 @@ async function start(): Promise<void> {
   sweepStuckPendingIntegrations().catch((err) => console.error('[sweep-pending] failed:', err?.message));
   runInitSeed().catch((err) => console.error('[initSeed] failed:', err?.message));
   backfillIntegrationSkills().catch((err) => console.error('[autoInstall] backfill failed:', err?.message));
-  backfillAllAgencyCore().catch((err) => console.error('[agency-core] backfill failed:', err?.message));
   backfillAllPlatformKb().catch((err) => console.error('[platformKb] backfill failed:', err?.message));
   backfillTelegramWebhookSecrets().catch((err) => console.error('[telegram-secrets] backfill failed:', err?.message));
   backfillWhatsAppAppSecrets().catch((err) => console.error('[whatsapp-backfill] failed:', err?.message));
