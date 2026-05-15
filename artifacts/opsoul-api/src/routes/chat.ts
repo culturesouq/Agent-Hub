@@ -1296,19 +1296,26 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         const iterFullStart = fullContent.length; // mark start of this iteration in fullContent
         let iterToolCall: { id: string; name: string; args: string } | undefined;
 
+        // Operator-as-driver: the operator decided in analyse() whether tools
+        // are needed this turn. For `chat` intent the catalog is empty — the
+        // LLM cannot call tools because none are offered. For `execute` intent
+        // the full catalog is presented. Birth mode passes 'execute' so newborn
+        // operators retain full capability during identity formation.
         const iterTools: ToolDefinition[] = [];
-        if (webSearchTool && webSearchCount < MAX_SEARCHES) iterTools.push(webSearchTool);
-        if (kbSeedTool) iterTools.push(kbSeedTool);
-        iterTools.push(writeFileTool);
-        iterTools.push(readFileTool);
-        iterTools.push(listFilesTool);
-        iterTools.push(getCurrentTimeTool);
-        iterTools.push(scheduleTaskTool);
-        iterTools.push(updateTaskTool);
-        iterTools.push(pauseTaskTool);
-        iterTools.push(resumeTaskTool);
-        iterTools.push(deleteTaskTool);
-        if (httpRequestTool) iterTools.push(httpRequestTool);
+        if (decision.kind === 'execute') {
+          if (webSearchTool && webSearchCount < MAX_SEARCHES) iterTools.push(webSearchTool);
+          if (kbSeedTool) iterTools.push(kbSeedTool);
+          iterTools.push(writeFileTool);
+          iterTools.push(readFileTool);
+          iterTools.push(listFilesTool);
+          iterTools.push(getCurrentTimeTool);
+          iterTools.push(scheduleTaskTool);
+          iterTools.push(updateTaskTool);
+          iterTools.push(pauseTaskTool);
+          iterTools.push(resumeTaskTool);
+          iterTools.push(deleteTaskTool);
+          if (httpRequestTool) iterTools.push(httpRequestTool);
+        }
         const iterOpts = {
           ...chatOpts,
           tools: iterTools.length > 0 ? iterTools : undefined,
@@ -1914,19 +1921,23 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         }
       }
 
+      // Operator-as-driver: same gating as the streaming path. Tools are
+      // offered only when the operator's analyse() decision is 'execute'.
       const syncTools: ToolDefinition[] = [];
-      if (webSearchTool) syncTools.push(webSearchTool);
-      if (kbSeedTool) syncTools.push(kbSeedTool);
-      syncTools.push(writeFileTool);
-      syncTools.push(readFileTool);
-      syncTools.push(listFilesTool);
-      syncTools.push(getCurrentTimeTool);
-      syncTools.push(scheduleTaskTool);
-      syncTools.push(updateTaskTool);
-      syncTools.push(pauseTaskTool);
-      syncTools.push(resumeTaskTool);
-      syncTools.push(deleteTaskTool);
-      if (httpRequestTool) syncTools.push(httpRequestTool);
+      if (decision.kind === 'execute') {
+        if (webSearchTool) syncTools.push(webSearchTool);
+        if (kbSeedTool) syncTools.push(kbSeedTool);
+        syncTools.push(writeFileTool);
+        syncTools.push(readFileTool);
+        syncTools.push(listFilesTool);
+        syncTools.push(getCurrentTimeTool);
+        syncTools.push(scheduleTaskTool);
+        syncTools.push(updateTaskTool);
+        syncTools.push(pauseTaskTool);
+        syncTools.push(resumeTaskTool);
+        syncTools.push(deleteTaskTool);
+        if (httpRequestTool) syncTools.push(httpRequestTool);
+      }
       const syncOpts = { ...chatOpts, tools: syncTools.length > 0 ? syncTools : undefined };
       const result = await agent.executeSync(messages, syncOpts);
 

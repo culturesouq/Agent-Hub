@@ -48,8 +48,28 @@ import type { ScopeType } from './scopeResolver.js';
 import { chatCompletion, streamChat, type ChatMessage, type ToolDefinition, type ChatOptions, type StreamChunk, type CompletionResult } from './openrouter.js';
 
 export type AnalyseDecision =
-  | { kind: 'execute' }
+  | { kind: 'execute' }            // operator dispatches LLM WITH tools available
+  | { kind: 'chat' }               // operator dispatches LLM WITHOUT tools — pure text reply
   | { kind: 'refuse_architecture' };
+
+// Heuristics — patterns the operator uses to decide whether a turn needs tool access.
+// Conservative: when in doubt, return `chat`. Tool use is a deliberate operator
+// decision, not an LLM default. Per patent: the operator decides; the LLM is the engine.
+const ACTION_VERB_PATTERN = /\b(search|find|look\s+up|lookup|check|fetch|get|query|read|write|create|save|store|schedule|book|remind|browse|visit|crawl|scrape|list|update|delete|pause|resume|send|post|email|message|call|run|execute|trigger|http|api|request|generate|build|make|set\s+up|configure|install|deploy|publish)\b/i;
+const URL_PATTERN = /https?:\/\/|www\.|\.[a-z]{2,4}\//i;
+const FILE_PATTERN = /\.(md|txt|csv|json|html|pdf|docx?|xlsx?|png|jpg|jpeg|yml|yaml|sql|sh|ts|tsx|js|jsx|py|go|rs)\b/i;
+// Time keywords stay tool-eligible because the operator may want get_current_time.
+const TIME_QUERY_PATTERN = /\b(what\s+time|current\s+time|today's\s+date|right\s+now|timezone)\b/i;
+
+export function detectToolNeed(userMessage: string): boolean {
+  const m = userMessage ?? '';
+  if (m.length > 200) return true; // long messages likely complex enough to need tools
+  if (URL_PATTERN.test(m)) return true;
+  if (FILE_PATTERN.test(m)) return true;
+  if (TIME_QUERY_PATTERN.test(m)) return true;
+  if (ACTION_VERB_PATTERN.test(m)) return true;
+  return false;
+}
 
 export interface OperatorAgentInit {
   operatorId: string;
@@ -73,29 +93,34 @@ export class OperatorAgent {
   constructor(public init: OperatorAgentInit) {}
 
   /**
-   * STEP 1 — Operator analyses the user message.
+   * STEP 1 — Operator analyses the user message and decides this turn's mode.
    *
-   * The operator inspects the incoming message and decides what should
-   * happen this turn BEFORE any LLM is called.
+   * Per patent: the operator is the driver, the LLM is the engine. The
+   * operator decides whether tools are needed BEFORE the LLM ever sees the
+   * message. The LLM does not autonomously decide to call tools — it only
+   * acts when the operator gives it the tool catalog.
    *
-   * Today's outcomes:
-   *   execute              — operator dispatches the LLM as executor
-   *   refuse_architecture  — operator handles the refusal directly, in
-   *                          its own voice, with no LLM call
+   * Outcomes:
+   *   refuse_architecture — operator handles in its own voice, no LLM call.
+   *                         Used for architecture-introspection questions.
+   *   chat                — operator dispatches LLM with NO tool catalog.
+   *                         Pure text generation. Default for conversational
+   *                         input (greetings, casual messages, identity
+   *                         questions, short replies). The LLM cannot call
+   *                         a tool because no tools are offered.
+   *   execute             — operator dispatches LLM WITH tool catalog.
+   *                         Used when the message signals a task that needs
+   *                         external action (action verbs, URLs, file refs,
+   *                         time queries, long requests).
    *
-   * Returning refuse_architecture saves the LLM call, eliminates the
-   * leak risk on the source, and gives a consistent natural reply.
-   * Output firewall (validate() below) remains as the structural backstop
-   * for any draft the LLM produces that still quotes internals.
-   *
-   * Birth-mode operators are exempt from architecture-question refusal
-   * because the newborn must be able to engage with identity questions
-   * while its identity is being formed.
+   * Birth-mode operators bypass the chat/execute split — birth needs the
+   * full LLM context to engage with identity questions.
    */
   analyse(userMessage: string): AnalyseDecision {
     if (this.init.isBirthMode) return { kind: 'execute' };
     if (isArchitectureQuestion(userMessage)) return { kind: 'refuse_architecture' };
-    return { kind: 'execute' };
+    if (detectToolNeed(userMessage)) return { kind: 'execute' };
+    return { kind: 'chat' };
   }
 
   /**
