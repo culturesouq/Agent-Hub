@@ -11,13 +11,13 @@
 |---|---|
 | **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` (HTTP 200, 89ms) |
 | **Container App** | `opsoul` (resource group `bani-studio-rg`, region `uaenorth`) |
-| **Active Revision** | `opsoul--0000052` (Healthy, 100% traffic — Step 1 cleanup shipped) |
-| **Image** | `banistudioacr.azurecr.io/opsoul-api:cleanup-step1-477d53b` |
-| **Source commit (live)** | `477d53b` (remove `_agency-core` "My tools:" KB seed — Step 1 of cleanup-and-rewire plan) |
-| **ACR build** | Run ID `dg5e` (2m 12s, 2026-05-15) |
-| **Notable env vars** | `VAEL_INBOX_ENABLED=true` (Vael's inbox-processing gate open per owner direction) |
-| **Code commits in this image** | `477d53b` Step 1 cleanup · `4a17d0a` planning artifacts · `6dc4672` SoT marker · `d394985` Vael dynamic id · `30686b1` operator-as-driver Step 2 · `5bf5e9b` infra bundle |
-| **DB state** | Clean. `_agency-core` rows = 0 (3 deleted in Step 1, no auto-reseed). Per-operator KB: Vael 85, Nahil 95, Operator 83. 0 Layer 1, 0 Layer 2, 0 orphan skills, 5 active rag_dna. |
+| **Active Revision** | `opsoul--0000053` (Healthy, 100% traffic — rag_dna teardown shipped) |
+| **Image** | `banistudioacr.azurecr.io/opsoul-api:rag-teardown-6459739` |
+| **Source commit (live)** | `6459739` (rag_dna pipeline removed: 3 tables dropped, 9 files deleted, 21 files changed, -3253 / +28 lines) |
+| **ACR build** | Run ID `dg5f` (2m 18s, 2026-05-15) |
+| **Notable env vars** | `VAEL_INBOX_ENABLED=true` (legacy from before teardown — no longer wired to anything; safe to leave or remove later) |
+| **Code commits in this image** | `6459739` rag_dna teardown · `4185346` rebuild plan · `2616266` SoT Step 1 record · `477d53b` Step 1 cleanup · `4a17d0a` planning artifacts · `d394985` Vael dynamic id |
+| **DB state** | Clean. **rag_dna table DROPPED.** rag_pipeline_config + rag_sources tables also DROPPED (orphans). Per-operator KB: Vael 85, Nahil 95, Operator 83. 0 Layer 1, 0 Layer 2 memories, 0 orphan skills. |
 | **Operators in DB** | 3: Vael (`8668f6c9-...`), Nahil (`37da8776-...`), Operator/Blank (`eb70c409-...`). No orphans, no soft-deleted, no ghosts. |
 | **ACR state** | Active tag `cleanup-step1-477d53b`. Prior tag `vael-id-fix-d394985` retained for rollback. Prior revision `0000051` deactivated. |
 | **Optional next step** | Set `SANDBOX_OPERATOR_ID` env var on the container app. If unset, sandbox-shaped userIds are rejected on every operator. Optional `VAEL_OPERATOR_ID` env var also recognised as explicit override (default = DB lookup by name='Vael'). |
@@ -224,6 +224,36 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 ---
 
 ## 8. Commit History — newest first
+
+### 2026-05-15 (PM) — rag_dna SHIPPED — table + pipeline + code removed (`6459739`, LIVE on revision 0000053)
+
+**Owner direction:** "ok fine, we will wait till you rebuild so what, just Go." Approved data wipe + full code teardown; accepted UI dark state until OIN rebuild lands.
+
+**What shipped:**
+- **DB:** `DELETE FROM rag_dna` (5 active rows) → `DROP TABLE rag_dna, rag_pipeline_config, rag_sources CASCADE`. All 3 dead tables gone.
+- **Code (deleted):** `routes/adminRag.ts` (967 lines, 27 routes), `cron/vaelCron.ts` (631 lines), `utils/vaelEngine.ts`, `utils/vaelOperatorId.ts`, `utils/ragSourceFetcher.ts`, `scripts/seedVael.ts`, `scripts/seedVaelScopingKb.ts`, `scripts/seedBuilderDna.ts`, `scripts/seedArchetypeDna.ts`, `scripts/fixBuilderDnaTone.ts`. 9 files, ~3000 lines.
+- **Code (edited):** `routes/chat.ts` (dnaEntries injection block + ragDnaTable import removed), `routes/admin.ts` (/backfill/dna-embeddings route + ragDnaTable import removed), `index.ts` (startVaelCron + adminRagRouter imports + mount + call removed), `utils/memoryEngine.ts` (vaelOperatorId guard removed — all operators now platform-eligible by default), `utils/architectureFirewall.ts` (3 VAEL Desk / DNA scoping regex rules removed), `utils/vectorSearch.ts` (`searchDnaKb` removed, `kbSource` union narrowed).
+- **Schema:** `lib/db/src/schema/rag_dna.ts`, `rag_pipeline.ts`, `rag_sources.ts` deleted + re-exports removed.
+
+**Build + deploy:**
+- ACR Run `dg5f` (2m 18s, image `rag-teardown-6459739`).
+- `az containerapp update` → revision `opsoul--0000053` (Healthy, 100% traffic, HTTP 200 in 245ms).
+
+**Frontend left intact.** `AdminPage.tsx` Vael Desk sections will get 404s on `/admin/rag/*` calls until OIN rebuild replaces them with the new Insight Triage UI per the plan. Acceptable per owner.
+
+**Vael preserved.** Her operator row, identity, soul, KB (85 rows), 2 secrets, conversations — all untouched. She is now a normal operator, no longer wired as platform validator. Her Layer-2 memory promotion now follows the same rules as any other operator (no special exclusion).
+
+**What this is expected to fix immediately:**
+- The "use tools" Layer-1 foundation prime that lived in `rag_dna` is gone. Vael's gatekeeper identity no longer composes with it on bare greetings. Tool-loop on "hi" should stop (no LLM call has the "prioritize tools" instruction anymore).
+- Nahil's prompt no longer contains agriculture-as-identity from cross-operator pollution.
+- Operator (Blank) no longer contains agriculture content either.
+- All three operators' system prompts now carry only: identity + soul + archetype foundations + roles + own KB hits + own memory hits.
+
+**Awaiting owner verification.** Test Vael "hi" against `opsoul--0000053` to confirm loop is gone.
+
+**Next per plan:** Section B of OIN rebuild (Operator Insight Network — schema → submission → verification → query tool → Insight Triage UI). Each phase needs owner approval per § 3 rule 7.
+
+---
 
 ### 2026-05-15 (PM, post-Step-1) — `rag_dna` teardown + Operator Insight Network rebuild plan (planning entry; no code yet)
 
