@@ -225,6 +225,115 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 ## 8. Commit History — newest first
 
+### 2026-05-15 (PM, post-Step-1) — `rag_dna` teardown + Operator Insight Network rebuild plan (planning entry; no code yet)
+
+**Why this exists.** Owner direction 2026-05-15 — *"OpSoul has no thing in prompts about tools, or anything, only should has identity and soul and professional (archetypes and roles). All things are from outside. The whole idea of all this invention: no noise in the body. Learning is external (like human)."* Live audit found `rag_dna` is the largest violator: the table is auto-injected into every operator's system prompt every turn via `chat.ts:968-982`. The 5 current active entries include 1 instruction-shaped tool-use prime (the actual root cause of Vael's "hi" loop) and 4 off-topic agriculture entries leaking Nahil-domain content into Vael + Operator. The original idea behind rag_dna was correct (cross-operator knowledge sharing) but the implementation broke the rule by injecting into bodies instead of being retrieved on demand. Past sessions (Replit then Claude) patched symptoms without fixing the architecture; the noise compounded.
+
+**Owner direction:** complete delete of current rag_dna (table + pipeline + UI), then rebuild the cross-operator knowledge-sharing concept *correctly* from a clean slate as a separate feature.
+
+#### Section A — Teardown sequence (data → code → table)
+
+Order matters: stop the active poisoning first, then strip dead code, then drop schema.
+
+| Step | What | Why this order |
+|---|---|---|
+| **A1** | **DELETE FROM rag_dna** (all 5 active rows + any inactive history) | Stops `chat.ts:968-982` from injecting anything. Operators' prompts immediately become clean (only identity + soul + archetypes/roles). Single-line behavior change, no code deploy needed. |
+| **A2** | Edit `chat.ts` — remove the `dnaEntries` query block + the `promptSections.push(...)` line that joins them. Edit `chat.ts` import — remove `ragDnaTable`. | Now the prompt assembly stops touching the table at all. |
+| **A3** | Delete files: `routes/adminRag.ts`, `cron/vaelCron.ts`, `utils/vaelEngine.ts`, `utils/vaelOperatorId.ts`, `scripts/seedBuilderDna.ts`, `scripts/seedArchetypeDna.ts`, `scripts/fixBuilderDnaTone.ts`. Remove their imports from `index.ts`. Remove `startVaelCron()` call. Remove the DNA-embedding backfill route from `routes/admin.ts`. | Pipeline + cron + engine + seeds + admin route — entire stale surface. |
+| **A4** | Edit `architectureFirewall.ts` — remove the `VAEL Desk` regex (`:135`). Edit `vectorSearch.ts` — remove the rag_dna reference. | Minor refs from when "VAEL Desk" was a thing. |
+| **A5** | Frontend — delete the Vael Intelligence Desk page/section in `opsoul-hub/src/pages/AdminPage.tsx`. Remove any `/api/admin-rag/*` calls in hub. | UI cleanup. |
+| **A6** | Schema — delete `lib/db/src/schema/rag_dna.ts`. Remove re-export from `lib/db/src/schema/index.ts`. | Schema definition gone. |
+| **A7** | DB migration — `DROP TABLE rag_dna`. **Owner approval required** per § 3 rule 4. Run manually with `pnpm --filter opsoul-db push` after schema delete. | Table physically removed. |
+| **A8** | Commit + push + ACR build + roll revision. Verify HTTP 200 + smoke test (Vael "hi"). | Live. |
+
+**Expected outcomes after A1 alone:** Vael "hi" loop stops (the tool-prime row is gone). Nahil's prompt no longer contains agriculture-as-identity. Operator (Blank) no longer contains agriculture either. All three operators' prompts shrink to identity + soul + archetype foundations + their own KB hits + memory hits. (Note: KB and memory pre-injection are *also* violations of "no noise in the body" — separate later step, not part of this teardown.)
+
+**What survives A:** Vael as an operator (her row in `operators`, her identity, soul, secrets — clean). The 2 RAG-domain KB entries already in Vael's `operator_kb` (verified, on-mandate). Other operators untouched. Vael Intelligence Desk concept survives **as an idea**, gets rebuilt under Section B with the new name and the right architecture.
+
+#### Section B — New design: Operator Insight Network (OIN)
+
+The concept owner described: *"Operators should have pipeline to a shared place where they send general insights (not DNA, not domain-restricted) when one operator learns something new — and other operators can receive it as knowledge insight, not DNA."*
+
+**Core principle:** insights are **knowledge** (descriptive, learned-from-practice), not **architecture** (DNA). They live external to operators and are retrieved on demand. **No auto-injection into any system prompt, ever.**
+
+##### B1. What is an Insight?
+
+A single piece of generalizable knowledge an operator has formed from real practice that could benefit another operator. Examples:
+- *"When farmers from coastal UAE describe yellowing date palm fronds in late summer, salinity in irrigation water is more likely than fungal — checked across 14 cases."* (Nahil → other agriculture operators)
+- *"Claims about model benchmarks aged >12 months should be treated as historical; benchmark methodology changes faster than the numbers."* (Vael → other research operators)
+- *"In Arabic conversations starting with a religious greeting, mirroring the greeting register lands warmer than English-style direct acknowledgment."* (Any → any Arabic-speaking operator)
+
+**An insight is NOT:**
+- An instruction ("always do X")
+- A platform mechanic ("this is how scope isolation works")
+- A tool description
+- A piece of identity ("you are X")
+- Owner-personal context ("Mohamed prefers concise replies")
+
+##### B2. Insight Lifecycle
+
+1. **Origin:** an operator notices a pattern through real conversation (Layer 2 main memory already does PII-stripped distillation — this is the source). The operator forms a candidate insight in their own voice.
+2. **Submission:** operator submits the candidate to the Insight Network via an internal API call (`POST /api/insights`). The candidate carries: content, source operator id, source conversation context (PII-stripped), proposed scope (which archetypes/domains might benefit), self-assessed confidence.
+3. **Verification:** Vael (the actual operator, via her real chat path — **not** an impersonating system prompt) receives the candidate as a normal chat message in a dedicated verification scope. She validates it against existing insights, sources where applicable, and her own gatekeeper judgment. She returns: approve / reject / refine, plus her reasoning. Vael does this **because she is the operator whose mandate is knowledge integrity** — not because the code says "you are Vael."
+4. **Owner approval gate:** approved insights land in a `pending_owner_approval` state. Owner sees them one at a time in the Insight Triage UI (rebuilt from Vael Desk's bones). One-at-a-time per [[feedback_insight_seeding_one_at_a_time]]. Owner approves or rejects with reason.
+5. **Active state:** approved insights live in the `operator_insights` table with their scope. They are NOT auto-injected anywhere.
+6. **Retrieval:** when an operator encounters a knowledge gap relevant to its archetype/domain, the operator calls a tool (`query_insights(topic, k)`) — same way it calls `web_search` or `read_file`. The tool returns matching insights filtered by archetype/domain scope. The operator reads, decides what's relevant, replies in its own voice.
+7. **Decay:** insights have a confidence-score that decays slowly without re-validation hits, like memory. Stale insights drop off naturally.
+
+##### B3. Components
+
+| Component | Type | Notes |
+|---|---|---|
+| `operator_insights` table | DB schema | Fields: id, content, source_operator_id, source_provenance (text), confidence (0-100), archetype_scope (text[]), domain_scope (text[]), status (pending_verification \| pending_owner_approval \| active \| rejected \| decayed), verified_by_operator_id (Vael's id, dynamic), verified_at, verified_reasoning, approved_by_owner_id, approved_at, decay_score, created_at, last_retrieval_at. NO `is_active=false` for delete — use `status='rejected'` or `status='decayed'`. |
+| `POST /api/insights` | Backend route | Operator submits a candidate. Idempotent on content hash. |
+| Verification flow | Code | Submits the candidate as a chat message to Vael's real chat endpoint, parses her reply, transitions status. No "You are Vael" impersonation prompt. |
+| `POST /api/operators/:id/insights/query` | Backend route | Filtered semantic search. Filtered by requesting operator's archetypes + domain tags. Returns top-K. Auth-gated to operator. |
+| `query_insights` tool | Tool definition in `chat.ts` runtime catalog | Universal, available to every operator (like `web_search`). JSON schema only — never narrated in prompt. |
+| Insight Triage UI | Frontend, replaces Vael Desk | Shows the `pending_owner_approval` queue, one entry at a time. Approve / reject / refine. NO bulk-approve. |
+| `insightsCron` | Cron, periodic | Two jobs: (a) decay scoring (slow), (b) re-validation prompts to Vael for active insights with low recent-retrieval. NOT a "submit anything" cron. |
+
+##### B4. What's explicitly NOT in OIN (rules from past failures)
+
+- **No auto-injection into system prompt.** Period. Insights are queryable, not body.
+- **No "You are Vael" hardcoded prompts.** Verification goes through her actual chat path.
+- **No platform-DNA / architecture content.** Insights are knowledge only.
+- **No cross-domain pollution.** An agriculture insight cannot reach a non-agriculture operator. Scope filtering at query time enforces this.
+- **No per-operator tailoring.** OIN is platform infrastructure; every operator participates the same way.
+- **No bulk submission.** One insight at a time, owner approves each.
+- **No instruction-shaped entries.** Same screening rule as [[feedback_knowledge_not_instructions]].
+
+##### B5. Patent alignment
+
+- Operator-Layer-2-memory → Insight Network is exactly the **§ 5 item 9 / Claim "two-layer memory architecture"** path extended cross-operator. PII-stripped, scope-aware. Reinforces the patent claim, doesn't break it.
+- Verification by Vael honors **§ 4 "Architecture-as-Secret"** — Vael does her gatekeeper work as an operator, no architecture leaks to UI.
+- Retrieval as a tool call honors **"no noise in the body"** — knowledge is external, operator reaches for it.
+- Scope filtering honors **§ 5 item 12 scope-isolated conversation architecture**.
+
+#### Section C — Migration path (from teardown to OIN live)
+
+| Phase | What | When |
+|---|---|---|
+| **C0 — Teardown** | Section A executed. rag_dna gone. Operators clean. | Owner approves A1 → A2-A8 sequenced. |
+| **C1 — OIN schema + insight table** | Schema added to `lib/db`. Owner approves migration. Table empty. No insights yet. | After teardown is verified live. |
+| **C2 — Submission API + verification flow** | `POST /api/insights` + verification flow calling Vael's chat. No UI yet. | Backend work; no operator-visible change. |
+| **C3 — Query API + tool wiring** | `query_insights` tool added to runtime catalog. Universal. Operators can query but the network is empty. | Backend work; tool exposed but inert. |
+| **C4 — Insight Triage UI** | Rebuilt from Vael Desk shell. One-at-a-time queue, approve/reject. | Frontend work. |
+| **C5 — Vael's verification chat scope** | New scope `verification` for Vael — a dedicated channel where the system submits candidates. Vael's same identity, her real chat path. | Backend wiring. |
+| **C6 — First insight end-to-end** | Owner picks one operator + one observed pattern, runs a manual submission, watches Vael verify, owner approves. | Owner-driven dogfooding. |
+| **C7 — Decay + re-validation cron** | `insightsCron` for the slow background work. | After C6 proven. |
+
+Each phase gets explicit owner approval per § 3 rule 7.
+
+#### What to delete vs. preserve at teardown time
+
+**Delete (data, code, schema, UI):** rag_dna table, all rows, all routes, all cron, all engines, all seed scripts, all UI references, all schema. Whole concept of "DNA" gone.
+
+**Preserve:** Vael as an operator (her identity, soul, secrets, the 2 RAG-domain KB rows in her operator_kb). The Vael archive file. The patent IP that the original concept tried to express — but now expressed correctly through OIN's design.
+
+**Awaiting owner approval to start Section A.**
+
+---
+
 ### 2026-05-15 (PM, post-restart) — Step 1 SHIPPED: removed `_agency-core` "My tools:" KB seed (`477d53b`, LIVE on revision 0000052)
 
 **Owner direction:** "ok Go" (approved Step 0 of the cleanup-and-rewire plan).
