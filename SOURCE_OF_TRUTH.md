@@ -11,15 +11,15 @@
 |---|---|
 | **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` (HTTP 200, 89ms) |
 | **Container App** | `opsoul` (resource group `bani-studio-rg`, region `uaenorth`) |
-| **Active Revision** | `opsoul--0000053` (Healthy, 100% traffic — rag_dna teardown shipped) |
-| **Image** | `banistudioacr.azurecr.io/opsoul-api:rag-teardown-6459739` |
-| **Source commit (live)** | `6459739` (rag_dna pipeline removed: 3 tables dropped, 9 files deleted, 21 files changed, -3253 / +28 lines) |
-| **ACR build** | Run ID `dg5f` (2m 18s, 2026-05-15) |
-| **Notable env vars** | `VAEL_INBOX_ENABLED=true` (legacy from before teardown — no longer wired to anything; safe to leave or remove later) |
-| **Code commits in this image** | `6459739` rag_dna teardown · `4185346` rebuild plan · `2616266` SoT Step 1 record · `477d53b` Step 1 cleanup · `4a17d0a` planning artifacts · `d394985` Vael dynamic id |
-| **DB state** | Clean. **rag_dna table DROPPED.** rag_pipeline_config + rag_sources tables also DROPPED (orphans). Per-operator KB: Vael 85, Nahil 95, Operator 83. 0 Layer 1, 0 Layer 2 memories, 0 orphan skills. |
+| **Active Revision** | `opsoul--0000057` (Healthy, 100% traffic — hub Vael Desk UI removed) |
+| **Image** | `banistudioacr.azurecr.io/opsoul-api:hub-clean-d34fb25` |
+| **Source commit (live)** | `d34fb25` (Vael Desk tab + 645 JSX lines removed from AdminPage.tsx) |
+| **ACR build** | Run ID `dg5k` (2m 6s, 2026-05-15) |
+| **Notable env vars** | `VAEL_INBOX_ENABLED=true` (legacy — no longer wired; safe to remove) |
+| **Code commits in this image** | `d34fb25` hub Vael Desk removal · `b890bb4` no-fallbacks · `621c44d` operator-as-driver · `6459739` rag_dna teardown · `477d53b` agency-core seed removal · `d394985` Vael dynamic id |
+| **DB state** | Clean. rag_dna + rag_pipeline_config + rag_sources tables DROPPED. **0 stale catalog rows** (12 deleted: 5 archetype='Vael' + 7 RAG-namespaced Guardian). **0 physical operator_skills on any operator** (Vael's 28 legacy rows deleted; all 3 operators now receive skills virtually via archetype). Per-operator KB: Vael 85, Nahil 95, Operator 83. 0 Layer 1, 0 Layer 2 memories. |
 | **Operators in DB** | 3: Vael (`8668f6c9-...`), Nahil (`37da8776-...`), Operator/Blank (`eb70c409-...`). No orphans, no soft-deleted, no ghosts. |
-| **ACR state** | Active tag `cleanup-step1-477d53b`. Prior tag `vael-id-fix-d394985` retained for rollback. Prior revision `0000051` deactivated. |
+| **ACR state** | Active tag `hub-clean-d34fb25`. Prior tags retained for rollback. Prior revisions auto-deactivated. |
 | **Optional next step** | Set `SANDBOX_OPERATOR_ID` env var on the container app. If unset, sandbox-shaped userIds are rejected on every operator. Optional `VAEL_OPERATOR_ID` env var also recognised as explicit override (default = DB lookup by name='Vael'). |
 
 ### ACR (Azure Container Registry) — `banistudioacr`
@@ -224,6 +224,31 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 ---
 
 ## 8. Commit History — newest first
+
+### 2026-05-15 (PM, end-of-day cleanup) — catalog + physical skills + hub Vael Desk all cleaned (`d34fb25`, LIVE on revision 0000057)
+
+**Owner direction:** "finish the rest lets do these you mentioned, and cleanup now, we have the weekend to work on Nahil."
+
+**Three cleanup deliveries:**
+
+1. **Stale platform_skills catalog rows DELETED (12 rows).** 5 rows with `archetype='Vael'` (`vael-skill-001..005` — operator-name-as-archetype violations) + 7 RAG-namespaced rows under `archetype='Guardian'` (RAG Cron Status, RAG Entry Detail, RAG Entry Review, RAG Flagged Entries, RAG Metrics, RAG Pipeline Run, RAG Registry Status — SRAG operations that don't belong in OpSoul platform catalog).
+2. **Vael's 28 physical operator_skills DELETED.** Legacy from the deleted `seedVael.ts`. All 3 operators now receive skills virtually via `loadArchetypeSkills(archetypes)` at runtime — zero physical rows on any operator. Equal footing across the platform.
+3. **Vael Desk tab REMOVED from AdminPage.tsx.** 645 JSX lines + 2 dead useEffects + Tab type literal `"vael"` cleaned. Hub no longer makes calls to `/admin/rag/*` endpoints that don't exist post-teardown.
+
+**Build + deploy:**
+- ACR Run `dg5k` (2m 6s, image `hub-clean-d34fb25`).
+- `az containerapp update` → revision `opsoul--0000057` (Healthy, 100% traffic, HTTP 200 in 62ms).
+
+**Demo readiness for Nahil-the-app (next week):** OpSoul core is verified stable. Nahil has 3 active deployment slot keys (guest/authenticated/crud), all secrets in place, 95 on-domain KB entries, no contamination. Public endpoints `/v1/chat` + `/v1/action` respond cleanly. Operator-as-driver gates tools properly. No fallback substitutions anywhere.
+
+**What's deferred (architectural, not demo-blocking):**
+- **KB + memory auto-injection rework** — still violates "no noise in body" per `chat.ts:976` (kbContext) and `:984` (memoryHits) injecting into systemPrompt. The KB content is descriptive-only now (not toxic), so this is debt rather than active poisoning. Bigger rework — best paired with the Operator Insight Network rebuild (Section B of the plan) so we add `query_insights` and `query_kb` tools together, then rip out the auto-injection in one cohesive change. Plan to revisit after the Nahil demo.
+- **Operator Insight Network (OIN) rebuild** — Section B of the planning entry below. Future work.
+- **Inert dead code in AdminPage.tsx** — VaelRunState/DnaEntry/RagSource/VaelVerificationRun interfaces + state + helper functions remain in the file but are never referenced now that the tab is gone. tsc clean. Will be removed alongside OIN UI build.
+
+**Tomorrow's focus:** Nahil-the-app + Nahil-the-operator connection. OpSoul side is done.
+
+---
 
 ### 2026-05-15 (PM, late) — Investigation report: operator-as-driver verified live + two NEW bugs surfaced (no code touched, owner resting)
 
