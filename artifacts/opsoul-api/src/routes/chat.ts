@@ -1287,6 +1287,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       let finalTokens = 0;
       let webSearchCount = 0;
       let httpRequestFired = false;
+      // Diagnostic: per-iteration breadcrumb showing tool calls for the operator+message.
+      // Helps trace why a turn hits MAX_ITER (tool-loop soul-failure). Temporary.
+      const iterTrace: Array<{ iter: number; toolName?: string; textLen: number }> = [];
 
       for (let iter = 0; iter < MAX_ITER; iter++) {
         let iterContent = '';
@@ -1330,6 +1333,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             completionTokens += chunk.usage.completionTokens;
           }
         }
+        iterTrace.push({ iter, toolName: iterToolCall?.name, textLen: iterContent.length });
+        console.log(`[AGENCY-ITER] op=${operator.name} iter=${iter} tool=${iterToolCall?.name ?? 'NONE'} textLen=${iterContent.length} userMsgLen=${message.length}`);
 
         // ── WEB SEARCH TOOL CALL ───────────────────────────────────────────
         if (iterToolCall?.name === 'web_search') {
@@ -1788,6 +1793,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
       // Soul-based fallback — if loop produced no user-facing text, respond in operator's voice
       if (!finalContent || finalContent.trim().length < 5) {
+        console.error(`[AGENCY-LOOP-FAIL] op=${operator.name} hit MAX_ITER with no text. Trace:`, JSON.stringify(iterTrace));
         finalContent = soulFailureResponse(operator, 'execution', 'tool loop', 'No result was produced.');
         fullContent += finalContent;
         res.write(`data: ${JSON.stringify({ delta: finalContent })}\n\n`);
