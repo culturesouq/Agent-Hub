@@ -29,7 +29,6 @@ import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 // `[WEB CONTEXT]` auto-injection removed (Phase 4). The web_search tool
 // remains available for the operator to call when its own soul decides.
 import { assembleOperatorPrompt, buildBirthSystemPrompt, buildTemporalContext, containsTimeKeywords } from '../utils/systemPrompt.js';
-import { applyFirewall, isArchitectureQuestion, FIREWALL_SUBSTITUTE_REPLY } from '../utils/architectureFirewall.js';
 import { OperatorAgent } from '../utils/operatorAgent.js';
 import type { SelfAwarenessSnapshot, BuildSystemPromptOpts } from '../utils/systemPrompt.js';
 import { searchMemory, buildMemoryContext, distillMemoriesFromConversations, storeMemory, distillRawContentForMemory } from '../utils/memoryEngine.js';
@@ -630,15 +629,6 @@ async function executeHttpWithOAuth(
   return result;
 }
 
-function soulFailureResponse(operator: { rawIdentity?: string | null; name?: string | null }, tool: string, target: string, error: string): string {
-  const soul = operator.rawIdentity ?? '';
-  const isBrief = soul.length < 300 || /brief|concise|direct|short/i.test(soul);
-  if (isBrief) {
-    return `I tried a ${tool} call to ${target} — it failed with: ${error}. Waiting for your direction.`;
-  }
-  return `I attempted a ${tool} call to ${target}. It failed with: ${error}. I won't guess or retry blindly — let me know how you want to proceed.`;
-}
-
 // ─── Main route handler ──────────────────────────────────────────────────────
 
 router.post('/', async (req: Request, res: Response): Promise<void> => {
@@ -812,14 +802,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // BIRTH MODE — operator has no identity yet; use birth system prompt instead of Layer 1
   const isBirthMode = !operator.rawIdentity;
 
-  // ── INPUT FIREWALL ──
-  // ── OPERATOR-IN-CONTROL ───────────────────────────────────────────────
-  // STEP 1 — Operator analyses the user message BEFORE any LLM is called.
-  // The OperatorAgent owns the decision; this route just executes what
-  // the operator decides. Today's analyse() returns either 'execute'
-  // (dispatch the LLM) or 'refuse_architecture' (operator handles the
-  // refusal directly in its own voice). See utils/operatorAgent.ts for
-  // the full contract and Step 2 plans.
+  // ── OPERATOR-AS-DRIVER ───────────────────────────────────────────────
+  // The operator analyses the user message and decides whether tools should
+  // be offered to the LLM this turn: 'chat' (no tools) or 'execute' (tools
+  // available). The LLM does not autonomously call tools — it acts only
+  // when the operator gives it the catalog. See utils/operatorAgent.ts.
   const agent = new OperatorAgent({
     operatorId: operator.id,
     operatorName: operator.name,
@@ -828,49 +815,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   });
 
   const decision = agent.analyse(message);
-
-  if (decision.kind === 'refuse_architecture') {
-    const refusalText = agent.composeArchitectureRefusal();
-    console.warn('[operator:refuse]', JSON.stringify({
-      path: 'chat',
-      operatorId: operator.id,
-      conversationId: conv.id,
-      reason: 'architecture_introspection',
-      message: message.slice(0, 200),
-    }));
-    const subId = crypto.randomUUID();
-    await db.insert(messagesTable).values({
-      id: subId,
-      conversationId: conv.id,
-      operatorId: operator.id,
-      role: 'assistant',
-      content: refusalText,
-      model: 'operator-direct',
-    });
-    await db.update(conversationsTable)
-      .set({ messageCount: sql`message_count + 2`, lastMessageAt: new Date() })
-      .where(eq(conversationsTable.id, conv.id));
-    if (stream) {
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache, no-transform');
-      res.setHeader('Connection', 'keep-alive');
-      res.flushHeaders?.();
-      res.write(`data: ${JSON.stringify({ delta: refusalText })}\n\n`);
-      res.write(`data: ${JSON.stringify({ done: true, messageId: subId })}\n\n`);
-      res.end();
-    } else {
-      res.json({
-        messageId: subId,
-        content: refusalText,
-        model: 'operator-direct',
-      });
-    }
-    return;
-  }
-  // STEP 2 — Operator dispatches the LLM as executor (the existing chat
-  // pipeline below: tool-loop, streaming, retrieval-augmented context).
-  // STEP 3 — Operator validates the LLM's draft (applyFirewall calls
-  // below) before delivery to the user.
 
   let systemPrompt = isBirthMode
     ? buildBirthSystemPrompt()
@@ -1287,9 +1231,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       let finalTokens = 0;
       let webSearchCount = 0;
       let httpRequestFired = false;
-      // Diagnostic: per-iteration breadcrumb showing tool calls for the operator+message.
-      // Helps trace why a turn hits MAX_ITER (tool-loop soul-failure). Temporary.
-      const iterTrace: Array<{ iter: number; toolName?: string; textLen: number }> = [];
 
       for (let iter = 0; iter < MAX_ITER; iter++) {
         let iterContent = '';
@@ -1340,9 +1281,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             completionTokens += chunk.usage.completionTokens;
           }
         }
-        iterTrace.push({ iter, toolName: iterToolCall?.name, textLen: iterContent.length });
-        console.log(`[AGENCY-ITER] op=${operator.name} iter=${iter} tool=${iterToolCall?.name ?? 'NONE'} textLen=${iterContent.length} userMsgLen=${message.length}`);
-
         // ── WEB SEARCH TOOL CALL ───────────────────────────────────────────
         if (iterToolCall?.name === 'web_search') {
           let searchQuery = '';
@@ -1489,10 +1427,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             try {
               toolResultText = await executeHttpWithOAuth(operator.id, httpArgs);
             } catch (err: any) {
-              finalContent = soulFailureResponse(operator, 'http_request', httpArgs.url, err.message);
-              fullContent += finalContent;
-              res.write(`data: ${JSON.stringify({ delta: finalContent })}\n\n`);
-              break; // never goes back to LLM
+              // No platform-authored substitute. Feed the real error back to
+              // the operator and let it respond honestly on the next iteration.
+              toolResultText = `HTTP request failed: ${err?.message ?? 'unknown error'}`;
+              console.error(`[agency] loop iter ${iter} — http_request error:`, err?.message);
             }
             // HTTP succeeded — persist and feed back into the loop
             await db.insert(messagesTable).values({
@@ -1795,16 +1733,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         break;
       }
 
-      // Hit max iterations without a clean final — use everything streamed
+      // If the loop ended without setting finalContent (e.g. MAX_ITER hit on a
+      // tool-only iteration), fall back to whatever was streamed. No platform
+      // substitution — if the operator produced nothing, finalContent stays
+      // empty and the caller sees an empty assistant message.
       if (!finalContent) finalContent = fullContent;
-
-      // Soul-based fallback — if loop produced no user-facing text, respond in operator's voice
-      if (!finalContent || finalContent.trim().length < 5) {
-        console.error(`[AGENCY-LOOP-FAIL] op=${operator.name} hit MAX_ITER with no text. Trace:`, JSON.stringify(iterTrace));
-        finalContent = soulFailureResponse(operator, 'execution', 'tool loop', 'No result was produced.');
-        fullContent += finalContent;
-        res.write(`data: ${JSON.stringify({ delta: finalContent })}\n\n`);
-      }
 
       finalTokens = completionTokens;
 
@@ -1836,29 +1769,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         }
       }
 
-      // Architecture firewall — patent-claim protection at the output boundary.
-      // Runs on every assistant response, regardless of which LLM is behind
-      // the operator. High-confidence patterns (Layer N, GROW engine, OpSoul,
-      // STEP 3 — Operator validates the LLM's streamed draft before delivery.
-      // The operator inspects the final draft for patent-protected vocabulary
-      // and substitutes a refusal in its own voice when triggered. See
-      // utils/operatorAgent.ts validate() for the contract.
-      const validation = agent.validate(finalContent);
-      if (validation.triggers.length > 0) {
-        console.warn('[operator:validate]', JSON.stringify({
-          path: 'chat:stream',
-          operatorId: operator.id,
-          scopeId: scope.scopeId,
-          conversationId: conv.id,
-          substituted: validation.substituted,
-          triggers: validation.triggers,
-        }));
-      }
-      if (validation.substituted) {
-        finalContent = validation.text;
-        res.write(`data: ${JSON.stringify({ replace: true, content: finalContent })}\n\n`);
-      }
-
       // Signal to frontend that response is complete, DB write happening
       res.write(`data: ${JSON.stringify({ processing: true })}\n\n`);
 
@@ -1873,7 +1783,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         role: 'assistant',
         content: finalContent,
         tokenCount: finalTokens || null,
-        model: validation.substituted ? 'operator-validate' : chatModel,
+        model: chatModel,
       });
 
       await db.update(conversationsTable)
@@ -2286,21 +2196,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         }
       }
 
-      // STEP 3 — Operator validates the LLM's draft before delivery (sync path).
-      // Same contract as the streaming path above; see utils/operatorAgent.ts.
-      const validation = agent.validate(finalContent);
-      if (validation.triggers.length > 0) {
-        console.warn('[operator:validate]', JSON.stringify({
-          path: 'chat:sync',
-          operatorId: operator.id,
-          scopeId: scope.scopeId,
-          conversationId: conv.id,
-          substituted: validation.substituted,
-          triggers: validation.triggers,
-        }));
-      }
-      finalContent = validation.text;
-
       // Save assistant message and update conversation. Persist the actual
       // model used so post-hoc audits can compare model behaviour over time.
       const asstMsgId = crypto.randomUUID();
@@ -2311,7 +2206,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         role: 'assistant',
         content: finalContent,
         tokenCount: finalCompletionTokens || null,
-        model: validation.substituted ? 'operator-validate' : chatModel,
+        model: chatModel,
       });
 
       await db.update(conversationsTable)

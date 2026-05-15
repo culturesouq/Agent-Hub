@@ -16,7 +16,6 @@ import { searchMemory, distillMemoriesFromConversations } from '../utils/memoryE
 import type { MemoryHit } from '../utils/memoryEngine.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { assembleOperatorPrompt, buildTemporalContext, containsTimeKeywords } from '../utils/systemPrompt.js';
-import { applyFirewall, isArchitectureQuestion, FIREWALL_SUBSTITUTE_REPLY } from '../utils/architectureFirewall.js';
 import { OperatorAgent } from '../utils/operatorAgent.js';
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
 import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
@@ -126,31 +125,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   });
 
   const decision = agent.analyse(message);
-  if (decision.kind === 'refuse_architecture') {
-    const refusalText = agent.composeArchitectureRefusal();
-    console.warn('[operator:refuse]', JSON.stringify({
-      path: 'public-chat',
-      operatorId: slot.operatorId,
-      reason: 'architecture_introspection',
-      message: message.slice(0, 200),
-    }));
-    if (stream) {
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache, no-transform');
-      res.setHeader('Connection', 'keep-alive');
-      res.flushHeaders?.();
-      res.write(`data: ${JSON.stringify({ delta: refusalText })}\n\n`);
-      res.write(`data: ${JSON.stringify({ done: true, conversationId: conversationId ?? crypto.randomUUID(), scopeId: 'operator-direct' })}\n\n`);
-      res.end();
-    } else {
-      res.json({
-        conversationId: conversationId ?? crypto.randomUUID(),
-        message: { role: 'assistant', content: refusalText },
-        scopeId: 'operator-direct',
-      });
-    }
-    return;
-  }
 
   // ── Find or create conversation (DB-backed for persistent scopes only) ──
   let conv: typeof conversationsTable.$inferSelect | undefined;
@@ -391,29 +365,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         }
       }
 
-      // Architecture firewall — patent claim protection at the output boundary.
-      // STEP 3 — Operator validates the LLM's streamed draft before delivery.
-      // High-confidence patterns trigger a substitute in the operator's voice;
-      // log-only patterns are flagged but pass through.
-      const validation = agent.validate(fullContent);
-      if (validation.triggers.length > 0) {
-        console.warn('[operator:validate]', JSON.stringify({
-          path: 'public-chat:stream',
-          operatorId: slot.operatorId,
-          scopeId: scope.scopeId,
-          conversationId: conv?.id,
-          substituted: validation.substituted,
-          triggers: validation.triggers,
-        }));
-      }
-      let finalContent = validation.text;
-
-      // If the operator substituted, send a final delta to overwrite what the
-      // user already saw via streaming, then mark done. Frontend renders the
-      // last delta as the final assistant turn.
-      if (validation.substituted) {
-        res.write(`data: ${JSON.stringify({ replace: true, content: finalContent })}\n\n`);
-      }
+      let finalContent = fullContent;
 
       if (scope.writesHistory && conv) {
         await db.insert(messagesTable).values({
@@ -422,7 +374,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           operatorId: slot.operatorId,
           role: 'assistant',
           content: finalContent,
-          model: validation.substituted ? 'operator-validate' : model,
+          model,
         });
         await db.update(conversationsTable)
           .set({ messageCount: sql`message_count + 2`, lastMessageAt: new Date() })
@@ -469,19 +421,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // STEP 3 — Operator validates the LLM's draft (sync path).
-    const validation = agent.validate(result.content);
-    if (validation.triggers.length > 0) {
-      console.warn('[operator:validate]', JSON.stringify({
-        path: 'public-chat:sync',
-        operatorId: slot.operatorId,
-        scopeId: scope.scopeId,
-        conversationId: conv?.id,
-        substituted: validation.substituted,
-        triggers: validation.triggers,
-      }));
-    }
-    const finalContent = validation.text;
+    const finalContent = result.content;
 
     if (scope.writesHistory && conv) {
       await db.insert(messagesTable).values({
@@ -490,7 +430,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         operatorId: slot.operatorId,
         role: 'assistant',
         content: finalContent,
-        model: validation.substituted ? 'operator-validate' : model,
+        model,
       });
       await db.update(conversationsTable)
         .set({ messageCount: sql`message_count + 2`, lastMessageAt: new Date() })

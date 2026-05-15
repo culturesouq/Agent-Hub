@@ -282,26 +282,7 @@ router.post('/:operatorId', async (req: RequestWithRawBody, res: Response): Prom
   });
 
   const decision = agent.analyse(userMessage);
-  if (decision.kind === 'refuse_architecture') {
-    const refusalText = agent.composeArchitectureRefusal();
-    console.warn('[operator:refuse]', JSON.stringify({
-      path: 'whatsapp-webhook',
-      operatorId,
-      conversationId: conv.id,
-      reason: 'architecture_introspection',
-      message: userMessage.slice(0, 200),
-    }));
-    await db.insert(messagesTable).values({
-      id: crypto.randomUUID(),
-      operatorId,
-      conversationId: conv.id,
-      role: 'assistant',
-      content: refusalText,
-      model: 'operator-direct',
-    });
-    await sendWhatsAppMessage(accessToken, phoneNumberId, from, refusalText);
-    return;
-  }
+  void decision; // retained for future tool-gating in this webhook
 
   try {
     const embedding = await embed(userMessage);
@@ -345,20 +326,7 @@ router.post('/:operatorId', async (req: RequestWithRawBody, res: Response): Prom
     // voice; the operator validates it (next step) before the route
     // delivers it via WhatsApp.
     const result = await agent.executeSync(chatMessages, { model });
-
-    // STEP 3 — Operator validates the LLM's draft before delivery.
-    const validation = agent.validate(result.content);
-    if (validation.triggers.length > 0) {
-      console.warn('[operator:validate]', JSON.stringify({
-        path: 'whatsapp-webhook',
-        operatorId,
-        scopeId: scope.scopeId,
-        conversationId: conv.id,
-        substituted: validation.substituted,
-        triggers: validation.triggers,
-      }));
-    }
-    const finalContent = validation.text;
+    const finalContent = result.content;
 
     await db.insert(messagesTable).values({
       id: crypto.randomUUID(),
@@ -366,7 +334,7 @@ router.post('/:operatorId', async (req: RequestWithRawBody, res: Response): Prom
       conversationId: conv.id,
       role: 'assistant',
       content: finalContent,
-      model: validation.substituted ? 'operator-validate' : model,
+      model,
     });
 
     await db

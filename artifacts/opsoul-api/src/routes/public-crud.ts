@@ -120,18 +120,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   });
 
   const actionDecision = actionAgent.analyse(actionText);
-  if (actionDecision.kind === 'refuse_architecture') {
-    const refusalText = actionAgent.composeArchitectureRefusal();
-    console.warn('[operator:refuse]', JSON.stringify({
-      path: 'public-crud',
-      operatorId: operator.id,
-      slotId: slot.slotId,
-      reason: 'architecture_introspection',
-      action: actionText.slice(0, 200),
-    }));
-    res.json({ result: refusalText, refused: true });
-    return;
-  }
+  void actionDecision; // retained for future tool-gating
 
   // ── Try skill trigger first ──
   const trigger = await detectSkillTrigger(actionText, allSkills, operator.name);
@@ -274,19 +263,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     { model: resolvedModel },
   );
 
-  // STEP 3 — Operator validates the LLM's draft action result before delivery.
-  const validation = actionAgent.validate(result.content);
-  if (validation.triggers.length > 0) {
-    console.warn('[operator:validate]', JSON.stringify({
-      path: 'public-crud',
-      operatorId: operator.id,
-      slotId: slot.slotId,
-      substituted: validation.substituted,
-      triggers: validation.triggers,
-    }));
-  }
-
-  res.json({ result: validation.text });
+  res.json({ result: result.content });
 
   // Action scope contributes to GROW via PII-free task pattern memory
   distillActionTaskPattern(

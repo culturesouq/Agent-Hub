@@ -217,26 +217,7 @@ router.post('/:operatorId', async (req: Request, res: Response): Promise<void> =
   });
 
   const decision = agent.analyse(userMessage);
-  if (decision.kind === 'refuse_architecture') {
-    const refusalText = agent.composeArchitectureRefusal();
-    console.warn('[operator:refuse]', JSON.stringify({
-      path: 'telegram-webhook',
-      operatorId,
-      conversationId: conv.id,
-      reason: 'architecture_introspection',
-      message: userMessage.slice(0, 200),
-    }));
-    await db.insert(messagesTable).values({
-      id: crypto.randomUUID(),
-      operatorId,
-      conversationId: conv.id,
-      role: 'assistant',
-      content: refusalText,
-      model: 'operator-direct',
-    });
-    await sendTelegramMessage(botToken, chatId, refusalText);
-    return;
-  }
+  void decision; // tool gating in this webhook is handled at the executeSync layer; decision retained for future use
 
   try {
     const embedding = await embed(userMessage);
@@ -281,20 +262,7 @@ router.post('/:operatorId', async (req: Request, res: Response): Promise<void> =
     // The LLM produces text in the operator's voice; the operator validates
     // it (next step) before the route delivers it via Telegram.
     const result = await agent.executeSync(chatMessages, { model });
-
-    // STEP 3 — Operator validates the LLM's draft before delivery.
-    const validation = agent.validate(result.content);
-    if (validation.triggers.length > 0) {
-      console.warn('[operator:validate]', JSON.stringify({
-        path: 'telegram-webhook',
-        operatorId,
-        scopeId: scope.scopeId,
-        conversationId: conv.id,
-        substituted: validation.substituted,
-        triggers: validation.triggers,
-      }));
-    }
-    const finalContent = validation.text;
+    const finalContent = result.content;
 
     await db.insert(messagesTable).values({
       id: crypto.randomUUID(),
@@ -302,7 +270,7 @@ router.post('/:operatorId', async (req: Request, res: Response): Promise<void> =
       conversationId: conv.id,
       role: 'assistant',
       content: finalContent,
-      model: validation.substituted ? 'operator-validate' : model,
+      model,
     });
 
     await db
