@@ -19,7 +19,7 @@
 | **Code commits in this image** | `d34fb25` hub Vael Desk removal · `b890bb4` no-fallbacks · `621c44d` operator-as-driver · `6459739` rag_dna teardown · `477d53b` agency-core seed removal · `d394985` Vael dynamic id |
 | **DB state** | Clean. rag_dna + rag_pipeline_config + rag_sources tables DROPPED. **0 stale catalog rows** (12 deleted: 5 archetype='Vael' + 7 RAG-namespaced Guardian). **0 physical operator_skills on any operator** (Vael's 28 legacy rows deleted; all 3 operators now receive skills virtually via archetype). Per-operator KB: Vael 85, Nahil 95, Operator 83. 0 Layer 1, 0 Layer 2 memories. |
 | **Operators in DB** | 3: Vael (`8668f6c9-...`), Nahil (`37da8776-...`), Operator/Blank (`eb70c409-...`). No orphans, no soft-deleted, no ghosts. |
-| **ACR state** | Active tag `hub-clean-d34fb25`. Prior tags retained for rollback. Prior revisions auto-deactivated. |
+| **ACR state** | One tag in `opsoul-api` repo: `hub-clean-d34fb25` (= live). All prior tags deleted. One active revision (`opsoul--0000057`), all prior revisions deactivated by Azure. |
 | **Optional next step** | Set `SANDBOX_OPERATOR_ID` env var on the container app. If unset, sandbox-shaped userIds are rejected on every operator. Optional `VAEL_OPERATOR_ID` env var also recognised as explicit override (default = DB lookup by name='Vael'). |
 
 ### ACR (Azure Container Registry) — `banistudioacr`
