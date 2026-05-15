@@ -224,6 +224,61 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 ## 8. Commit History — newest first
 
+### 2026-05-15 — Vael "hi" tool-loop investigation (no commit; report only, owner picks fix on resume)
+
+**Owner reported:** "fix the bug about Hi and hello or anything trigger for vael just happened now, first thing, as i don't want it to effect opsoul, when you are done investigating report, we will take them one by one today" — then took a Mac restart break before picking a fix option.
+
+**Vael's owner conversation (id `0921bdb3-a6e2-4e71-a078-37fad0b4bd64`) captured the bug 4 times in a row.** Recent message tail:
+```
+user:      hi
+assistant: I tried a execution call to tool loop — it failed with: No result was produced.
+user:      hi
+assistant: I tried a execution call to tool loop — it failed with: No result was produced.
+user:      what is it ??
+assistant: Something's looping in my execution layer — every time you say "hi" without context...
+user:      hi
+assistant: I tried a execution call to tool loop — it failed with: No result was produced.
+```
+
+Vael literally explained the failure to owner before owner reported it. She knows.
+
+**Root cause confirmed (code + DB evidence):**
+
+| Evidence | Source |
+|---|---|
+| Conversation history is CLEAN — 14 user / 14 assistant / 0 tool-shaped messages | DB query on `messages` table for that conv |
+| `chat.ts:1306` — `MAX_ITER = 8` (tool-loop iteration limit) | code |
+| `chat.ts:1320-1331` — `iterTools.push(...)` for 11+ tools, every iteration, **unconditional regardless of message length or content** | code |
+| `chat.ts:1814` — `finalContent = soulFailureResponse(operator, 'execution', 'tool loop', 'No result was produced.')` fires when 8 iterations passed and no text generated | code |
+
+**Why it hits Vael specifically (not Nahil):** Vael's identity is "RAG gatekeeper / archive curator / platform intelligence." When Sonnet 4.5 sees that identity + "hi" + 12 available tools (web_search, kb_seed, http_request to SOVEREIGN_RAG, schedule_task, etc.), the model concludes "this entity checks things — let me check something" and calls a tool instead of replying. Loop iterates × 8. Empty text → fallback. Owner confirmed Nahil is fine: *"i was chatting with Nahil and all good"* — Nahil's identity ("agricultural advisor") doesn't prime tool use the same way.
+
+**Containment:** Vael is **not farmer-facing**. She works only inside OpSoul / SRAG (private to owner). This bug blocks owner's own admin workflow with Vael but does NOT affect the EDB Nahil demo.
+
+**Three fix options (owner picks on resume):**
+
+| Option | Approach | Time | Quality |
+|---|---|---|---|
+| **A** | Greeting tool-gate — detect short greeting (≤3 words / pattern match EN+AR) in `agent.analyse()`, route skips `iterTools.push` for that turn. Sonnet has no tools → just replies. | 30 min | Decent — small extension to analyse |
+| **B** ★ owner-recommended | Greeting bypass — `agent.analyse()` returns new `'greet'` decision; route responds directly with operator-voice greeting (no LLM call), same shape as existing `composeArchitectureRefusal`. | 1 hour | Best — operator owns the greeting in code; predictable; cheap |
+| **C** | Composer fallback — Step 2.5 — when tool-loop produces empty text after MAX_ITER, agent dispatches single composer LLM call (no tools) to render a brief reply in operator voice. | 2-3 hours | Architecturally truest — operator never falls into soul-failure |
+
+**Recommendation: Option B.** Same pattern as architecture-refusal already in production. Sets the precedent for richer `analyse()` outcomes in Step 2.5.
+
+**Status:** No code touched. No deploy. SoT-only entry. Awaiting owner go on A/B/C when back from Mac restart.
+
+---
+
+### 2026-05-15 — Vael's 27 overview-URL entries DELETED + investigation of "Vael added them but didn't categorize"
+
+Owner's read of the situation: *"i think Vael smarter, she added them but didn't categorize them in any DNA, just general, but the URL where overviews not real, what we gave her were wrong"*. Vael behaved correctly given the input — she verified the source as official (Anthropic docs) but the content was overview pages, not deep skill documentation, so she didn't archetype-scope them. Owner DELETED all 27 entries; intends to drop direct skill-doc URLs (not overviews) when ready, with crawl done owner-side outside OpSoul. Vael Desk inbox flow remains live and ready for the right inputs.
+
+Also: owner clarified Vael's scope — *"Vael isn't farmer or any body facing at all, she only work within OpSoul or the SRAG (all private are mine)"*. SoT § 5 already documents this; no change needed.
+
+DB state after delete: 5 active rag_dna entries (the originals) — `inbox:L0_ AI BUILDER_mot43hur.md` + 4 `operator_intake` entries about UAE agriculture.
+
+---
+
 ### 2026-05-14 — Late-evening operations log (no commit; env-var + DB ops only)
 
 **1. Vael's inbox gate opened.** `VAEL_INBOX_ENABLED=true` set on the container app via `az containerapp update --set-env-vars`. New revision `opsoul--0000051` (Healthy, 100% traffic, same image `vael-id-fix-d394985`). Prior revision `0000050` deactivated. Vael's full sweep cron now processes `./knowledge_inbox/` files in addition to `rag_sources` URLs.
@@ -234,12 +289,38 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 ---
 
-### Open items for tomorrow's session
+### Open items — RESUME HERE 2026-05-15 (owner taking a Mac restart break after 5 days non-stop)
 
-1. **Vael extraction prompt tightening.** `utils/vaelEngine.ts` `EXTRACT_SYSTEM` constant — adjust to weight skill / capability / constraint / mechanism / API-rule patterns OVER news / benchmark / product-mention patterns. Re-run extraction on the 5 URLs, compare output, owner approves.
-2. **Owner-triage the 27 rag_dna entries from tonight's run.** Owner reviews titles, marks news-shaped ones `is_active=false` (or DELETE). Skill-shaped ones stay `current` and get archetype-scoped via Vael Desk.
-3. **Mount persistent Azure Files volume at `/app/knowledge_inbox`.** Today's inbox path is on the container's ephemeral filesystem — every revision change wipes uploaded `.md` files. Mount an Azure Files share so the Vael Desk inbox UI persists across deploys/restarts/scale events. ~30 min Azure config.
-4. **First-message-duplicate bug live reproduction** (deferred from earlier today). Frontend auto-Thread race was removed in `5bf5e9b`; if duplicate still appears on new operator creation, owner provides screenshot + repro steps.
+**Status snapshot:** OpSoul live revision `0000051` healthy, image `vael-id-fix-d394985` + env var `VAEL_INBOX_ENABLED=true`. DB clean (3 operators, 5 active rag_dna, 0 orphans, 0 Layer 1/2 pollution). Sandbox guard active. Operator-as-driver Step 1+2, scope architecture, GROW guards 3+4, per-message model column, Vael dynamic id — all live. Demo-safe for Nahil farmers via EDB program.
+
+**Pick up here when back:**
+
+1. **Vael "hi" tool-loop fix — investigation complete, awaiting owner's pick of A/B/C** (see § 8 entry for 2026-05-15 below). Symptom: Vael returns `soulFailureResponse` when owner sends "hi" / "hello" / brief greeting. Root cause confirmed: `chat.ts:1306-1331` offers 11+ tools every iteration unconditionally; Vael's identity ("RAG gatekeeper / archive curator") primes Sonnet to call tools instead of replying conversationally; loop hits MAX_ITER=8 with no text; fallback string fires. **Vael not farmer-facing — pure owner-workflow bug, NOT demo-blocking.** Owner's recommendation pending: **Option B** (greeting decision in `agent.analyse()` → operator answers directly, same pattern as `composeArchitectureRefusal()`). 1 hour to implement + deploy.
+
+2. **Right inputs for Vael's archetype DNA pipeline.** Yesterday's 27 entries were DELETED — the 5 URLs were Anthropic overview pages, not actual skill docs (Vael correctly didn't archetype-categorize them; she just verified source authenticity). Owner will provide direct URLs to actual skill content (not overviews). Crawl is owner-side (not OpSoul-side per owner direction). When ready, drop one URL at a time via Vael Desk per the one-at-a-time seeding rule.
+
+3. **Vael extraction prompt tightening** — only do AFTER #2 above. `utils/vaelEngine.ts` `EXTRACT_SYSTEM` constant. Re-evaluate after Vael processes the right URLs; the prompt may already be fine when given correct skill-doc input. Don't tune blind.
+
+4. **Nahil "doesn't know he's connected" bug.** Owner reported: chatted with Nahil, all responses good, but Nahil himself doesn't know he's connected to the Nahil app / OpSoul backend. Likely missing self-awareness about deployment state (which slot keys are active, which app he's serving). Investigate Nahil's KB / scope context for missing connection-awareness data. Owner-side note: Nahil app is the EDB demo target — fix this before farmers see "I don't know if I'm reachable" type responses.
+
+5. **Mount persistent Azure Files at `/app/knowledge_inbox`** — same as before. ~30 min Azure config so the Vael Desk inbox UI persists across deploys/restarts. Not blocking; just so future inbox uploads don't get wiped on next revision change.
+
+6. **First-message-duplicate live reproduction** — frontend auto-Thread race removed in `5bf5e9b`. Owner verifies in fresh browser by creating a new operator and watching for duplicate; if still present, provide screenshot + repro steps.
+
+7. **§ 7 Open Items housekeeping — 5 items closed but still listed open.** When time permits, refresh § 7 to reflect verified live state. Closed: DB migration `operator_main_memory` ✅ applied; DB migration `operator_memory.scopeId` ✅ applied; UI/backend default-model mismatch ✅ fixed (`5bf5e9b`); Per-message model record ✅ shipped (`5bf5e9b`); Layer 2 cross-scope filter ✅ shipped (`917b638`); Vael id stale-ghost ✅ fixed (`d394985`).
+
+**Demo readiness for EDB Nahil program:** Nothing in OpSoul blocks. The work that matters before farmers test is item #4 (Nahil connection-awareness). Items 1, 3, 5, 6 are quality/infra debt, not blockers.
+
+**Next agent picks up here:** Read this section first. Then read § 8 commit history (newest first) for the full Vael bug investigation.
+
+---
+
+### Earlier note (superseded by RESUME HERE above)
+
+1. **Vael extraction prompt tightening** (deferred — see #3 above)
+2. **Owner-triage the 27 rag_dna entries** — DONE 2026-05-15: all 27 deleted (overview URLs were wrong input)
+3. **Mount Azure Files volume** (still queued — see #5 above)
+4. **First-message-duplicate live reproduction** (still queued — see #6 above)
 
 ---
 
