@@ -4,7 +4,7 @@ import { embed } from '@workspace/opsoul-utils/ai';
 import { chatCompletion } from './openrouter.js';
 import { curiositySearch } from './curiosityEngine.js';
 
-const DISTILL_MODEL = 'anthropic/claude-haiku-4-5';
+const DISTILL_MODEL = 'moonshotai/kimi-k2.6';
 
 export type IntakeStatus = 'verified' | 'pending' | 'skipped';
 

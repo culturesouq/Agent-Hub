@@ -130,7 +130,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       trigger.operatorOwnerId = slot.ownerId;
       const skillModel = operator.defaultModel && operator.defaultModel !== 'opsoul/auto'
         ? operator.defaultModel
-        : 'anthropic/claude-haiku-4-5';
+        : 'moonshotai/kimi-k2.6';
       const skillResult = await executeSkill(trigger, skillModel);
       res.json({ result: skillResult.output, skill: trigger.name });
       distillActionTaskPattern(
@@ -249,7 +249,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   const resolvedModel = operator.defaultModel && operator.defaultModel !== 'opsoul/auto'
     ? operator.defaultModel
-    : 'anthropic/claude-haiku-4-5';
+    : 'moonshotai/kimi-k2.6';
 
   // STEP 2 — Operator dispatches the LLM as its executor for this action.
   // The operator owns the call (it set the action context, built the

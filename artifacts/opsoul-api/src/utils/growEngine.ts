@@ -24,7 +24,7 @@ import {
   runSemanticIdentityGuard,
 } from './growGuards.js';
 
-const GROW_MODEL = 'anthropic/claude-sonnet-4-5';
+const GROW_MODEL = 'moonshotai/kimi-k2.6';
 
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_DELAY_HOURS = [1, 2, 4] as const;

@@ -341,7 +341,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     : CHAT_MODEL;
   // Force vision-capable model when image attachments are present
   if (attachments && attachments.some((a) => a.type === 'image')) {
-    model = 'google/gemini-2.0-flash-001';
+    model = 'moonshotai/kimi-k2.6';
   }
 
   // ── STREAM PATH ────────────────────────────────────────────────────────────

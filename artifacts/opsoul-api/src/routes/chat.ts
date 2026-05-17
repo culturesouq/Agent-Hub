@@ -817,27 +817,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     }
   }
 
-  // Auto routing — resolved after kbContext and memoryHits are known
-  chatModel = (() => {
-    if (rawModel !== 'opsoul/auto') return rawModel;
-    const hasAttachment = Array.isArray(attachments) && attachments.length > 0;
-    const isShort = message.length < 200;
-    const hasContext = kbContext.length > 0 || memoryHits.length > 0;
-    // Never route to Haiku when web search is available — Haiku narrates instead of calling tools
-    const webSearchActive = isWebSearchAvailable();
-    let resolved = hasAttachment
-      ? 'google/gemini-flash-2.0'
-      : isShort && !hasContext && !webSearchActive
-        ? 'anthropic/claude-haiku-4-5'
-        : 'anthropic/claude-sonnet-4-5';
-    // Force vision-capable model when image attachments are present
-    const hasImageAttachment = Array.isArray(attachments) && attachments.some((a) => a.type === 'image');
-    if (hasImageAttachment) {
-      resolved = 'google/gemini-2.0-flash-001';
-    }
-    console.log(`[AUTO] routed → ${resolved} | short=${isShort} attachment=${hasAttachment} image=${hasImageAttachment} hasContext=${hasContext} webSearch=${webSearchActive}`);
-    return resolved;
-  })();
+  // Single-model strategy: Kimi K2.6 handles chat + vision + tool calling natively.
+  // 'opsoul/auto' sentinel now resolves directly to CHAT_MODEL (no per-turn switching).
+  chatModel = rawModel === 'opsoul/auto' ? CHAT_MODEL : rawModel;
 
   // BIRTH MODE — operator has no identity yet; use birth system prompt instead of Layer 1
   const isBirthMode = !operator.rawIdentity;

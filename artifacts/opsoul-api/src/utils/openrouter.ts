@@ -1,13 +1,12 @@
 import OpenAI from 'openai';
 import type { ChatCompletion, ChatCompletionChunk, ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/index.js';
 
-export const CHAT_MODEL = 'anthropic/claude-sonnet-4-5';
-export const KB_MODEL = 'anthropic/claude-haiku-4-5';
+export const CHAT_MODEL = 'moonshotai/kimi-k2.6';
+export const KB_MODEL = 'moonshotai/kimi-k2.6';
 export const AUTO_MODEL = 'opsoul/auto';
 
 export const MODEL_OPTIONS = [
-  { id: 'anthropic/claude-sonnet-4-5', label: 'Claude Sonnet', description: 'Best quality — deeper reasoning and richer responses' },
-  { id: 'anthropic/claude-haiku-4-5', label: 'Claude Haiku', description: 'Fast and balanced — great for most conversations' },
+  { id: 'moonshotai/kimi-k2.6', label: 'Kimi K2.6', description: 'Moonshot AI — multimodal, agent swarm architecture, 262K context' },
 ] as const;
 
 const MAX_TOKENS = 8192;

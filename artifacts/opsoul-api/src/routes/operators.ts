@@ -174,7 +174,7 @@ Archetype guide:
         { role: 'system', content: 'You generate structured operator identity data. Return ONLY valid JSON matching the template exactly — no markdown, no explanation, no extra keys.' },
         { role: 'user', content: prompt },
       ],
-      'anthropic/claude-sonnet-4-5',
+      'moonshotai/kimi-k2.6',
     );
 
     let parsed: any;
@@ -765,7 +765,7 @@ router.post('/:id/model-settings/verify-key', async (req: Request, res: Response
     const { chatCompletion: cc } = await import('../utils/openrouter.js');
     const result = await cc(
       [{ role: 'user', content: 'Reply with the single word: verified' }],
-      { apiKey: apiKey.trim(), model: 'anthropic/claude-haiku-4-5' },
+      { apiKey: apiKey.trim(), model: 'moonshotai/kimi-k2.6' },
     );
     const valid = result.content.toLowerCase().includes('verified');
     res.json({ ok: valid, message: valid ? 'Key is working' : 'Key responded but got unexpected output' });

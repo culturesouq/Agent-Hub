@@ -71,7 +71,7 @@ Return ONLY valid JSON, no explanation:
   try {
     const result = await chatCompletion(
       [{ role: 'user', content: prompt }],
-      'anthropic/claude-haiku-4-5',
+      'moonshotai/kimi-k2.6',
     );
 
     const text = result.content.trim();
