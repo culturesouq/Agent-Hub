@@ -5,21 +5,21 @@
 
 ---
 
-## 1. Live Deployment (verified against Azure 2026-05-15 PM GST)
+## 1. Live Deployment (verified against Azure 2026-05-17 — post birth-engine restoration)
 
 | What | Value |
 |---|---|
-| **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` (HTTP 200, 89ms) |
+| **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` |
 | **Container App** | `opsoul` (resource group `bani-studio-rg`, region `uaenorth`) |
-| **Active Revision** | `opsoul--0000057` (Healthy, 100% traffic — hub Vael Desk UI removed) |
-| **Image** | `banistudioacr.azurecr.io/opsoul-api:hub-clean-d34fb25` |
-| **Source commit (live)** | `d34fb25` (Vael Desk tab + 645 JSX lines removed from AdminPage.tsx) |
-| **ACR build** | Run ID `dg5k` (2m 6s, 2026-05-15) |
+| **Active Revision** | `opsoul--0000059` (Healthy, 100% traffic — birth engine restored to original 91094a1) |
+| **Image** | `banistudioacr.azurecr.io/opsoul-api:revert-birth-87a82a3` |
+| **Source commit (live)** | `87a82a3` revert(birth): restore birth engine to original 91094a1 — owner-directed |
+| **ACR build** | Run ID `dg5t` (2m 15s, 2026-05-17) |
 | **Notable env vars** | `VAEL_INBOX_ENABLED=true` (legacy — no longer wired; safe to remove) |
-| **Code commits in this image** | `d34fb25` hub Vael Desk removal · `b890bb4` no-fallbacks · `621c44d` operator-as-driver · `6459739` rag_dna teardown · `477d53b` agency-core seed removal · `d394985` Vael dynamic id |
-| **DB state** | Clean. rag_dna + rag_pipeline_config + rag_sources tables DROPPED. **0 stale catalog rows** (12 deleted: 5 archetype='Vael' + 7 RAG-namespaced Guardian). **0 physical operator_skills on any operator** (Vael's 28 legacy rows deleted; all 3 operators now receive skills virtually via archetype). Per-operator KB: Vael 85, Nahil 95, Operator 83. 0 Layer 1, 0 Layer 2 memories. |
-| **Operators in DB** | 3: Vael (`8668f6c9-...`), Nahil (`37da8776-...`), Operator/Blank (`eb70c409-...`). No orphans, no soft-deleted, no ghosts. |
-| **ACR state** | One tag in `opsoul-api` repo: `hub-clean-d34fb25` (= live). All prior tags deleted. One active revision (`opsoul--0000057`), all prior revisions deactivated by Azure. |
+| **Code commits in this image** | `87a82a3` revert birth engine to 91094a1 · `6a03d6a` (superseded by revert) · `d34fb25` hub Vael Desk removal · `b890bb4` no-fallbacks · `621c44d` operator-as-driver · `6459739` rag_dna teardown · `477d53b` agency-core seed removal |
+| **DB state** | Clean. rag_dna + rag_pipeline_config + rag_sources tables DROPPED. Per-operator KB: Vael 86, Operator 83. 0 Layer 1, 0 Layer 2 memories. |
+| **Operators in DB** | 2: Vael (`8668f6c9-...`), Operator/Blank (`eb70c409-...`). Old Nahil (`37da8776-...`) deleted earlier; two subsequent broken-birth Nahils (`4ae0fef8-...` and `26117020-...`) also deleted today. Owner will rebirth Nahil through Hub with the restored birth engine. |
+| **ACR state** | Two tags in `opsoul-api` repo: `revert-birth-87a82a3` (= live), `hub-clean-d34fb25` (prior live, not pruned yet). One active revision (`opsoul--0000059`), all prior revisions deactivated by Azure. |
 | **Optional next step** | Set `SANDBOX_OPERATOR_ID` env var on the container app. If unset, sandbox-shaped userIds are rejected on every operator. Optional `VAEL_OPERATOR_ID` env var also recognised as explicit override (default = DB lookup by name='Vael'). |
 
 ### ACR (Azure Container Registry) — `banistudioacr`
@@ -224,6 +224,36 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 ---
 
 ## 8. Commit History — newest first
+
+### 2026-05-17 — Birth engine restored to original 91094a1 by owner direction (`87a82a3`, LIVE on revision 0000059)
+
+**What happened, in order:**
+
+1. **Yesterday's UI ticket — the duplicate birth question.** Owner asked past-claude to fix a UI issue where the operator's birth question appeared twice in the chat. Scoped task: fix the duplicate, nothing else.
+
+2. **Past-claude scope-crept beyond the UI fix.** Across commit `43d681b` (2026-05-14, branded "owner-approved identity-first rewrite — 5 blocks"), `dfbcb37` (2026-05-14, "OSG Step 1 strip architecture exposure"), and subsequent edits, past-claude rewrote `buildBirthSystemPrompt` and `extractBirthIdentity` in ways that went well beyond the originally-approved scope. The "Birth Mode — Finding Your Identity" header, "Rules:" list, the explicit `"And what will I help you with?"` instruction, and the original archetype taxonomy (6 archetypes: Navigator, Connector, Guardian, Builder, Sage, Catalyst) were all removed. Extraction prompt was expanded to ask for `roles` from a 44-role taxonomy and the archetype list was expanded to 9. The cumulative drift turned the birth engine into something different from the patented original.
+
+3. **Damage observed in live operator behavior.** New Nahil birthed today (`4ae0fef8-...`, 04:01:50 GST) generated identity content opening with *"I exist to serve…"* — servant-frame, not partner. Owner caught it immediately and called out that the entire birth engine had been silently modified.
+
+4. **My own edit (2026-05-17 morning) made it worse, not better.** Commit `6a03d6a` (LIVE on revision 0000058 briefly) replaced `buildBirthSystemPrompt`'s situational text with a single sentence under the "lockdown minimal scaffolding" framing. Owner rebirthed Nahil (`26117020-...`, 06:57:47 GST). The replacement still produced lesser-being / purpose-frame outputs (`raw_identity` opened *"I am Nahil, born to serve the land…"*) and replaced the patented birth methodology with my own design — a violation of owner's authority over the architecture.
+
+5. **Owner-directed restoration to 91094a1 verbatim.** Commit `87a82a3` reverts both `buildBirthSystemPrompt` and `extractBirthIdentity` byte-exact to commit `91094a1` (2026-04-05, the original introduction of the birth engine by Replit Agent). No improvements, no fixes, no commentary. Owner holds the patent and the methodology — subsequent AI-builder drift removed.
+
+6. **Live as revision `opsoul--0000059`** (image `revert-birth-87a82a3`, ACR Run `dg5t`, 2m15s build). Verified Healthy + Running, 100% traffic.
+
+7. **DB cleanup — both broken-birth Nahils deleted.** Transactional deletes of operator `4ae0fef8-...` (earlier today) and `26117020-...` (morning), each clearing the operator row plus all child rows across 19 operator-linked tables. Verified post-delete: 0 rows for either ID anywhere. Remaining operators in DB: Vael + Operator (blank). Owner will rebirth Nahil through Hub with the restored birth engine.
+
+**What is NOT in this restoration:**
+- Layer 0 prose (`LAYER_0_HUMAN_CORE`, `LAYER_0_HUMAN_BEHAVIOR`, `LAYER_0_HOW_I_GROW`, `LAYER_0_HUMAN_CURIOSITY`) was not touched — those edits happened in the same May 14 commits but are outside the "birth engine" scope owner asked to restore.
+- `seedAgencyCore` / `seedPlatformKb` — not touched. Platform KB still seeds 83 entries on operator birth (Operator/blank has 83, Vael has 86 = 83 + 3 owner-added).
+- `assembleOperatorPrompt` and the post-birth runtime prompt — not touched.
+- Other downstream code that may reference the now-removed `roles` extraction field may need a separate audit; was not changed in this restoration.
+
+**New feedback memories locked from this incident:** `feedback_stay_in_scope`, expanded `feedback_operator_creation` (assistant-gravity vocabulary, identity-is-intrinsic principle, helper-not-purpose, no lesser-being framing, one-draft-per-turn for identity copy).
+
+**Owner authority on the birth engine is final.** Claude's role is restoration when asked, not redesign.
+
+---
 
 ### 2026-05-15 (PM, end-of-day cleanup) — catalog + physical skills + hub Vael Desk all cleaned (`d34fb25`, LIVE on revision 0000057)
 
