@@ -11,9 +11,9 @@
 |---|---|
 | **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` |
 | **Container App** | `opsoul` (resource group `bani-studio-rg`, region `uaenorth`) |
-| **Active Revision** | `opsoul--0000063` (Healthy — env-only revision, Kimi K2.5 code unchanged) |
-| **Image** | `banistudioacr.azurecr.io/opsoul-api:kimi-k2-5-7e5e39c` |
-| **Source commit (live)** | `7e5e39c` fix(llm): swap Kimi K2.6 → Kimi K2.5 — non-reasoning variant, latency fix |
+| **Active Revision** | `opsoul--0000064` (Healthy — webhook minConfidence type-mismatch fix) |
+| **Image** | `banistudioacr.azurecr.io/opsoul-api:webhook-fix-2c4ea80` |
+| **Source commit (live)** | `2c4ea80` fix(webhooks): pass integer 30 (not float 0.5) for KB minConfidence in telegram + whatsapp webhooks |
 | **LLM model (entire stack)** | `moonshotai/kimi-k2.5` via OpenRouter — chat, distillation, GROW, sub-agent dispatch, vision, schema normalization, capability loop, all routes |
 | **Auto-routing** | **REMOVED** (was 17-line block in chat.ts switching between Sonnet/Haiku/Gemini per-turn) |
 | **Notable env vars (set 2026-05-17 PM)** | `OPENROUTER_API_KEY` (unchanged) · `API_BASE_URL = https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io` (NEW — required by Hub's `connectTelegram` for inline `setWebhook` registration) · `APP_URL` + `APP_BASE_URL` → same Azure FQDN (were wrongly `https://opsoul.io` which doesn't resolve, blocking Google OAuth callbacks + dashboard URL responses) · `VAEL_INBOX_ENABLED=true` (legacy — no longer wired) |
@@ -226,7 +226,23 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 ## 8. Commit History — newest first
 
-### 2026-05-17 (late PM) — Telegram webhook fix: env vars + manual webhook registration for Reem (no commit — env + DB only, LIVE on revision 0000063)
+### 2026-05-17 (late PM) — Webhook minConfidence type-mismatch fix — Reem live end-to-end on Telegram (`2c4ea80`, LIVE on revision 0000064)
+
+After the env-var fix unblocked Reem's webhook URL registration (rev 0000063), Telegram messages started reaching OpSoul but the operator replied *"Sorry, I encountered an error. Please try again."* Investigation found a third bug:
+
+**Bug 3 — Type mismatch in webhook KB search call.** `telegram-webhook.ts:225` and `whatsapp-webhook.ts:290` both called `searchBothKbs(operator.id, embedding, 5, 0.5, ...)` passing `0.5` as the `minConfidence` argument. The function's `confidence_score` filter is an INTEGER column (0-100 percentage scale, default `KB_RETRIEVAL_MIN_CONFIDENCE = 30`). The webhook authors conflated similarity threshold (0-1 float) with confidence score (0-100 int). Postgres rejected with `invalid input syntax for type integer: "0.5"`; the catch block at line 282 returned the generic fallback string to Telegram.
+
+The web chat (`chat.ts` + `public-chat.ts`) was unaffected — those paths correctly pass an integer-typed `kbMinConfidence` variable. Bug isolated to the two webhook handlers only.
+
+**Fix:** changed literal `0.5` → `30` in both files. Two single-value edits, nothing else touched.
+
+**Verification post-deploy:** Owner sent live Telegram message to `@ReemCULTUREYES_bot` — Reem responded in character ("Yes — Telegram. You're Mohamed. I'm Reem. What's up?"). Full end-to-end chain confirmed working: Telegram → OpSoul webhook (auth via secret token) → KB+memory vector search → Kimi K2.5 chat completion → response back via Telegram.
+
+**ACR Run ID:** `dg5x` (2m 12s, 2026-05-17)
+
+---
+
+### 2026-05-17 (late PM) — Telegram webhook fix: env vars + manual webhook registration for Reem (no commit — env + DB only, was revision 0000063)
 
 Owner reported new operator **Reem** (executive assistant) connected to Telegram but not responding. Investigation found two cascading bugs:
 
