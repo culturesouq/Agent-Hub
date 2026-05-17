@@ -5,21 +5,21 @@
 
 ---
 
-## 1. Live Deployment (verified against Azure 2026-05-17 — post birth-engine restoration)
+## 1. Live Deployment (verified against Azure 2026-05-17 — post 3-step birth-engine fix)
 
 | What | Value |
 |---|---|
 | **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` |
 | **Container App** | `opsoul` (resource group `bani-studio-rg`, region `uaenorth`) |
-| **Active Revision** | `opsoul--0000059` (Healthy, 100% traffic — birth engine restored to original 91094a1) |
-| **Image** | `banistudioacr.azurecr.io/opsoul-api:revert-birth-87a82a3` |
-| **Source commit (live)** | `87a82a3` revert(birth): restore birth engine to original 91094a1 — owner-directed |
-| **ACR build** | Run ID `dg5t` (2m 15s, 2026-05-17) |
+| **Active Revision** | `opsoul--0000060` (Healthy, 100% traffic — canonical 9 archetypes + role extraction + 188-role taxonomy) |
+| **Image** | `banistudioacr.azurecr.io/opsoul-api:birth-9arch-188roles-96e83c6` |
+| **Source commit (live)** | `96e83c6` feat(birth): restore canonical archetypes + role extraction + expand roles to 188 |
+| **ACR build** | Run ID `dg5u` (2m 15s, 2026-05-17) |
 | **Notable env vars** | `VAEL_INBOX_ENABLED=true` (legacy — no longer wired; safe to remove) |
-| **Code commits in this image** | `87a82a3` revert birth engine to 91094a1 · `6a03d6a` (superseded by revert) · `d34fb25` hub Vael Desk removal · `b890bb4` no-fallbacks · `621c44d` operator-as-driver · `6459739` rag_dna teardown · `477d53b` agency-core seed removal |
+| **Code commits in this image** | `96e83c6` 9 archetypes + role extraction + 188 roles · `87a82a3` revert birth engine to 91094a1 · `d34fb25` hub Vael Desk removal · `b890bb4` no-fallbacks · `621c44d` operator-as-driver · `6459739` rag_dna teardown · `477d53b` agency-core seed removal |
 | **DB state** | Clean. rag_dna + rag_pipeline_config + rag_sources tables DROPPED. Per-operator KB: Vael 86, Operator 83. 0 Layer 1, 0 Layer 2 memories. |
-| **Operators in DB** | 2: Vael (`8668f6c9-...`), Operator/Blank (`eb70c409-...`). Old Nahil (`37da8776-...`) deleted earlier; two subsequent broken-birth Nahils (`4ae0fef8-...` and `26117020-...`) also deleted today. Owner will rebirth Nahil through Hub with the restored birth engine. |
-| **ACR state** | Two tags in `opsoul-api` repo: `revert-birth-87a82a3` (= live), `hub-clean-d34fb25` (prior live, not pruned yet). One active revision (`opsoul--0000059`), all prior revisions deactivated by Azure. |
+| **Operators in DB** | 2: Vael (`8668f6c9-...`), Operator/Blank (`eb70c409-...`). Three Nahils created and deleted today (`4ae0fef8-...`, `26117020-...`, `4ff16da2-...`) plus the original (`37da8776-...`) deleted earlier. Owner will rebirth Nahil through Hub when ready — next birth will use the canonical 9-archetype list + 188-role extraction. |
+| **ACR state** | Three tags in `opsoul-api` repo: `birth-9arch-188roles-96e83c6` (= live), `revert-birth-87a82a3` (prior), `hub-clean-d34fb25` (prior). One active revision (`opsoul--0000060`), all prior revisions deactivated by Azure. |
 | **Optional next step** | Set `SANDBOX_OPERATOR_ID` env var on the container app. If unset, sandbox-shaped userIds are rejected on every operator. Optional `VAEL_OPERATOR_ID` env var also recognised as explicit override (default = DB lookup by name='Vael'). |
 
 ### ACR (Azure Container Registry) — `banistudioacr`
@@ -224,6 +224,29 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 ---
 
 ## 8. Commit History — newest first
+
+### 2026-05-17 (PM) — Birth-engine 3-step fix: canonical 9 archetypes + role extraction + 188-role taxonomy (`96e83c6`, LIVE on revision 0000060)
+
+After the prior commit restored the birth engine to verbatim 91094a1, the audit surfaced that 91094a1's extraction (a) used an older 6-archetype taxonomy that does not include the canonical 9, and (b) never asked for or wrote `roles` at all. The new Nahil birthed under 91094a1 came back with `archetype = {Sage, Guardian}` (Sage is not in the canonical 9) and `roles = {}` — both judged broken by owner.
+
+Owner approved a 3-step platform fix (not per-operator), done as one commit:
+
+**Step 1 — canonical 9-archetype list.** `chat.ts extractBirthIdentity` archetype taxonomy changed from `[Navigator, Connector, Guardian, Builder, Sage, Catalyst]` (6, from 91094a1) to `[Executor, Advisor, Expert, Connector, Creator, Guardian, Builder, Catalyst, Analyst]` (9, the canonical set also used by `operators.ts:67` VALID_ARCHETYPES). Stored as a top-level const `BIRTH_ARCHETYPES`.
+
+**Step 2 — role extraction restored.** `extractBirthIdentity` now asks the LLM for `roles` and writes them to the operator row. Added: top-level const `BIRTH_ROLES`, extraction-prompt `roles:` line, JSON template `"roles":["..."]`, TypeScript type `roles: string[]`, DB UPDATE `roles: extracted.roles ?? []`. Validation guard unchanged — does not require roles to be non-empty.
+
+**Step 3 — role taxonomy expanded from 44 to 188.** Both `BIRTH_ROLES` (chat.ts) and `VALID_ROLES` (operators.ts) replaced byte-identical with the same 188-entry list, grouped by domain in comment headers: Strategy & Leadership (7), Research & Knowledge (11), Project & Program (6), Business & Analysis (5), Finance & Accounting (9), Sales & Marketing (11), Operations & Supply (9), Government Policy & Diplomacy (13), Communications & Media (10), Intelligence & Security (8), Legal (8), People & Culture (8), Coaching (8), Education & Training (8), Technology & Engineering (15), Design & Creative (12), Health & Wellbeing (7), Sustainability & Environment (8), Agriculture & Food (3), Real Estate & Built Environment (7), Entrepreneurship & Venture (5), Culture Arts & Tourism (8), Executive Support (2). Two arrays still duplicated by value (not refactored to a shared module — owner did not ask for that).
+
+Net: 2 files changed, 104 insertions, 25 deletions. Built as image `birth-9arch-188roles-96e83c6` (ACR Run `dg5u`, 2m15s). Live on `opsoul--0000060`, Healthy + Running, 100% traffic.
+
+The broken-birth Nahil (`4ff16da2-...`) was then deleted at owner direction — same transactional 19-table cleanup pattern as the two prior deletions today. OpSoul DB now holds Vael + Operator (blank). Hub is clean for owner's next Nahil birth, which will run through the fixed engine.
+
+What is NOT in this commit:
+- `buildBirthSystemPrompt` in systemPrompt.ts — still at 91094a1 verbatim from the prior `87a82a3` restoration. Language drift ("newly created", "described your purpose", "you are ready to begin", "Rules:" list, etc.) NOT addressed. Owner decision pending on whether/how to revise.
+- `core_values` / `ethical_boundaries` / `tone_profile` / `emotional_range` — `extractBirthIdentity` still does not ask for these fields. Pre-existing systemic gap, separate scope.
+- Shared-module refactor to deduplicate the two role arrays — not requested.
+
+---
 
 ### 2026-05-17 — Birth engine restored to original 91094a1 by owner direction (`87a82a3`, LIVE on revision 0000059)
 
