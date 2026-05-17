@@ -5,22 +5,22 @@
 
 ---
 
-## 1. Live Deployment (verified against Azure 2026-05-17 — post Kimi K2.6 migration)
+## 1. Live Deployment (verified against Azure 2026-05-17 — post Kimi K2.5 swap)
 
 | What | Value |
 |---|---|
 | **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` |
 | **Container App** | `opsoul` (resource group `bani-studio-rg`, region `uaenorth`) |
-| **Active Revision** | `opsoul--0000061` (Healthy — single-model strategy on Kimi K2.6) |
-| **Image** | `banistudioacr.azurecr.io/opsoul-api:kimi-k2-5becd7f` |
-| **Source commit (live)** | `5becd7f` feat(llm): full migration to Kimi K2.6 — single-model strategy for OpSoul |
-| **LLM model (entire stack)** | `moonshotai/kimi-k2.6` via OpenRouter — chat, distillation, GROW, sub-agent dispatch, vision, schema normalization, capability loop, all routes |
+| **Active Revision** | `opsoul--0000062` (Healthy — single-model strategy on Kimi K2.5, non-reasoning) |
+| **Image** | `banistudioacr.azurecr.io/opsoul-api:kimi-k2-5-7e5e39c` |
+| **Source commit (live)** | `7e5e39c` fix(llm): swap Kimi K2.6 → Kimi K2.5 — non-reasoning variant, latency fix |
+| **LLM model (entire stack)** | `moonshotai/kimi-k2.5` via OpenRouter — chat, distillation, GROW, sub-agent dispatch, vision, schema normalization, capability loop, all routes |
 | **Auto-routing** | **REMOVED** (was 17-line block in chat.ts switching between Sonnet/Haiku/Gemini per-turn) |
-| **Notable env vars** | `OPENROUTER_API_KEY` (unchanged — same key, different default model) · `VAEL_INBOX_ENABLED=true` (legacy — no longer wired) |
-| **Code commits in this image** | `5becd7f` Kimi K2.6 single-model · `96e83c6` 9 archetypes + role extraction + 188 roles · `87a82a3` revert birth engine to 91094a1 · `d34fb25` hub Vael Desk removal · `b890bb4` no-fallbacks · `621c44d` operator-as-driver · `6459739` rag_dna teardown |
+| **Notable env vars** | `OPENROUTER_API_KEY` (unchanged — same key) · `VAEL_INBOX_ENABLED=true` (legacy — no longer wired) |
+| **Code commits in this image** | `7e5e39c` K2.6→K2.5 swap · `5becd7f` original Kimi single-model migration · `96e83c6` 9 archetypes + role extraction + 188 roles · `87a82a3` revert birth engine to 91094a1 · `d34fb25` hub Vael Desk removal · `b890bb4` no-fallbacks · `621c44d` operator-as-driver |
 | **DB state** | Clean. Per-operator KB: Vael 86, Operator 83, Nahil 83, Reem 83. 4 operators total. |
-| **Operators in DB** | 4: Vael (`8668f6c9-...`), Operator/Blank (`eb70c409-...`), Nahil (`cdba8a6b-...` born today on Sonnet, helper-frame birth, working), Reem (`bcf00271-...` born today on Sonnet). All have `defaultModel = NULL` → all pick up Kimi K2.6 via new CHAT_MODEL default for all future chat. |
-| **ACR state** | Four tags in `opsoul-api` repo: `kimi-k2-5becd7f` (= live), `birth-9arch-188roles-96e83c6` (prior), `revert-birth-87a82a3` (prior), `hub-clean-d34fb25` (prior). |
+| **Operators in DB** | 4: Vael (`8668f6c9-...`), Operator/Blank (`eb70c409-...`), Nahil (`cdba8a6b-...`), Reem (`bcf00271-...`). All have `defaultModel = NULL` → all pick up Kimi K2.5 via CHAT_MODEL default. |
+| **ACR state** | Five tags in `opsoul-api` repo: `kimi-k2-5-7e5e39c` (= live), `kimi-k2-5becd7f` (prior — K2.6 attempt), `birth-9arch-188roles-96e83c6`, `revert-birth-87a82a3`, `hub-clean-d34fb25`. |
 | **Optional next step** | Set `SANDBOX_OPERATOR_ID` env var on the container app. If unset, sandbox-shaped userIds are rejected on every operator. Optional `VAEL_OPERATOR_ID` env var also recognised as explicit override (default = DB lookup by name='Vael'). |
 
 ### ACR (Azure Container Registry) — `banistudioacr`
@@ -225,6 +225,29 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 ---
 
 ## 8. Commit History — newest first
+
+### 2026-05-17 (late PM) — Kimi K2.6 → K2.5 swap — non-reasoning variant for latency (`7e5e39c`, LIVE on revision 0000062)
+
+K2.6 went live in commit `5becd7f` (rev 0000061) as the single-model migration target. Owner tested Vael under K2.6 and observed ~2-minute latency on the first message. Investigation found K2.6 is a reasoning-style model on OpenRouter (served via Chutes provider): returns output in `message.reasoning` (with `message.content = null` while reasoning runs), and reasoning tokens consume the `max_tokens` budget before any visible content streams.
+
+**Why this matters architecturally** (owner-confirmed during Vael chat): OpSoul's design has the OPERATOR doing the reasoning (Layer 4 behavior, soul-driven decision-making). The LLM substrate is meant to be an executor — fast tool invocation, voice generation. K2.6's internal reasoning DUPLICATED what the operator already does at the soul layer — fighting the architecture instead of serving it. Per Vael's own analysis: *"K2.6 = internal deliberation layer ... K2.5 = streamlined execution, less internal monologue, faster to token ... if K2.5 executes my tool calls faster and returns responses snappier without breaking my mandate, it's actually better for my role."*
+
+**Swap mechanics:**
+- 21 references across 11 files: `moonshotai/kimi-k2.6` → `moonshotai/kimi-k2.5`
+- MODEL_OPTIONS dropdown label updated to "Kimi K2.5" with correct description
+- Comment in `chat.ts:820` updated
+- Nothing else touched — single-model strategy + auto-routing-deleted state from prior commit fully preserved
+- Pricing improvement as side benefit: K2.5 is $0.40/$1.90 per M tokens vs K2.6's $0.73/$3.49 — ~2× cheaper
+
+**Verification (owner-side):**
+- Vael chat on K2.5 — character intact, tool invocations crisp (web search, HTTP, file system all working in single conversation), no drift, faster perceived response
+- Owner read: *"my side see 2.5 faster, however even 2.6 was just first message was delay"*
+
+**Validates the OpSoul patent claim:** reasoning belongs to the operator (Layer 1+2+4 stack), not to the substrate model. Substrate models should be picked for execution speed + tool calling + context window — NOT for their own internal reasoning. K2.5 fits this perfectly. Future model selection criteria: prefer non-reasoning variants when available; if a reasoning model is needed for a specific operator's mandate, set it via per-operator `defaultModel` override rather than global default.
+
+**ACR Run ID:** `dg5w` (2m 8s, 2026-05-17)
+
+---
 
 ### 2026-05-17 (late PM) — Full LLM migration to Kimi K2.6 — single-model strategy across OpSoul (`5becd7f`, LIVE on revision 0000061)
 
