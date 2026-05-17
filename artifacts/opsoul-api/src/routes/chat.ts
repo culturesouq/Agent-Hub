@@ -817,7 +817,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     }
   }
 
-  // Single-model strategy: Kimi K2.6 handles chat + vision + tool calling natively.
+  // Single-model strategy: Kimi K2.5 handles chat + vision + tool calling natively.
   // 'opsoul/auto' sentinel now resolves directly to CHAT_MODEL (no per-turn switching).
   chatModel = rawModel === 'opsoul/auto' ? CHAT_MODEL : rawModel;
 

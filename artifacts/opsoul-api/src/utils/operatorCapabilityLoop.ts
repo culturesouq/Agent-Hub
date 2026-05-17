@@ -79,7 +79,7 @@ export async function runCapabilityLoop(
   operatorId?: string,
   operatorOwnerId?: string,
 ): Promise<CapabilityLoopResult> {
-  const modelStr = typeof modelOrOptions === 'string' ? modelOrOptions : (modelOrOptions.model ?? 'moonshotai/kimi-k2.6');
+  const modelStr = typeof modelOrOptions === 'string' ? modelOrOptions : (modelOrOptions.model ?? 'moonshotai/kimi-k2.5');
 
   const first = await chatCompletion(messages, modelOrOptions);
   let content            = first.content ?? '';

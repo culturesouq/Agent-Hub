@@ -4,7 +4,7 @@ import { embed } from '@workspace/opsoul-utils/ai';
 import { chatCompletion } from './openrouter.js';
 import { curiositySearch } from './curiosityEngine.js';
 
-const DISTILL_MODEL = 'moonshotai/kimi-k2.6';
+const DISTILL_MODEL = 'moonshotai/kimi-k2.5';
 
 export type IntakeStatus = 'verified' | 'pending' | 'skipped';
 

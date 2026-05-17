@@ -1,12 +1,12 @@
 import OpenAI from 'openai';
 import type { ChatCompletion, ChatCompletionChunk, ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/index.js';
 
-export const CHAT_MODEL = 'moonshotai/kimi-k2.6';
-export const KB_MODEL = 'moonshotai/kimi-k2.6';
+export const CHAT_MODEL = 'moonshotai/kimi-k2.5';
+export const KB_MODEL = 'moonshotai/kimi-k2.5';
 export const AUTO_MODEL = 'opsoul/auto';
 
 export const MODEL_OPTIONS = [
-  { id: 'moonshotai/kimi-k2.6', label: 'Kimi K2.6', description: 'Moonshot AI — multimodal, agent swarm architecture, 262K context' },
+  { id: 'moonshotai/kimi-k2.5', label: 'Kimi K2.5', description: 'Moonshot AI — multimodal, self-directed agent swarm paradigm, 262K context' },
 ] as const;
 
 const MAX_TOKENS = 8192;

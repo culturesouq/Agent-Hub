@@ -240,7 +240,7 @@ router.post('/connect-app', async (req: Request, res: Response): Promise<void> =
             },
             { role: 'user', content: JSON.stringify(raw).slice(0, 4000) },
           ],
-          'moonshotai/kimi-k2.6',
+          'moonshotai/kimi-k2.5',
         );
         try {
           appSchema = JSON.parse(normalized.content.trim().replace(/```json\n?|\n?```/g, ''));

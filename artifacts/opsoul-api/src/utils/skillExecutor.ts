@@ -252,7 +252,7 @@ async function fetchIntegrationData(
             content: `API: ${baseUrl}\nTask: ${instructions}${schemaContext}\n\nReturn only the GraphQL operation.`,
           },
         ],
-        'moonshotai/kimi-k2.6',
+        'moonshotai/kimi-k2.5',
       );
 
       const gqlQuery = queryResult.content.trim().replace(/^```[\w]*\n?|```$/g, '');
@@ -272,7 +272,7 @@ async function fetchIntegrationData(
             content: `Task: ${instructions}\n\nReturn only the search term.`,
           },
         ],
-        'moonshotai/kimi-k2.6',
+        'moonshotai/kimi-k2.5',
       );
 
       const searchTerm = searchTermResult.content.trim();
@@ -293,7 +293,7 @@ async function fetchIntegrationData(
           content: `Base URL: ${baseUrl}\nTask: ${instructions}${schemaContext}\n\nReturn only the endpoint path.`,
         },
       ],
-      'moonshotai/kimi-k2.6',
+      'moonshotai/kimi-k2.5',
     );
 
     const path = endpointResult.content.trim().replace(/^["']|["']$/g, '');
@@ -351,7 +351,7 @@ export async function executeSkill(
       const params = await extractParams<{ query: string }>(
         `Context: ${trigger.extractedParams}\nInstructions: ${instructions}`,
         '{ "query": "string — the search query to run" }',
-        'moonshotai/kimi-k2.6',
+        'moonshotai/kimi-k2.5',
       );
       const query = params?.query?.trim() || trigger.extractedParams.slice(0, 200);
       console.log(`[skillExecutor] web_search: "${query}"`);
@@ -389,7 +389,7 @@ export async function executeSkill(
       }>(
         `Context: ${trigger.extractedParams}\nInstructions: ${instructions}`,
         '{ "method": "GET|POST|PUT|PATCH|DELETE", "url": "full URL", "headers": { "key": "value" }, "body": "optional request body string" }',
-        'moonshotai/kimi-k2.6',
+        'moonshotai/kimi-k2.5',
       );
       if (!params?.method || !params?.url) {
         return { skillName: trigger.name, output: 'Could not extract HTTP request parameters from context.', success: false, error: 'Parameter extraction failed' };
@@ -407,7 +407,7 @@ export async function executeSkill(
       const params = await extractParams<{ filename: string; content: string }>(
         `Context: ${trigger.extractedParams}\nInstructions: ${instructions}`,
         '{ "filename": "the file name with extension", "content": "the full content to write" }',
-        'moonshotai/kimi-k2.6',
+        'moonshotai/kimi-k2.5',
       );
       if (!params?.filename || !params?.content) {
         return { skillName: trigger.name, output: 'Could not extract file write parameters from context.', success: false, error: 'Parameter extraction failed' };
@@ -425,7 +425,7 @@ export async function executeSkill(
       const params = await extractParams<{ content: string; source: string; confidence?: number }>(
         `Context: ${trigger.extractedParams}\nInstructions: ${instructions}`,
         '{ "content": "the knowledge content to store (minimum 50 characters)", "source": "source name or description", "confidence": 65 }',
-        'moonshotai/kimi-k2.6',
+        'moonshotai/kimi-k2.5',
       );
       if (!params?.content || !params?.source) {
         return { skillName: trigger.name, output: 'Could not extract KB seed parameters from context.', success: false, error: 'Parameter extraction failed' };
