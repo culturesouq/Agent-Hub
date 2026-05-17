@@ -167,14 +167,6 @@ async function loadActiveSkills(operatorId: string): Promise<ActiveSkill[]> {
 // Silently extracts name/rawIdentity/archetype/mandate from the birth conversation
 
 async function extractBirthIdentity(operatorId: string, conversationId: string): Promise<void> {
-  // DB guard first — skip LLM entirely if rawIdentity is already written.
-  // Handles stale in-memory state and concurrent duplicate calls.
-  const [current] = await db
-    .select({ rawIdentity: operatorsTable.rawIdentity })
-    .from(operatorsTable)
-    .where(eq(operatorsTable.id, operatorId));
-  if (current?.rawIdentity) return;
-
   const msgs = await db
     .select({ role: messagesTable.role, content: messagesTable.content })
     .from(messagesTable)
@@ -193,19 +185,12 @@ ${transcript}
 Extract exactly:
 - name: what the owner said to call the operator (just the name, cleaned up, no extra text)
 - rawIdentity: a 200-400 word first-person story, written as the operator speaking, based on what the owner described as the purpose
-- archetype: pick as many as genuinely fit — no minimum, no maximum. From this exact list only: ["Executor", "Advisor", "Expert", "Connector", "Creator", "Guardian", "Builder", "Catalyst", "Analyst"]
-- roles: pick as many as genuinely fit — no minimum, no maximum. Exact strings only from this list: ["Strategist", "Researcher", "Executive Assistant", "Data Analyst", "Legal Reviewer", "Content Writer", "Project Manager", "Account Advisor", "Risk Officer", "Coach", "Chief of Staff", "Operations Manager", "Business Analyst", "Financial Advisor", "Sales Advisor", "Marketing Strategist", "Brand Manager", "Product Manager", "Customer Success Manager", "Procurement Advisor", "Policy Analyst", "Compliance Officer", "Public Affairs Advisor", "Regulatory Advisor", "Governance Advisor", "Communications Officer", "Intelligence Analyst", "Program Manager", "Domain Expert", "Knowledge Manager", "Technical Advisor", "Scientific Advisor", "Innovation Advisor", "HR Advisor", "Training Advisor", "Wellness Coach", "Leadership Coach", "Technology Advisor", "Cybersecurity Advisor", "Data Engineer", "Systems Analyst", "Investment Advisor", "Sustainability Advisor", "Cultural Affairs Advisor"]
+- archetype: 1 or 2 values only from this exact list: ["Navigator", "Connector", "Guardian", "Builder", "Sage", "Catalyst"] — choose what best fits the described purpose
 - mandate: one sentence starting with a verb, stating the operator's core purpose
 
 Return ONLY valid JSON, no markdown, no explanation:
-{"name":"...","rawIdentity":"...","archetype":["..."],"roles":["..."],"mandate":"..."}`;
+{"name":"...","rawIdentity":"...","archetype":["..."],"mandate":"..."}`;
 
-  // Birth-extraction is internal operator-formation logic invoked AFTER the
-  // turn (from runPostResponseTasks). It runs outside the route handler's
-  // `agent` scope, so it calls chatCompletion directly. The operator that
-  // is being formed cannot dispatch its own birth-extraction LLM call —
-  // the platform extracts the operator's identity from the birth
-  // conversation transcript on the operator's behalf.
   const result = await chatCompletion(
     [
       { role: 'system', content: 'You extract structured identity data from conversations. Return only valid JSON, no markdown, no explanation.' },
@@ -214,7 +199,7 @@ Return ONLY valid JSON, no markdown, no explanation:
     { model: CHAT_MODEL },
   );
 
-  let extracted: { name: string; rawIdentity: string; archetype: string[]; roles: string[]; mandate: string };
+  let extracted: { name: string; rawIdentity: string; archetype: string[]; mandate: string };
   try {
     const raw = typeof result.content === 'string' ? result.content : '';
     extracted = JSON.parse(raw.replace(/```json\n?|\n?```/g, '').trim());
@@ -229,7 +214,6 @@ Return ONLY valid JSON, no markdown, no explanation:
       name: extracted.name,
       rawIdentity: extracted.rawIdentity,
       archetype: extracted.archetype,
-      roles: extracted.roles ?? [],
       mandate: extracted.mandate,
     })
     .where(eq(operatorsTable.id, operatorId));
