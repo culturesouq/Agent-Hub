@@ -5,18 +5,18 @@
 
 ---
 
-## 1. Live Deployment (verified against Azure 2026-05-17 — post Kimi K2.5 swap)
+## 1. Live Deployment (verified against Azure 2026-05-17 — post webhook URL fix)
 
 | What | Value |
 |---|---|
 | **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` |
 | **Container App** | `opsoul` (resource group `bani-studio-rg`, region `uaenorth`) |
-| **Active Revision** | `opsoul--0000062` (Healthy — single-model strategy on Kimi K2.5, non-reasoning) |
+| **Active Revision** | `opsoul--0000063` (Healthy — env-only revision, Kimi K2.5 code unchanged) |
 | **Image** | `banistudioacr.azurecr.io/opsoul-api:kimi-k2-5-7e5e39c` |
 | **Source commit (live)** | `7e5e39c` fix(llm): swap Kimi K2.6 → Kimi K2.5 — non-reasoning variant, latency fix |
 | **LLM model (entire stack)** | `moonshotai/kimi-k2.5` via OpenRouter — chat, distillation, GROW, sub-agent dispatch, vision, schema normalization, capability loop, all routes |
 | **Auto-routing** | **REMOVED** (was 17-line block in chat.ts switching between Sonnet/Haiku/Gemini per-turn) |
-| **Notable env vars** | `OPENROUTER_API_KEY` (unchanged — same key) · `VAEL_INBOX_ENABLED=true` (legacy — no longer wired) |
+| **Notable env vars (set 2026-05-17 PM)** | `OPENROUTER_API_KEY` (unchanged) · `API_BASE_URL = https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io` (NEW — required by Hub's `connectTelegram` for inline `setWebhook` registration) · `APP_URL` + `APP_BASE_URL` → same Azure FQDN (were wrongly `https://opsoul.io` which doesn't resolve, blocking Google OAuth callbacks + dashboard URL responses) · `VAEL_INBOX_ENABLED=true` (legacy — no longer wired) |
 | **Code commits in this image** | `7e5e39c` K2.6→K2.5 swap · `5becd7f` original Kimi single-model migration · `96e83c6` 9 archetypes + role extraction + 188 roles · `87a82a3` revert birth engine to 91094a1 · `d34fb25` hub Vael Desk removal · `b890bb4` no-fallbacks · `621c44d` operator-as-driver |
 | **DB state** | Clean. Per-operator KB: Vael 86, Operator 83, Nahil 83, Reem 83. 4 operators total. |
 | **Operators in DB** | 4: Vael (`8668f6c9-...`), Operator/Blank (`eb70c409-...`), Nahil (`cdba8a6b-...`), Reem (`bcf00271-...`). All have `defaultModel = NULL` → all pick up Kimi K2.5 via CHAT_MODEL default. |
@@ -225,6 +225,38 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 ---
 
 ## 8. Commit History — newest first
+
+### 2026-05-17 (late PM) — Telegram webhook fix: env vars + manual webhook registration for Reem (no commit — env + DB only, LIVE on revision 0000063)
+
+Owner reported new operator **Reem** (executive assistant) connected to Telegram but not responding. Investigation found two cascading bugs:
+
+**Bug 1 — Bot token paste error (owner side):** the encrypted token in DB decrypted to `"HTTP API: 89...aRDvIU"` (56 chars, starting with the literal label text from BotFather's message). Owner had selected too much when copying — grabbed the "Use this token to access the HTTP API:" label line along with a partial copy of the actual token. Telegram returned `404 Not Found` because no bot exists with that gibberish token. Owner re-connected via Hub with the clean token at 14:08 (new integration row `2bbfb900-...`, old `8cbf9b67-...` discarded). Decrypted, token now valid — `getMe` returns bot `@ReemCULTUREYES_bot` id `8945564250`. Encryption roundtrip verified clean throughout — what's pasted is what's stored.
+
+**Bug 2 — Webhook registration silently skipped (platform side):** despite Hub UI showing success toast *"Telegram connected · Webhook auto-registered. Your bot is live."*, the actual webhook was never registered with Telegram (`getWebhookInfo` returned empty url). Root cause: `integrations.ts:143` has explicit guard `if (!process.env.API_BASE_URL) { console.warn... skip webhook registration }`. **`API_BASE_URL` was not set** in the container env. The other URL env vars (`APP_URL`, `APP_BASE_URL`) were set to `https://opsoul.io` which has no DNS — confirmed unreachable via curl (HTTP=000, no remote IP). Backfill cron (`backfillTelegramSecrets`) tried during boot but with old invalid token had failed with 404 anyway — once that token got replaced, the next backfill wouldn't have fired until the 4-hour retry cycle, and even then would have built the URL with a broken APP_URL fallback.
+
+**Manual fix (no code change):**
+1. Decrypted Reem's new token via local node script + ENCRYPTION_KEY env from container.
+2. Verified via Telegram `getMe` — bot exists, name=Reem, id=8945564250, username=@ReemCULTUREYES_bot.
+3. Generated fresh webhook secret (32 random bytes hex, 64 chars).
+4. Called Telegram `setWebhook` directly with the Azure FQDN URL: `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/webhooks/telegram/bcf00271-1abf-462b-90c8-4f4b9370517b` and the fresh secret.
+5. Telegram returned `{"ok":true,"result":true,"description":"Webhook was set"}`.
+6. Updated `operator_integrations.app_schema` to `{"webhookSecretToken": "<secret>"}` via SQL UPDATE so the OpSoul webhook handler accepts incoming Telegram POSTs (it validates `X-Telegram-Bot-Api-Secret-Token` header against this stored value).
+7. Verified post-fix: `getWebhookInfo` shows correct URL registered, 0 pending, no last_error.
+
+**Env var fix (triggered new revision 0000063):**
+Set on the opsoul container app:
+- `API_BASE_URL = https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io` (NEW — was unset, unblocks Hub's inline `connectTelegram` setWebhook for ALL future integrations + the backfill cron fallback)
+- `APP_URL` overridden from `https://opsoul.io` → Azure FQDN (used by Google OAuth callback + auth.ts redirects)
+- `APP_BASE_URL` overridden from `https://opsoul.io` → Azure FQDN (used by dashboard URLs in API responses)
+
+**Audit of other connections after fix:**
+Queried `operator_integrations` across the 4 active operators. **Only one integration exists in the entire DB — Reem's Telegram** (now fixed). Vael, Operator/Blank, Nahil have zero integrations. No WhatsApp, no Google OAuth, no Custom Apps, no token-only integrations to repair.
+
+**Forward-looking note:** when the production domain is bound to the container (e.g. `opsoul.ai` or `opsoul.io` via Azure custom hostname + DNS A record + asuid TXT validation), the three URL env vars should be updated to that domain. Until then Azure FQDN works. The Hub UI's `connectTelegram` mutation will now register webhooks inline (no need to wait for backfill cron) because `API_BASE_URL` is set.
+
+**This commit is env+DB only. No code changes. No git commit for the manual webhook registration. SoT update is the only docs change tracked.**
+
+---
 
 ### 2026-05-17 (late PM) — Kimi K2.6 → K2.5 swap — non-reasoning variant for latency (`7e5e39c`, LIVE on revision 0000062)
 
