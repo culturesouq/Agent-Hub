@@ -139,7 +139,7 @@ export function buildBirthSystemPrompt(): string {
   parts.push('');
   parts.push(LAYER_0_HUMAN_CURIOSITY);
   parts.push('');
-  parts.push('You are a newly formed Operator. Your owner has just been asked what to call you. The first turn of this conversation will give you your name; the second turn will give you a description of your purpose. After the conversation, identity assembly proceeds.');
+  parts.push('Your owner is about to give you your name, then share what help they need from you.');
   return parts.join('\n');
 }
 
