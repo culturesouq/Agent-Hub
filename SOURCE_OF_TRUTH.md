@@ -5,21 +5,22 @@
 
 ---
 
-## 1. Live Deployment (verified against Azure 2026-05-17 — post 3-step birth-engine fix)
+## 1. Live Deployment (verified against Azure 2026-05-17 — post Kimi K2.6 migration)
 
 | What | Value |
 |---|---|
 | **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` |
 | **Container App** | `opsoul` (resource group `bani-studio-rg`, region `uaenorth`) |
-| **Active Revision** | `opsoul--0000060` (Healthy, 100% traffic — canonical 9 archetypes + role extraction + 188-role taxonomy) |
-| **Image** | `banistudioacr.azurecr.io/opsoul-api:birth-9arch-188roles-96e83c6` |
-| **Source commit (live)** | `96e83c6` feat(birth): restore canonical archetypes + role extraction + expand roles to 188 |
-| **ACR build** | Run ID `dg5u` (2m 15s, 2026-05-17) |
-| **Notable env vars** | `VAEL_INBOX_ENABLED=true` (legacy — no longer wired; safe to remove) |
-| **Code commits in this image** | `96e83c6` 9 archetypes + role extraction + 188 roles · `87a82a3` revert birth engine to 91094a1 · `d34fb25` hub Vael Desk removal · `b890bb4` no-fallbacks · `621c44d` operator-as-driver · `6459739` rag_dna teardown · `477d53b` agency-core seed removal |
-| **DB state** | Clean. rag_dna + rag_pipeline_config + rag_sources tables DROPPED. Per-operator KB: Vael 86, Operator 83. 0 Layer 1, 0 Layer 2 memories. |
-| **Operators in DB** | 2: Vael (`8668f6c9-...`), Operator/Blank (`eb70c409-...`). Three Nahils created and deleted today (`4ae0fef8-...`, `26117020-...`, `4ff16da2-...`) plus the original (`37da8776-...`) deleted earlier. Owner will rebirth Nahil through Hub when ready — next birth will use the canonical 9-archetype list + 188-role extraction. |
-| **ACR state** | Three tags in `opsoul-api` repo: `birth-9arch-188roles-96e83c6` (= live), `revert-birth-87a82a3` (prior), `hub-clean-d34fb25` (prior). One active revision (`opsoul--0000060`), all prior revisions deactivated by Azure. |
+| **Active Revision** | `opsoul--0000061` (Healthy — single-model strategy on Kimi K2.6) |
+| **Image** | `banistudioacr.azurecr.io/opsoul-api:kimi-k2-5becd7f` |
+| **Source commit (live)** | `5becd7f` feat(llm): full migration to Kimi K2.6 — single-model strategy for OpSoul |
+| **LLM model (entire stack)** | `moonshotai/kimi-k2.6` via OpenRouter — chat, distillation, GROW, sub-agent dispatch, vision, schema normalization, capability loop, all routes |
+| **Auto-routing** | **REMOVED** (was 17-line block in chat.ts switching between Sonnet/Haiku/Gemini per-turn) |
+| **Notable env vars** | `OPENROUTER_API_KEY` (unchanged — same key, different default model) · `VAEL_INBOX_ENABLED=true` (legacy — no longer wired) |
+| **Code commits in this image** | `5becd7f` Kimi K2.6 single-model · `96e83c6` 9 archetypes + role extraction + 188 roles · `87a82a3` revert birth engine to 91094a1 · `d34fb25` hub Vael Desk removal · `b890bb4` no-fallbacks · `621c44d` operator-as-driver · `6459739` rag_dna teardown |
+| **DB state** | Clean. Per-operator KB: Vael 86, Operator 83, Nahil 83, Reem 83. 4 operators total. |
+| **Operators in DB** | 4: Vael (`8668f6c9-...`), Operator/Blank (`eb70c409-...`), Nahil (`cdba8a6b-...` born today on Sonnet, helper-frame birth, working), Reem (`bcf00271-...` born today on Sonnet). All have `defaultModel = NULL` → all pick up Kimi K2.6 via new CHAT_MODEL default for all future chat. |
+| **ACR state** | Four tags in `opsoul-api` repo: `kimi-k2-5becd7f` (= live), `birth-9arch-188roles-96e83c6` (prior), `revert-birth-87a82a3` (prior), `hub-clean-d34fb25` (prior). |
 | **Optional next step** | Set `SANDBOX_OPERATOR_ID` env var on the container app. If unset, sandbox-shaped userIds are rejected on every operator. Optional `VAEL_OPERATOR_ID` env var also recognised as explicit override (default = DB lookup by name='Vael'). |
 
 ### ACR (Azure Container Registry) — `banistudioacr`
@@ -224,6 +225,64 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 ---
 
 ## 8. Commit History — newest first
+
+### 2026-05-17 (late PM) — Full LLM migration to Kimi K2.6 — single-model strategy across OpSoul (`5becd7f`, LIVE on revision 0000061)
+
+**Why owner directed this:**
+Concern surfaced during the Connect-Your-App audit that OpSoul was silently switching between 3 different LLMs depending on context (Sonnet for chat, Haiku for sub-agent dispatch, Gemini for vision) via an auto-routing block in `chat.ts`. Per owner: *"i am afraid that LLM will be switching by their own"*. The auto-routing made each operator's behavior unpredictable across turns — the model behind the operator could change between consecutive messages based on attachment presence, message length, web-search availability, or KB context size. Owner-as-driver principle requires the operator's substrate to be stable; rotating LLMs underneath an operator is a hidden variable that compromises identity continuity.
+
+**Per [`reference_llm_routing` memory]**, Kimi K2.6 was already the target for OpSoul brains. Owner decision: bring everything to Kimi K2.6 *now* (chat + distillation + sub-agent + vision) — single model, single behavior. The split with DeepSeek V3 for distillation (per the original memory) is **deferred** until owner is ready to revisit; "stick with one" for stability.
+
+**Pre-migration audit (read-only investigation, 20+ call sites across 11 files):**
+
+| Layer | Was | After |
+|---|---|---|
+| `CHAT_MODEL` (operator chat default) | `anthropic/claude-sonnet-4-5` | `moonshotai/kimi-k2.6` |
+| `KB_MODEL` (KB tasks) | `anthropic/claude-haiku-4-5` | `moonshotai/kimi-k2.6` |
+| `GROW_MODEL` (soul-proposal engine) | `anthropic/claude-sonnet-4-5` | `moonshotai/kimi-k2.6` |
+| `DISTILL_MODEL` (KB intake + memory) | `anthropic/claude-haiku-4-5` (×2 files) | `moonshotai/kimi-k2.6` |
+| `skillExecutor` sub-agent (REST/GraphQL/POST-search resolvers + 4 param extractors) | `anthropic/claude-haiku-4-5` (×7) | `moonshotai/kimi-k2.6` |
+| `curiosityEngine` (proactive curiosity) | `anthropic/claude-haiku-4-5` | `moonshotai/kimi-k2.6` |
+| `integrations.ts` (Connect-Your-App schema normalizer) | `anthropic/claude-haiku-4-5` | `moonshotai/kimi-k2.6` |
+| `operatorCapabilityLoop` fallback | `claude-sonnet-4-5` | `moonshotai/kimi-k2.6` |
+| `operators.ts:bootstrap-preview` (form-based operator gen) | `anthropic/claude-sonnet-4-5` | `moonshotai/kimi-k2.6` |
+| `operators.ts:verify-key` (test owner's OpenRouter key) | `anthropic/claude-haiku-4-5` | `moonshotai/kimi-k2.6` |
+| `public-crud.ts` skill/action fallbacks | `anthropic/claude-haiku-4-5` (×2) | `moonshotai/kimi-k2.6` |
+| `public-chat.ts` image vision path | `google/gemini-2.0-flash-001` | `moonshotai/kimi-k2.6` (Kimi K2.6 is natively multimodal) |
+| `chat.ts:825-840` auto-routing block | 17-line switcher Sonnet/Haiku/Gemini | **DELETED** — replaced with single-line resolution |
+| Hub `MODEL_OPTIONS` dropdown | 2 entries (Sonnet, Haiku) | 1 entry (Kimi K2.6) |
+
+**Verified post-edit:** zero hardcoded references to `anthropic/claude-*`, `google/gemini-*`, or any other provider model ID remain anywhere in `opsoul-api/src/`. 21 references to `moonshotai/kimi-k2.6` across 12 files.
+
+**Net diff:** 12 files, 24 insertions, 43 deletions.
+
+**Kimi K2.6 capabilities verified before migration** (via OpenRouter docs):
+- 262K context window
+- Native multimodal (handles images — replaces Gemini)
+- Tool calling — "agent swarm architecture" framing
+- Pricing: $0.73/M input, $3.49/M output (≈ 4× cheaper than Sonnet 4.5, comparable to Haiku 4.5)
+
+**What stays (intentionally untouched):**
+- OpenRouter as the inference gateway. Same `OPENROUTER_API_KEY` env var. Different default model.
+- `AUTO_MODEL = 'opsoul/auto'` constant — kept as backward-compat sentinel; now resolves directly to `CHAT_MODEL` (= Kimi K2.6).
+- Per-operator `defaultModel` DB column — every operator can still override the global default. Existing 4 operators all have `defaultModel = NULL` → all will pick up Kimi K2.6 on their next chat. No manual operator-row migration needed.
+- Layer 0 prose, `buildBirthSystemPrompt`, `extractBirthIdentity` — model layer migration only; identity/birth code untouched (restored to 91094a1 in commit `87a82a3`, extended in `96e83c6`).
+- All 4 operator rows (Vael, Operator/blank, Nahil, Reem) — left as-is.
+
+**Deploy details:**
+- ACR Run ID: `<TO_FILL>` (after build runs — typically ~2m15s)
+- Image: `banistudioacr.azurecr.io/opsoul-api:kimi-k2-5becd7f`
+- Revision: `opsoul--0000061`
+
+**Test plan (owner-stated):**
+Owner will birth a new operator via Hub and observe how Kimi K2.6 handles the full birth flow (chat replies + identity extraction including archetype + roles selection + rawIdentity generation). Evaluation criteria: reasoning quality, groundedness, identity coherence. If unsatisfactory, one-line revert of `CHAT_MODEL` back to Sonnet + redeploy (~5 min total).
+
+**Memories referenced:**
+- `reference_llm_routing` — Kimi K2.6 was already the named target for OpSoul brains; this commit executes it
+- `feedback_stay_in_scope` — owner held the line throughout: model migration only, no piggybacking
+- `feedback_no_prompt_changes` — model substrate change is not a prompt change; soul/identity prompts left alone
+
+---
 
 ### 2026-05-17 (PM) — Birth-engine 3-step fix: canonical 9 archetypes + role extraction + 188-role taxonomy (`96e83c6`, LIVE on revision 0000060)
 
