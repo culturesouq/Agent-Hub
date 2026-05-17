@@ -287,7 +287,7 @@ router.post('/:operatorId', async (req: RequestWithRawBody, res: Response): Prom
   try {
     const embedding = await embed(userMessage);
     const [hits, memHits] = await Promise.all([
-      searchBothKbs(operator.id, embedding, 5, 0.5, operator.archetype, operator.domainTags ?? []),
+      searchBothKbs(operator.id, embedding, 5, 30, operator.archetype, operator.domainTags ?? []),
       searchMemory(operator.id, embedding, 5, 0.7, 0.3, scope.scopeId),
     ]);
 
