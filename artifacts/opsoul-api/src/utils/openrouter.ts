@@ -1,42 +1,103 @@
+/**
+ * Multi-provider LLM client — routes every chat completion through the
+ * model registry so OpSoul can drive any LLM behind any SDK.
+ *
+ * Public API (stable — chat.ts, mcpServer.ts, etc. don't change):
+ *   - streamChat(messages, opts) - AsyncGenerator of streaming chunks
+ *   - chatCompletion(messages, opts) - non-streaming result
+ *   - CHAT_MODEL / KB_MODEL / AUTO_MODEL - default model ids
+ *   - MODEL_OPTIONS - frontend picker payload
+ *
+ * Internal: getClientForModel(modelId, apiKey?) consults modelRegistry to
+ * pick the baseURL + API key + adapter for each call. Today all supported
+ * providers are OpenAI-compatible (OpenRouter, Hajeri RunPod, OpenAI, etc.)
+ * so a single OpenAI SDK client handles them all with different baseURLs.
+ * The 'adapter' field on ProviderConfig is the seam for non-OpenAI-compat
+ * providers (Anthropic Messages API, Google Gemini) when their adapter
+ * modules are added later.
+ *
+ * Filename is historical ('openrouter.ts'). The module is now multi-
+ * provider; OpenRouter is just one of many. A future commit can rename to
+ * llmClient.ts or modelClient.ts — touches every importer.
+ */
+
 import OpenAI from 'openai';
 import type { ChatCompletion, ChatCompletionChunk, ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/index.js';
+import {
+  resolveModel,
+  resolveApiKey,
+  listAvailableModels,
+  DEFAULT_MODEL_ID,
+  type ProviderConfig,
+} from './modelRegistry.js';
 
-export const CHAT_MODEL = 'moonshotai/kimi-k2.5';
-export const KB_MODEL = 'moonshotai/kimi-k2.5';
+// ───────────────────────────────────────────────────────────────────────────
+//  PUBLIC API (stable — do not change export shapes without auditing callers)
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Default model when an operator has no defaultModel set. */
+export const CHAT_MODEL = DEFAULT_MODEL_ID;
+/** Model used for KB intake distillation. */
+export const KB_MODEL = DEFAULT_MODEL_ID;
+/** Sentinel model that means "let OpSoul pick per-turn". */
 export const AUTO_MODEL = 'opsoul/auto';
 
-export const MODEL_OPTIONS = [
-  { id: 'moonshotai/kimi-k2.5', label: 'Kimi K2.5', description: 'Moonshot AI — multimodal, self-directed agent swarm paradigm, 262K context' },
-] as const;
+/** Frontend model picker payload — sourced from the registry. */
+export const MODEL_OPTIONS = listAvailableModels().map((m) => ({
+  id: m.id,
+  label: m.label,
+  description: m.description,
+}));
 
 const MAX_TOKENS = 8192;
 
-let _defaultClient: OpenAI | null = null;
+// ───────────────────────────────────────────────────────────────────────────
+//  INTERNAL — provider-routed client builder
+// ───────────────────────────────────────────────────────────────────────────
 
-export function getOpenRouterClient(apiKey?: string | null): OpenAI {
-  if (!apiKey) {
-    if (!_defaultClient) {
-      _defaultClient = new OpenAI({
-        baseURL: 'https://openrouter.ai/api/v1',
-        apiKey: process.env.OPENROUTER_API_KEY!,
-        defaultHeaders: {
-          'HTTP-Referer': 'https://opsoul.ai',
-          'X-Title': 'OpSoul v2.4',
-        },
-      });
-    }
-    return _defaultClient;
-  }
+/**
+ * Cache of OpenAI SDK clients keyed by `${baseURL}::${apiKey}` so we don't
+ * spin up a new client for every request. Important for connection reuse.
+ */
+const clientCache = new Map<string, OpenAI>();
 
-  return new OpenAI({
-    baseURL: 'https://openrouter.ai/api/v1',
-    apiKey,
+function buildClient(config: ProviderConfig, apiKey: string): OpenAI {
+  const cacheKey = `${config.baseURL}::${apiKey}`;
+  const cached = clientCache.get(cacheKey);
+  if (cached) return cached;
+  const client = new OpenAI({
+    baseURL: config.baseURL,
+    apiKey: apiKey || 'unused',
     defaultHeaders: {
       'HTTP-Referer': 'https://opsoul.ai',
       'X-Title': 'OpSoul v2.4',
     },
   });
+  clientCache.set(cacheKey, client);
+  return client;
 }
+
+/**
+ * Resolves a model id + optional per-operator API key into a ready-to-use
+ * OpenAI-compatible client + the model name to send.
+ *
+ * Returned `sendAs` may differ from the operator-facing modelId — e.g.
+ * OpenAI provider strips the 'openai/' prefix because the OpenAI API
+ * expects bare 'gpt-5', not 'openai/gpt-5'.
+ */
+function getClientForModel(
+  modelId: string,
+  apiKeyOverride?: string | null,
+): { client: OpenAI; sendAs: string; config: ProviderConfig } {
+  const { config, sendAs } = resolveModel(modelId);
+  const apiKey = resolveApiKey(config, apiKeyOverride);
+  const client = buildClient(config, apiKey);
+  return { client, sendAs, config };
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+//  SHARED TYPES (stable — these are public)
+// ───────────────────────────────────────────────────────────────────────────
 
 export type ContentPart =
   | { type: 'text'; text: string }
@@ -86,6 +147,10 @@ export interface ChatOptions {
   tools?: ToolDefinition[];
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+//  STREAM CHAT
+// ───────────────────────────────────────────────────────────────────────────
+
 export async function* streamChat(
   messages: ChatMessage[],
   modelOrOptions: string | ChatOptions = CHAT_MODEL,
@@ -94,11 +159,11 @@ export async function* streamChat(
     ? { model: modelOrOptions }
     : modelOrOptions;
 
-  const client = getOpenRouterClient(opts.apiKey);
-  const model = opts.model || CHAT_MODEL;
+  const modelId = opts.model || CHAT_MODEL;
+  const { client, sendAs } = getClientForModel(modelId, opts.apiKey);
 
   const requestParams: Parameters<typeof client.chat.completions.create>[0] = {
-    model,
+    model: sendAs,
     messages: messages as Parameters<typeof client.chat.completions.create>[0]['messages'],
     max_tokens: MAX_TOKENS,
     stream: true,
@@ -150,6 +215,10 @@ export async function* streamChat(
   }
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+//  NON-STREAM CHAT
+// ───────────────────────────────────────────────────────────────────────────
+
 export interface CompletionResult {
   content: string;
   toolCall?: ToolCall;
@@ -165,11 +234,11 @@ export async function chatCompletion(
     ? { model: modelOrOptions }
     : modelOrOptions;
 
-  const client = getOpenRouterClient(opts.apiKey);
-  const model = opts.model || CHAT_MODEL;
+  const modelId = opts.model || CHAT_MODEL;
+  const { client, sendAs } = getClientForModel(modelId, opts.apiKey);
 
   const requestParams: Parameters<typeof client.chat.completions.create>[0] = {
-    model,
+    model: sendAs,
     messages: messages as Parameters<typeof client.chat.completions.create>[0]['messages'],
     max_tokens: MAX_TOKENS,
     stream: false,
@@ -191,4 +260,15 @@ export async function chatCompletion(
     promptTokens: response.usage?.prompt_tokens ?? 0,
     completionTokens: response.usage?.completion_tokens ?? 0,
   };
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+//  BACKWARD-COMPAT EXPORT — some legacy callers may still import this.
+//  Kept as a thin wrapper around getClientForModel() so its old shape works.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** @deprecated Prefer streamChat/chatCompletion which auto-route via registry. */
+export function getOpenRouterClient(apiKey?: string | null): OpenAI {
+  const { client } = getClientForModel(CHAT_MODEL, apiKey);
+  return client;
 }
