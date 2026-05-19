@@ -23,12 +23,14 @@ export type ScopeType = 'owner' | 'public' | 'authenticated' | 'action' | 'chann
 /** Conditions that gate whether a tool is offered in a given context. */
 export type Availability = 'always' | 'web' | 'secrets';
 
-/** Categories for admin/UI grouping. Matches utils/builtinSkills.ts. */
+/** Categories for admin/UI grouping. */
 export type ToolCategory = 'research' | 'workspace' | 'integration' | 'automation';
 
 export interface RegisteredTool {
-  /** Tool name as sent to the LLM. Must match handler dispatch. */
+  /** Tool name as sent to the LLM. Must match handler dispatch. snake_case. */
   name: string;
+  /** Title-case label shown in the frontend SkillsSection.tsx grid. */
+  displayName: string;
   /** Human-readable description for the LLM. Sent verbatim in the tools array. */
   description: string;
   /** JSON-Schema for the tool's input parameters. */
@@ -60,6 +62,7 @@ export interface ToolContext {
 export const UNIVERSAL_TOOLS: RegisteredTool[] = [
   {
     name: 'web_search',
+    displayName: 'Web search',
     description:
       'Issues a search query and returns ranked results — URLs and text snippets from matching pages.',
     inputSchema: {
@@ -75,6 +78,7 @@ export const UNIVERSAL_TOOLS: RegisteredTool[] = [
   },
   {
     name: 'kb_seed',
+    displayName: 'Knowledge seed',
     description:
       "Adds an entry to the operator's knowledge base. The entry is embedded at insertion time and becomes retrievable in subsequent conversations. New entries land in pending state for verification.",
     inputSchema: {
@@ -103,6 +107,7 @@ export const UNIVERSAL_TOOLS: RegisteredTool[] = [
   },
   {
     name: 'write_file',
+    displayName: 'Write file',
     description:
       "Creates or replaces a file in the operator's workspace under a chosen name. Files persist across conversations and appear in the Files tab.",
     inputSchema: {
@@ -127,6 +132,7 @@ export const UNIVERSAL_TOOLS: RegisteredTool[] = [
   },
   {
     name: 'read_file',
+    displayName: 'Read file',
     description: 'Returns the contents of a workspace file by name.',
     inputSchema: {
       type: 'object',
@@ -144,6 +150,7 @@ export const UNIVERSAL_TOOLS: RegisteredTool[] = [
   },
   {
     name: 'list_files',
+    displayName: 'List files',
     description: 'Enumerates files present in the workspace with size and last-update timestamp.',
     inputSchema: {
       type: 'object',
@@ -156,6 +163,7 @@ export const UNIVERSAL_TOOLS: RegisteredTool[] = [
   },
   {
     name: 'get_current_time',
+    displayName: 'Current time',
     description:
       'Returns the current date and time. Defaults to Asia/Dubai (GST). Optional timezone parameter accepts an IANA timezone identifier (e.g. "America/New_York", "Asia/Tokyo", "Europe/London", "UTC") for time elsewhere in the world.',
     inputSchema: {
@@ -174,6 +182,7 @@ export const UNIVERSAL_TOOLS: RegisteredTool[] = [
   },
   {
     name: 'schedule_task',
+    displayName: 'Schedule task',
     description:
       'Creates a recurring task with a daily or weekly schedule. The task fires on schedule, executing a stored prompt against the operator.',
     inputSchema: {
@@ -199,6 +208,7 @@ export const UNIVERSAL_TOOLS: RegisteredTool[] = [
   },
   {
     name: 'update_task',
+    displayName: 'Update task',
     description:
       'Modifies the name, prompt, or schedule of an existing task, identified by its current name.',
     inputSchema: {
@@ -224,6 +234,7 @@ export const UNIVERSAL_TOOLS: RegisteredTool[] = [
   },
   {
     name: 'pause_task',
+    displayName: 'Pause task',
     description:
       'Sets a task to paused state. A paused task is preserved but does not fire on its schedule.',
     inputSchema: {
@@ -239,6 +250,7 @@ export const UNIVERSAL_TOOLS: RegisteredTool[] = [
   },
   {
     name: 'resume_task',
+    displayName: 'Resume task',
     description: 'Sets a paused task to active state, resuming its scheduled firing.',
     inputSchema: {
       type: 'object',
@@ -253,6 +265,7 @@ export const UNIVERSAL_TOOLS: RegisteredTool[] = [
   },
   {
     name: 'delete_task',
+    displayName: 'Delete task',
     description: "Removes a task permanently from the operator's task list.",
     inputSchema: {
       type: 'object',
@@ -267,6 +280,7 @@ export const UNIVERSAL_TOOLS: RegisteredTool[] = [
   },
   {
     name: 'http_request',
+    displayName: 'HTTP request',
     // NOTE: description is suffixed with the live secret labels list at runtime
     // in toToolDefinition() below. Base description here is the static part.
     description:
@@ -372,7 +386,10 @@ export function listToolsForContext(ctx: ToolContext): ToolDefinition[] {
  * operator actually sees.
  */
 export interface ToolManifestEntry {
+  /** snake_case LLM-facing identifier. */
   name: string;
+  /** Title-case label for the frontend SkillsSection.tsx grid. */
+  displayName: string;
   description: string;
   category: ToolCategory;
   scopes: ScopeType[] | '*';
@@ -383,6 +400,7 @@ export interface ToolManifestEntry {
 export function buildToolManifest(ctx: ToolContext): ToolManifestEntry[] {
   return UNIVERSAL_TOOLS.map(t => ({
     name: t.name,
+    displayName: t.displayName,
     description: t.description,
     category: t.category,
     scopes: t.scopes,

@@ -6,10 +6,10 @@ import { operatorSkillsTable, platformSkillsTable, operatorsTable } from '@works
 import { requireAuth } from '../middleware/requireAuth.js';
 import { eq, and } from 'drizzle-orm';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
-import { BUILTIN_SKILLS } from '../utils/builtinSkills.js';
 import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
 import { isWebSearchAvailable } from '../utils/capabilityEngine.js';
 import { operatorSecretsTable } from '@workspace/db';
+import { buildToolManifest } from '../utils/toolRegistry.js';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -130,12 +130,10 @@ router.get('/manifest', async (req: Request, res: Response): Promise<void> => {
 
   const archetypes = (op.archetype as string[] | null) ?? [];
 
-  const [hasSecrets, archetypeSkills, customInstalls] = await Promise.all([
-    db.select({ id: operatorSecretsTable.id })
+  const [secretRows, archetypeSkills, customInstalls] = await Promise.all([
+    db.select({ key: operatorSecretsTable.key })
       .from(operatorSecretsTable)
-      .where(eq(operatorSecretsTable.operatorId, operatorId))
-      .limit(1)
-      .then((rows) => rows.length > 0),
+      .where(eq(operatorSecretsTable.operatorId, operatorId)),
     loadArchetypeSkills(archetypes),
     db.select({
       id:                 operatorSkillsTable.id,
@@ -151,18 +149,23 @@ router.get('/manifest', async (req: Request, res: Response): Promise<void> => {
       .where(eq(operatorSkillsTable.operatorId, operatorId)),
   ]);
 
-  const webOn = isWebSearchAvailable();
-  const builtin = BUILTIN_SKILLS
-    .filter((s) => {
-      if (s.availability === 'always') return true;
-      if (s.availability === 'web') return webOn;
-      if (s.availability === 'secrets') return hasSecrets;
-      return false;
-    })
-    .map((s) => ({
-      name:        s.name,
-      description: s.description,
-      category:    s.category,
+  // Universal builder tools — sourced from utils/toolRegistry.ts so the UI
+  // sees exactly the same set the operator can call via the LLM and the
+  // same set external MCP clients see at /mcp. Owner scope here matches
+  // the auth context (chat route requires owner-level auth).
+  const builtin = buildToolManifest({
+    scopeType: 'owner',
+    hasWebSearch: isWebSearchAvailable(),
+    liveSecrets: secretRows.map((r) => r.key),
+  })
+    .filter((t) => t.available)
+    .map((t) => ({
+      // Frontend SkillsSection.tsx renders `name` as the card title — use
+      // the title-case displayName so the UI shows "Web search" rather than
+      // the LLM-facing snake_case "web_search".
+      name:        t.displayName,
+      description: t.description,
+      category:    t.category,
     }));
 
   const specialty = archetypeSkills.map((s) => ({
