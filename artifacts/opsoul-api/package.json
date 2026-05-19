@@ -10,6 +10,7 @@
     "backfill:telegram-secrets": "tsx src/scripts/runBackfillTelegramSecrets.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@types/node-cron": "^3.0.11",
     "@workspace/db": "workspace:*",
     "@workspace/opsoul-utils": "workspace:*",
