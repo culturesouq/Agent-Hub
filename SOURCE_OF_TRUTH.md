@@ -226,6 +226,20 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 ## 8. Commit History — newest first
 
+### 2026-05-19 — Post-audit cleanup #3: dead layer-order test deleted + 2 ghost fields removed from Layer 1 lock (`26905e7`, NOT DEPLOYED — batched)
+
+Two behavior-neutral cleanups from the post-audit fix list:
+
+1. **Deleted** `artifacts/opsoul-api/src/utils/__tests__/systemPrompt.layer-order.ts`. The test asserted marker strings (`'Layer 0 — Human Core'`, `'Layer 3 — Dynamic Context'`, etc.) that were stripped from the prompt per the 2026-05-14 directive (*"Hide it, all of it"*). It would have failed if run; it was already dead. Does NOT touch the actual `systemPrompt.ts` source.
+
+2. **Removed** `fundamentalPersonality` / `fundamental_personality` / `operatorType` / `operator_type` from `LAYER_1_LOCKED_FIELDS` in `growGuards.ts`. Those four names were defending DB columns that don't exist in the `operators` schema — never have. The lock was inert for them. Comment block added explaining why and how to re-add if the columns are ever introduced.
+
+**NOT done** from the original cleanup item: `void selfAwareness;` in `systemPrompt.ts` is intentional load-bearing code (kept for backward compatibility per the 2026-05-14 documented decision), not cruft. Left alone deliberately.
+
+Type-check clean. Origin: post-audit fix list 2026-05-18, FIX item #3. Three-item sequence: **(#2 scope-fallback `aa209bf` ✅) → (#3 cleanup this commit ✅) → (#1 GROW 3-level refactor — next)**. No deploy until all three land.
+
+---
+
 ### 2026-05-19 — Post-audit fix #2: Layer 2 scope-fallback → owner-scope default (`aa209bf`, NOT DEPLOYED — batched with next two fixes)
 
 Closes a within-operator cross-scope leak in `searchLayer2Memory` (`memoryEngine.ts:101`). Previous fallback when `requestScope` missing returned operator-wide query across all scopes — meaning a memory distilled from a Nahil farmer's conversation could surface in the owner's Hub workspace, or a WhatsApp-channel memory could appear in a Hub UI chat. Violates patent claim 18/19 (per-scope isolation in chat).
