@@ -90,8 +90,11 @@ export async function searchLayer1Memory(
 //
 //      → When `requestScope` is provided, restrict to entries whose
 //        `source_scope` matches exactly. When not provided (legacy
-//        callers, defensive default), no scope restriction is applied
-//        and the function logs a warning.
+//        callers, defensive default), the function looks up the
+//        operator's ownerId and restricts to that owner's scope only
+//        (`authenticated:${ownerId}`), then logs a warning so the
+//        missing-scope caller can be tracked down. The previous
+//        behaviour returned a cross-scope query and is closed.
 //
 //   2. GROW path (`getMainMemoryContext` in growEngine.ts): genuinely
 //      cross-scope by design. GROW aggregates patterns from all scopes
@@ -107,8 +110,27 @@ export async function searchLayer2Memory(
 ): Promise<MemoryHit[]> {
   const vecStr = `[${embedding.join(',')}]`;
 
-  if (!requestScope) {
-    console.warn('[searchLayer2Memory] called without requestScope — falling back to operator-wide query (no scope isolation). Caller should pass current scopeId.');
+  // Defensive default — when a caller forgets to pass requestScope, restrict
+  // to the operator's OWNER scope only. Patent claim 18/19 requires per-scope
+  // isolation in chat. The previous fallback returned operator-wide memories
+  // across all scopes (within-operator leak — e.g. a Nahil farmer's memory
+  // surfacing in the owner's Hub workspace). Owner-scope is the legitimate
+  // safe default because the owner is the only caller who would legitimately
+  // query without a specific scope. The GROW path does NOT call this
+  // function (it runs its own un-scoped query in growEngine.ts for
+  // intentional cross-scope evolution), so this defensive default doesn't
+  // break GROW.
+  let effectiveScope = requestScope;
+  if (!effectiveScope) {
+    const [op] = await db
+      .select({ ownerId: operatorsTable.ownerId })
+      .from(operatorsTable)
+      .where(eq(operatorsTable.id, operatorId));
+    if (!op) return [];
+    effectiveScope = `authenticated:${op.ownerId}`;
+    console.warn(
+      `[searchLayer2Memory] called without requestScope — defaulting to owner-scope (${effectiveScope}) to prevent cross-scope leak. Caller should pass current scopeId.`
+    );
   }
 
   const baseSql = `SELECT id, content, memory_type, confidence, created_at,
@@ -118,28 +140,15 @@ export async function searchLayer2Memory(
        AND embedding IS NOT NULL
        AND archived_at IS NULL
        AND grow_eligible = TRUE
-       AND (1 - (embedding <=> $1::vector)) >= $3`;
+       AND (1 - (embedding <=> $1::vector)) >= $3
+       AND source_scope = $5
+     ORDER BY distance ASC
+     LIMIT $4`;
 
-  const result = requestScope
-    ? await pool.query<{
-        id: string; content: string; memory_type: string;
-        confidence: number; created_at: Date | null; distance: number;
-      }>(
-        `${baseSql}
-         AND source_scope = $5
-         ORDER BY distance ASC
-         LIMIT $4`,
-        [vecStr, operatorId, minSimilarity, topN, requestScope],
-      )
-    : await pool.query<{
-        id: string; content: string; memory_type: string;
-        confidence: number; created_at: Date | null; distance: number;
-      }>(
-        `${baseSql}
-         ORDER BY distance ASC
-         LIMIT $4`,
-        [vecStr, operatorId, minSimilarity, topN],
-      );
+  const result = await pool.query<{
+    id: string; content: string; memory_type: string;
+    confidence: number; created_at: Date | null; distance: number;
+  }>(baseSql, [vecStr, operatorId, minSimilarity, topN, effectiveScope]);
 
   return result.rows.map((r) => ({
     id: r.id, content: r.content, memoryType: r.memory_type,
