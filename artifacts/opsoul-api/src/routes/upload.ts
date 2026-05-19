@@ -1,121 +1,209 @@
-import { Router, type Request, type Response } from 'express';
+import { Router, type Request, type Response, type NextFunction } from 'express';
 import multer from 'multer';
 import { requireAuth } from '../middleware/requireAuth.js';
 
 const router = Router();
 router.use(requireAuth);
 
-const ALLOWED_MIME_TYPES = new Set([
-  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-  'application/pdf',
-  'text/plain',
-  'text/markdown',
-  'text/x-markdown',
-  'text/csv',
-  'application/json',
-  'application/octet-stream',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+/**
+ * File-extension allowlist. Used both for fileFilter fallback (when browser
+ * reports a generic mimetype like application/octet-stream) AND for the
+ * upload-route's own dispatch (which extractor to run). Broader than the
+ * pre-fix allowlist — accepts every common doc/text/spreadsheet/image we
+ * have a parser for.
+ */
+const TEXT_EXTENSIONS = new Set([
+  '.txt', '.md', '.markdown', '.csv', '.json', '.log',
+  '.yaml', '.yml', '.toml', '.ini', '.env',
+  '.html', '.htm', '.xml', '.tsv',
 ]);
 
-const TEXT_EXTENSIONS = new Set(['.txt', '.md', '.markdown', '.csv', '.json', '.log', '.yaml', '.yml', '.toml', '.ini', '.env']);
+const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg']);
+const DOC_EXTENSIONS = new Set(['.pdf', '.doc', '.docx']);
+const SHEET_EXTENSIONS = new Set(['.xls', '.xlsx', '.xlsm']);
 
-function isTextExtension(filename: string): boolean {
-  const ext = '.' + filename.split('.').pop()?.toLowerCase();
-  return TEXT_EXTENSIONS.has(ext);
+function getExt(filename: string): string {
+  const idx = filename.lastIndexOf('.');
+  return idx === -1 ? '' : filename.slice(idx).toLowerCase();
 }
 
+function isImageExt(filename: string): boolean {
+  return IMAGE_EXTENSIONS.has(getExt(filename));
+}
+function isTextExt(filename: string): boolean {
+  return TEXT_EXTENSIONS.has(getExt(filename));
+}
+function isDocExt(filename: string): boolean {
+  return DOC_EXTENSIONS.has(getExt(filename));
+}
+function isSheetExt(filename: string): boolean {
+  return SHEET_EXTENSIONS.has(getExt(filename));
+}
+
+/**
+ * Permissive file filter — accept by mimetype OR by extension. Browsers
+ * sometimes report odd mimetypes (e.g., 'application/octet-stream' for
+ * .md files on Windows). Falling back to the extension means owners can
+ * upload anything we have a parser for, even when the browser is lying.
+ *
+ * Pure binary types we can't parse (.exe, .zip, .dmg, etc.) still fail —
+ * but with a clear JSON error message, not a generic 500.
+ */
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
   fileFilter: (_req, file, cb) => {
-    if (ALLOWED_MIME_TYPES.has(file.mimetype) || isTextExtension(file.originalname)) {
+    const fname = file.originalname || '';
+    const mime = file.mimetype || '';
+    const ok =
+      mime.startsWith('image/') ||
+      mime.startsWith('text/') ||
+      mime === 'application/pdf' ||
+      mime === 'application/json' ||
+      mime === 'application/msword' ||
+      mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      mime === 'application/vnd.ms-excel' ||
+      mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+      mime === 'application/octet-stream' || // browser couldn't sniff — trust extension
+      isImageExt(fname) ||
+      isTextExt(fname) ||
+      isDocExt(fname) ||
+      isSheetExt(fname);
+    if (ok) {
       cb(null, true);
     } else {
-      cb(new Error(`Unsupported file type: ${file.mimetype}`));
+      // Pass an Error — handled below by uploadErrorHandler which returns JSON.
+      cb(new Error(`Unsupported file: ${fname || 'unnamed'} (mime: ${mime || 'unknown'})`));
     }
   },
 });
 
-router.post('/', upload.single('file'), async (req: Request, res: Response): Promise<void> => {
-  if (!req.file) {
-    res.status(400).json({ error: 'No file uploaded' });
-    return;
+/**
+ * Multer error -> JSON. Without this, multer errors (file too big,
+ * unsupported type, malformed multipart) fall through to Express's default
+ * HTML error handler. The frontend then tries res.json() on HTML and throws
+ * "Unexpected token <" — surfacing as the useless "Upload failed: ..." red
+ * banner. With this handler, every error is structured JSON the frontend
+ * can show clearly.
+ */
+function uploadErrorHandler(err: unknown, _req: Request, res: Response, next: NextFunction): void {
+  if (!err) return next();
+  const message = err instanceof Error ? err.message : String(err);
+  // Multer's own errors carry a `code` (e.g., LIMIT_FILE_SIZE)
+  const code = (err as { code?: string }).code;
+  let status = 400;
+  let userMessage = message;
+  if (code === 'LIMIT_FILE_SIZE') {
+    status = 413;
+    userMessage = 'File too large — max 10 MB. Try compressing it or splitting into smaller files.';
+  } else if (code === 'LIMIT_UNEXPECTED_FILE') {
+    userMessage = 'Form field name must be "file".';
   }
+  console.error('[upload] error:', code ?? 'NO_CODE', '-', message);
+  res.status(status).json({ error: userMessage, code: code ?? 'UPLOAD_REJECTED' });
+}
 
-  const { mimetype, originalname, buffer } = req.file;
-
-  try {
-    // Images — return base64
-    if (mimetype.startsWith('image/')) {
-      const base64 = buffer.toString('base64');
-      res.json({ type: 'image', base64, mimeType: mimetype, name: originalname });
+router.post(
+  '/',
+  (req: Request, res: Response, next: NextFunction) => {
+    upload.single('file')(req, res, (err: unknown) => {
+      if (err) return uploadErrorHandler(err, req, res, next);
+      next();
+    });
+  },
+  async (req: Request, res: Response): Promise<void> => {
+    if (!req.file) {
+      res.status(400).json({ error: 'No file uploaded. Use form field name "file".' });
       return;
     }
 
-    // PDF — extract text via pdf-parse
-    if (mimetype === 'application/pdf') {
-      const pdfModule = await import('pdf-parse');
-      const raw = (pdfModule as any).default ?? pdfModule;
-      const pdfParse: (buf: Buffer) => Promise<{ text: string }> =
-        typeof raw === 'function' ? raw : (raw as any).default;
-      const data = await pdfParse(buffer);
-      const content = data.text.slice(0, 12000);
-      res.json({ type: 'text', content, name: originalname });
-      return;
-    }
+    const { mimetype, originalname, buffer } = req.file;
 
-    // Plain text and all text-like formats (.txt, .md, .csv, .json, .yaml, etc.)
-    if (
-      mimetype === 'text/plain' ||
-      mimetype === 'text/markdown' ||
-      mimetype === 'text/x-markdown' ||
-      mimetype === 'text/csv' ||
-      mimetype === 'application/json' ||
-      mimetype.startsWith('text/') ||
-      isTextExtension(originalname)
-    ) {
-      const content = buffer.toString('utf-8').slice(0, 12000);
-      res.json({ type: 'text', content, name: originalname });
-      return;
-    }
+    try {
+      // ── Images — return base64 (LLM consumes via image_url) ──
+      if (mimetype.startsWith('image/') || isImageExt(originalname)) {
+        const base64 = buffer.toString('base64');
+        const effectiveMime = mimetype.startsWith('image/')
+          ? mimetype
+          : `image/${getExt(originalname).slice(1) || 'jpeg'}`;
+        res.json({ type: 'image', base64, mimeType: effectiveMime, name: originalname });
+        return;
+      }
 
-    // Word docx — extract via mammoth
-    if (mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-      const mammoth = await import('mammoth');
-      const result = await mammoth.extractRawText({ buffer });
-      const content = result.value.slice(0, 12000);
-      res.json({ type: 'text', content, name: originalname });
-      return;
-    }
+      // ── PDF — pdf-parse text extraction ──
+      if (mimetype === 'application/pdf' || getExt(originalname) === '.pdf') {
+        const pdfModule = await import('pdf-parse');
+        const raw = (pdfModule as any).default ?? pdfModule;
+        const pdfParse: (buf: Buffer) => Promise<{ text: string }> =
+          typeof raw === 'function' ? raw : (raw as any).default;
+        const data = await pdfParse(buffer);
+        const content = data.text.slice(0, 12000);
+        res.json({ type: 'text', content, name: originalname });
+        return;
+      }
 
-    // Legacy .doc — return filename only (binary, no parser)
-    if (mimetype === 'application/msword') {
-      res.json({ type: 'text', content: `[Legacy .doc file: ${originalname} — please convert to .docx for full text extraction]`, name: originalname });
-      return;
-    }
+      // ── Word .docx — mammoth ──
+      if (
+        mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+        getExt(originalname) === '.docx'
+      ) {
+        const mammoth = await import('mammoth');
+        const result = await mammoth.extractRawText({ buffer });
+        const content = result.value.slice(0, 12000);
+        res.json({ type: 'text', content, name: originalname });
+        return;
+      }
 
-    // Excel — extract first sheet as TSV via xlsx
-    if (
-      mimetype === 'application/vnd.ms-excel' ||
-      mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    ) {
-      const XLSX = await import('xlsx');
-      const workbook = XLSX.read(buffer, { type: 'buffer' });
-      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-      const csv = XLSX.utils.sheet_to_csv(firstSheet);
-      const content = csv.slice(0, 12000);
-      res.json({ type: 'text', content, name: originalname });
-      return;
-    }
+      // ── Legacy .doc — no parser, return filename note ──
+      if (mimetype === 'application/msword' || getExt(originalname) === '.doc') {
+        res.json({
+          type: 'text',
+          content: `[Legacy .doc file: ${originalname} — please convert to .docx for full text extraction]`,
+          name: originalname,
+        });
+        return;
+      }
 
-    res.status(400).json({ error: 'Unsupported file type' });
-  } catch (err) {
-    console.error('[upload] parse error:', (err as Error).message);
-    res.status(500).json({ error: 'Failed to process file', detail: (err as Error).message });
-  }
-});
+      // ── Excel — first sheet to CSV ──
+      if (
+        mimetype === 'application/vnd.ms-excel' ||
+        mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+        isSheetExt(originalname)
+      ) {
+        const XLSX = await import('xlsx');
+        const workbook = XLSX.read(buffer, { type: 'buffer' });
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        const csv = XLSX.utils.sheet_to_csv(firstSheet);
+        const content = csv.slice(0, 12000);
+        res.json({ type: 'text', content, name: originalname });
+        return;
+      }
+
+      // ── Any text-like content (last resort — covers JSON, YAML, MD, CSV, .env, etc.) ──
+      if (
+        mimetype.startsWith('text/') ||
+        mimetype === 'application/json' ||
+        isTextExt(originalname) ||
+        mimetype === 'application/octet-stream' // trust ext when browser didn't sniff
+      ) {
+        const content = buffer.toString('utf-8').slice(0, 12000);
+        res.json({ type: 'text', content, name: originalname });
+        return;
+      }
+
+      // Shouldn't reach here — fileFilter should have rejected first.
+      res.status(415).json({
+        error: `Unsupported file type: ${mimetype || 'unknown'} (${originalname})`,
+        code: 'UNSUPPORTED_MIME',
+      });
+    } catch (err) {
+      console.error('[upload] parse error:', (err as Error).message);
+      res.status(500).json({
+        error: `Failed to process file: ${(err as Error).message}`,
+        code: 'PARSE_FAILED',
+      });
+    }
+  },
+);
 
 export default router;

@@ -345,6 +345,12 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   // ("New conversation" button) — the operator's existing conversations
   // (Birth or otherwise) load from the server without auto-creation.
 
+  /**
+   * Streaming-aware auth fetch. Refreshes the token if it 401s and retries.
+   * NOTE: caller must pass `cloneBody` for requests with non-replayable bodies
+   * (FormData, ReadableStream). For those, do NOT use this — use
+   * `refreshTokenIfNeeded()` and then plain fetch with a fresh init object.
+   */
   const authFetch = async (url: string, init: RequestInit): Promise<Response> => {
     let token = localStorage.getItem("opsoul_token");
     const res = await fetch(url, { ...init, headers: { ...(init.headers ?? {}), Authorization: `Bearer ${token}` } });
@@ -361,14 +367,66 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     return res;
   };
 
+  /**
+   * Refresh the access token if the current one is missing/invalid.
+   * Used BEFORE FormData uploads so we never have to retry-after-401 with a
+   * consumed FormData body (the old bug: retry sent empty body silently).
+   */
+  const refreshTokenIfNeeded = async (): Promise<string | null> => {
+    const existing = localStorage.getItem("opsoul_token");
+    if (existing) return existing;
+    const refreshRes = await fetch("/api/auth/refresh", { method: "POST", credentials: "include" });
+    if (!refreshRes.ok) {
+      window.dispatchEvent(new Event("auth-unauthorized"));
+      return null;
+    }
+    const { accessToken } = await refreshRes.json();
+    localStorage.setItem("opsoul_token", accessToken);
+    return accessToken;
+  };
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
     try {
+      // Ensure a valid token BEFORE building FormData — refreshing afterwards
+      // would consume the body. Industry-standard: refresh-before-stream.
+      const token = await refreshTokenIfNeeded();
+      if (!token) {
+        throw new Error("Not authenticated. Please log in and try again.");
+      }
+
       const formData = new FormData();
       formData.append("file", file);
-      const res = await authFetch("/api/upload", { method: "POST", body: formData });
+
+      // Plain fetch — NOT authFetch — because we already refreshed the token
+      // and FormData is a stream we cannot replay on a retry. Do NOT set
+      // Content-Type manually: the browser auto-adds multipart/form-data with
+      // the right boundary; setting it ourselves breaks multipart parsing.
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      // Robust error extraction: backend returns JSON on every error path now,
+      // but fall back to text() if something upstream returned HTML.
+      if (!res.ok) {
+        let detail = `HTTP ${res.status}`;
+        try {
+          const errJson = await res.json();
+          detail = errJson.error ?? errJson.message ?? detail;
+        } catch {
+          try {
+            const txt = await res.text();
+            // First line of HTML error pages is usually readable
+            detail = txt.split("\n")[0].slice(0, 200) || detail;
+          } catch { /* keep HTTP ${res.status} */ }
+        }
+        throw new Error(detail);
+      }
+
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setAttachments(prev => [...prev, {
