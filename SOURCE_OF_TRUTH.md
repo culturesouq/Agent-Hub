@@ -226,6 +226,18 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 ## 8. Commit History — newest first
 
+### 2026-05-19 — Post-audit fix #2: Layer 2 scope-fallback → owner-scope default (`aa209bf`, NOT DEPLOYED — batched with next two fixes)
+
+Closes a within-operator cross-scope leak in `searchLayer2Memory` (`memoryEngine.ts:101`). Previous fallback when `requestScope` missing returned operator-wide query across all scopes — meaning a memory distilled from a Nahil farmer's conversation could surface in the owner's Hub workspace, or a WhatsApp-channel memory could appear in a Hub UI chat. Violates patent claim 18/19 (per-scope isolation in chat).
+
+New behaviour: missing `requestScope` → look up `operators.ownerId` → restrict to `authenticated:${ownerId}` (owner scope). Fallback is preserved (no caller breaks), warn log persists (missing-scope callers can still be tracked down), but the worst-case payload is now safe. GROW path unaffected — it does not call this function, runs its own intentionally-cross-scope query in `growEngine.ts` for evolution.
+
+Verified live: two callers in repo, `searchMemory` already passes scopeId — no behaviour change for that path. The defensive default activates only when scope is genuinely missing. `npx tsc --noEmit` clean.
+
+**Origin:** post-audit fix list 2026-05-18 (see `/Users/bstar/OPSOUL_RED/PATENT_AUDIT_2026-05-18.md`, FIX list item #2). Three-item sequence, no deploy until all three land: **(#2 this commit ✅) → (#3 cleanup) → (#1 GROW 3-level refactor)**.
+
+---
+
 ### 2026-05-17 (late PM) — Webhook minConfidence type-mismatch fix — Reem live end-to-end on Telegram (`2c4ea80`, LIVE on revision 0000064)
 
 After the env-var fix unblocked Reem's webhook URL registration (rev 0000063), Telegram messages started reaching OpSoul but the operator replied *"Sorry, I encountered an error. Please try again."* Investigation found a third bug:
