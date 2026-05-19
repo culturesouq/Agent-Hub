@@ -13,32 +13,29 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-const MODELS = [
-  {
-    id: "opsoul/auto",
-    label: "Auto",
-    description: "OpSoul picks the right model per message — fast when simple, powerful when it matters.",
-    badge: "Recommended",
-  },
-  {
-    id: "anthropic/claude-sonnet-4-5",
-    label: "Claude Sonnet",
-    description: "Best quality — deep reasoning, rich responses, strong Arabic support.",
-    badge: "Best Quality",
-  },
-  {
-    id: "anthropic/claude-haiku-4-5",
-    label: "Claude Haiku",
-    description: "Fast and sharp — great for quick back-and-forth conversations.",
-    badge: "Fast & Sharp",
-  },
-  {
-    id: "google/gemini-flash-2.0",
-    label: "Gemini Flash 2.0",
-    description: "Fast, multimodal — handles images, files, and rapid queries.",
-    badge: "Multimodal",
-  },
-] as const;
+/**
+ * Model option shape served by GET /api/models — backed by the backend
+ * `utils/modelRegistry.ts` PROVIDERS table. The frontend no longer
+ * hardcodes a model list: any model added to the registry shows up here
+ * automatically, and every operator can pick from it via SettingsSection.
+ */
+type ModelOption = {
+  id: string;
+  label: string;
+  description: string;
+  provider: string;
+  badge?: string;
+  contextWindow: number;
+};
+
+/**
+ * Fallback list used while /api/models is loading (or fails). Mirrors the
+ * current backend defaults so the picker never goes empty — the registry
+ * is still source of truth, this is a soft-fail.
+ */
+const FALLBACK_MODELS: ModelOption[] = [
+  { id: "moonshotai/kimi-k2.5", label: "Kimi K2.5", description: "Moonshot AI — multimodal, 262K context", badge: "Default", provider: "openrouter", contextWindow: 262144 },
+];
 
 type EvolutionLevel = "OPEN" | "CONTROLLED" | "LOCKED";
 
@@ -413,18 +410,25 @@ export default function SettingsSection({ operator, section }: { operator: Opera
   const [safeMode, setSafeMode] = useState(operator.safeMode ?? false);
   const [freeRoaming, setFreeRoaming] = useState(operator.freeRoaming ?? false);
 
-  // When operator.defaultModel is NULL the backend uses Claude Sonnet 4.5
-  // (see chat.ts: `operator.defaultModel || CHAT_MODEL`). The UI must reflect
-  // that — previously it read "opsoul/auto" for NULL, which meant clicking
-  // Save without changing the dropdown silently flipped the operator from
-  // Sonnet to auto-routing. The dropdown now shows the actual default the
-  // backend would use; Auto is opt-in by explicit selection.
-  const defaultModelId = operator.defaultModel ?? "anthropic/claude-sonnet-4-5";
+  // When operator.defaultModel is NULL the backend uses Kimi K2.5 (the
+  // current CHAT_MODEL from utils/modelRegistry.DEFAULT_MODEL_ID). The
+  // UI mirrors that so clicking Save without changing the dropdown keeps
+  // the operator on its actual default — never silently flips it.
+  const defaultModelId = operator.defaultModel ?? "moonshotai/kimi-k2.5";
   const [selectedModel, setSelectedModel] = useState<string>(defaultModelId);
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [verifyStatus, setVerifyStatus] = useState<"idle" | "verifying" | "ok" | "fail">("idle");
   const [showModelDropdown, setShowModelDropdown] = useState(false);
+
+  // Fetch the live model catalog from the backend registry. Single source
+  // of truth: any model added in utils/modelRegistry.ts shows up here.
+  const { data: modelsResponse } = useQuery<{ models: ModelOption[] }>({
+    queryKey: ["/models"],
+    queryFn: () => apiFetch("/models"),
+    staleTime: 5 * 60 * 1000,
+  });
+  const MODELS: ModelOption[] = modelsResponse?.models ?? FALLBACK_MODELS;
 
   const selectedModelInfo = MODELS.find((m) => m.id === selectedModel) ?? MODELS[0];
 

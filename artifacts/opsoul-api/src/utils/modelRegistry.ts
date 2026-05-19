@@ -57,6 +57,8 @@ export interface ProviderConfig {
   label: string;
   /** Short description for the model picker. */
   description: string;
+  /** Optional short pill rendered next to the option in SettingsSection. */
+  badge?: string;
   /** Context window in tokens (for client-side prompt sizing decisions). */
   contextWindow: number;
 }
@@ -82,7 +84,8 @@ const PROVIDERS: Record<string, ProviderConfig> = {
     baseURL: 'https://openrouter.ai/api/v1',
     apiKeyEnv: 'OPENROUTER_API_KEY',
     label: 'Kimi K2.5',
-    description: 'Moonshot AI — multimodal, self-directed agent swarm paradigm, 262K context',
+    description: 'Moonshot AI — multimodal, agent swarm paradigm, 262K context',
+    badge: 'Default',
     contextWindow: 262144,
   },
 
@@ -99,7 +102,8 @@ const PROVIDERS: Record<string, ProviderConfig> = {
     apiKeyEnv: 'HAJERI_API_KEY',
     publicFallbackKey: 'hajeri-local',
     label: 'Hajeri 3B v2',
-    description: 'OpSoul custom 3B model — GatedFusionEmbedding + QK-norm, English/Arabic',
+    description: 'OpSoul custom — GatedFusionEmbedding + QK-norm, English/Arabic',
+    badge: 'Custom',
     contextWindow: 2048,
   },
 
@@ -112,6 +116,7 @@ const PROVIDERS: Record<string, ProviderConfig> = {
     modelOverride: 'gpt-5',
     label: 'GPT-5',
     description: 'OpenAI GPT-5 — 1M context, multimodal',
+    badge: '1M context',
     contextWindow: 1_000_000,
   },
   'openai/gpt-4o': {
@@ -136,6 +141,7 @@ const PROVIDERS: Record<string, ProviderConfig> = {
     apiKeyEnv: 'OPENROUTER_API_KEY',
     label: 'Claude Sonnet 4.6',
     description: 'Anthropic via OpenRouter — 200K context',
+    badge: 'Best Quality',
     contextWindow: 200_000,
   },
   'anthropic/claude-opus-4.7': {
@@ -145,6 +151,7 @@ const PROVIDERS: Record<string, ProviderConfig> = {
     apiKeyEnv: 'OPENROUTER_API_KEY',
     label: 'Claude Opus 4.7',
     description: 'Anthropic via OpenRouter — 1M context',
+    badge: 'Deepest',
     contextWindow: 1_000_000,
   },
 
@@ -156,6 +163,7 @@ const PROVIDERS: Record<string, ProviderConfig> = {
     apiKeyEnv: 'OPENROUTER_API_KEY',
     label: 'Gemini 3 Pro',
     description: 'Google Gemini 3 Pro via OpenRouter',
+    badge: 'Multimodal',
     contextWindow: 1_000_000,
   },
 
@@ -166,7 +174,8 @@ const PROVIDERS: Record<string, ProviderConfig> = {
     baseURL: 'https://openrouter.ai/api/v1',
     apiKeyEnv: 'OPENROUTER_API_KEY',
     label: 'OpSoul Auto',
-    description: 'OpSoul auto-routing — picks a model per turn (default: Kimi K2.5)',
+    description: 'OpSoul picks the right model per message — default Kimi K2.5',
+    badge: 'Auto',
     contextWindow: 262144,
   },
 };
@@ -231,6 +240,7 @@ export interface ModelOption {
   label: string;
   description: string;
   provider: string;
+  badge?: string;
   contextWindow: number;
 }
 
@@ -240,6 +250,7 @@ export function listAvailableModels(): ModelOption[] {
     label: cfg.label,
     description: cfg.description,
     provider: cfg.provider,
+    badge: cfg.badge,
     contextWindow: cfg.contextWindow,
   }));
 }
