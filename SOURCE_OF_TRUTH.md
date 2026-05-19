@@ -163,7 +163,7 @@ The patent draft (IPPT-2026-000028, not yet filed) needs these reconciliations b
 | **OpSoul Cleanup & Rewire Plan** | **Open — owner-approved planning entry written to § 8 on 2026-05-15 PM.** 3 parts: (1) Vael surgical delete + recreate, (2) wiring violations catalog (12 items), (3) sequenced 7-step plan with approval gates. Vael's full state archived to `/Users/bstar/opsoul-audit/VAEL_ARCHIVE_2026-05-15.md`. Awaiting owner go on Step 1. |
 | **Nahil "hi" → "Server error 404"** | **Root cause confirmed + fixed 2026-05-13.** Nahil's owner conv list contained a stray conversation (`cc494a1d`) I accidentally created at 10:30 today via a smoke test (POST /v1/chat with `userId: "farmer-test-42"`). That conv was stored with `owner_id = <real owner>` but `scope_id = "authenticated:farmer-test-42"`. The `/api/operators/:id/conversations` GET endpoint filtered by `owner_id` + `scope_type='authenticated'` but NOT by `scope_id`, so Hub UI received both convs, picked the newer one (the polluted one) as active. The subsequent POST to `/messages` was correctly rejected by `chat.ts:298` because the chat handler DOES filter by `scope_id` — returns 404 "Conversation not found" — and Hub UI displayed "Server error 404. Please try again." Two fixes: (a) deleted the stray conv row + its 2 messages via SQL admin op, (b) patched `conversations.ts` list query to filter `scope_id = buildOwnerScope().scopeId` exactly. List endpoint and messages endpoint now agree on the scope. Architectural fix — applies to every operator going forward. |
 | **GROW levels: collapse 4 + safeMode → real 3** | **Pre-commercial readiness — parked 2026-05-19.** Current code has `growLockLevel` enum {OPEN, CONTROLLED, LOCKED, FROZEN} + `safe_mode` boolean. Real intent (owner directive): 3 levels — `LOCKED` (proposals fire, all decisions require owner approval — currently MISSING), `CONTROLLED` (LLM verifies + decides — current default behaviour), `NO_GROW` (engine off — currently spread across LOCKED/FROZEN/safeMode). Refactor scope: rewrite `categoriseFields` + `runGrowCycle` (`growEngine.ts`), drop `safe_mode` column, drop OPEN/FROZEN values, DB migration to map existing operators (OPEN→CONTROLLED, LOCKED/FROZEN/safeMode→NO_GROW). **No live risk today** — default is CONTROLLED, no operators are at OPEN, refactor changes zero current behaviour. **Trigger to pick up:** first operator that needs LOCKED-with-approval (high-stakes — Bani deploys, anything money-touching) OR pre-commercial readiness checklist. Full plan in `/Users/bstar/OPSOUL_RED/PATENT_AUDIT_2026-05-18.md` FIX item #5. |
-| **MCP + tool catalog buildout** | **NEW 2026-05-19.** OpSoul needs MCP client (Anthropic SDK) so operators can plug into any MCP server in the world (Slack, GitHub, Stripe, calendars, etc.). Plus a few platform-level skills every operator inherits at birth: web browse (real-time), code execution sandbox, vision (image input), file ops (already partially via `read_file`/`write_file`/`list_files` per § 5 line 6). All extensions plug into the existing semantic skill trigger engine (claim 12) — operator's `analyse()` stays the gate. No patent surface change. See § 8 for build plan when scheduled. |
+| **MCP + tool catalog buildout** | **BUILT 2026-05-19 on branch `feat/mcp-runtime-layer` (8 commits, TypeScript clean, NOT DEPLOYED).** Single source of truth `utils/toolRegistry.ts` for the 12 universal builder tools, MCP-shaped, scope+availability gating. `utils/toolHandlers.ts` `dispatchTool()` is the single execution path used by chat.ts AND the new `/api/operators/:id/conversations/:convId/mcp` HTTP endpoint — internal and external both share the same handlers. Frontend `/skills/manifest` now sources from the registry too. Universal model adapter (`utils/modelRegistry.ts`) added: operators can run on Hajeri/Claude/GPT/Kimi/Gemini by setting `defaultModel`. chat.ts shrank 2261→1133 lines (1128 deleted duplicate dispatch). Patent-protected mechanisms untouched (skill trigger engine Claim 12, system prompt Layers 0–4, scope isolation, memory engine, GROW engine). Awaiting owner 4-operator smoke test before deploy. Full state in `[[project-opsoul-mcp-buildout]]` memory file. See § 8 entry below. |
 
 ### Seeding cadence — one insight at a time (rule, 2026-05-11)
 
@@ -227,6 +227,64 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 ---
 
 ## 8. Commit History — newest first
+
+### 2026-05-19 — Universal MCP runtime layer + multi-provider LLM adapter (`feat/mcp-runtime-layer` branch, 8 commits, NOT DEPLOYED)
+
+Built the OpSoul universal MCP runtime layer per owner directive ("we said no fragments and we do all same MCP or custom?? we said ready and proof is better"). Single source of truth across the stack, internal + external use the same dispatcher, any LLM can drive any operator.
+
+**Commits on branch `feat/mcp-runtime-layer`:**
+
+| Commit | What |
+|---|---|
+| `0f529f5` | `feat(mcp): add universal tool registry with scope + availability gating` — `utils/toolRegistry.ts` (411 lines). 12 universal tools (`web_search`, `kb_seed`, `write_file`, `read_file`, `list_files`, `get_current_time`, `schedule_task`, `update_task`, `pause_task`, `resume_task`, `delete_task`, `http_request`). MCP-shaped, scope-type + availability gating mechanism. Defaults permissive (`scopes: '*'`) so behavior matches current production. |
+| `43ab2ea` | `feat(mcp): add @modelcontextprotocol/sdk dependency` — v1.29.0 added to `@workspace/opsoul-api`. |
+| `270a90d` | `refactor(mcp): move 4 persistence helpers + OAuth machinery out of chat.ts` — new `utils/toolPersistence.ts` (331 lines). `persistUrlScrapedResult`, `persistWebSearchResult`, `persistSkillResult`, `executeHttpWithOAuth` (+ private OAuth helpers). chat.ts: 2261→1997 (−264). |
+| `987d357` | `feat(mcp): add toolHandlers.ts — 12-tool dispatcher (not yet wired)` — `dispatchTool(name, rawArgs, ctx, onProgress?)` (566 lines). Each handler parses args, fires SSE progress event (preserved verbatim so frontend `ChatSection.tsx` regex matchers continue working), persists side effects, returns `{ content, meta? }`. |
+| `1124cc5` | `feat(mcp): add MCP server + HTTP endpoint at /api/operators/:id/conversations/:convId/mcp` — `utils/mcpServer.ts` (138 lines) `createMcpServerForContext(opts)` factory using low-level Server class so JSON Schema feeds straight into `tools/list`. `routes/mcp.ts` (146 lines) wires `StreamableHTTPServerTransport` in stateless mode. External MCP clients (Hajeri, Claude, GPT, Cursor, etc.) can now call OpSoul's tools via standard protocol. |
+| `0e06f0c` | `refactor(mcp): wire chat.ts streaming + sync paths through toolRegistry + dispatchTool` — **1128 lines removed from chat.ts** (2261→1133, −50%). 12 inline dispatch blocks become one `dispatchTool()` call per path. Meta hints `webSearchFired` / `httpRequestFired` / `terminateLoop` preserve all loop-control semantics. Operator-as-driver gate (`decision.kind === 'execute'`, Claim 21) preserved. Per-tool sync prefix map (`SYNC_TOOL_PREFIX`) preserves second-pass LLM wording. |
+| `482efa1` | `refactor(mcp): /skills/manifest reads from toolRegistry; delete dead builtinSkills.ts` — `routes/operator-skills.ts` `/manifest` endpoint now sources `builtin` from `buildToolManifest()`. Frontend `SkillsSection.tsx` cards show registry-supplied `displayName` ("Web search" not "web_search"). UI now shows 12 cards (was 11 — pre-refactor `BUILTIN_SKILLS` merged pause+resume; now each is separate). `utils/builtinSkills.ts` deleted (was the parallel UI catalog — no fragments). |
+| (next) | `feat(mcp): universal model adapter — pluggable LLM/SDK abstraction via modelRegistry` — `utils/modelRegistry.ts` (257 lines) PROVIDERS table maps model IDs to provider config (baseURL, apiKey env var, adapter kind). `utils/openrouter.ts` refactored to route via registry while keeping public exports (`streamChat`, `chatCompletion`, `CHAT_MODEL`, `MODEL_OPTIONS`) stable. Operators can now set `defaultModel` to `hajeri-3b-v2` (RunPod), `openai/gpt-5`, `anthropic/claude-sonnet-4.6`, etc. Adding a new provider = one entry in the PROVIDERS table. Unknown models with `/` fall back to OpenRouter (long-tail compatibility preserved). |
+
+**Architecture: single source of truth, 3 transports + 1 future**
+```
+                            ┌─ chat.ts (streaming)    ──┐
+toolRegistry.ts              ├─ chat.ts (sync)         ──┤  → same 12 tools
++ toolHandlers.dispatchTool()├─ /mcp HTTP endpoint     ──┤    same behavior
+                            └─ /skills/manifest (UI)  ──┘    everywhere
+
+modelRegistry.ts → openrouter.ts (multi-provider router) → ANY LLM
+```
+
+**Runtime layer integration map (verified at chat.ts call sites):**
+
+| Layer | Where wired | Source module | Patent claim |
+|---|---|---|---|
+| Auth | `requireAuth` middleware | `middleware/requireAuth.ts` | — |
+| Scope isolation | `buildOwnerScope()` line 130; scope filter on conv query 139; toolHandlerCtx 726 | `utils/scopeResolver.ts` | 18, 19 |
+| Memory retrieval (on-demand) | `searchMemory(opId, embed, …, scopeId)` line 568 | `utils/memoryEngine.ts` | 11 |
+| KB retrieval (on-demand) | `searchBothKbs()` line 567 + `buildRagContext()` line 570 | `utils/vectorSearch.ts` | 9, 10, 22 |
+| System prompt assembly | `assembleOperatorPrompt()` line 601 (or `buildBirthSystemPrompt()` 600) | `utils/systemPrompt.ts` | 1, 2, 4 (untouched) |
+| Time injection (hybrid) | `if (containsTimeKeywords(message))` line 613 + `get_current_time` tool | `utils/systemPrompt.ts` + `toolHandlers.ts` | open territory |
+| Operator decision gate | `OperatorAgent.analyse()` → `decision.kind === 'execute'` line 821 | `utils/operatorAgent.ts` | 21 |
+| Tool catalog (per-turn) | `listToolsForContext(toolListCtx)` line 821 | `utils/toolRegistry.ts` | 12 (transport) |
+| LLM call (multi-provider) | `agent.executeStreaming(loopMessages, iterOpts)` → `streamChat` → `resolveModel()` | `utils/openrouter.ts` + `utils/modelRegistry.ts` | — |
+| Tool execution | `dispatchTool(name, args, ctx, onProgress)` line 862 | `utils/toolHandlers.ts` | 12 (transport) |
+| Skill trigger (Claim 12) | `detectSkillTrigger(message, skills, finalContent)` line 924/1068 | `utils/skillTriggerEngine.ts` | 12 (cosine 0.45/0.60, untouched) |
+| Post-response tasks | `runPostResponseTasks()` line 410 — LEARN: tag, birth extraction, self-awareness, memory distillation | inline + `selfAwarenessEngine.ts` | 11, 14 |
+
+**Patent-protected mechanisms NOT touched:** skill trigger engine (Claim 12 thresholds), system prompt assembly (Layers 0–4), scope isolation (DB query layer), memory engine (Claim 11 — 5 types, decay, soul-anchor), KB validation (Claims 9, 10, 22 — VAEL pipeline + Sovereign RAG), GROW engine (4 levels), operator agent (Claim 21).
+
+**Per [[batch-deploys-dont-drip]]: NO DEPLOY** until owner runs 4-operator smoke test (Nahil, Vael, Istishari, Bani) on the branch and says "ship it". `pnpm dev` against the branch, talk to each operator, confirm tool calls work + identity preserved + frontend SkillsSection shows 12 cards.
+
+External MCP probe:
+```bash
+curl -X POST -H "Cookie: <opsoul-auth>" -H "Content-Type: application/json" \
+    -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+    http://localhost:3001/api/operators/<id>/conversations/<convId>/mcp
+```
+Should return the 12 tools in MCP shape. This is the proof point that external agents (including Hajeri once we plug him back in) can call OpSoul's universal toolset.
+
+---
 
 ### 2026-05-19 — Post-audit cleanup #3: dead layer-order test deleted + 2 ghost fields removed from Layer 1 lock (`26905e7`, NOT DEPLOYED — batched)
 
