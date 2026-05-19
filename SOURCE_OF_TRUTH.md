@@ -11,9 +11,9 @@
 |---|---|
 | **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` |
 | **Container App** | `opsoul` (resource group `bani-studio-rg`, region `uaenorth`) |
-| **Active Revision** | `opsoul--0000064` (Healthy — webhook minConfidence type-mismatch fix) |
-| **Image** | `banistudioacr.azurecr.io/opsoul-api:webhook-fix-2c4ea80` |
-| **Source commit (live)** | `2c4ea80` fix(webhooks): pass integer 30 (not float 0.5) for KB minConfidence in telegram + whatsapp webhooks |
+| **Active Revision** | `opsoul--0000065` (Healthy 2026-05-19 — universal MCP runtime layer + multi-provider LLM adapter + 6 batched post-audit fixes) |
+| **Image** | `banistudioacr.azurecr.io/opsoul-api:mcp-runtime-f9f23e4` |
+| **Source commit (live)** | `f9f23e4` docs(SoT): scrub 'pre-commercial' framing — head of `feat/mcp-runtime-layer` fast-forwarded into `main`. Ships 13 MCP commits (toolRegistry + toolHandlers + mcpServer + /mcp endpoint + modelRegistry + /api/models + chat.ts refactor 2261→1133 lines + frontend picker + 41-assertion smoke test) AND the 6 parked post-audit commits (`aa209bf` memory scope-fallback, `26905e7` growGuards cleanup, plus SoT docs). |
 | **LLM model (entire stack)** | `moonshotai/kimi-k2.5` via OpenRouter — chat, distillation, GROW, sub-agent dispatch, vision, schema normalization, capability loop, all routes |
 | **Auto-routing** | **REMOVED** (was 17-line block in chat.ts switching between Sonnet/Haiku/Gemini per-turn) |
 | **Notable env vars (set 2026-05-17 PM)** | `OPENROUTER_API_KEY` (unchanged) · `API_BASE_URL = https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io` (NEW — required by Hub's `connectTelegram` for inline `setWebhook` registration) · `APP_URL` + `APP_BASE_URL` → same Azure FQDN (were wrongly `https://opsoul.io` which doesn't resolve, blocking Google OAuth callbacks + dashboard URL responses) · `VAEL_INBOX_ENABLED=true` (legacy — no longer wired) |
@@ -228,6 +228,30 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 ## 8. Commit History — newest first
 
+### 2026-05-19 (late) — MCP runtime layer + post-audit fixes SHIPPED (`opsoul--0000065`, image `mcp-runtime-f9f23e4`)
+
+Live proof: `curl https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/api/models` returns 200 with the 8 catalogued models (Kimi K2.5 with `badge: "Default"` confirmed first). New `/api/models` route is serving the registry. New `/mcp` endpoint mounted at `/api/operators/:id/conversations/:convId/mcp` (requires auth).
+
+Deploy sequence:
+1. `git checkout main && git merge --ff-only feat/mcp-runtime-layer` — fast-forward, no merge commit
+2. `git push origin main` — `67334ad..f9f23e4` pushed to `culturesouq/Agent-Hub`
+3. `az acr build --registry banistudioacr --image opsoul-api:mcp-runtime-f9f23e4 -f Dockerfile .` — 2m14s, Run ID `dg64`, image digest `sha256:0c8c0109d808ce0a55990fce38ca0d72ba41874eb851fb5ef9c61df675b757d7`
+4. `az containerapp update -n opsoul -g bani-studio-rg --image banistudioacr.azurecr.io/opsoul-api:mcp-runtime-f9f23e4` — new revision `opsoul--0000065` Healthy
+5. `/api/models` smoke 200 OK — confirms new code is serving
+
+Old revision `opsoul--0000064` (image `webhook-fix-2c4ea80`) is still Active during the rolling-traffic transition; auto-deactivates when traffic fully cuts over.
+
+What this ships:
+- All 13 MCP commits from `feat/mcp-runtime-layer` (see prior history entry below)
+- All 6 previously-parked post-audit commits (`aa209bf` Layer 2 scope-fallback memory fix, `26905e7` growGuards cleanup, plus 4 SoT docs)
+- `f9f23e4` doc scrub (removed "pre-commercial" framing owner did not use)
+
+Pre-deploy verification: TypeScript clean on `opsoul-api` + `opsoul-hub`, `mcpSmoke.ts` 41/41 passing, az auth confirmed, image build succeeded, container app health probe passed.
+
+Post-deploy owner action (recommended): chat with each of the 4 live operators (Vael / Operator/Blank / Nahil / Reem) to confirm identity preserved + tool calls work + Settings page shows 8 models in the picker.
+
+---
+
 ### 2026-05-19 — Universal MCP runtime layer + multi-provider LLM adapter (`feat/mcp-runtime-layer` branch, 8 commits, NOT DEPLOYED)
 
 Built the OpSoul universal MCP runtime layer per owner directive ("we said no fragments and we do all same MCP or custom?? we said ready and proof is better"). Single source of truth across the stack, internal + external use the same dispatcher, any LLM can drive any operator.
@@ -292,7 +316,7 @@ Should return the 12 tools in MCP shape. This is the proof point that external a
 
 ---
 
-### 2026-05-19 — Post-audit cleanup #3: dead layer-order test deleted + 2 ghost fields removed from Layer 1 lock (`26905e7`, NOT DEPLOYED — batched)
+### 2026-05-19 — Post-audit cleanup #3: dead layer-order test deleted + 2 ghost fields removed from Layer 1 lock (`26905e7`, NOW DEPLOYED in rev 0000065)
 
 Two behavior-neutral cleanups from the post-audit fix list:
 
@@ -306,7 +330,7 @@ Type-check clean. Origin: post-audit fix list 2026-05-18, FIX item #3. Three-ite
 
 ---
 
-### 2026-05-19 — Post-audit fix #2: Layer 2 scope-fallback → owner-scope default (`aa209bf`, NOT DEPLOYED — batched with next two fixes)
+### 2026-05-19 — Post-audit fix #2: Layer 2 scope-fallback → owner-scope default (`aa209bf`, NOW DEPLOYED in rev 0000065 with next two fixes)
 
 Closes a within-operator cross-scope leak in `searchLayer2Memory` (`memoryEngine.ts:101`). Previous fallback when `requestScope` missing returned operator-wide query across all scopes — meaning a memory distilled from a Nahil farmer's conversation could surface in the owner's Hub workspace, or a WhatsApp-channel memory could appear in a Hub UI chat. Violates patent claim 18/19 (per-scope isolation in chat).
 
