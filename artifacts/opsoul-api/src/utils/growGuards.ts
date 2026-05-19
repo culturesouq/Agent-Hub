@@ -2,6 +2,12 @@ import crypto from 'crypto';
 import { db } from '@workspace/db';
 import { growBlockedLogTable } from '@workspace/db';
 
+// Layer 1 identity fields that GROW must never propose changes to. Names
+// match the actual `operators` table columns (camelCase for app, snake_case
+// for DB raw queries). Two earlier names — fundamentalPersonality and
+// operatorType — were removed 2026-05-19 because they were never added to
+// the `operators` schema; they were defending columns that don't exist.
+// If those fields are ever introduced, re-add them here.
 export const LAYER_1_LOCKED_FIELDS = new Set([
   'name',
   'archetype',
@@ -10,10 +16,6 @@ export const LAYER_1_LOCKED_FIELDS = new Set([
   'core_values',
   'ethicalBoundaries',
   'ethical_boundaries',
-  'fundamentalPersonality',
-  'fundamental_personality',
-  'operatorType',
-  'operator_type',
   'ownerId',
   'owner_id',
   'slug',
