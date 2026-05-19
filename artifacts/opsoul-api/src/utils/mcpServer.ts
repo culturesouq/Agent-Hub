@@ -122,9 +122,9 @@ export function createMcpServerForContext(opts: CreateMcpServerOptions): Server 
         },
       ],
       // isError is signaled when the dispatch said the args were invalid or
-      // the tool isn't registered. The MCP client (external agent) can react
-      // to this and adjust.
-      isError: result.meta?.invalidArgs === true,
+      // the underlying operation failed. The MCP client (external agent)
+      // can react to this and adjust.
+      isError: result.meta?.terminateLoop === true,
     };
   });
 

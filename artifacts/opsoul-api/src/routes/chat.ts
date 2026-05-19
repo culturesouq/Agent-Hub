@@ -10,7 +10,6 @@ import {
   platformSkillsTable,
   selfAwarenessStateTable,
   tasksTable,
-  operatorFilesTable,
   operatorDeploymentSlotsTable,
   operatorSecretsTable,
   ownersTable,
@@ -29,7 +28,7 @@ import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { assembleOperatorPrompt, buildBirthSystemPrompt, buildTemporalContext, containsTimeKeywords } from '../utils/systemPrompt.js';
 import { OperatorAgent } from '../utils/operatorAgent.js';
 import type { SelfAwarenessSnapshot, BuildSystemPromptOpts } from '../utils/systemPrompt.js';
-import { searchMemory, buildMemoryContext, distillMemoriesFromConversations, storeMemory } from '../utils/memoryEngine.js';
+import { searchMemory, buildMemoryContext, distillMemoriesFromConversations } from '../utils/memoryEngine.js';
 import type { MemoryHit } from '../utils/memoryEngine.js';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
@@ -38,16 +37,39 @@ import type { ChatMessage, ToolDefinition } from '../utils/openrouter.js';
 import { buildOwnerScope, buildScopeContext, type ValidatedScope } from '../utils/scopeResolver.js';
 import { scrapeUrl } from '../utils/urlScraper.js';
 import type { ContentPart } from '../utils/openrouter.js';
-import { verifyAndStore, persistKbSeedEntry } from '../utils/kbIntake.js';
+import { verifyAndStore } from '../utils/kbIntake.js';
 import { eq, and, ne, asc, sql, desc } from 'drizzle-orm';
 import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
-import { isWebSearchAvailable, executeWebSearch } from '../utils/capabilityEngine.js';
+import { isWebSearchAvailable } from '../utils/capabilityEngine.js';
 import {
   persistUrlScrapedResult,
-  persistWebSearchResult,
   persistSkillResult,
-  executeHttpWithOAuth,
 } from '../utils/toolPersistence.js';
+import { listToolsForContext } from '../utils/toolRegistry.js';
+import { dispatchTool, type ToolHandlerContext } from '../utils/toolHandlers.js';
+
+/**
+ * Sync-path tool-result system-message prefixes, preserved verbatim from
+ * the pre-MCP-refactor sync blocks. The LLM sees these labels in the second
+ * executeSync() pass after a tool fires, so its view of "what just happened"
+ * matches the pre-refactor wording. handleHttpRequest already includes the
+ * '[HTTP Response]' prefix in its returned content; the sync path guards
+ * against double-prefixing via a startsWith check.
+ */
+const SYNC_TOOL_PREFIX: Record<string, string> = {
+  web_search:       '[Web Search]',
+  kb_seed:          '[KB Seed Result]',
+  write_file:       '[File Created]',
+  read_file:        '[File Read]',
+  list_files:       '[Files in workspace]',
+  get_current_time: '[Current time]',
+  schedule_task:    '[Task Scheduled]',
+  update_task:      '[Task Updated]',
+  pause_task:       '[Task Paused]',
+  resume_task:      '[Task Resumed]',
+  delete_task:      '[Task Deleted]',
+  http_request:     '[HTTP Response]',
+};
 
 interface ActiveSkill {
   name: string;
@@ -690,234 +712,29 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   await lockLayer1IfUnlocked(operator.id);
 
-  // Web search tool — offered to the operator; the operator decides when to call it
-  const webSearchTool: ToolDefinition | null = isWebSearchAvailable()
-    ? {
-        type: 'function',
-        function: {
-          name: 'web_search',
-          description: 'Issues a search query and returns ranked results — URLs and text snippets from matching pages.',
-          parameters: {
-            type: 'object',
-            properties: {
-              query: { type: 'string', description: 'Concise search query, 3–8 words' },
-            },
-            required: ['query'],
-          },
-        },
-      }
-    : null;
-
-  // KB seed tool — lets the operator persist a synthesized knowledge entry directly.
-  // Offered alongside web_search (same availability gate). Skips curiositySearch since
-  // the operator has already done the research; entries land pending for VAEL cron verification.
-  const kbSeedTool: ToolDefinition | null = isWebSearchAvailable()
-    ? {
-        type: 'function',
-        function: {
-          name: 'kb_seed',
-          description: 'Adds an entry to the operator\'s knowledge base. The entry is embedded at insertion time and becomes retrievable in subsequent conversations. New entries land in pending state for verification.',
-          parameters: {
-            type: 'object',
-            properties: {
-              content: {
-                type: 'string',
-                description: 'The knowledge content to store — a self-contained factual chunk, typically 100–400 words.',
-              },
-              source: {
-                type: 'string',
-                description: 'Source identifier(s) the entry was derived from (e.g. "Google AI Blog 2024, MIT study on transformer efficiency").',
-              },
-              confidence: {
-                type: 'number',
-                description: 'Confidence score 0–100 reflecting expected reliability of the entry.',
-              },
-            },
-            required: ['content', 'source', 'confidence'],
-          },
-        },
-      }
-    : null;
-
-  // write_file tool — always offered; operator creates/updates files in their workspace
-  const writeFileTool: ToolDefinition = {
-    type: 'function',
-    function: {
-      name: 'write_file',
-      description: 'Creates or replaces a file in the operator\'s workspace under a chosen name. Files persist across conversations and appear in the Files tab.',
-      parameters: {
-        type: 'object',
-        properties: {
-          filename: { type: 'string', description: 'Filename including extension (e.g. "report.md", "todo.txt")' },
-          content: { type: 'string', description: 'Full file content as a string.' },
-          action: { type: 'string', enum: ['create', 'update'], description: '\'create\' for a new file, \'update\' to overwrite an existing one.' },
-        },
-        required: ['filename', 'content', 'action'],
-      },
+  // Tool definitions live in utils/toolRegistry.ts — single source of truth
+  // for OpSoul's universal toolset. Both this internal chat path and the
+  // external /mcp HTTP endpoint resolve tools through the same registry.
+  // listToolsForContext(ctx) returns the wire-format ToolDefinition[] the
+  // LLM call expects, filtered by scope + availability + (for http_request)
+  // injected with the operator's live secret labels.
+  const toolHandlerCtx: ToolHandlerContext = {
+    operatorId: operator.id,
+    ownerId: operator.ownerId,
+    conversationId: conv.id,
+    scope: {
+      scopeId: scope.scopeId,
+      scopeTrust: scope.scopeTrust,
+      // owner-scope only path currently — chat.ts requires auth. Public/
+      // channel scopes flow through public-chat.ts / channel webhooks.
+      scopeType: 'owner',
     },
+    mandate: operator.mandate ?? '',
   };
-
-  // http_request tool — only offered when the operator has stored secrets
-  const httpRequestTool: ToolDefinition | null = liveSecrets.length > 0 ? {
-    type: 'function',
-    function: {
-      name: 'http_request',
-      description: 'Issues an HTTP request to an external endpoint. Stored secrets are referenced via the {{SECRET_NAME}} syntax in URL, headers, or body; the label resolves to its value at call time. Available stored secret labels: ' + (liveSecrets.length > 0 ? liveSecrets.map(s => `{{${s}}}`).join(', ') : '(none stored)') + '.',
-      parameters: {
-        type: 'object',
-        properties: {
-          method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], description: 'HTTP method' },
-          url: { type: 'string', description: 'Full URL including query parameters' },
-          headers: {
-            type: 'object',
-            description: 'HTTP headers as key-value pairs. {{SECRET_NAME}} placeholders are resolved to stored secret values at call time.',
-            additionalProperties: { type: 'string' },
-          },
-          body: {
-            type: 'string',
-            description: 'Request body as a JSON string (for POST/PUT/PATCH). {{SECRET_NAME}} placeholders are resolved to stored secret values at call time.',
-          },
-        },
-        required: ['method', 'url'],
-      },
-    },
-  } : null;
-
-  // read_file tool — always offered; operator can re-read its own workspace
-  const readFileTool: ToolDefinition = {
-    type: 'function',
-    function: {
-      name: 'read_file',
-      description: 'Returns the contents of a workspace file by name.',
-      parameters: {
-        type: 'object',
-        properties: {
-          filename: { type: 'string', description: 'Filename including extension. Must match an existing file exactly.' },
-        },
-        required: ['filename'],
-      },
-    },
-  };
-
-  // list_files tool — always offered; operator can see what is in its workspace
-  const listFilesTool: ToolDefinition = {
-    type: 'function',
-    function: {
-      name: 'list_files',
-      description: 'Enumerates files present in the workspace with size and last-update timestamp.',
-      parameters: {
-        type: 'object',
-        properties: {},
-        required: [],
-      },
-    },
-  };
-
-  // get_current_time tool — always offered; operator pulls current time when
-  // a time-relative question arises. Replaces the previous always-on temporal
-  // substrate auto-injection. Operator carries no time in its head; calls the
-  // tool when it needs to know.
-  const getCurrentTimeTool: ToolDefinition = {
-    type: 'function',
-    function: {
-      name: 'get_current_time',
-      description: 'Returns the current date and time. Defaults to Asia/Dubai (GST). Optional timezone parameter accepts an IANA timezone identifier (e.g. "America/New_York", "Asia/Tokyo", "Europe/London", "UTC") for time elsewhere in the world.',
-      parameters: {
-        type: 'object',
-        properties: {
-          timezone: {
-            type: 'string',
-            description: 'IANA timezone identifier. Defaults to Asia/Dubai when omitted.',
-          },
-        },
-        required: [],
-      },
-    },
-  };
-
-  // schedule_task tool — always offered; operator can create its own automations
-  const scheduleTaskTool: ToolDefinition = {
-    type: 'function',
-    function: {
-      name: 'schedule_task',
-      description: 'Creates a recurring task with a daily or weekly schedule. The task fires on schedule, executing a stored prompt against the operator.',
-      parameters: {
-        type: 'object',
-        properties: {
-          name: { type: 'string', description: 'Short label for the task (shown in the Tasks tab).' },
-          prompt: { type: 'string', description: 'The prompt that will execute on each scheduled run. Read by the next-run instance of the operator as its task brief.' },
-          schedule: { type: 'string', enum: ['daily', 'weekly'], description: 'How often the task fires.' },
-        },
-        required: ['name', 'prompt', 'schedule'],
-      },
-    },
-  };
-
-  // update_task tool — change name, prompt, or schedule of an existing automation
-  const updateTaskTool: ToolDefinition = {
-    type: 'function',
-    function: {
-      name: 'update_task',
-      description: 'Modifies the name, prompt, or schedule of an existing task, identified by its current name.',
-      parameters: {
-        type: 'object',
-        properties: {
-          name: { type: 'string', description: 'Current name of the task to update.' },
-          newName: { type: 'string', description: 'Optional new name.' },
-          newPrompt: { type: 'string', description: 'Optional new prompt — what each future run will read.' },
-          newSchedule: { type: 'string', enum: ['daily', 'weekly'], description: 'Optional new schedule.' },
-        },
-        required: ['name'],
-      },
-    },
-  };
-
-  // pause_task tool — stop a task from firing without deleting it
-  const pauseTaskTool: ToolDefinition = {
-    type: 'function',
-    function: {
-      name: 'pause_task',
-      description: 'Sets a task to paused state. A paused task is preserved but does not fire on its schedule.',
-      parameters: {
-        type: 'object',
-        properties: {
-          name: { type: 'string', description: 'Name of the task to pause.' },
-        },
-        required: ['name'],
-      },
-    },
-  };
-
-  // resume_task tool — restart a paused task
-  const resumeTaskTool: ToolDefinition = {
-    type: 'function',
-    function: {
-      name: 'resume_task',
-      description: 'Sets a paused task to active state, resuming its scheduled firing.',
-      parameters: {
-        type: 'object',
-        properties: {
-          name: { type: 'string', description: 'Name of the paused task to resume.' },
-        },
-        required: ['name'],
-      },
-    },
-  };
-
-  // delete_task tool — retire a task permanently
-  const deleteTaskTool: ToolDefinition = {
-    type: 'function',
-    function: {
-      name: 'delete_task',
-      description: 'Removes a task permanently from the operator\'s task list.',
-      parameters: {
-        type: 'object',
-        properties: {
-          name: { type: 'string', description: 'Name of the task to delete.' },
-        },
-        required: ['name'],
-      },
-    },
+  const toolListCtx = {
+    scopeType: 'owner' as const,
+    hasWebSearch: isWebSearchAvailable(),
+    liveSecrets: liveSecrets.map(s => s.key),
   };
 
   // ─── STREAMING PATH ────────────────────────────────────────────────────────
@@ -995,26 +812,19 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         const iterFullStart = fullContent.length; // mark start of this iteration in fullContent
         let iterToolCall: { id: string; name: string; args: string } | undefined;
 
-        // Operator-as-driver: the operator decided in analyse() whether tools
-        // are needed this turn. For `chat` intent the catalog is empty — the
-        // LLM cannot call tools because none are offered. For `execute` intent
-        // the full catalog is presented. Birth mode passes 'execute' so newborn
-        // operators retain full capability during identity formation.
-        const iterTools: ToolDefinition[] = [];
-        if (decision.kind === 'execute') {
-          if (webSearchTool && webSearchCount < MAX_SEARCHES) iterTools.push(webSearchTool);
-          if (kbSeedTool) iterTools.push(kbSeedTool);
-          iterTools.push(writeFileTool);
-          iterTools.push(readFileTool);
-          iterTools.push(listFilesTool);
-          iterTools.push(getCurrentTimeTool);
-          iterTools.push(scheduleTaskTool);
-          iterTools.push(updateTaskTool);
-          iterTools.push(pauseTaskTool);
-          iterTools.push(resumeTaskTool);
-          iterTools.push(deleteTaskTool);
-          if (httpRequestTool) iterTools.push(httpRequestTool);
-        }
+        // Operator-as-driver (Patent claim 21): the operator decided in
+        // analyse() whether tools are needed this turn. For `chat` intent
+        // the catalog is empty — the LLM cannot call tools because none
+        // are offered. For `execute` intent the full universal catalog is
+        // presented from the toolRegistry. Birth mode passes 'execute' so
+        // newborn operators retain full capability during identity formation.
+        const allTools = decision.kind === 'execute' ? listToolsForContext(toolListCtx) : [];
+        // Per-iteration cap on web_search — once an operator has done
+        // MAX_SEARCHES in this turn, filter it out of the offered set so
+        // the LLM cannot keep searching in a loop.
+        const iterTools = webSearchCount >= MAX_SEARCHES
+          ? allTools.filter(t => t.function.name !== 'web_search')
+          : allTools;
         const iterOpts = {
           ...chatOpts,
           tools: iterTools.length > 0 ? iterTools : undefined,
@@ -1039,452 +849,60 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             completionTokens += chunk.usage.completionTokens;
           }
         }
-        // ── WEB SEARCH TOOL CALL ───────────────────────────────────────────
-        if (iterToolCall?.name === 'web_search') {
-          let searchQuery = '';
-          try { searchQuery = JSON.parse(iterToolCall.args).query ?? ''; } catch { /* skip */ }
+        // ── TOOL DISPATCH (via toolHandlers.dispatchTool — single path for all 12 tools) ──
+        //
+        // Each handler in toolHandlers.ts mirrors the pre-refactor inline
+        // block behavior verbatim: it parses args, fires the SSE progress
+        // event the frontend ChatSection.tsx regex-matches, persists side
+        // effects, and returns { content, meta? }. The meta hints
+        // (webSearchFired, httpRequestFired, terminateLoop) carry the
+        // loop-control signals the inline blocks used to encode via
+        // if/break/continue.
+        if (iterToolCall) {
+          const dispatchResult = await dispatchTool(
+            iterToolCall.name,
+            iterToolCall.args,
+            toolHandlerCtx,
+            (e) => {
+              try { res.write(`data: ${JSON.stringify(e.payload)}\n\n`); } catch { /* connection gone */ }
+            },
+          );
 
-          if (searchQuery) {
-            console.log(`[agency] loop iter ${iter} — web search: "${searchQuery}"`);
-            res.write(`data: ${JSON.stringify({ searching: searchQuery })}\n\n`);
-            const capResult = await executeWebSearch(searchQuery);
-
-            if (capResult.success) {
-              await persistWebSearchResult(operator.id, operator.ownerId, conv.id, searchQuery, capResult, operator.mandate ?? '', scope.scopeId, scope.scopeTrust);
-              webSearchCount++;
-
-              // Inject the assistant turn + tool result so the model has full context
-              loopMessages.push(
-                {
-                  role: 'assistant',
-                  content: iterContent || '',
-                  tool_calls: [{
-                    id: iterToolCall.id,
-                    type: 'function',
-                    function: { name: 'web_search', arguments: iterToolCall.args },
-                  }],
-                },
-                { role: 'tool', content: capResult.output, tool_call_id: iterToolCall.id },
-              );
-              continue; // loop: LLM sees the result and decides what to do next
-            }
-          }
-
-          // Search failed or empty query — what we have is the final response
-          finalContent = iterContent;
-          break;
-        }
-
-        // ── KB SEED TOOL CALL ──────────────────────────────────────────────
-        if (iterToolCall?.name === 'kb_seed') {
-          let seedArgs: { content?: string; source?: string; confidence?: number } = {};
-          try { seedArgs = JSON.parse(iterToolCall.args); } catch { /* skip */ }
-
-          if (seedArgs.content && seedArgs.source) {
-            const confidence = typeof seedArgs.confidence === 'number' ? seedArgs.confidence : 65;
-            console.log(`[agency] loop iter ${iter} — kb_seed: "${seedArgs.source}" (confidence ${confidence})`);
-            res.write(`data: ${JSON.stringify({ seeding: seedArgs.source })}\n\n`);
-
-            const seedResult = await persistKbSeedEntry(
-              operator.id,
-              operator.ownerId,
-              seedArgs.content,
-              seedArgs.source,
-              confidence,
-            );
-
-            const toolResultText = seedResult.stored
-              ? `Entry stored successfully. Confidence: ${Math.max(40, Math.min(85, Math.round(confidence)))}. Status: pending — queued for VAEL pipeline verification.`
-              : `Entry not stored: ${seedResult.reason}`;
-
-            if (seedResult.stored) {
-              storeMemory(
-                operator.id,
-                operator.ownerId,
-                `Knowledge entry seeded: "${seedArgs.source}". ${seedArgs.content!.slice(0, 300)}`,
-                'fact',
-                'ai_distilled',
-                confidence / 100,
-              ).catch(() => {});
-            }
-
-            loopMessages.push(
-              {
-                role: 'assistant',
-                content: iterContent || '',
-                tool_calls: [{
-                  id: iterToolCall.id,
-                  type: 'function',
-                  function: { name: 'kb_seed', arguments: iterToolCall.args },
-                }],
-              },
-              { role: 'tool', content: toolResultText, tool_call_id: iterToolCall.id },
-            );
-            continue;
-          }
-
-          // Missing required args — treat as final response
-          finalContent = iterContent;
-          break;
-        }
-
-        // ── WRITE FILE TOOL CALL ───────────────────────────────────────────
-        if (iterToolCall?.name === 'write_file') {
-          let fileArgs: { filename?: string; content?: string; action?: string } = {};
-          try { fileArgs = JSON.parse(iterToolCall.args); } catch { /* skip */ }
-
-          if (fileArgs.filename && fileArgs.content) {
-            console.log(`[agency] loop iter ${iter} — write_file: "${fileArgs.filename}"`);
-            res.write(`data: ${JSON.stringify({ writing: fileArgs.filename })}\n\n`);
-
-            const existing = await db.select({ id: operatorFilesTable.id })
-              .from(operatorFilesTable)
-              .where(and(eq(operatorFilesTable.operatorId, operator.id), eq(operatorFilesTable.filename, fileArgs.filename)))
-              .limit(1);
-
-            let fileId: string;
-            if (existing.length > 0 && fileArgs.action !== 'create') {
-              fileId = existing[0].id;
-              await db.update(operatorFilesTable).set({ content: fileArgs.content, updatedAt: new Date() }).where(eq(operatorFilesTable.id, fileId));
-            } else {
-              fileId = crypto.randomUUID();
-              await db.insert(operatorFilesTable).values({ id: fileId, operatorId: operator.id, ownerId: operator.ownerId, filename: fileArgs.filename, content: fileArgs.content });
-            }
-
-            res.write(`data: ${JSON.stringify({ file_created: { id: fileId, filename: fileArgs.filename } })}\n\n`);
-            const toolResultText = `File "${fileArgs.filename}" ${existing.length > 0 && fileArgs.action !== 'create' ? 'updated' : 'created'}. Owner can see and download it from the Files tab.`;
-
-            loopMessages.push(
-              {
-                role: 'assistant',
-                content: iterContent || '',
-                tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'write_file', arguments: iterToolCall.args } }],
-              },
-              { role: 'tool', content: toolResultText, tool_call_id: iterToolCall.id },
-            );
-            continue;
-          }
-
-          finalContent = iterContent;
-          break;
-        }
-
-        // ── HTTP REQUEST TOOL CALL ─────────────────────────────────────────
-        if (iterToolCall?.name === 'http_request') {
-          let httpArgs: { method: string; url: string; headers?: Record<string, string>; body?: string } = { method: 'GET', url: '' };
-          try { httpArgs = JSON.parse(iterToolCall.args); } catch { /* skip */ }
-
-          if (httpArgs.url) {
+          if (dispatchResult.meta?.webSearchFired) webSearchCount++;
+          if (dispatchResult.meta?.httpRequestFired) {
             httpRequestFired = true;
-            // Strip any pre-call narration text from fullContent — text streamed
-            // before a tool fires is noise, not a response (covers consecutive tool calls too)
+            // Strip pre-call narration text from fullContent — text streamed
+            // before a tool fires is noise, not a response. Mirrors the
+            // pre-refactor http_request behavior (covers consecutive tool
+            // calls too).
             fullContent = fullContent.slice(0, iterFullStart);
-            console.log(`[agency] loop iter ${iter} — http_request: ${httpArgs.method} ${httpArgs.url}`);
-            res.write(`data: ${JSON.stringify({ calling: httpArgs.url })}\n\n`);
-            let toolResultText: string;
-            try {
-              toolResultText = await executeHttpWithOAuth(operator.id, httpArgs);
-            } catch (err: any) {
-              // No platform-authored substitute. Feed the real error back to
-              // the operator and let it respond honestly on the next iteration.
-              toolResultText = `HTTP request failed: ${err?.message ?? 'unknown error'}`;
-              console.error(`[agency] loop iter ${iter} — http_request error:`, err?.message);
-            }
-            // HTTP succeeded — persist and feed back into the loop
-            await db.insert(messagesTable).values({
-              id: crypto.randomUUID(),
-              conversationId: conv.id,
-              operatorId: operator.id,
-              role: 'system',
-              content: `[HTTP Response]\n${toolResultText}`,
-            });
-            loopMessages.push(
-              {
-                role: 'assistant',
-                content: iterContent || '',
-                tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'http_request', arguments: iterToolCall.args } }],
-              },
-              { role: 'tool', content: `[HTTP Response]\n${toolResultText}`, tool_call_id: iterToolCall.id },
-            );
-            continue;
           }
 
-          finalContent = iterContent;
-          break;
-        }
-
-        // ── READ FILE TOOL CALL ────────────────────────────────────────────
-        if (iterToolCall?.name === 'read_file') {
-          let readArgs: { filename?: string } = {};
-          try { readArgs = JSON.parse(iterToolCall.args); } catch { /* skip */ }
-
-          if (readArgs.filename) {
-            console.log(`[agency] loop iter ${iter} — read_file: "${readArgs.filename}"`);
-            res.write(`data: ${JSON.stringify({ reading: readArgs.filename })}\n\n`);
-
-            const [file] = await db.select({ content: operatorFilesTable.content })
-              .from(operatorFilesTable)
-              .where(and(eq(operatorFilesTable.operatorId, operator.id), eq(operatorFilesTable.filename, readArgs.filename)))
-              .limit(1);
-
-            const toolResultText = file
-              ? `File "${readArgs.filename}":\n${file.content}`
-              : `File "${readArgs.filename}" not found in your workspace.`;
-
-            loopMessages.push(
-              {
-                role: 'assistant',
-                content: iterContent || '',
-                tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'read_file', arguments: iterToolCall.args } }],
-              },
-              { role: 'tool', content: toolResultText, tool_call_id: iterToolCall.id },
-            );
-            continue;
+          if (dispatchResult.meta?.terminateLoop) {
+            // Handler reported it couldn't make useful progress (missing
+            // required args, or underlying operation failed). Fall back to
+            // whatever the model streamed before the call — matches the
+            // pre-refactor break-on-failure behavior of each inline block.
+            finalContent = iterContent;
+            break;
           }
 
-          finalContent = iterContent;
-          break;
-        }
-
-        // ── LIST FILES TOOL CALL ───────────────────────────────────────────
-        if (iterToolCall?.name === 'list_files') {
-          console.log(`[agency] loop iter ${iter} — list_files`);
-          res.write(`data: ${JSON.stringify({ listing: 'workspace files' })}\n\n`);
-
-          const files = await db.select({
-            filename: operatorFilesTable.filename,
-            updatedAt: operatorFilesTable.updatedAt,
-            content: operatorFilesTable.content,
-          })
-            .from(operatorFilesTable)
-            .where(eq(operatorFilesTable.operatorId, operator.id));
-
-          const toolResultText = files.length === 0
-            ? 'Your workspace has no files yet.'
-            : files
-                .map((f) => `- ${f.filename} (${f.content.length} chars, updated ${f.updatedAt?.toISOString() ?? 'unknown'})`)
-                .join('\n');
-
+          // Push the assistant turn + tool result back into the loop so the
+          // model sees the result and decides what to do next.
           loopMessages.push(
             {
               role: 'assistant',
               content: iterContent || '',
-              tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'list_files', arguments: iterToolCall.args } }],
+              tool_calls: [{
+                id: iterToolCall.id,
+                type: 'function',
+                function: { name: iterToolCall.name, arguments: iterToolCall.args },
+              }],
             },
-            { role: 'tool', content: toolResultText, tool_call_id: iterToolCall.id },
+            { role: 'tool', content: dispatchResult.content, tool_call_id: iterToolCall.id },
           );
           continue;
         }
-
-        // ── GET CURRENT TIME TOOL CALL ─────────────────────────────────────
-        if (iterToolCall?.name === 'get_current_time') {
-          let timeArgs: { timezone?: string } = {};
-          try { timeArgs = JSON.parse(iterToolCall.args); } catch { /* default to Asia/Dubai */ }
-          const tz = timeArgs.timezone || 'Asia/Dubai';
-          console.log(`[agency] loop iter ${iter} — get_current_time (${tz})`);
-          res.write(`data: ${JSON.stringify({ checking_time: tz })}\n\n`);
-
-          let toolResultText: string;
-          try {
-            toolResultText = buildTemporalContext(new Date(), tz);
-          } catch (err: any) {
-            toolResultText = `Invalid timezone "${tz}". The timezone parameter accepts IANA identifiers such as "Asia/Dubai", "America/New_York", "Europe/London", "UTC".`;
-          }
-
-          loopMessages.push(
-            {
-              role: 'assistant',
-              content: iterContent || '',
-              tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'get_current_time', arguments: iterToolCall.args } }],
-            },
-            { role: 'tool', content: toolResultText, tool_call_id: iterToolCall.id },
-          );
-          continue;
-        }
-
-        // ── SCHEDULE TASK TOOL CALL ────────────────────────────────────────
-        if (iterToolCall?.name === 'schedule_task') {
-          let taskArgs: { name?: string; prompt?: string; schedule?: string } = {};
-          try { taskArgs = JSON.parse(iterToolCall.args); } catch { /* skip */ }
-
-          if (taskArgs.name && taskArgs.prompt && (taskArgs.schedule === 'daily' || taskArgs.schedule === 'weekly')) {
-            console.log(`[agency] loop iter ${iter} — schedule_task: "${taskArgs.name}" (${taskArgs.schedule})`);
-            res.write(`data: ${JSON.stringify({ scheduling: taskArgs.name })}\n\n`);
-
-            const intervalMs = taskArgs.schedule === 'daily' ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
-            const taskId = crypto.randomUUID();
-            await db.insert(tasksTable).values({
-              id: taskId,
-              operatorId: operator.id,
-              conversationId: conv.id,
-              contextName: taskArgs.name,
-              taskType: taskArgs.schedule,
-              integrationLabel: 'self_scheduled',
-              prompt: taskArgs.prompt,
-              payload: { description: taskArgs.prompt, scheduledBy: 'operator' },
-              status: 'active',
-              nextRunAt: new Date(Date.now() + intervalMs),
-            });
-
-            const toolResultText = `Task "${taskArgs.name}" scheduled to run ${taskArgs.schedule}. First run at ${new Date(Date.now() + intervalMs).toISOString()}. Owner can pause or edit it from the Tasks tab.`;
-
-            loopMessages.push(
-              {
-                role: 'assistant',
-                content: iterContent || '',
-                tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'schedule_task', arguments: iterToolCall.args } }],
-              },
-              { role: 'tool', content: toolResultText, tool_call_id: iterToolCall.id },
-            );
-            continue;
-          }
-
-          finalContent = iterContent;
-          break;
-        }
-
-        // ── UPDATE TASK TOOL CALL ──────────────────────────────────────────
-        if (iterToolCall?.name === 'update_task') {
-          let upd: { name?: string; newName?: string; newPrompt?: string; newSchedule?: string } = {};
-          try { upd = JSON.parse(iterToolCall.args); } catch { /* skip */ }
-
-          if (upd.name) {
-            const [task] = await db.select({ id: tasksTable.id })
-              .from(tasksTable)
-              .where(and(eq(tasksTable.operatorId, operator.id), eq(tasksTable.contextName, upd.name)))
-              .limit(1);
-
-            let toolResultText: string;
-            if (!task) {
-              toolResultText = `No task named "${upd.name}" found in your station.`;
-            } else {
-              const patch: Record<string, unknown> = {};
-              if (upd.newName) patch.contextName = upd.newName;
-              if (upd.newPrompt) patch.prompt = upd.newPrompt;
-              if (upd.newSchedule === 'daily' || upd.newSchedule === 'weekly') patch.taskType = upd.newSchedule;
-              if (Object.keys(patch).length === 0) {
-                toolResultText = `No fields to update on "${upd.name}".`;
-              } else {
-                await db.update(tasksTable).set(patch).where(eq(tasksTable.id, task.id));
-                console.log(`[agency] loop iter ${iter} — update_task: "${upd.name}"`);
-                res.write(`data: ${JSON.stringify({ updating_task: upd.name })}\n\n`);
-                toolResultText = `Task "${upd.name}" updated.`;
-              }
-            }
-
-            loopMessages.push(
-              {
-                role: 'assistant',
-                content: iterContent || '',
-                tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'update_task', arguments: iterToolCall.args } }],
-              },
-              { role: 'tool', content: toolResultText, tool_call_id: iterToolCall.id },
-            );
-            continue;
-          }
-
-          finalContent = iterContent;
-          break;
-        }
-
-        // ── PAUSE TASK TOOL CALL ───────────────────────────────────────────
-        if (iterToolCall?.name === 'pause_task') {
-          let p: { name?: string } = {};
-          try { p = JSON.parse(iterToolCall.args); } catch { /* skip */ }
-
-          if (p.name) {
-            const result = await db.update(tasksTable)
-              .set({ status: 'paused' })
-              .where(and(eq(tasksTable.operatorId, operator.id), eq(tasksTable.contextName, p.name)))
-              .returning({ id: tasksTable.id });
-
-            const toolResultText = result.length > 0
-              ? `Task "${p.name}" paused. It will not fire until you resume it.`
-              : `No task named "${p.name}" found in your station.`;
-
-            console.log(`[agency] loop iter ${iter} — pause_task: "${p.name}" (${result.length} rows)`);
-            res.write(`data: ${JSON.stringify({ pausing_task: p.name })}\n\n`);
-
-            loopMessages.push(
-              {
-                role: 'assistant',
-                content: iterContent || '',
-                tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'pause_task', arguments: iterToolCall.args } }],
-              },
-              { role: 'tool', content: toolResultText, tool_call_id: iterToolCall.id },
-            );
-            continue;
-          }
-
-          finalContent = iterContent;
-          break;
-        }
-
-        // ── RESUME TASK TOOL CALL ──────────────────────────────────────────
-        if (iterToolCall?.name === 'resume_task') {
-          let r: { name?: string } = {};
-          try { r = JSON.parse(iterToolCall.args); } catch { /* skip */ }
-
-          if (r.name) {
-            const result = await db.update(tasksTable)
-              .set({ status: 'active' })
-              .where(and(eq(tasksTable.operatorId, operator.id), eq(tasksTable.contextName, r.name)))
-              .returning({ id: tasksTable.id });
-
-            const toolResultText = result.length > 0
-              ? `Task "${r.name}" resumed.`
-              : `No task named "${r.name}" found in your station.`;
-
-            console.log(`[agency] loop iter ${iter} — resume_task: "${r.name}" (${result.length} rows)`);
-            res.write(`data: ${JSON.stringify({ resuming_task: r.name })}\n\n`);
-
-            loopMessages.push(
-              {
-                role: 'assistant',
-                content: iterContent || '',
-                tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'resume_task', arguments: iterToolCall.args } }],
-              },
-              { role: 'tool', content: toolResultText, tool_call_id: iterToolCall.id },
-            );
-            continue;
-          }
-
-          finalContent = iterContent;
-          break;
-        }
-
-        // ── DELETE TASK TOOL CALL ──────────────────────────────────────────
-        if (iterToolCall?.name === 'delete_task') {
-          let d: { name?: string } = {};
-          try { d = JSON.parse(iterToolCall.args); } catch { /* skip */ }
-
-          if (d.name) {
-            const result = await db.delete(tasksTable)
-              .where(and(eq(tasksTable.operatorId, operator.id), eq(tasksTable.contextName, d.name)))
-              .returning({ id: tasksTable.id });
-
-            const toolResultText = result.length > 0
-              ? `Task "${d.name}" deleted.`
-              : `No task named "${d.name}" found in your station.`;
-
-            console.log(`[agency] loop iter ${iter} — delete_task: "${d.name}" (${result.length} rows)`);
-            res.write(`data: ${JSON.stringify({ deleting_task: d.name })}\n\n`);
-
-            loopMessages.push(
-              {
-                role: 'assistant',
-                content: iterContent || '',
-                tool_calls: [{ id: iterToolCall.id, type: 'function', function: { name: 'delete_task', arguments: iterToolCall.args } }],
-              },
-              { role: 'tool', content: toolResultText, tool_call_id: iterToolCall.id },
-            );
-            continue;
-          }
-
-          finalContent = iterContent;
-          break;
-        }
-
 
         // ── NO TOOL CALL — clean final response ────────────────────────────
         finalContent = iterContent;
@@ -1589,23 +1007,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         }
       }
 
-      // Operator-as-driver: same gating as the streaming path. Tools are
-      // offered only when the operator's analyse() decision is 'execute'.
-      const syncTools: ToolDefinition[] = [];
-      if (decision.kind === 'execute') {
-        if (webSearchTool) syncTools.push(webSearchTool);
-        if (kbSeedTool) syncTools.push(kbSeedTool);
-        syncTools.push(writeFileTool);
-        syncTools.push(readFileTool);
-        syncTools.push(listFilesTool);
-        syncTools.push(getCurrentTimeTool);
-        syncTools.push(scheduleTaskTool);
-        syncTools.push(updateTaskTool);
-        syncTools.push(pauseTaskTool);
-        syncTools.push(resumeTaskTool);
-        syncTools.push(deleteTaskTool);
-        if (httpRequestTool) syncTools.push(httpRequestTool);
-      }
+      // Operator-as-driver (Patent claim 21): same gating as the streaming
+      // path. Tools are offered only when the operator's analyse() decision
+      // is 'execute'. Tool definitions come from the universal toolRegistry,
+      // filtered for this scope + availability.
+      const syncTools = decision.kind === 'execute' ? listToolsForContext(toolListCtx) : [];
       const syncOpts = { ...chatOpts, tools: syncTools.length > 0 ? syncTools : undefined };
       const result = await agent.executeSync(messages, syncOpts);
 
@@ -1614,311 +1020,41 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       let finalCompletionTokens = result.completionTokens;
       let capabilityFired = false;
 
-
-      // Web search — operator actually called the tool via function calling
-      if (!capabilityFired && result.toolCall && result.toolCall.name === 'web_search') {
-        let searchQuery = '';
-        try { searchQuery = JSON.parse(result.toolCall.args).query ?? ''; } catch { /* skip */ }
-        if (searchQuery) {
-          console.log(`[agency] operator-initiated web search (sync): "${searchQuery}"`);
-          const capResult = await executeWebSearch(searchQuery);
-          if (capResult.success) {
-            await persistWebSearchResult(operator.id, operator.ownerId, conv.id, searchQuery, capResult, operator.mandate ?? '', scope.scopeId, scope.scopeTrust);
-            capabilityFired = true;
-            const toolResultMessages: ChatMessage[] = [
-              ...messages,
-              { role: 'system', content: `[Web Search] ${searchQuery}\n${capResult.output}` },
-            ];
-            const secondResult = await agent.executeSync(toolResultMessages, chatOpts);
-            finalContent = secondResult.content;
-            finalPromptTokens = secondResult.promptTokens;
-            finalCompletionTokens = secondResult.completionTokens;
-          }
-        }
-      }
-
-      // KB seed — operator called the tool via function calling (sync path)
-      if (!capabilityFired && result.toolCall && result.toolCall.name === 'kb_seed') {
-        let seedArgs: { content?: string; source?: string; confidence?: number } = {};
-        try { seedArgs = JSON.parse(result.toolCall.args); } catch { /* skip */ }
-        if (seedArgs.content && seedArgs.source) {
-          const confidence = typeof seedArgs.confidence === 'number' ? seedArgs.confidence : 65;
-          console.log(`[agency] kb_seed (sync): "${seedArgs.source}" (confidence ${confidence})`);
-          const seedResult = await persistKbSeedEntry(operator.id, operator.ownerId, seedArgs.content, seedArgs.source, confidence);
+      // ── TOOL DISPATCH (sync) — single path via toolHandlers.dispatchTool ──
+      //
+      // Pattern: if the LLM produced a tool call, execute it via the same
+      // dispatcher chat.ts streaming and the external /mcp endpoint use,
+      // then run a SECOND executeSync() with the tool result injected as a
+      // system message so the model can produce a final reply. The
+      // per-tool system-message prefix is preserved verbatim from the
+      // pre-refactor sync blocks so the LLM's view of "what just happened"
+      // is unchanged (and downstream frontend regex matchers continue to
+      // recognise them).
+      if (result.toolCall) {
+        const dispatchResult = await dispatchTool(
+          result.toolCall.name,
+          result.toolCall.args,
+          toolHandlerCtx,
+          // No SSE in sync path — drop progress events
+        );
+        // Old break-on-failure: if missing args or operation failed, do NOT
+        // run the second LLM pass. The first-pass result.content (often a
+        // chatty preamble) becomes the final answer, matching pre-refactor
+        // behavior where each `if (...args missing) finalContent break;` block
+        // just dropped through.
+        if (!dispatchResult.meta?.terminateLoop) {
           capabilityFired = true;
-          const toolResultText = seedResult.stored
-            ? `Entry stored. Confidence: ${Math.max(40, Math.min(85, Math.round(confidence)))}. Status: pending.`
-            : `Entry not stored: ${seedResult.reason}`;
-          const seedMessages: ChatMessage[] = [
+          const syncPrefix = SYNC_TOOL_PREFIX[result.toolCall.name] ?? `[Tool: ${result.toolCall.name}]`;
+          // handleHttpRequest already prefixes its content with [HTTP Response];
+          // avoid double-prefixing by detecting the existing prefix.
+          const wrappedContent = dispatchResult.content.startsWith(syncPrefix)
+            ? dispatchResult.content
+            : `${syncPrefix}\n${dispatchResult.content}`;
+          const followupMessages: ChatMessage[] = [
             ...messages,
-            { role: 'system', content: `[KB Seed Result]\n${toolResultText}` },
+            { role: 'system', content: wrappedContent },
           ];
-          const secondResult = await agent.executeSync(seedMessages, chatOpts);
-          finalContent = secondResult.content;
-          finalPromptTokens = secondResult.promptTokens;
-          finalCompletionTokens = secondResult.completionTokens;
-        }
-      }
-
-      // Write file — operator called write_file tool (sync path)
-      if (!capabilityFired && result.toolCall && result.toolCall.name === 'write_file') {
-        let fileArgs: { filename?: string; content?: string; action?: string } = {};
-        try { fileArgs = JSON.parse(result.toolCall.args); } catch { /* skip */ }
-        if (fileArgs.filename && fileArgs.content) {
-          console.log(`[agency] write_file (sync): "${fileArgs.filename}"`);
-          const existing = await db.select({ id: operatorFilesTable.id })
-            .from(operatorFilesTable)
-            .where(and(eq(operatorFilesTable.operatorId, operator.id), eq(operatorFilesTable.filename, fileArgs.filename)))
-            .limit(1);
-
-          let fileId: string;
-          if (existing.length > 0 && fileArgs.action !== 'create') {
-            fileId = existing[0].id;
-            await db.update(operatorFilesTable).set({ content: fileArgs.content, updatedAt: new Date() }).where(eq(operatorFilesTable.id, fileId));
-          } else {
-            fileId = crypto.randomUUID();
-            await db.insert(operatorFilesTable).values({ id: fileId, operatorId: operator.id, ownerId: operator.ownerId, filename: fileArgs.filename, content: fileArgs.content });
-          }
-
-          capabilityFired = true;
-          const toolResultText = `File "${fileArgs.filename}" ${existing.length > 0 && fileArgs.action !== 'create' ? 'updated' : 'created'}. Owner can see it in the Files tab.`;
-          const fileMessages: ChatMessage[] = [
-            ...messages,
-            { role: 'system', content: `[File Created]\n${toolResultText}` },
-          ];
-          const secondResult = await agent.executeSync(fileMessages, chatOpts);
-          finalContent = secondResult.content;
-          finalPromptTokens = secondResult.promptTokens;
-          finalCompletionTokens = secondResult.completionTokens;
-        }
-      }
-
-      // Read file — operator called read_file tool (sync path)
-      if (!capabilityFired && result.toolCall && result.toolCall.name === 'read_file') {
-        let readArgs: { filename?: string } = {};
-        try { readArgs = JSON.parse(result.toolCall.args); } catch { /* skip */ }
-        if (readArgs.filename) {
-          console.log(`[agency] read_file (sync): "${readArgs.filename}"`);
-          const [file] = await db.select({ content: operatorFilesTable.content })
-            .from(operatorFilesTable)
-            .where(and(eq(operatorFilesTable.operatorId, operator.id), eq(operatorFilesTable.filename, readArgs.filename)))
-            .limit(1);
-          capabilityFired = true;
-          const toolResultText = file
-            ? `File "${readArgs.filename}":\n${file.content}`
-            : `File "${readArgs.filename}" not found in your workspace.`;
-          const readMessages: ChatMessage[] = [
-            ...messages,
-            { role: 'system', content: `[File Read]\n${toolResultText}` },
-          ];
-          const secondResult = await agent.executeSync(readMessages, chatOpts);
-          finalContent = secondResult.content;
-          finalPromptTokens = secondResult.promptTokens;
-          finalCompletionTokens = secondResult.completionTokens;
-        }
-      }
-
-      // List files — operator called list_files tool (sync path)
-      if (!capabilityFired && result.toolCall && result.toolCall.name === 'list_files') {
-        console.log(`[agency] list_files (sync)`);
-        const files = await db.select({
-          filename: operatorFilesTable.filename,
-          updatedAt: operatorFilesTable.updatedAt,
-          content: operatorFilesTable.content,
-        })
-          .from(operatorFilesTable)
-          .where(eq(operatorFilesTable.operatorId, operator.id));
-        capabilityFired = true;
-        const toolResultText = files.length === 0
-          ? 'Your workspace has no files yet.'
-          : files
-              .map((f) => `- ${f.filename} (${f.content.length} chars, updated ${f.updatedAt?.toISOString() ?? 'unknown'})`)
-              .join('\n');
-        const listMessages: ChatMessage[] = [
-          ...messages,
-          { role: 'system', content: `[Files in workspace]\n${toolResultText}` },
-        ];
-        const secondResult = await agent.executeSync(listMessages, chatOpts);
-        finalContent = secondResult.content;
-        finalPromptTokens = secondResult.promptTokens;
-        finalCompletionTokens = secondResult.completionTokens;
-      }
-
-      // Get current time — operator called get_current_time tool (sync path)
-      if (!capabilityFired && result.toolCall && result.toolCall.name === 'get_current_time') {
-        let timeArgs: { timezone?: string } = {};
-        try { timeArgs = JSON.parse(result.toolCall.args); } catch { /* default tz */ }
-        const tz = timeArgs.timezone || 'Asia/Dubai';
-        console.log(`[agency] get_current_time (sync): ${tz}`);
-        capabilityFired = true;
-        let toolResultText: string;
-        try {
-          toolResultText = buildTemporalContext(new Date(), tz);
-        } catch {
-          toolResultText = `Invalid timezone "${tz}". The timezone parameter accepts IANA identifiers such as "Asia/Dubai", "America/New_York", "Europe/London", "UTC".`;
-        }
-        const timeMessages: ChatMessage[] = [
-          ...messages,
-          { role: 'system', content: `[Current time]\n${toolResultText}` },
-        ];
-        const secondResult = await agent.executeSync(timeMessages, chatOpts);
-        finalContent = secondResult.content;
-        finalPromptTokens = secondResult.promptTokens;
-        finalCompletionTokens = secondResult.completionTokens;
-      }
-
-      // Schedule task — operator called schedule_task tool (sync path)
-      if (!capabilityFired && result.toolCall && result.toolCall.name === 'schedule_task') {
-        let taskArgs: { name?: string; prompt?: string; schedule?: string } = {};
-        try { taskArgs = JSON.parse(result.toolCall.args); } catch { /* skip */ }
-        if (taskArgs.name && taskArgs.prompt && (taskArgs.schedule === 'daily' || taskArgs.schedule === 'weekly')) {
-          console.log(`[agency] schedule_task (sync): "${taskArgs.name}" (${taskArgs.schedule})`);
-          const intervalMs = taskArgs.schedule === 'daily' ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
-          await db.insert(tasksTable).values({
-            id: crypto.randomUUID(),
-            operatorId: operator.id,
-            conversationId: conv.id,
-            contextName: taskArgs.name,
-            taskType: taskArgs.schedule,
-            integrationLabel: 'self_scheduled',
-            prompt: taskArgs.prompt,
-            payload: { description: taskArgs.prompt, scheduledBy: 'operator' },
-            status: 'active',
-            nextRunAt: new Date(Date.now() + intervalMs),
-          });
-          capabilityFired = true;
-          const toolResultText = `Task "${taskArgs.name}" scheduled to run ${taskArgs.schedule}. First run at ${new Date(Date.now() + intervalMs).toISOString()}.`;
-          const taskMessages: ChatMessage[] = [
-            ...messages,
-            { role: 'system', content: `[Task Scheduled]\n${toolResultText}` },
-          ];
-          const secondResult = await agent.executeSync(taskMessages, chatOpts);
-          finalContent = secondResult.content;
-          finalPromptTokens = secondResult.promptTokens;
-          finalCompletionTokens = secondResult.completionTokens;
-        }
-      }
-
-      // Update task — operator called update_task tool (sync path)
-      if (!capabilityFired && result.toolCall && result.toolCall.name === 'update_task') {
-        let upd: { name?: string; newName?: string; newPrompt?: string; newSchedule?: string } = {};
-        try { upd = JSON.parse(result.toolCall.args); } catch { /* skip */ }
-        if (upd.name) {
-          const [task] = await db.select({ id: tasksTable.id })
-            .from(tasksTable)
-            .where(and(eq(tasksTable.operatorId, operator.id), eq(tasksTable.contextName, upd.name)))
-            .limit(1);
-          let toolResultText: string;
-          if (!task) {
-            toolResultText = `No task named "${upd.name}" found in your station.`;
-          } else {
-            const patch: Record<string, unknown> = {};
-            if (upd.newName) patch.contextName = upd.newName;
-            if (upd.newPrompt) patch.prompt = upd.newPrompt;
-            if (upd.newSchedule === 'daily' || upd.newSchedule === 'weekly') patch.taskType = upd.newSchedule;
-            if (Object.keys(patch).length === 0) {
-              toolResultText = `No fields to update on "${upd.name}".`;
-            } else {
-              await db.update(tasksTable).set(patch).where(eq(tasksTable.id, task.id));
-              toolResultText = `Task "${upd.name}" updated.`;
-            }
-          }
-          capabilityFired = true;
-          const updMessages: ChatMessage[] = [...messages, { role: 'system', content: `[Task Updated]\n${toolResultText}` }];
-          const secondResult = await agent.executeSync(updMessages, chatOpts);
-          finalContent = secondResult.content;
-          finalPromptTokens = secondResult.promptTokens;
-          finalCompletionTokens = secondResult.completionTokens;
-        }
-      }
-
-      // Pause task (sync)
-      if (!capabilityFired && result.toolCall && result.toolCall.name === 'pause_task') {
-        let p: { name?: string } = {};
-        try { p = JSON.parse(result.toolCall.args); } catch { /* skip */ }
-        if (p.name) {
-          const updated = await db.update(tasksTable)
-            .set({ status: 'paused' })
-            .where(and(eq(tasksTable.operatorId, operator.id), eq(tasksTable.contextName, p.name)))
-            .returning({ id: tasksTable.id });
-          capabilityFired = true;
-          const toolResultText = updated.length > 0
-            ? `Task "${p.name}" paused.`
-            : `No task named "${p.name}" found in your station.`;
-          const pauseMessages: ChatMessage[] = [...messages, { role: 'system', content: `[Task Paused]\n${toolResultText}` }];
-          const secondResult = await agent.executeSync(pauseMessages, chatOpts);
-          finalContent = secondResult.content;
-          finalPromptTokens = secondResult.promptTokens;
-          finalCompletionTokens = secondResult.completionTokens;
-        }
-      }
-
-      // Resume task (sync)
-      if (!capabilityFired && result.toolCall && result.toolCall.name === 'resume_task') {
-        let r: { name?: string } = {};
-        try { r = JSON.parse(result.toolCall.args); } catch { /* skip */ }
-        if (r.name) {
-          const updated = await db.update(tasksTable)
-            .set({ status: 'active' })
-            .where(and(eq(tasksTable.operatorId, operator.id), eq(tasksTable.contextName, r.name)))
-            .returning({ id: tasksTable.id });
-          capabilityFired = true;
-          const toolResultText = updated.length > 0
-            ? `Task "${r.name}" resumed.`
-            : `No task named "${r.name}" found in your station.`;
-          const resMessages: ChatMessage[] = [...messages, { role: 'system', content: `[Task Resumed]\n${toolResultText}` }];
-          const secondResult = await agent.executeSync(resMessages, chatOpts);
-          finalContent = secondResult.content;
-          finalPromptTokens = secondResult.promptTokens;
-          finalCompletionTokens = secondResult.completionTokens;
-        }
-      }
-
-      // Delete task (sync)
-      if (!capabilityFired && result.toolCall && result.toolCall.name === 'delete_task') {
-        let d: { name?: string } = {};
-        try { d = JSON.parse(result.toolCall.args); } catch { /* skip */ }
-        if (d.name) {
-          const deleted = await db.delete(tasksTable)
-            .where(and(eq(tasksTable.operatorId, operator.id), eq(tasksTable.contextName, d.name)))
-            .returning({ id: tasksTable.id });
-          capabilityFired = true;
-          const toolResultText = deleted.length > 0
-            ? `Task "${d.name}" deleted.`
-            : `No task named "${d.name}" found in your station.`;
-          const delMessages: ChatMessage[] = [...messages, { role: 'system', content: `[Task Deleted]\n${toolResultText}` }];
-          const secondResult = await agent.executeSync(delMessages, chatOpts);
-          finalContent = secondResult.content;
-          finalPromptTokens = secondResult.promptTokens;
-          finalCompletionTokens = secondResult.completionTokens;
-        }
-      }
-
-      // HTTP request — operator called http_request tool (sync path)
-      if (!capabilityFired && result.toolCall && result.toolCall.name === 'http_request') {
-        let httpArgs: { method: string; url: string; headers?: Record<string, string>; body?: string } = { method: 'GET', url: '' };
-        try { httpArgs = JSON.parse(result.toolCall.args); } catch { /* skip */ }
-        if (httpArgs.url) {
-          console.log(`[agency] http_request (sync): ${httpArgs.method} ${httpArgs.url}`);
-          capabilityFired = true;
-          let httpResult: string;
-          try {
-            httpResult = await executeHttpWithOAuth(operator.id, httpArgs);
-          } catch (err: any) {
-            httpResult = `HTTP request failed: ${err.message}`;
-          }
-          await db.insert(messagesTable).values({
-            id: crypto.randomUUID(),
-            conversationId: conv.id,
-            operatorId: operator.id,
-            role: 'system',
-            content: `[HTTP Response]\n${httpResult}`,
-          });
-          const httpMessages: ChatMessage[] = [
-            ...messages,
-            { role: 'system', content: `[HTTP Response]\n${httpResult}` },
-          ];
-          const secondResult = await agent.executeSync(httpMessages, chatOpts);
+          const secondResult = await agent.executeSync(followupMessages, chatOpts);
           finalContent = secondResult.content;
           finalPromptTokens = secondResult.promptTokens;
           finalCompletionTokens = secondResult.completionTokens;

@@ -93,10 +93,11 @@ export interface ToolResult {
     webSearchFired?: boolean;
     /** Set to true when http_request ran (chat.ts uses this to suppress skill trigger). */
     httpRequestFired?: boolean;
-    /** True when the call short-circuited because required args were missing —
-     *  chat.ts treats this as "use the iterContent as final" to mirror the
-     *  pre-refactor break behavior. */
-    invalidArgs?: boolean;
+    /** True when the caller should break its agent loop after this tool —
+     *  e.g. required args were missing, or the underlying operation could
+     *  not produce a useful result. Mirrors the pre-refactor break-on-
+     *  failure semantics of each inline tool block. */
+    terminateLoop?: boolean;
   };
 }
 
@@ -123,14 +124,19 @@ async function handleWebSearch(
 ): Promise<ToolResult> {
   const { query } = parseArgs<{ query?: string }>(rawArgs);
   if (!query) {
-    return { content: 'web_search requires a non-empty "query" argument.', meta: { invalidArgs: true } };
+    return { content: 'web_search requires a non-empty "query" argument.', meta: { terminateLoop: true } };
   }
   console.log(`[agency] web_search: "${query}"`);
   onProgress?.({ event: 'searching', payload: { searching: query } });
 
   const capResult = await executeWebSearch(query);
   if (!capResult.success) {
-    return { content: `Web search returned no usable results for "${query}".` };
+    // Mirror old chat.ts behavior: a failed search terminates the agent loop;
+    // the caller falls back to whatever iterContent was streamed.
+    return {
+      content: `Web search returned no usable results for "${query}".`,
+      meta: { terminateLoop: true },
+    };
   }
 
   await persistWebSearchResult(
@@ -162,7 +168,7 @@ async function handleKbSeed(
   }>(rawArgs);
 
   if (!content || !source) {
-    return { content: 'kb_seed requires both "content" and "source".', meta: { invalidArgs: true } };
+    return { content: 'kb_seed requires both "content" and "source".', meta: { terminateLoop: true } };
   }
 
   const conf = typeof confidence === 'number' ? confidence : 65;
@@ -207,7 +213,7 @@ async function handleWriteFile(
   }>(rawArgs);
 
   if (!filename || !content) {
-    return { content: 'write_file requires both "filename" and "content".', meta: { invalidArgs: true } };
+    return { content: 'write_file requires both "filename" and "content".', meta: { terminateLoop: true } };
   }
   console.log(`[agency] write_file: "${filename}"`);
   onProgress?.({ event: 'writing', payload: { writing: filename } });
@@ -248,7 +254,7 @@ async function handleReadFile(
 ): Promise<ToolResult> {
   const { filename } = parseArgs<{ filename?: string }>(rawArgs);
   if (!filename) {
-    return { content: 'read_file requires a "filename".', meta: { invalidArgs: true } };
+    return { content: 'read_file requires a "filename".', meta: { terminateLoop: true } };
   }
   console.log(`[agency] read_file: "${filename}"`);
   onProgress?.({ event: 'reading', payload: { reading: filename } });
@@ -323,7 +329,7 @@ async function handleScheduleTask(
   }>(rawArgs);
 
   if (!name || !prompt || (schedule !== 'daily' && schedule !== 'weekly')) {
-    return { content: 'schedule_task requires "name", "prompt", and "schedule" (daily|weekly).', meta: { invalidArgs: true } };
+    return { content: 'schedule_task requires "name", "prompt", and "schedule" (daily|weekly).', meta: { terminateLoop: true } };
   }
   console.log(`[agency] schedule_task: "${name}" (${schedule})`);
   onProgress?.({ event: 'scheduling', payload: { scheduling: name } });
@@ -361,7 +367,7 @@ async function handleUpdateTask(
   }>(rawArgs);
 
   if (!name) {
-    return { content: 'update_task requires the current task "name".', meta: { invalidArgs: true } };
+    return { content: 'update_task requires the current task "name".', meta: { terminateLoop: true } };
   }
 
   const [task] = await db
@@ -397,7 +403,7 @@ async function handlePauseTask(
 ): Promise<ToolResult> {
   const { name } = parseArgs<{ name?: string }>(rawArgs);
   if (!name) {
-    return { content: 'pause_task requires a "name".', meta: { invalidArgs: true } };
+    return { content: 'pause_task requires a "name".', meta: { terminateLoop: true } };
   }
 
   const result = await db
@@ -423,7 +429,7 @@ async function handleResumeTask(
 ): Promise<ToolResult> {
   const { name } = parseArgs<{ name?: string }>(rawArgs);
   if (!name) {
-    return { content: 'resume_task requires a "name".', meta: { invalidArgs: true } };
+    return { content: 'resume_task requires a "name".', meta: { terminateLoop: true } };
   }
 
   const result = await db
@@ -449,7 +455,7 @@ async function handleDeleteTask(
 ): Promise<ToolResult> {
   const { name } = parseArgs<{ name?: string }>(rawArgs);
   if (!name) {
-    return { content: 'delete_task requires a "name".', meta: { invalidArgs: true } };
+    return { content: 'delete_task requires a "name".', meta: { terminateLoop: true } };
   }
 
   const result = await db
@@ -480,7 +486,7 @@ async function handleHttpRequest(
   }>(rawArgs);
 
   if (!httpArgs.url) {
-    return { content: 'http_request requires a "url" and "method".', meta: { invalidArgs: true } };
+    return { content: 'http_request requires a "url" and "method".', meta: { terminateLoop: true } };
   }
   const method = httpArgs.method || 'GET';
 
