@@ -2640,3 +2640,84 @@ Preserved for context. State of OpSoul on commit `9c61a15`, image `phase2-v2-050
 ### E. Capability Surface
 
 All 15 capability surfaces working as of May 9 (Chat, Identity, Personality, Memory, Owner KB, Operator KB, Skills, GROW, Tasks, Files, Integrations, Settings, Channels, Deployments, API Keys). The 2026-05-10 work expanded the operator's tool count from 4 to 11 universal tools.
+
+---
+
+## Resume tomorrow — 2026-05-22 — Azure Foundry migration + 0.3 integer bug
+
+Owner confirmed Azure AI Foundry credits arriving. Foundry catalog includes Kimi K2/K2.5 Thinking + Claude Sonnet 4.6 (Anthropic) — both eligible for Azure benefit credits. Migration plan agreed in the chat session ending 2026-05-22.
+
+### Architectural split (the upgrade)
+
+The migration isn't just a cost swap — it's a real architecture improvement:
+
+| Workload | Model | Why |
+|---|---|---|
+| **Operator voices** (Hajeri, Nahil, Istishari, Bani, Vael) | **Kimi K2.5 Thinking Global** ($0.60/$3.00 per 1M) | Voice already validated. Kimi preserves persona under archetype/soul layers. Same model, lower cost via credits, lower latency (UAE North same-region). |
+| **GROW evaluation + VAEL verification + curiosity corroboration** | **Claude Sonnet 4.6** (~$3/$15 per 1M, credit-covered) | "Judge ≠ generator" pattern. The `claudeEvaluation` field in `grow_proposals` literally names Claude; likely Kimi is doing this today (since everything routes through OpenRouter). Putting real Sonnet behind these paths is a quality upgrade, not just a swap. Sonnet excels at evaluating proposals + flagging weak corroboration. |
+| **Embeddings** | Foundry `text-embedding-3-large` | Same model dimensions (1536) so pgvector unchanged. Pure cost win. |
+| **DeepSeek V3 distillation** (per `[reference_llm_routing]` memory) | Foundry DeepSeek when added | Future — owner has separate distillation pipeline. |
+
+### Migration phases (in order)
+
+1. **Phase 1 — Foundry deployment + env wiring** (~30 min)
+   Owner deploys Kimi K2.5 Thinking + Sonnet 4.6 in Foundry. Sets on opsoul container app:
+   ```
+   FOUNDRY_API_BASE=https://<your-foundry>.services.ai.azure.com
+   FOUNDRY_API_KEY=<key>
+   FOUNDRY_KIMI_DEPLOYMENT=kimi-k2-5-thinking
+   FOUNDRY_SONNET_DEPLOYMENT=claude-sonnet-4-6
+   ```
+2. **Phase 2 — Model router adapter** (~60 min)
+   Thin wrapper in `lib/integrations-openrouter-ai/` (or new `lib/integrations-foundry/`) that prefers Foundry when env set, falls back to OpenRouter. Single env-var switch per operator if needed.
+3. **Phase 3 — Vael smoke** (~30 min)
+   Flip Vael first — empty `rag_sources` (per memory) = lowest blast radius. Run 10-20 turns + A/B vs OpenRouter via `hajeri-cli`. Watch latency + voice.
+4. **Phase 4 — Sonnet for evaluator paths** (~45 min)
+   Wire Sonnet into `routes/grow.ts` (where `claudeEvaluation` already exists), `utils/curiosityEngine.ts` (corroboration check), VAEL verification cron when it ships.
+5. **Phase 5 — Cohort rollout** (~30 min)
+   Vael solid → Nahil → Istishari + Bani. OpenRouter as cold fallback for ~1 week then remove env.
+6. **Phase 6 — Embeddings swap** (~30 min)
+   `utils/embed.ts` to Foundry `text-embedding-3-large`. pgvector dimensions unchanged. High-volume, low-risk.
+
+### Pricing summary
+
+Kimi K2.5 Thinking Global: $0.60 / $3.00 per 1M (vs OpenRouter ~$0.55/$2.20)
+Kimi K2 Thinking DataZone: $0.66 / $2.75 per 1M (data-residency tier — only if compliance demands it)
+Sonnet 4.6: typical Foundry ~$3 / $15 per 1M (covered by credits; used only for evaluator paths — ~10-20% of total tokens)
+
+Raw per-token cost goes up ~10-15% vs OpenRouter, but Azure credits cover it AND latency drops to same-region.
+
+### Pre-migration sanity check (do this first tomorrow)
+
+**Does OpSoul today actually call real Anthropic Claude for `claudeEvaluation`, or is Kimi doing the judging?** Grep for the call site:
+```bash
+grep -rn "claudeEval\|anthropic\.com\|claude-3\|claude-sonnet" /Users/bstar/opsoul-audit/artifacts/opsoul-api/src
+```
+If Kimi is doing both today, swapping just the evaluator paths to real Sonnet is a quality improvement on top of the cost migration.
+
+---
+
+## Open bug — Postgres rejects "0.3" on integer column (under investigation)
+
+Owner reported Nahil's automation throwing: `Error: invalid input syntax for type integer: "0.3"`. Most likely culprit:
+
+**Schema:** `lib/db/src/schema/operator_kb.ts:10` — `confidenceScore: integer('confidence_score').default(40)` — column expects 0-100 integer.
+
+**Investigation status (2026-05-22 evening):** All well-known write paths to `operator_kb.confidence_score` are guarded:
+- `routes/operator-kb.ts` — Zod `z.number().int().min(0).max(100)`
+- `utils/kbIntake.ts` (curiosity) — hardcodes 40
+- `utils/kbIntake.ts:189` (persistKbSeedEntry) — `Math.max(40, Math.min(85, Math.round(confidence)))`
+- `utils/skillExecutor.ts:434` (kb_seed) — `Math.max(40, Math.min(85, params.confidence ?? 65))`
+- `utils/platformKbSeed.ts` — hardcoded 95
+
+None of these would let "0.3" through. The error must be coming from a path I didn't find — possibly the MCP runtime layer (per `[project_opsoul_mcp_buildout]` memory, on branch `feat/mcp-runtime-layer`) or a different integer column entirely (`kb_verification.score_before/score_after`, `grow_proposals.retry_count`, `messages.token_count`).
+
+**To resolve tomorrow — owner action:**
+```bash
+az containerapp logs show -n opsoul -g bani-studio-rg --tail 500 | grep -B5 -A20 "invalid input syntax"
+```
+The stack trace will name the file + line where the failing query lives. Once we have that, fix is one of:
+- Update the writer to round/clamp (preferred — defensive)
+- Change the column to `numeric(3,2)` if 0-1 scale is intentional
+- Reject the input with a friendly 400 at the API layer
+
