@@ -15,17 +15,64 @@ import { format } from "date-fns";
 
 type Schedule = "hourly" | "daily" | "weekly" | "cron";
 
+/**
+ * UI-only preset modes. They map down to (schedule, customSchedule) the
+ * backend accepts. Keeping the preset distinct from the wire schedule
+ * lets the owner pick "every 6 hours" without writing free-text cron.
+ */
+type PresetMode = "every_minutes" | "every_hours" | "daily" | "weekly" | "at_time_daily" | "at_time_weekday" | "advanced";
+
 interface TaskFormState {
   name: string;
-  schedule: Schedule;
+  preset: PresetMode;
+  intervalN: number;        // for every_minutes / every_hours
+  timeHH: string;           // "HH" — for at_time_*
+  timeMM: string;           // "MM"
+  weekday: string;          // for at_time_weekday
   prompt: string;
-  customSchedule: string;
+  advancedExpr: string;     // for advanced
 }
 
-const EMPTY_FORM: TaskFormState = { name: "", schedule: "daily", prompt: "", customSchedule: "" };
+const EMPTY_FORM: TaskFormState = {
+  name: "", preset: "daily", intervalN: 1,
+  timeHH: "09", timeMM: "00", weekday: "monday",
+  prompt: "", advancedExpr: "",
+};
 
-const SCHEDULE_HINT =
-  'Cron examples: "every 30 minutes", "every 6 hours", "at 09:00 daily", "at 14:30 on monday", or a 5-field cron like "0 9 * * 1-5".';
+const ADVANCED_HINT =
+  'Free-text examples: "every 15 minutes", "at 14:30 on tuesday", or a 5-field cron like "0 9 * * 1-5".';
+
+/** Translate a UI preset to the backend's (schedule, customSchedule) pair. */
+function presetToWire(f: TaskFormState): { schedule: Schedule; customSchedule?: string } {
+  switch (f.preset) {
+    case "every_minutes":   return { schedule: "cron", customSchedule: `every ${Math.max(5, f.intervalN)} minutes` };
+    case "every_hours":     return { schedule: "cron", customSchedule: `every ${Math.max(1, f.intervalN)} hours` };
+    case "daily":           return { schedule: "daily" };
+    case "weekly":          return { schedule: "weekly" };
+    case "at_time_daily":   return { schedule: "cron", customSchedule: `at ${f.timeHH}:${f.timeMM} daily` };
+    case "at_time_weekday": return { schedule: "cron", customSchedule: `at ${f.timeHH}:${f.timeMM} on ${f.weekday}` };
+    case "advanced":        return { schedule: "cron", customSchedule: f.advancedExpr.trim() };
+  }
+}
+
+/** Best-effort reverse — open the edit dialog with the closest preset. */
+function wireToPreset(schedule: string, customSchedule: string | null | undefined): Partial<TaskFormState> {
+  const expr = (customSchedule ?? "").trim();
+  if (schedule === "daily")   return { preset: "daily" };
+  if (schedule === "weekly")  return { preset: "weekly" };
+  if (schedule === "hourly")  return { preset: "every_hours", intervalN: 1 };
+  if (schedule !== "cron")    return { preset: "daily" };
+
+  const minM = expr.match(/^every\s+(\d+)\s+minutes?$/i);
+  if (minM) return { preset: "every_minutes", intervalN: parseInt(minM[1], 10) };
+  const hourM = expr.match(/^every\s+(\d+)\s+hours?$/i);
+  if (hourM) return { preset: "every_hours", intervalN: parseInt(hourM[1], 10) };
+  const dailyM = expr.match(/^at\s+(\d{1,2}):(\d{2})\s+daily$/i);
+  if (dailyM) return { preset: "at_time_daily", timeHH: dailyM[1].padStart(2, "0"), timeMM: dailyM[2] };
+  const wdM = expr.match(/^at\s+(\d{1,2}):(\d{2})\s+on\s+(\w+)$/i);
+  if (wdM) return { preset: "at_time_weekday", timeHH: wdM[1].padStart(2, "0"), timeMM: wdM[2], weekday: wdM[3].toLowerCase() };
+  return { preset: "advanced", advancedExpr: expr };
+}
 
 function scheduleLabel(t: Task): string {
   if (t.schedule === "cron") return t.customSchedule || "Custom";
@@ -49,16 +96,18 @@ export default function TasksSection({ operatorId }: { operatorId: string }) {
   const tasks: Task[] = Array.isArray(data) ? data : (data as Task[] | undefined) ?? [];
 
   const createTask = useMutation({
-    mutationFn: (body: TaskFormState) =>
-      apiFetch(`/operators/${operatorId}/tasks`, {
+    mutationFn: (body: TaskFormState) => {
+      const wire = presetToWire(body);
+      return apiFetch(`/operators/${operatorId}/tasks`, {
         method: "POST",
         body: JSON.stringify({
           name: body.name,
-          schedule: body.schedule,
+          schedule: wire.schedule,
           prompt: body.prompt,
-          customSchedule: body.schedule === "cron" ? body.customSchedule : undefined,
+          ...(wire.customSchedule ? { customSchedule: wire.customSchedule } : {}),
         }),
-      }),
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "tasks"] });
       setIsAddOpen(false);
@@ -69,16 +118,18 @@ export default function TasksSection({ operatorId }: { operatorId: string }) {
   });
 
   const updateTask = useMutation({
-    mutationFn: ({ id, body }: { id: string; body: Partial<TaskFormState> }) =>
-      apiFetch(`/operators/${operatorId}/tasks/${id}`, {
+    mutationFn: ({ id, body }: { id: string; body: TaskFormState }) => {
+      const wire = presetToWire(body);
+      return apiFetch(`/operators/${operatorId}/tasks/${id}`, {
         method: "PATCH",
         body: JSON.stringify({
-          ...(body.name !== undefined ? { name: body.name } : {}),
-          ...(body.schedule !== undefined ? { schedule: body.schedule } : {}),
-          ...(body.prompt !== undefined ? { prompt: body.prompt } : {}),
-          ...(body.customSchedule !== undefined ? { customSchedule: body.customSchedule } : {}),
+          name: body.name,
+          schedule: wire.schedule,
+          prompt: body.prompt,
+          customSchedule: wire.customSchedule ?? "",
         }),
-      }),
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "tasks"] });
       setEditingTask(null);
@@ -125,11 +176,13 @@ export default function TasksSection({ operatorId }: { operatorId: string }) {
 
   const openEdit = (task: Task) => {
     setEditingTask(task);
+    const presetFields = wireToPreset(task.schedule, task.customSchedule);
     setForm({
+      ...EMPTY_FORM,
+      ...presetFields,
       name: task.name,
-      schedule: (task.schedule as Schedule) ?? "daily",
       prompt: task.prompt,
-      customSchedule: task.customSchedule ?? "",
+      advancedExpr: presetFields.preset === "advanced" ? (task.customSchedule ?? "") : "",
     });
   };
 
@@ -141,15 +194,7 @@ export default function TasksSection({ operatorId }: { operatorId: string }) {
   const handleUpdate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingTask) return;
-    updateTask.mutate({
-      id: editingTask.id,
-      body: {
-        name: form.name,
-        schedule: form.schedule,
-        prompt: form.prompt,
-        customSchedule: form.schedule === "cron" ? form.customSchedule : "",
-      },
-    });
+    updateTask.mutate({ id: editingTask.id, body: form });
   };
 
   return (
@@ -311,6 +356,8 @@ export default function TasksSection({ operatorId }: { operatorId: string }) {
   );
 }
 
+const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+
 function TaskForm({
   form, setForm, onSubmit, submitting, submitLabel,
 }: {
@@ -320,6 +367,12 @@ function TaskForm({
   submitting: boolean;
   submitLabel: string;
 }) {
+  // Preview line — shows the owner exactly what cron expression will be saved.
+  const wire = presetToWire(form);
+  const preview = wire.customSchedule
+    ? `Saves as: schedule = "cron", expression = "${wire.customSchedule}"`
+    : `Saves as: schedule = "${wire.schedule}"`;
+
   return (
     <form onSubmit={onSubmit} className="space-y-4 mt-2">
       <div className="space-y-2">
@@ -336,34 +389,94 @@ function TaskForm({
       <div className="space-y-2">
         <Label className="font-mono text-xs uppercase text-muted-foreground">Schedule</Label>
         <Select
-          value={form.schedule}
-          onValueChange={(v) => setForm(f => ({ ...f, schedule: v as Schedule }))}
+          value={form.preset}
+          onValueChange={(v) => setForm(f => ({ ...f, preset: v as PresetMode }))}
         >
           <SelectTrigger className="font-mono">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="hourly">Hourly</SelectItem>
-            <SelectItem value="daily">Daily</SelectItem>
-            <SelectItem value="weekly">Weekly</SelectItem>
-            <SelectItem value="cron">Custom (cron / expression)</SelectItem>
+            <SelectItem value="every_minutes">Every N minutes</SelectItem>
+            <SelectItem value="every_hours">Every N hours</SelectItem>
+            <SelectItem value="daily">Once per day</SelectItem>
+            <SelectItem value="weekly">Once per week</SelectItem>
+            <SelectItem value="at_time_daily">Daily at a specific time</SelectItem>
+            <SelectItem value="at_time_weekday">Weekly at a specific time</SelectItem>
+            <SelectItem value="advanced">Advanced (free-text / cron)</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
-      {form.schedule === "cron" && (
+      {(form.preset === "every_minutes" || form.preset === "every_hours") && (
         <div className="space-y-2">
-          <Label className="font-mono text-xs uppercase text-muted-foreground">Schedule expression</Label>
+          <Label className="font-mono text-xs uppercase text-muted-foreground">
+            {form.preset === "every_minutes" ? "Minutes between runs" : "Hours between runs"}
+          </Label>
           <Input
-            value={form.customSchedule}
-            onChange={e => setForm(f => ({ ...f, customSchedule: e.target.value }))}
-            required
-            className="font-mono"
-            placeholder='e.g. "every 6 hours" or "at 09:00 daily"'
+            type="number"
+            min={form.preset === "every_minutes" ? 5 : 1}
+            max={form.preset === "every_minutes" ? 59 : 23}
+            value={form.intervalN}
+            onChange={e => setForm(f => ({ ...f, intervalN: Math.max(1, parseInt(e.target.value, 10) || 1) }))}
+            className="font-mono w-32"
           />
-          <p className="font-mono text-[11px] text-muted-foreground/70">{SCHEDULE_HINT}</p>
+          <p className="font-mono text-[11px] text-muted-foreground/70">
+            {form.preset === "every_minutes" ? "Minimum 5 minutes." : "1–23 hours."}
+          </p>
         </div>
       )}
+
+      {(form.preset === "at_time_daily" || form.preset === "at_time_weekday") && (
+        <div className="space-y-2">
+          <Label className="font-mono text-xs uppercase text-muted-foreground">Time (UTC, 24-hour)</Label>
+          <div className="flex items-center gap-2">
+            <Input
+              type="number" min={0} max={23}
+              value={form.timeHH}
+              onChange={e => setForm(f => ({ ...f, timeHH: String(Math.max(0, Math.min(23, parseInt(e.target.value, 10) || 0))).padStart(2, "0") }))}
+              className="font-mono w-20"
+            />
+            <span className="font-mono">:</span>
+            <Input
+              type="number" min={0} max={59}
+              value={form.timeMM}
+              onChange={e => setForm(f => ({ ...f, timeMM: String(Math.max(0, Math.min(59, parseInt(e.target.value, 10) || 0))).padStart(2, "0") }))}
+              className="font-mono w-20"
+            />
+          </div>
+          {form.preset === "at_time_weekday" && (
+            <>
+              <Label className="font-mono text-xs uppercase text-muted-foreground pt-2 block">Day</Label>
+              <Select value={form.weekday} onValueChange={(v) => setForm(f => ({ ...f, weekday: v }))}>
+                <SelectTrigger className="font-mono"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {WEEKDAYS.map(d => (
+                    <SelectItem key={d} value={d}>{d.charAt(0).toUpperCase() + d.slice(1)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </>
+          )}
+        </div>
+      )}
+
+      {form.preset === "advanced" && (
+        <div className="space-y-2">
+          <Label className="font-mono text-xs uppercase text-muted-foreground">Expression</Label>
+          <Input
+            value={form.advancedExpr}
+            onChange={e => setForm(f => ({ ...f, advancedExpr: e.target.value }))}
+            required
+            className="font-mono"
+            placeholder='e.g. "every 15 minutes" or "0 9 * * 1-5"'
+          />
+          <p className="font-mono text-[11px] text-muted-foreground/70">{ADVANCED_HINT}</p>
+        </div>
+      )}
+
+      <div className="rounded-md border border-border/30 bg-card/20 px-3 py-1.5 font-mono text-[10px] text-muted-foreground/80">
+        {preview}
+      </div>
 
       <div className="space-y-2">
         <Label className="font-mono text-xs uppercase text-muted-foreground">What to do</Label>

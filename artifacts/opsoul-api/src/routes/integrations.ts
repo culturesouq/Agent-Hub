@@ -2,9 +2,9 @@ import { Router, type Request, type Response } from 'express';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { db } from '@workspace/db';
-import { operatorIntegrationsTable, operatorsTable, ownersTable } from '@workspace/db';
+import { operatorIntegrationsTable, operatorsTable, ownersTable, messagesTable } from '@workspace/db';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql, desc, like } from 'drizzle-orm';
 import { encryptToken, decryptToken } from '@workspace/opsoul-utils/crypto';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { chatCompletion } from '../utils/openrouter.js';
@@ -196,10 +196,34 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
       ),
     );
 
+  // Outbound activity counts — populated for channels that have a
+  // [OUTBOUND <type>] audit trail in messagesTable (written by
+  // send_telegram / send_whatsapp / send_slack handlers on success).
+  const outboundCounts: Record<string, { count: number; lastSentAt: string | null }> = {};
+  for (const type of ['telegram', 'whatsapp', 'slack'] as const) {
+    const [agg] = await db
+      .select({
+        n: sql<number>`count(*)::int`,
+        last: sql<Date | null>`max(${messagesTable.createdAt})`,
+      })
+      .from(messagesTable)
+      .where(and(
+        eq(messagesTable.operatorId, operatorId),
+        like(messagesTable.content, `[OUTBOUND ${type}]%`),
+      ));
+    outboundCounts[type] = {
+      count: agg?.n ?? 0,
+      lastSentAt: agg?.last instanceof Date ? agg.last.toISOString() : null,
+    };
+  }
+
   res.json({
     operatorId,
     count: integrations.length,
-    integrations: integrations.map(safeSerialize),
+    integrations: integrations.map((i) => ({
+      ...safeSerialize(i),
+      outbound: outboundCounts[i.integrationType] ?? null,
+    })),
   });
 });
 

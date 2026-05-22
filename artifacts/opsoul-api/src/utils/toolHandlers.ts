@@ -905,6 +905,29 @@ async function loadIntegration(operatorId: string, integrationType: string): Pro
   };
 }
 
+/**
+ * Audit a successful outbound channel send into messagesTable so the
+ * Connections page can show "X messages sent" per channel. Stored as a
+ * system-role message with a `[OUTBOUND ${type}]` prefix in its content.
+ * Failures are not audited — only successful deliveries count.
+ */
+async function logOutboundSend(
+  ctx: ToolHandlerContext,
+  channelType: 'telegram' | 'whatsapp' | 'slack',
+  target: string,
+  text: string,
+): Promise<void> {
+  try {
+    await db.insert(messagesTable).values({
+      id: crypto.randomUUID(),
+      conversationId: ctx.conversationId,
+      operatorId: ctx.operatorId,
+      role: 'system',
+      content: `[OUTBOUND ${channelType}] → ${target}: ${text.slice(0, 200)}`,
+    });
+  } catch { /* audit best-effort */ }
+}
+
 async function handleSendTelegram(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
   const { chatId, text } = parseArgs<{ chatId?: string; text?: string }>(rawArgs);
   if (!chatId || !text) return { content: 'send_telegram requires "chatId" and "text".', meta: { terminateLoop: true } };
@@ -919,6 +942,7 @@ async function handleSendTelegram(rawArgs: string, ctx: ToolHandlerContext): Pro
   });
   const body = await res.text();
   if (!res.ok) return { content: `Telegram sendMessage failed (HTTP ${res.status}): ${body.slice(0, 300)}` };
+  await logOutboundSend(ctx, 'telegram', chatId, text);
   return { content: `Telegram message delivered to ${chatId}.` };
 }
 
@@ -939,6 +963,7 @@ async function handleSendWhatsApp(rawArgs: string, ctx: ToolHandlerContext): Pro
   });
   const body = await res.text();
   if (!res.ok) return { content: `WhatsApp send failed (HTTP ${res.status}): ${body.slice(0, 300)}` };
+  await logOutboundSend(ctx, 'whatsapp', to, text);
   return { content: `WhatsApp message delivered to ${to}.` };
 }
 
@@ -956,6 +981,7 @@ async function handleSendSlack(rawArgs: string, ctx: ToolHandlerContext): Promis
   });
   const body = await res.json().catch(() => ({})) as { ok?: boolean; error?: string };
   if (!body.ok) return { content: `Slack post failed: ${body.error ?? 'unknown error'}` };
+  await logOutboundSend(ctx, 'slack', channel, text);
   return { content: `Slack message posted to ${channel}.` };
 }
 

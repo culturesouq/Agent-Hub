@@ -631,10 +631,61 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     }
   };
 
+  /**
+   * `/render <kind> <json>` slash command — bypasses the LLM and injects an
+   * assistant-shaped message containing a fenced opsoul-widget block. Lets
+   * the owner preview any widget (connect_form / chart / table / mermaid)
+   * without depending on the model choosing to call render_*. Local-only —
+   * the injected message is not persisted to the server.
+   *
+   * Examples:
+   *   /render chart {"chartType":"bar","data":[{"label":"A","value":3}]}
+   *   /render table {"columns":["A","B"],"rows":[["1","2"]]}
+   *   /render mermaid {"diagram":"flowchart TD\n A-->B"}
+   *   /render connect_form {"integrationType":"slack","label":"Slack","fields":[{"name":"token","label":"Bot Token","type":"password"}]}
+   */
+  const tryInjectWidget = (text: string): boolean => {
+    const m = text.trim().match(/^\/render\s+(\w+)\s+(\{[\s\S]*\})\s*$/);
+    if (!m) return false;
+    const kind = m[1];
+    let parsed: Record<string, unknown>;
+    try { parsed = JSON.parse(m[2]) as Record<string, unknown>; }
+    catch (err) {
+      dispatch({ type: "ERROR", message: `/render: invalid JSON — ${(err as Error).message}` });
+      return true;
+    }
+    const payload = { kind, ...parsed };
+    const fenced = "```opsoul-widget\n" + JSON.stringify(payload) + "\n```";
+
+    // Inject as a local-only assistant message in the messages query cache.
+    queryClient.setQueryData(
+      ["operators", operatorId, "conversations", activeConvId, "messages"],
+      (old: Message[] | undefined) => {
+        const next: Message = {
+          id: `widget-test-${Date.now()}`,
+          role: "assistant",
+          content: fenced,
+          createdAt: new Date().toISOString(),
+          tokenCount: 0,
+        };
+        return old ? [...old, next] : [next];
+      },
+    );
+    return true;
+  };
+
   const sendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() && attachments.length === 0) return;
     if (!activeConvId) return;
+
+    // Slash-command intercept — runs before the normal send path.
+    if (input.trim().startsWith("/render ")) {
+      if (tryInjectWidget(input)) {
+        setInput("");
+        return;
+      }
+    }
 
     const msgText = input || `[${attachments.map(a => a.name).join(", ")}]`;
     const pendingAttachments = [...attachments];

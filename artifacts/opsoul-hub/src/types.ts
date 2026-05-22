@@ -127,6 +127,8 @@ export interface Integration {
   appSchema?: Record<string, unknown> | null;
   baseUrl?: string | null;
   isCustomApp?: boolean;
+  /** Outbound message activity for channels (telegram/whatsapp/slack). null for non-channel integrations. */
+  outbound?: { count: number; lastSentAt: string | null } | null;
   createdAt: string;
 }
 

@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Download, Trash2, Plus, Sparkles, Search, Layers } from "lucide-react";
+import { Download, Trash2, Plus, Sparkles, Search, Layers, Zap, Loader2, ChevronDown } from "lucide-react";
 import { format } from "date-fns";
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -89,6 +89,28 @@ export default function SkillsSection({ operatorId }: { operatorId: string }) {
   const specialtySkills: SpecialtySkillCard[] = manifest?.specialty ?? [];
   const customSkills: OperatorSkill[] = manifest?.custom ?? [];
 
+  // ── Test-fire panel state ──
+  const [showTestPanel, setShowTestPanel] = useState(false);
+  const [testToolName, setTestToolName] = useState("");
+  const [testArgs, setTestArgs] = useState("{}");
+  const [testResult, setTestResult] = useState<{ ok: boolean; content?: string; error?: string } | null>(null);
+
+  const testTool = useMutation({
+    mutationFn: async (): Promise<{ ok: boolean; result?: { content: string }; error?: string }> => {
+      let args: unknown;
+      try { args = JSON.parse(testArgs); }
+      catch { throw new Error("Args is not valid JSON"); }
+      return apiFetch(`/operators/${operatorId}/skills/test-tool`, {
+        method: "POST",
+        body: JSON.stringify({ name: testToolName, args }),
+      });
+    },
+    onSuccess: (data) => {
+      setTestResult({ ok: data.ok, content: data.result?.content, error: data.error });
+    },
+    onError: (err: Error) => setTestResult({ ok: false, error: err.message }),
+  });
+
   return (
     <div className="space-y-6 bg-white p-6">
       {/* Header */}
@@ -101,6 +123,12 @@ export default function SkillsSection({ operatorId }: { operatorId: string }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline" size="sm"
+            onClick={() => { setShowTestPanel(v => !v); if (!showTestPanel && !testToolName && builtin[0]) { setTestToolName(builtin[0].name.toLowerCase().replace(/\s+/g, "_")); } }}
+          >
+            <Zap className="w-3 h-3 mr-1" /> Test fire
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setShowBrowse(true)}>
             <Search className="w-3 h-3 mr-1" /> Browse library
           </Button>
@@ -109,6 +137,64 @@ export default function SkillsSection({ operatorId }: { operatorId: string }) {
           </Button>
         </div>
       </div>
+
+      {showTestPanel && (
+        <div className="border border-primary/30 bg-primary/5 rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="font-mono text-sm font-bold text-foreground">Test fire — run any tool directly</p>
+            <button
+              onClick={() => setShowTestPanel(false)}
+              className="font-mono text-[11px] text-muted-foreground hover:text-foreground"
+            >
+              Close
+            </button>
+          </div>
+          <p className="font-mono text-[11px] text-muted-foreground">
+            Bypasses the LLM. Fires the named tool with the JSON args against this operator's runtime context. Owner-scope authority.
+          </p>
+
+          <div className="space-y-1.5">
+            <label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Tool name (snake_case)</label>
+            <input
+              value={testToolName}
+              onChange={(e) => setTestToolName(e.target.value)}
+              placeholder="e.g. get_self_info, list_integrations, render_chart"
+              className="w-full font-mono text-xs rounded-md border border-border/40 bg-background/60 p-2"
+              spellCheck={false}
+              autoComplete="off"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Args (JSON)</label>
+            <textarea
+              value={testArgs}
+              onChange={(e) => setTestArgs(e.target.value)}
+              className="w-full font-mono text-xs rounded-md border border-border/40 bg-background/60 p-2 min-h-[80px] resize-y"
+              spellCheck={false}
+              placeholder='{"query": "hello"}'
+            />
+          </div>
+
+          <Button
+            size="sm" className="font-mono text-xs"
+            onClick={() => { setTestResult(null); testTool.mutate(); }}
+            disabled={!testToolName.trim() || testTool.isPending}
+          >
+            {testTool.isPending ? <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Firing…</> : <><Zap className="w-3 h-3 mr-1.5" />Fire tool</>}
+          </Button>
+
+          {testResult && (
+            <div className={`rounded-md border px-3 py-2 font-mono text-[11px] ${testResult.ok ? "border-green-500/30 bg-green-500/5 text-green-700" : "border-destructive/30 bg-destructive/5 text-destructive"}`}>
+              {testResult.ok ? (
+                <pre className="whitespace-pre-wrap break-all max-h-64 overflow-y-auto">{testResult.content ?? "(empty result)"}</pre>
+              ) : (
+                <span>{testResult.error ?? "Unknown error"}</span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {manifestLoading ? (
         <div className="text-center text-sm text-muted-foreground py-8 animate-pulse">Loading...</div>
