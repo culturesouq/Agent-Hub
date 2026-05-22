@@ -11,10 +11,10 @@
 |---|---|
 | **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` |
 | **Container App** | `opsoul` (resource group `bani-studio-rg`, region `uaenorth`) |
-| **Active Revision** | `opsoul--0000066` (Healthy 2026-05-19 — upload-fix on top of MCP runtime layer; chat file upload now works for all formats) |
-| **Image** | `banistudioacr.azurecr.io/opsoul-api:upload-fix-dd7e32c` |
-| **Source commit (live)** | `dd7e32c` fix(upload): all-formats — JSON errors, permissive file filter, FormData-safe refresh. Fixes pre-existing chat upload bug (never worked end-to-end): multer errors now return JSON instead of HTML (frontend was throwing "Unexpected token <"); fileFilter now accepts by mimetype OR extension (rescues Windows browsers reporting application/octet-stream for .md/.yaml/etc.); frontend handleFileSelect refreshes token BEFORE FormData so 401-retry-with-consumed-stream bug is gone. |
-| **🛡 Rollback safety net (DO NOT DELETE)** | Two retained rollback fallbacks: (1) image `banistudioacr.azurecr.io/opsoul-api:mcp-runtime-f9f23e4` (rev `opsoul--0000065` — MCP runtime layer, pre-upload-fix), (2) image `banistudioacr.azurecr.io/opsoul-api:webhook-fix-2c4ea80` (rev `opsoul--0000064` — pre-MCP). Owner directive 2026-05-19: keep both flagged, do **not** auto-prune; touch only on explicit owner directive. Rollback to MCP-only state: `az containerapp update -n opsoul -g bani-studio-rg --image banistudioacr.azurecr.io/opsoul-api:mcp-runtime-f9f23e4`. Rollback all the way to pre-MCP: `--image banistudioacr.azurecr.io/opsoul-api:webhook-fix-2c4ea80`. |
+| **Active Revision** | `opsoul--0000068` (Healthy 2026-05-22 — Operator Station rewrite: 57 MCP tools, widget protocol, tasks/connections rewrite, growth health fixes) |
+| **Image** | `banistudioacr.azurecr.io/opsoul-api:station-rewrite-319f273` |
+| **Source commit (live)** | `319f273` — last of an 11-commit Operator Station rewrite (`404fb57` → `319f273`). PDF upload fix, widget protocol + TokenDropCard, 45 new MCP tools across 3 waves (12→57 total), Tasks rewrite with hourly/cron/edit/run-now, Connections rewrite folding WhatsApp+Telegram inline + MCP endpoint surfaced, API Access cleanup, growth self-awareness stale-refresh + raised growActivity baseline. **Zero changes to Soul/Layer 0-1-2/systemPrompt/KB content/identity locks — pure runtime layer per Claim 12.** Full report in `SUMMARY_REPORT.md`. |
+| **🛡 Rollback safety net (DO NOT DELETE)** | Three retained rollback fallbacks: (1) image `banistudioacr.azurecr.io/opsoul-api:upload-fix-dd7e32c` (rev `opsoul--0000066` — pre-station-rewrite), (2) image `banistudioacr.azurecr.io/opsoul-api:mcp-runtime-f9f23e4` (rev `opsoul--0000065` — MCP runtime layer, pre-upload-fix), (3) image `banistudioacr.azurecr.io/opsoul-api:webhook-fix-2c4ea80` (rev `opsoul--0000064` — pre-MCP). Owner directive 2026-05-19 (still in force): keep flagged, do **not** auto-prune; touch only on explicit owner directive. Rollback to pre-station-rewrite: `az containerapp update -n opsoul -g bani-studio-rg --image banistudioacr.azurecr.io/opsoul-api:upload-fix-dd7e32c`. Pre-MCP state: `--image banistudioacr.azurecr.io/opsoul-api:webhook-fix-2c4ea80`. |
 | **Live proof (2026-05-19)** | Nahil successfully called `http_request` tool against `https://nahilai.com/` via the new MCP runtime layer. Retrieved structured JSON, reported back: profile (Abu Dhabi admin), 5 active subsidies (Smart Irrigation, AgTech Grant, Organic Farming, Protected Agriculture, Water Desalination Access), empty sensors/seasons. Universal tool layer confirmed working in production on a real operator hitting real consumer-app data. |
 | **LLM model (entire stack)** | `moonshotai/kimi-k2.5` via OpenRouter — chat, distillation, GROW, sub-agent dispatch, vision, schema normalization, capability loop, all routes |
 | **Auto-routing** | **REMOVED** (was 17-line block in chat.ts switching between Sonnet/Haiku/Gemini per-turn) |
@@ -230,7 +230,38 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 ## 8. Commit History — newest first
 
-### 2026-05-22 — Phase 10: Growth math fixes — no prompt edits (NOT YET DEPLOYED)
+### 2026-05-22 — Operator Station rewrite SHIPPED — all 11 phases (`opsoul--0000068`, image `station-rewrite-319f273`)
+
+The 11 phase commits below (P0 → P10) are all in this deploy. The per-phase entries say "NOT YET DEPLOYED" because they were written before deployment — this top-level entry overrides them.
+
+**Live proof:** `GET /api/models` → 200 OK on `opsoul--0000068`. Container Healthy.
+
+**Deploy sequence:**
+1. `git push origin main` — pushed `5339533..319f273` (11 commits) to culturesouq/Agent-Hub
+2. `az acr build --registry banistudioacr --image opsoul-api:station-rewrite-319f273 -f Dockerfile .` — run `dg79`, succeeded 2m15s
+3. `az containerapp update -n opsoul -g bani-studio-rg --image banistudioacr.azurecr.io/opsoul-api:station-rewrite-319f273` — new revision `opsoul--0000068` Healthy
+4. Smoke `/api/models` 200 OK — confirms new code serving
+
+**The 11 phases (all in this deploy):**
+- P0 PDF upload v2 fix + growth audit (`404fb57`)
+- P1 Widget protocol + TokenDropCard (`ee182d2`)
+- P2 MCP wave 1 — 16 tools (`fbee5e7`)
+- P3 Tasks rewrite (`df2efc4`)
+- P4 Connections rewrite + dropped bottom Channels group (`09f5c98`)
+- P5 Skills section MCP catalog completions (`9a3935e`)
+- P6 MCP wave 2 — 9 tools (`ce9b1c7`)
+- P7 Artifact renderers + 3 render tools (`e67b5ad`)
+- P8 MCP wave 3 — 17 tools (`e75d052`)
+- P9 API Access cleanup (`6574fff`)
+- P10 Growth math fixes (`319f273`)
+
+**Tool count: 12 → 57.**
+
+**Patent-protected layers untouched:** systemPrompt assembly, Soul fields (rawIdentity / backstory / toneProfile / coreValues / ethicalBoundaries / archetypes), KB content rules, Layer 4 guidance, identity-lock + grow-lock + safe-mode, memory pipeline behavior (storeMemory / searchMemory / decay / 0.55 retrieval threshold / scope isolation / two-layer split), GROW proposal generation prompt (`growEngine.ts`). The GROW reframe is flagged for a separate dedicated session that needs word-by-word approval.
+
+See `SUMMARY_REPORT.md` for the full diff narrative.
+
+### 2026-05-22 — Phase 10: Growth math fixes — no prompt edits
 
 Per the audit, two growth issues:
 
