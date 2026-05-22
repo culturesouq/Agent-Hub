@@ -4,6 +4,8 @@ import { apiFetch } from "@/lib/api";
 import { Conversation, Message } from "@/types";
 import { Send, MessageSquare, Paperclip, X, Mic, ChevronDown, Search, Zap, Download, Link, Globe, Square, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
+import { WidgetBlock } from "./widgets/WidgetBlock";
+import { parseWidgetPayload } from "./widgets/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -119,7 +121,7 @@ function parseInline(text: string): React.ReactNode[] {
   return parts;
 }
 
-const MarkdownMessage = memo(function MarkdownMessage({ content }: { content: string }) {
+const MarkdownMessage = memo(function MarkdownMessage({ content, operatorId }: { content: string; operatorId?: string }) {
   const lines = content.split("\n");
   const nodes: React.ReactNode[] = [];
   let i = 0;
@@ -133,6 +135,18 @@ const MarkdownMessage = memo(function MarkdownMessage({ content }: { content: st
       i++;
       while (i < lines.length && !lines[i].startsWith("```")) { codeLines.push(lines[i]); i++; }
       i++;
+
+      // Widget block — operator emits ```opsoul-widget\n{json}\n``` and the
+      // matching component renders inline. Parse-failure falls back to <pre>
+      // so a broken payload is visible, not silent.
+      if (lang === "opsoul-widget" && operatorId) {
+        const payload = parseWidgetPayload(codeLines.join("\n"));
+        if (payload) {
+          nodes.push(<WidgetBlock key={`widget-${i}`} payload={payload} operatorId={operatorId} />);
+          continue;
+        }
+      }
+
       nodes.push(
         <pre key={`code-${i}`} dir="ltr" className="text-left bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs font-mono overflow-x-auto my-2 whitespace-pre">
           {lang && <span className="text-gray-400 text-[10px] block mb-1">{lang}</span>}
@@ -717,7 +731,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                 ) : (
                   <div key={item.msg.id} className="group">
                     <div className="text-sm text-gray-900 leading-relaxed break-words">
-                      <MarkdownMessage content={item.msg.content} />
+                      <MarkdownMessage content={item.msg.content} operatorId={operatorId} />
                     </div>
                     {item.msg.content.length > 150 && (
                       <button
@@ -749,7 +763,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
               {/* Streaming assistant content */}
               {showStream && (
                 <div className="text-sm text-gray-900 leading-relaxed break-words">
-                  <MarkdownMessage content={displayContent} />
+                  <MarkdownMessage content={displayContent} operatorId={operatorId} />
                 </div>
               )}
 

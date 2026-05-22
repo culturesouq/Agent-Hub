@@ -230,6 +230,18 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 ## 8. Commit History — newest first
 
+### 2026-05-22 — Phase 1: Widget protocol + TokenDropCard (`widgets/`, ChatSection.tsx wiring, NOT YET DEPLOYED)
+
+**What:** Foundation for operators to emit interactive UI inline in chat. Pattern: assistant message contains a fenced code block tagged `opsoul-widget` with a JSON payload — `MarkdownMessage` detects the tag, parses, and renders the matching component. Parse-failure falls back to a normal `<pre>` so a broken payload is visible, never silently swallowed.
+
+**Files:**
+- `artifacts/opsoul-hub/src/components/operator/widgets/types.ts` — payload type union + parser. Supports `connect_form` (live), `chart` / `mermaid` / `table` (placeholders, wired in Phase 7).
+- `artifacts/opsoul-hub/src/components/operator/widgets/TokenDropCard.tsx` — renderer for `connect_form`. Multi-field form, POSTs to `/operators/:id/integrations` exactly like the existing IntegrationsSection Connect flow, success/error state inline.
+- `artifacts/opsoul-hub/src/components/operator/widgets/WidgetBlock.tsx` — dispatcher.
+- `artifacts/opsoul-hub/src/components/operator/ChatSection.tsx` — fence-detection in `MarkdownMessage`, threads `operatorId` to the two message-rendering callsites (debug tool-output accordion stays widget-free).
+
+**Phase 2 dependency:** the `request_credential` MCP tool ships next and emits these payloads.
+
 ### 2026-05-22 — Operator Station rewrite — Phase 0: PDF upload fix + growth audit (`routes/upload.ts`, NOT YET DEPLOYED)
 
 **Bug fixed:** Owner reported "Upload failed: Failed to process file: pdfParse is not a function" on PDF/DOC/XLSX uploads (images worked). Root cause: `pdf-parse` was bumped to v2.4.5 (class-based ESM API) but `upload.ts` still used the v1 callable-default pattern (`const pdfParse = pdfModule.default ?? pdfModule`). At runtime v2's namespace object had no callable, hence the error.
