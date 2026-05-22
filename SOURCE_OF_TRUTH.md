@@ -230,6 +230,18 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 ## 8. Commit History — newest first
 
+### 2026-05-22 — Phase 6: MCP wave 2 — 9 new tools for outbound comms, files, research (NOT YET DEPLOYED)
+
+**Tool count: 28 → 37.**
+
+- **Outbound comms** (4, all `availability:'integration'`): `send_telegram`, `send_whatsapp`, `send_slack`, `notify_owner`. Each loads the integration's encrypted token server-side, calls the platform's send-message endpoint, never reveals the credential to the LLM. `notify_owner` probes `appSchema.ownerChatId / ownerPhone / ownerChannel` in that preference order.
+- **Files** (3, `availability:'always'`): `delete_file`, `append_to_file` (creates the file if missing), `download_to_workspace` (HTML stripped to visible text; 100 KB cap).
+- **Research** (2): `fetch_url` (HTML→text, 10 KB cap), `extract_pdf_text` (uses the same pdf-parse v2 pipeline that fixed the upload bug; 12 KB cap).
+
+Helper: `loadIntegration(operatorId, integrationType)` — single function that decrypts the token + reads the appSchema for any connected service. Used by all four comms handlers.
+
+Note: `send_email` is reserved for wave 3 (Gmail-specific), where it'll join `gmail_send / gmail_search / gmail_read` under the Gmail-OAuth-connected first-class tool group.
+
 ### 2026-05-22 — Phase 5: Skills section already MCP-live; small completions (NOT YET DEPLOYED)
 
 Skills section was already pulling from `buildToolManifest()` — when Phase 2 added 16 new tools to `toolRegistry.ts` they automatically started rendering in the SkillsSection grid (the manifest endpoint is the single source of truth).

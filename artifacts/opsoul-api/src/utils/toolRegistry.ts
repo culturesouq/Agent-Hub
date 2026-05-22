@@ -576,6 +576,162 @@ export const UNIVERSAL_TOOLS: RegisteredTool[] = [
     availability: 'always',
     category: 'self',
   },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  //  WAVE 2 — OUTBOUND COMMS, FILE OPS, RESEARCH
+  // ─────────────────────────────────────────────────────────────────────────
+
+  {
+    name: 'send_telegram',
+    displayName: 'Send Telegram message',
+    description:
+      'Sends a text message via the connected Telegram bot. Requires a Telegram integration to be connected; the bot token is loaded server-side and never seen by the LLM.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        chatId: { type: 'string', description: 'Telegram chat ID of the recipient (numeric string, e.g. "123456789" or "-1009876…" for groups).' },
+        text:   { type: 'string', description: 'Message body. Supports Markdown.' },
+      },
+      required: ['chatId', 'text'],
+    },
+    scopes: '*',
+    availability: 'integration',
+    category: 'communication',
+  },
+  {
+    name: 'send_whatsapp',
+    displayName: 'Send WhatsApp message',
+    description:
+      'Sends a text message via WhatsApp Business API. Requires a WhatsApp integration to be connected; access token and phone number ID are loaded server-side.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        to:   { type: 'string', description: 'Recipient phone number in international format without "+" (e.g. "971501234567").' },
+        text: { type: 'string', description: 'Message body.' },
+      },
+      required: ['to', 'text'],
+    },
+    scopes: '*',
+    availability: 'integration',
+    category: 'communication',
+  },
+  {
+    name: 'send_slack',
+    displayName: 'Send Slack message',
+    description:
+      'Posts a message to a Slack channel via the connected Slack bot. Requires a Slack integration to be connected.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        channel: { type: 'string', description: 'Channel ID (e.g. "C01234ABCDE") or channel name with leading # (e.g. "#general").' },
+        text:    { type: 'string', description: 'Message body. Supports Slack markdown.' },
+      },
+      required: ['channel', 'text'],
+    },
+    scopes: '*',
+    availability: 'integration',
+    category: 'communication',
+  },
+  {
+    name: 'notify_owner',
+    displayName: 'Notify owner',
+    description:
+      'Sends a short notification to the owner via the first available connected channel (Telegram > WhatsApp > Slack). The owner\'s primary chat/number/channel is configured at integration time. Use when something needs the owner\'s attention outside the chat.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'Notification text — keep short and actionable.' },
+      },
+      required: ['text'],
+    },
+    scopes: '*',
+    availability: 'integration',
+    category: 'communication',
+  },
+
+  {
+    name: 'delete_file',
+    displayName: 'Delete file',
+    description:
+      'Removes a file from the operator\'s workspace by filename. Owner-uploaded and operator-written files are treated the same — there is no source distinction in the workspace.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        filename: { type: 'string', description: 'Exact filename to delete.' },
+      },
+      required: ['filename'],
+    },
+    scopes: '*',
+    availability: 'always',
+    category: 'workspace',
+  },
+  {
+    name: 'append_to_file',
+    displayName: 'Append to file',
+    description:
+      'Adds content to the end of an existing workspace file. Creates the file if it does not exist. Useful for running logs, notebooks, or accumulating notes across turns.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        filename: { type: 'string', description: 'Workspace filename.' },
+        content:  { type: 'string', description: 'Text to append.' },
+      },
+      required: ['filename', 'content'],
+    },
+    scopes: '*',
+    availability: 'always',
+    category: 'workspace',
+  },
+  {
+    name: 'download_to_workspace',
+    displayName: 'Download to workspace',
+    description:
+      'Fetches the content of a URL and stores it as a file in the operator\'s workspace. Text and JSON responses are stored verbatim; HTML is stripped to its visible text. Max 100 KB stored.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        url:      { type: 'string', description: 'URL to fetch.' },
+        filename: { type: 'string', description: 'Destination filename in the workspace.' },
+      },
+      required: ['url', 'filename'],
+    },
+    scopes: '*',
+    availability: 'always',
+    category: 'workspace',
+  },
+
+  {
+    name: 'fetch_url',
+    displayName: 'Fetch URL',
+    description:
+      'Fetches a webpage and returns its visible text (HTML tags stripped). Different from web_search: this targets a single known URL. Max 10000 characters returned.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'Full URL to fetch.' },
+      },
+      required: ['url'],
+    },
+    scopes: '*',
+    availability: 'always',
+    category: 'research',
+  },
+  {
+    name: 'extract_pdf_text',
+    displayName: 'Extract PDF text',
+    description:
+      'Downloads a PDF from a URL and returns its extracted text. Uses the same pdf-parse v2 pipeline as chat uploads. Max 12000 characters returned.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'URL of the PDF.' },
+      },
+      required: ['url'],
+    },
+    scopes: '*',
+    availability: 'always',
+    category: 'research',
+  },
 ];
 
 // ───────────────────────────────────────────────────────────────────────────

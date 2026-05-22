@@ -885,6 +885,244 @@ async function handleListConversations(rawArgs: string, ctx: ToolHandlerContext)
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+//  WAVE 2 — OUTBOUND COMMS, FILE OPS, RESEARCH
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Decrypt the token + read appSchema for a connected integration by type. */
+async function loadIntegration(operatorId: string, integrationType: string): Promise<{ token: string; appSchema: Record<string, unknown> } | null> {
+  const [row] = await db
+    .select()
+    .from(operatorIntegrationsTable)
+    .where(and(
+      eq(operatorIntegrationsTable.operatorId, operatorId),
+      eq(operatorIntegrationsTable.integrationType, integrationType),
+    ));
+  if (!row || !row.tokenEncrypted) return null;
+  const { decryptToken } = await import('@workspace/opsoul-utils/crypto');
+  return {
+    token: decryptToken(row.tokenEncrypted),
+    appSchema: (row.appSchema as Record<string, unknown> | null) ?? {},
+  };
+}
+
+async function handleSendTelegram(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { chatId, text } = parseArgs<{ chatId?: string; text?: string }>(rawArgs);
+  if (!chatId || !text) return { content: 'send_telegram requires "chatId" and "text".', meta: { terminateLoop: true } };
+
+  const integration = await loadIntegration(ctx.operatorId, 'telegram');
+  if (!integration) return { content: 'No Telegram integration connected. Ask the owner to connect one in Connections.' };
+
+  const res = await fetch(`https://api.telegram.org/bot${integration.token}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' }),
+  });
+  const body = await res.text();
+  if (!res.ok) return { content: `Telegram sendMessage failed (HTTP ${res.status}): ${body.slice(0, 300)}` };
+  return { content: `Telegram message delivered to ${chatId}.` };
+}
+
+async function handleSendWhatsApp(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { to, text } = parseArgs<{ to?: string; text?: string }>(rawArgs);
+  if (!to || !text) return { content: 'send_whatsapp requires "to" and "text".', meta: { terminateLoop: true } };
+
+  const integration = await loadIntegration(ctx.operatorId, 'whatsapp');
+  if (!integration) return { content: 'No WhatsApp integration connected. Ask the owner to connect one in Connections.' };
+
+  const phoneNumberId = (integration.appSchema.phoneNumberId as string | undefined) ?? null;
+  if (!phoneNumberId) return { content: 'WhatsApp integration is missing phoneNumberId in appSchema — reconnect to fix.' };
+
+  const res = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${integration.token}` },
+    body: JSON.stringify({ messaging_product: 'whatsapp', to, type: 'text', text: { body: text } }),
+  });
+  const body = await res.text();
+  if (!res.ok) return { content: `WhatsApp send failed (HTTP ${res.status}): ${body.slice(0, 300)}` };
+  return { content: `WhatsApp message delivered to ${to}.` };
+}
+
+async function handleSendSlack(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { channel, text } = parseArgs<{ channel?: string; text?: string }>(rawArgs);
+  if (!channel || !text) return { content: 'send_slack requires "channel" and "text".', meta: { terminateLoop: true } };
+
+  const integration = await loadIntegration(ctx.operatorId, 'slack');
+  if (!integration) return { content: 'No Slack integration connected.' };
+
+  const res = await fetch('https://slack.com/api/chat.postMessage', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json; charset=utf-8', Authorization: `Bearer ${integration.token}` },
+    body: JSON.stringify({ channel, text }),
+  });
+  const body = await res.json().catch(() => ({})) as { ok?: boolean; error?: string };
+  if (!body.ok) return { content: `Slack post failed: ${body.error ?? 'unknown error'}` };
+  return { content: `Slack message posted to ${channel}.` };
+}
+
+async function handleNotifyOwner(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { text } = parseArgs<{ text?: string }>(rawArgs);
+  if (!text) return { content: 'notify_owner requires "text".', meta: { terminateLoop: true } };
+
+  // Probe channels in preference order: telegram > whatsapp > slack.
+  const candidates = ['telegram', 'whatsapp', 'slack'] as const;
+  for (const type of candidates) {
+    const integration = await loadIntegration(ctx.operatorId, type);
+    if (!integration) continue;
+
+    const ownerTarget = (integration.appSchema.ownerChatId as string | undefined)
+      ?? (integration.appSchema.ownerPhone as string | undefined)
+      ?? (integration.appSchema.ownerChannel as string | undefined);
+    if (!ownerTarget) continue;
+
+    if (type === 'telegram') {
+      const r = await fetch(`https://api.telegram.org/bot${integration.token}/sendMessage`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: ownerTarget, text }),
+      });
+      if (r.ok) return { content: `Owner notified via Telegram (${ownerTarget}).` };
+    } else if (type === 'whatsapp') {
+      const phoneNumberId = integration.appSchema.phoneNumberId as string | undefined;
+      if (!phoneNumberId) continue;
+      const r = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${integration.token}` },
+        body: JSON.stringify({ messaging_product: 'whatsapp', to: ownerTarget, type: 'text', text: { body: text } }),
+      });
+      if (r.ok) return { content: `Owner notified via WhatsApp (${ownerTarget}).` };
+    } else if (type === 'slack') {
+      const r = await fetch('https://slack.com/api/chat.postMessage', {
+        method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8', Authorization: `Bearer ${integration.token}` },
+        body: JSON.stringify({ channel: ownerTarget, text }),
+      });
+      const body = await r.json().catch(() => ({})) as { ok?: boolean };
+      if (body.ok) return { content: `Owner notified via Slack (${ownerTarget}).` };
+    }
+  }
+  return {
+    content: 'No outbound channel is configured with an owner target. Set appSchema.ownerChatId on telegram, appSchema.ownerPhone on whatsapp, or appSchema.ownerChannel on slack — then call again.',
+  };
+}
+
+async function handleDeleteFile(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { filename } = parseArgs<{ filename?: string }>(rawArgs);
+  if (!filename) return { content: 'delete_file requires "filename".', meta: { terminateLoop: true } };
+
+  const deleted = await db
+    .delete(operatorFilesTable)
+    .where(and(
+      eq(operatorFilesTable.operatorId, ctx.operatorId),
+      eq(operatorFilesTable.filename, filename),
+    ))
+    .returning({ id: operatorFilesTable.id });
+  return {
+    content: deleted.length > 0
+      ? `Deleted "${filename}" from workspace.`
+      : `No file named "${filename}" in workspace.`,
+  };
+}
+
+async function handleAppendToFile(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { filename, content } = parseArgs<{ filename?: string; content?: string }>(rawArgs);
+  if (!filename || content === undefined) return { content: 'append_to_file requires "filename" and "content".', meta: { terminateLoop: true } };
+
+  const [existing] = await db
+    .select()
+    .from(operatorFilesTable)
+    .where(and(
+      eq(operatorFilesTable.operatorId, ctx.operatorId),
+      eq(operatorFilesTable.filename, filename),
+    ));
+
+  if (existing) {
+    const next = `${existing.content}${content}`;
+    await db.update(operatorFilesTable)
+      .set({ content: next, updatedAt: new Date() })
+      .where(eq(operatorFilesTable.id, existing.id));
+    return { content: `Appended ${content.length} chars to "${filename}" (total ${next.length} chars).` };
+  }
+
+  await db.insert(operatorFilesTable).values({
+    id: crypto.randomUUID(),
+    operatorId: ctx.operatorId,
+    ownerId: ctx.ownerId,
+    filename,
+    content,
+  });
+  return { content: `Created "${filename}" with ${content.length} chars (no prior file existed — append created it).` };
+}
+
+async function handleDownloadToWorkspace(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { url, filename } = parseArgs<{ url?: string; filename?: string }>(rawArgs);
+  if (!url || !filename) return { content: 'download_to_workspace requires "url" and "filename".', meta: { terminateLoop: true } };
+
+  let res: Response;
+  try { res = await fetch(url); }
+  catch (err) { return { content: `Fetch failed: ${(err as Error).message}` }; }
+  if (!res.ok) return { content: `Fetch returned HTTP ${res.status}.` };
+
+  const ctype = res.headers.get('content-type') ?? '';
+  let body = await res.text();
+
+  // Crude HTML strip: drop tags + script/style blocks if the content type suggests HTML.
+  if (ctype.includes('html')) {
+    body = body
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+  body = body.slice(0, 100 * 1024);
+
+  await db.insert(operatorFilesTable).values({
+    id: crypto.randomUUID(),
+    operatorId: ctx.operatorId,
+    ownerId: ctx.ownerId,
+    filename,
+    content: body,
+  });
+  return { content: `Downloaded ${body.length} chars from ${url} to workspace as "${filename}".` };
+}
+
+async function handleFetchUrl(rawArgs: string, _ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { url } = parseArgs<{ url?: string }>(rawArgs);
+  if (!url) return { content: 'fetch_url requires "url".', meta: { terminateLoop: true } };
+
+  let res: Response;
+  try { res = await fetch(url); }
+  catch (err) { return { content: `Fetch failed: ${(err as Error).message}` }; }
+  if (!res.ok) return { content: `Fetch returned HTTP ${res.status}.` };
+
+  const ctype = res.headers.get('content-type') ?? '';
+  let body = await res.text();
+  if (ctype.includes('html')) {
+    body = body
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+  return { content: body.slice(0, 10000) };
+}
+
+async function handleExtractPdfText(rawArgs: string, _ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { url } = parseArgs<{ url?: string }>(rawArgs);
+  if (!url) return { content: 'extract_pdf_text requires "url".', meta: { terminateLoop: true } };
+
+  let res: Response;
+  try { res = await fetch(url); }
+  catch (err) { return { content: `Fetch failed: ${(err as Error).message}` }; }
+  if (!res.ok) return { content: `Fetch returned HTTP ${res.status}.` };
+
+  const buffer = Buffer.from(await res.arrayBuffer());
+  const { PDFParse } = await import('pdf-parse');
+  const parser = new PDFParse({ data: new Uint8Array(buffer) });
+  const result = await parser.getText();
+  await parser.destroy();
+  return { content: result.text.slice(0, 12000) };
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 //  DISPATCH — single entry point for chat.ts and mcpServer.ts
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -945,6 +1183,17 @@ export async function dispatchTool(
     case 'kb_pending_list':        return handleKbPendingList(rawArgs, ctx);
     case 'get_self_info':          return handleGetSelfInfo(rawArgs, ctx);
     case 'list_conversations':     return handleListConversations(rawArgs, ctx);
+
+    // Wave 2
+    case 'send_telegram':          return handleSendTelegram(rawArgs, ctx);
+    case 'send_whatsapp':          return handleSendWhatsApp(rawArgs, ctx);
+    case 'send_slack':             return handleSendSlack(rawArgs, ctx);
+    case 'notify_owner':           return handleNotifyOwner(rawArgs, ctx);
+    case 'delete_file':            return handleDeleteFile(rawArgs, ctx);
+    case 'append_to_file':         return handleAppendToFile(rawArgs, ctx);
+    case 'download_to_workspace':  return handleDownloadToWorkspace(rawArgs, ctx);
+    case 'fetch_url':              return handleFetchUrl(rawArgs, ctx);
+    case 'extract_pdf_text':       return handleExtractPdfText(rawArgs, ctx);
 
     default:
       return {
