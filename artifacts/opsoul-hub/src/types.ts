@@ -125,6 +125,8 @@ export interface Integration {
   hasToken: boolean;
   hasAppSecret?: boolean;
   appSchema?: Record<string, unknown> | null;
+  baseUrl?: string | null;
+  isCustomApp?: boolean;
   createdAt: string;
 }
 

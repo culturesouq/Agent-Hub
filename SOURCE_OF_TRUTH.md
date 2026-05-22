@@ -230,6 +230,27 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 ## 8. Commit History — newest first
 
+### 2026-05-22 — Phase 4: Connections rewrite + drop bottom Channels group (NOT YET DEPLOYED)
+
+**IntegrationsSection.tsx full rewrite** (cleaner shell + folded channel features):
+- **MCP endpoint block at top** — shows `POST /api/operators/:id/conversations/{conversationId}/mcp` with copy button, brief explainer of JSON-RPC 2.0 + Streamable HTTP, and which methods are available.
+- **Active integrations list** — live count of connected services with one-click disconnect per row. Includes `[custom_app]` tag for connect-your-app rows.
+- **Catalog grouped by category** — channels (Telegram, WhatsApp, Discord), Google Workspace (Gmail, Calendar, Drive), Productivity & dev (GitHub, Notion, Slack, HubSpot, Linear). Each card collapses to a Connect button until clicked → expands inline form.
+- **Telegram card** — full setup (BotFather hint, single token input, webhook URL display when connected) — was its own standalone page before, now inline.
+- **WhatsApp card** — full setup including the HMAC App Secret management (status banner, add/update flow) — was its own standalone page before, now inline. Add-secret flow available both on initial connect AND on the connected card.
+- **Connect-your-app** — same form, simplified styling.
+- **Removed:** the static `COMING_SOON` (Salesforce/Jira/Zapier/Stripe) ghost tiles. If we ship one, it'll show as a working card.
+
+**Files deleted (folded into Connections):**
+- `artifacts/opsoul-hub/src/components/operator/TelegramChannelSection.tsx`
+- `artifacts/opsoul-hub/src/components/operator/WhatsAppChannelSection.tsx`
+
+**OperatorDetail.tsx:** dropped the bottom `Channels` group from `NAV_BOTTOM` (Telegram + WhatsApp now live in Connections). Removed obsolete imports + the `channels.*` case arms in `renderContent`. Bottom nav now just has Leave Feedback.
+
+**Hub types:** `Integration` gained `baseUrl?: string | null` and `isCustomApp?: boolean` so the active list can render custom-app rows properly.
+
+**New connector added:** Discord (PAT token flow). First-class Discord MCP tools land in Phase 8.
+
 ### 2026-05-22 — Phase 3: Tasks rewrite (cron parser, hourly, edit, run-now, NOT YET DEPLOYED)
 
 **The old "custom" path was broken** (computeNextRunAt('custom', ...) returned null → tasks set to custom never ran again). Replaced with a real expression parser.

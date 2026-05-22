@@ -7,8 +7,8 @@ import {
   ArrowLeft, MessageSquare, Brain, Activity,
   User, Zap, Archive, Network,
   CheckSquare, FileText, Settings2, Key, Code2, AlertTriangle,
-  Radio, MessageCircle, Send, Star, ChevronRight,
-  Shield, ShieldCheck, Menu, X, Cpu, Globe,
+  Star, ChevronRight,
+  Shield, ShieldCheck, Menu, X, Cpu,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -24,8 +24,6 @@ import GrowSection from "@/components/operator/GrowSection";
 import PersonalitySection from "@/components/operator/PersonalitySection";
 import KbSection from "@/components/operator/KbSection";
 import FilesSection from "@/components/operator/FilesSection";
-import TelegramChannelSection from "@/components/operator/TelegramChannelSection";
-import WhatsAppChannelSection from "@/components/operator/WhatsAppChannelSection";
 
 
 const PERSONA_IMAGES = [
@@ -168,19 +166,11 @@ const NAV_MAIN: NavItem[] = [
 ];
 
 const NAV_BOTTOM: NavItem[] = [
-  {
-    kind: "group", id: "channels", label: "Channels", icon: Radio, depth: 0,
-    children: [
-      { kind: "leaf", id: "channels.telegram", label: "Telegram", icon: Send,          depth: 1 },
-      { kind: "leaf", id: "channels.whatsapp", label: "WhatsApp", icon: MessageCircle, depth: 1 },
-    ],
-  },
   { kind: "leaf", id: "feedback", label: "Leave Feedback", icon: Star, depth: 0 },
 ];
 
 const BRAIN_LEAVES    = ["soul", "skills", "memory", "grow"];
 const SETTINGS_LEAVES = ["settings.model", "settings.secrets", "settings.api", "settings.behavior", "settings.evolution", "settings.danger"];
-const CHANNELS_LEAVES = ["channels.whatsapp", "channels.telegram"];
 
 export default function OperatorDetail({ id }: { id: string }) {
   const { toast } = useToast();
@@ -219,7 +209,6 @@ export default function OperatorDetail({ id }: { id: string }) {
       const next = new Set(prev);
       if (BRAIN_LEAVES.includes(activeTab))    next.add("brain");
       if (SETTINGS_LEAVES.includes(activeTab)) next.add("settings");
-      if (CHANNELS_LEAVES.includes(activeTab)) next.add("channels");
       return next;
     });
   }, [activeTab]);
@@ -279,8 +268,6 @@ export default function OperatorDetail({ id }: { id: string }) {
       case "settings.behavior":  return <SettingsSection operator={operator} section="safemode" />;
       case "settings.evolution": return <SettingsSection operator={operator} section="evolution" />;
       case "settings.danger":    return <SettingsSection operator={operator} section="danger" />;
-      case "channels.telegram":  return <TelegramChannelSection operatorId={operator.id} />;
-      case "channels.whatsapp":  return <WhatsAppChannelSection operatorId={operator.id} />;
       case "feedback":           return <ComingSoon title="Leave Feedback" />;
       default:                   return <ChatSection operatorId={id} />;
     }
