@@ -7,7 +7,7 @@ import {
   ArrowLeft, MessageSquare, Brain, Activity,
   User, Zap, Archive, Network,
   CheckSquare, FileText, Settings2, Key, Code2, AlertTriangle,
-  Star, ChevronRight,
+  Star, ChevronRight, Sparkles,
   Shield, ShieldCheck, Menu, X, Cpu,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ import GrowSection from "@/components/operator/GrowSection";
 import PersonalitySection from "@/components/operator/PersonalitySection";
 import KbSection from "@/components/operator/KbSection";
 import FilesSection from "@/components/operator/FilesSection";
+import ArtifactsSection from "@/components/operator/ArtifactsSection";
 
 
 const PERSONA_IMAGES = [
@@ -151,6 +152,7 @@ const NAV_MAIN: NavItem[] = [
   },
   { kind: "leaf", id: "tasks",       label: "Tasks",       icon: CheckSquare, depth: 0 },
   { kind: "leaf", id: "files",       label: "Files",       icon: FileText,    depth: 0 },
+  { kind: "leaf", id: "artifacts",   label: "Artifacts",   icon: Sparkles,    depth: 0 },
   { kind: "leaf", id: "connections", label: "Connections", icon: Network,     depth: 0 },
   {
     kind: "group", id: "settings", label: "Settings", icon: Settings2, depth: 0,
@@ -261,6 +263,7 @@ export default function OperatorDetail({ id }: { id: string }) {
       case "grow":               return <GrowSection operatorId={id} saData={saData} />;
       case "tasks":              return <TasksSection operatorId={id} />;
       case "files":              return <FilesSection operator={operator} />;
+      case "artifacts":          return <ArtifactsSection operatorId={id} />;
       case "connections":        return <IntegrationsSection operatorId={id} />;
       case "settings.model":     return <SettingsSection operator={operator} section="model" />;
       case "settings.secrets":   return <SettingsSection operator={operator} section="secrets" />;
