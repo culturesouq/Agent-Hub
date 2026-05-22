@@ -130,14 +130,16 @@ router.post(
         return;
       }
 
-      // ── PDF — pdf-parse text extraction ──
+      // ── PDF — pdf-parse v2 text extraction ──
+      // pdf-parse@2.x switched from a callable default export to a class API.
+      // The old `await import('pdf-parse')` + default-function pattern returned
+      // an object on v2, hence "pdfParse is not a function" at runtime.
       if (mimetype === 'application/pdf' || getExt(originalname) === '.pdf') {
-        const pdfModule = await import('pdf-parse');
-        const raw = (pdfModule as any).default ?? pdfModule;
-        const pdfParse: (buf: Buffer) => Promise<{ text: string }> =
-          typeof raw === 'function' ? raw : (raw as any).default;
-        const data = await pdfParse(buffer);
-        const content = data.text.slice(0, 12000);
+        const { PDFParse } = await import('pdf-parse');
+        const parser = new PDFParse({ data: new Uint8Array(buffer) });
+        const result = await parser.getText();
+        await parser.destroy();
+        const content = result.text.slice(0, 12000);
         res.json({ type: 'text', content, name: originalname });
         return;
       }

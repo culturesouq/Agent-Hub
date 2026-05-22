@@ -230,6 +230,28 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 ## 8. Commit History — newest first
 
+### 2026-05-22 — Operator Station rewrite — Phase 0: PDF upload fix + growth audit (`routes/upload.ts`, NOT YET DEPLOYED)
+
+**Bug fixed:** Owner reported "Upload failed: Failed to process file: pdfParse is not a function" on PDF/DOC/XLSX uploads (images worked). Root cause: `pdf-parse` was bumped to v2.4.5 (class-based ESM API) but `upload.ts` still used the v1 callable-default pattern (`const pdfParse = pdfModule.default ?? pdfModule`). At runtime v2's namespace object had no callable, hence the error.
+
+**Fix:** Switched to the v2 API — `import { PDFParse } from 'pdf-parse'`, `new PDFParse({ data: Uint8Array(buffer) }).getText()`. Same 12000-char slice retained.
+
+**Growth audit (read-only, no changes yet):** `GET /grow/self-awareness` (routes/grow.ts:212-214) returns the stored `selfAwarenessStateTable` row WITHOUT recompute — stale rows persist forever unless a trigger fires (`triggerSelfAwareness` on conversation_end / task creation). `OperatorDetail.tsx:213-215` does call recompute on mount, but a silent failure leaves the stored stale value visible. Will revisit in Phase 10.
+
+**Phase plan for the rewrite (11 phases, single deploy at end):**
+0. PDF fix + growth audit *(this commit)*
+1. Widget protocol foundation + TokenDropCard
+2. MCP wave 1 (~15 tools: integration mgmt, memory, KB-learned, self)
+3. Tasks rewrite (cron parser, hourly, edit, run-now)
+4. Connections rewrite (MCP block, fold WhatsApp/Telegram, drop bottom Channels group)
+5. Skills section → live MCP catalog
+6. MCP wave 2 (~13 tools: comms, files, research)
+7. Artifact renderers (chart, mermaid, table) + Artifacts sub-tab
+8. MCP wave 3 (~22 tools: Gmail/Calendar/Drive/GitHub/Notion/Slack/Linear/HubSpot)
+9. API Access page cleanup
+10. Growth math fixes (no prompt edits — those need word-by-word approval, separate session)
+11. Deploy + summary report
+
 ### 2026-05-19 (late) — MCP runtime layer + post-audit fixes SHIPPED (`opsoul--0000065`, image `mcp-runtime-f9f23e4`)
 
 Live proof: `curl https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/api/models` returns 200 with the 8 catalogued models (Kimi K2.5 with `badge: "Default"` confirmed first). New `/api/models` route is serving the registry. New `/mcp` endpoint mounted at `/api/operators/:id/conversations/:convId/mcp` (requires auth).
