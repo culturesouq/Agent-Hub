@@ -230,6 +230,23 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 ## 8. Commit History — newest first
 
+### 2026-05-22 — Phase 9: API Access cleanup — legacy dropped, v1 only (NOT YET DEPLOYED)
+
+The API Access page used to show **both** the legacy chat endpoint (`POST /operators/:id/conversations/:convId/messages` with the owner JWT) AND the v1 slot system (`POST /v1/chat` + `POST /v1/action` with per-slot API keys). Two auth models on one screen, with curl/JS/Python snippets only for the legacy auth.
+
+**Now:** v1 only. Operator id, public endpoint block (one for `/v1/chat`), key creation flow with surface type pills, active keys list with revoke. Owner picks `guest | authenticated | crud` per slot. The `KeyRevealCard` modal shows the right endpoint for the surface.
+
+Removed:
+- legacy `chatEndpoint` / `messagesEndpoint` / `baseUrl` strings
+- `curlExample` / `jsExample` / `pythonExample` blocks
+- the inline `CodeBlock` helper (used only by the legacy block)
+- the duplicate Operator-ID + Authentication-header sections that the legacy block had
+
+Kept:
+- Operator ID copy block (single, at top)
+- Public endpoint reference card
+- Create-key flow + active-keys list with surface-type pill
+
 ### 2026-05-22 — Phase 8: MCP wave 3 — 17 connected-app first-class tools (NOT YET DEPLOYED)
 
 **Tool count: 40 → 57.** All `availability:'integration'`, all routed through `executeHttpWithOAuth()` — the existing helper handles token decryption, Google OAuth refresh, domain detection, error formatting. The LLM never sees a raw credential.

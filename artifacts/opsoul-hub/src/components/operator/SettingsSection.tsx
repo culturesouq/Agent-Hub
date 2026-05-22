@@ -60,33 +60,6 @@ const EVOLUTION_OPTIONS: { value: EvolutionLevel; label: string; description: st
   },
 ];
 
-function CodeBlock({ code, onCopy }: { code: string; onCopy: () => void }) {
-  const [copied, setCopied] = useState(false);
-  const handleCopy = () => {
-    onCopy();
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
-  return (
-    <div className="relative group">
-      <pre className="text-xs bg-background/80 border border-border/30 rounded-lg p-4 overflow-x-auto text-muted-foreground leading-relaxed whitespace-pre-wrap break-all">
-        {code}
-      </pre>
-      <button
-        onClick={handleCopy}
-        className={`absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded border bg-card hover:bg-card/80 ${
-          copied
-            ? "border-green-500/40 text-green-500"
-            : "border-border/30 text-muted-foreground hover:text-foreground"
-        }`}
-        title="Copy"
-      >
-        {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-      </button>
-    </div>
-  );
-}
-
 const PUBLIC_ENDPOINT = `${typeof window !== "undefined" ? window.location.origin : ""}/v1/chat`;
 
 const PUBLIC_ENDPOINT_BLOCK = `POST ${PUBLIC_ENDPOINT}
@@ -494,41 +467,6 @@ export default function SettingsSection({ operator, section }: { operator: Opera
     setTimeout(() => setCopiedField(f => f === field ? null : f), 1500);
   };
 
-  const baseUrl = `${window.location.origin}/api`;
-  const chatEndpoint = `${baseUrl}/operators/${operator.id}/conversations`;
-  const messagesEndpoint = `${baseUrl}/operators/${operator.id}/conversations/{conversationId}/messages`;
-
-  const curlExample = `curl -X POST "${messagesEndpoint.replace('{conversationId}', '<CONVERSATION_ID>')}" \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer <YOUR_TOKEN>" \\
-  -d '{"message": "Hello", "stream": false}'`;
-
-  const jsExample = `const response = await fetch(
-  "${messagesEndpoint.replace('{conversationId}', '<CONVERSATION_ID>')}",
-  {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": "Bearer <YOUR_TOKEN>",
-    },
-    body: JSON.stringify({ message: "Hello", stream: false }),
-  }
-);
-const data = await response.json();
-console.log(data.content);`;
-
-  const pythonExample = `import requests
-
-response = requests.post(
-    "${messagesEndpoint.replace('{conversationId}', '<CONVERSATION_ID>')}",
-    headers={
-        "Content-Type": "application/json",
-        "Authorization": "Bearer <YOUR_TOKEN>",
-    },
-    json={"message": "Hello", "stream": False},
-)
-print(response.json()["content"])`;
-
   const updateEvolutionMode = useMutation({
     mutationFn: (level: EvolutionLevel) => apiFetch(`/operators/${operator.id}/grow-lock`, {
       method: "PATCH",
@@ -734,11 +672,11 @@ print(response.json()["content"])`;
         <section className="space-y-5">
           <div className="flex items-center gap-2 border-b border-border/50 pb-3">
             <Globe className="w-4 h-4 text-muted-foreground" />
-            <h2 className="font-headline font-bold text-base">API Reference</h2>
+            <h2 className="font-headline font-bold text-base">API Access</h2>
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Connect your operator to any app, script, or automation using the REST API below.
+            Embed this operator in your product via the v1 public endpoints. Each API key is scoped to a surface type — guest (anonymous), authenticated (per-user memory), or backend action (stateless).
           </p>
 
           <div className="space-y-1">
@@ -754,66 +692,12 @@ print(response.json()["content"])`;
             </div>
           </div>
 
-          <div className="space-y-1">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs text-muted-foreground tracking-wider">Authentication header</span>
-              <button onClick={() => copy("Authorization: Bearer <YOUR_TOKEN>", "auth")} className={`text-xs flex items-center gap-1 transition-colors ${copiedField === "auth" ? "text-green-500" : "text-primary hover:underline"}`}>
-                {copiedField === "auth" ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                {copiedField === "auth" ? "Copied" : "Copy"}
-              </button>
-            </div>
-            <div className="text-sm bg-background/60 border border-border/30 rounded-lg px-3 py-2.5 text-muted-foreground">
-              Authorization: Bearer {"<YOUR_TOKEN>"}
-            </div>
-            <p className="text-[10px] text-muted-foreground">Use the token from your login response or refresh token endpoint.</p>
-          </div>
-
-          <div className="space-y-2">
-            <span className="text-xs text-muted-foreground tracking-wider">Chat endpoint</span>
-            <div className="text-xs bg-background/60 border border-border/30 rounded-lg px-3 py-2.5 text-muted-foreground">
-              POST {chatEndpoint}
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground tracking-wider">curl</span>
-              <button onClick={() => copy(curlExample, "curl")} className={`text-xs flex items-center gap-1 transition-colors ${copiedField === "curl" ? "text-green-500" : "text-primary hover:underline"}`}>
-                {copiedField === "curl" ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                {copiedField === "curl" ? "Copied" : "Copy"}
-              </button>
-            </div>
-            <CodeBlock code={curlExample} onCopy={() => copy(curlExample, "curl-block")} />
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground tracking-wider">JavaScript</span>
-              <button onClick={() => copy(jsExample, "js")} className={`text-xs flex items-center gap-1 transition-colors ${copiedField === "js" ? "text-green-500" : "text-primary hover:underline"}`}>
-                {copiedField === "js" ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                {copiedField === "js" ? "Copied" : "Copy"}
-              </button>
-            </div>
-            <CodeBlock code={jsExample} onCopy={() => copy(jsExample, "js-block")} />
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground tracking-wider">Python</span>
-              <button onClick={() => copy(pythonExample, "py")} className={`text-xs flex items-center gap-1 transition-colors ${copiedField === "py" ? "text-green-500" : "text-primary hover:underline"}`}>
-                {copiedField === "py" ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                {copiedField === "py" ? "Copied" : "Copy"}
-              </button>
-            </div>
-            <CodeBlock code={pythonExample} onCopy={() => copy(pythonExample, "py-block")} />
-          </div>
-
           {/* ── API Keys ── */}
-          <div className="border-t border-border/40 pt-6 space-y-6">
+          <div className="space-y-6 pt-2">
 
             {/* Section 1 — Public Endpoint */}
             <div className="space-y-2">
-              <p className="text-[11px] text-muted-foreground tracking-wider">Public Endpoint</p>
+              <p className="text-[11px] text-muted-foreground tracking-wider">Public Endpoint (v1)</p>
               <PublicEndpointBlock />
             </div>
 
