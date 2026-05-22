@@ -122,7 +122,17 @@ export interface ToolDefinition {
     description: string;
     parameters: {
       type: 'object';
-      properties: Record<string, { type: string; description?: string; enum?: string[]; additionalProperties?: unknown }>;
+      properties: Record<string, {
+        type: string;
+        description?: string;
+        enum?: string[];
+        additionalProperties?: unknown;
+        /** For type:'array' params. JSON-Schema-shaped recursive item descriptor. */
+        items?: { type: string; description?: string; enum?: string[]; properties?: Record<string, unknown>; required?: string[]; additionalProperties?: unknown };
+        /** For type:'object' nested params. */
+        properties?: Record<string, unknown>;
+        required?: string[];
+      }>;
       required: string[];
     };
   };

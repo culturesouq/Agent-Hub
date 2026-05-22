@@ -230,6 +230,24 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 ## 8. Commit History — newest first
 
+### 2026-05-22 — Phase 2: MCP wave 1 — 16 new tools (toolRegistry + toolHandlers + tasksCron extract, NOT YET DEPLOYED)
+
+**Tool count: 12 → 28.** New tools, all `availability: 'always'` (no auth/connectivity gating), all `scopes: '*'`:
+
+- **Integration mgmt** (5): `list_integrations`, `request_credential` (emits TokenDropCard widget), `connect_with_secret` (uses Keys & Secrets), `disconnect_integration`, `list_secrets`
+- **Tasks** (3): `run_task_now`, `list_tasks`, `get_task_history`
+- **Memory** (3): `store_memory` (decay/retrieval pipeline preserved — same `storeMemory` engine), `search_memory`, `list_memories`
+- **KB-learned** (3): `kb_search` (both KBs), `kb_delete_learned` (operator_kb only — owner_kb literally unreachable through this tool, isSystem entries protected), `kb_pending_list`
+- **Self** (2): `get_self_info`, `list_conversations`
+
+**Cron refactor:** Extracted `runSingleTask(taskId, {rescheduleAfter})` from `tasksCron.ts`'s loop body. Both the hourly cron and the new `run_task_now` MCP tool now share that function. Phase 3's `/run-now` HTTP endpoint will reuse it again.
+
+**Schema relax:** Widened `ToolDefinition.parameters.properties` in `openrouter.ts` to permit `items`, nested `properties`, and `required` — needed to express `request_credential`'s `fields` array. Backward-compatible.
+
+**Type widening:** Added `'integration'` to `Availability` union and `'memory' | 'self' | 'communication'` to `ToolCategory` (the new categories ship now, communication is wave 2). `ToolContext.connectedIntegrations` added for future gating.
+
+**Patent constraint:** Zero changes to Layer 0/1/2 fields, systemPrompt assembly, Soul, KB schemas, identity locks. Pure runtime layer. Operator soul decides when to invoke each tool, per Claim 12.
+
 ### 2026-05-22 — Phase 1: Widget protocol + TokenDropCard (`widgets/`, ChatSection.tsx wiring, NOT YET DEPLOYED)
 
 **What:** Foundation for operators to emit interactive UI inline in chat. Pattern: assistant message contains a fenced code block tagged `opsoul-widget` with a JSON payload — `MarkdownMessage` detects the tag, parses, and renders the matching component. Parse-failure falls back to a normal `<pre>` so a broken payload is visible, never silently swallowed.

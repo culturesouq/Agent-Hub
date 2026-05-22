@@ -32,17 +32,27 @@ import {
   operatorFilesTable,
   tasksTable,
   messagesTable,
+  operatorIntegrationsTable,
+  operatorSecretsTable,
+  operatorMemoryTable,
+  operatorKbTable,
+  ownerKbTable,
+  operatorsTable,
+  conversationsTable,
 } from '@workspace/db';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, desc } from 'drizzle-orm';
 import { buildTemporalContext } from './systemPrompt.js';
 import { executeWebSearch } from './capabilityEngine.js';
 import { persistKbSeedEntry } from './kbIntake.js';
-import { storeMemory } from './memoryEngine.js';
+import { storeMemory, searchMemory } from './memoryEngine.js';
+import { searchBothKbs } from './vectorSearch.js';
+import { embed } from '@workspace/opsoul-utils/ai';
 import {
   persistWebSearchResult,
   executeHttpWithOAuth,
 } from './toolPersistence.js';
 import { getTool } from './toolRegistry.js';
+import { runSingleTask } from '../cron/tasksCron.js';
 import type { ScopeType } from './toolRegistry.js';
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -522,6 +532,359 @@ async function handleHttpRequest(
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+//  WAVE 1 — INTEGRATION MGMT, MEMORY, KB-LEARNED, SELF, TASK HELPERS
+// ───────────────────────────────────────────────────────────────────────────
+
+async function handleListIntegrations(_rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const rows = await db
+    .select({
+      integrationType: operatorIntegrationsTable.integrationType,
+      integrationLabel: operatorIntegrationsTable.integrationLabel,
+      status: operatorIntegrationsTable.status,
+      isCustomApp: operatorIntegrationsTable.isCustomApp,
+      baseUrl: operatorIntegrationsTable.baseUrl,
+      createdAt: operatorIntegrationsTable.createdAt,
+    })
+    .from(operatorIntegrationsTable)
+    .where(eq(operatorIntegrationsTable.operatorId, ctx.operatorId));
+
+  if (rows.length === 0) return { content: 'No integrations connected yet.' };
+
+  const lines = rows.map((r) =>
+    `- ${r.integrationType} (${r.integrationLabel}) — status: ${r.status ?? 'connected'}${r.isCustomApp ? ' [custom_app]' : ''}${r.baseUrl ? ` @ ${r.baseUrl}` : ''}`,
+  );
+  return { content: `Connected integrations (${rows.length}):\n${lines.join('\n')}` };
+}
+
+async function handleRequestCredential(rawArgs: string, _ctx: ToolHandlerContext): Promise<ToolResult> {
+  const args = parseArgs<{
+    integrationType?: string;
+    label?: string;
+    instructions?: string;
+    docsUrl?: string;
+    fields?: Array<{ name: string; label: string; type: string; placeholder?: string; required?: boolean; hint?: string }>;
+  }>(rawArgs);
+
+  if (!args.integrationType || !args.label || !Array.isArray(args.fields) || args.fields.length === 0) {
+    return { content: 'request_credential requires "integrationType", "label", and a non-empty "fields" array.', meta: { terminateLoop: true } };
+  }
+
+  const widget = {
+    kind: 'connect_form',
+    integrationType: args.integrationType,
+    label: args.label,
+    ...(args.instructions ? { instructions: args.instructions } : {}),
+    ...(args.docsUrl ? { docsUrl: args.docsUrl } : {}),
+    fields: args.fields,
+  };
+
+  // The widget is delivered as a fenced opsoul-widget block in the tool result.
+  // The operator's next assistant turn quotes this block; ChatSection.tsx
+  // detects the fence and renders TokenDropCard inline.
+  return {
+    content: `\`\`\`opsoul-widget\n${JSON.stringify(widget)}\n\`\`\`\n\nThe owner can drop the credential in the card above. The integration will be created the moment they hit Connect.`,
+  };
+}
+
+async function handleConnectWithSecret(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const args = parseArgs<{ integrationType?: string; label?: string; secretKey?: string; baseUrl?: string }>(rawArgs);
+  if (!args.integrationType || !args.label || !args.secretKey) {
+    return { content: 'connect_with_secret requires "integrationType", "label", and "secretKey".', meta: { terminateLoop: true } };
+  }
+
+  const [secret] = await db
+    .select()
+    .from(operatorSecretsTable)
+    .where(and(
+      eq(operatorSecretsTable.operatorId, ctx.operatorId),
+      eq(operatorSecretsTable.key, args.secretKey.toUpperCase()),
+    ));
+
+  if (!secret) {
+    return { content: `No secret named "${args.secretKey.toUpperCase()}" in this operator's Keys & Secrets.` };
+  }
+
+  const { encryptToken, decryptToken } = await import('@workspace/opsoul-utils/crypto');
+  const tokenPlain = decryptToken(secret.valueEncrypted);
+  const tokenEncrypted = encryptToken(tokenPlain);
+
+  await db.insert(operatorIntegrationsTable).values({
+    id: crypto.randomUUID(),
+    operatorId: ctx.operatorId,
+    ownerId: ctx.ownerId,
+    integrationType: args.integrationType,
+    integrationLabel: args.label,
+    tokenEncrypted,
+    scopes: [args.integrationType],
+    status: 'connected',
+    ...(args.baseUrl ? { baseUrl: args.baseUrl, isCustomApp: true } : {}),
+  });
+
+  return { content: `Connected ${args.integrationType} ("${args.label}") using stored secret ${args.secretKey.toUpperCase()}.` };
+}
+
+async function handleDisconnectIntegration(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { integrationType } = parseArgs<{ integrationType?: string }>(rawArgs);
+  if (!integrationType) {
+    return { content: 'disconnect_integration requires "integrationType".', meta: { terminateLoop: true } };
+  }
+
+  const deleted = await db
+    .delete(operatorIntegrationsTable)
+    .where(and(
+      eq(operatorIntegrationsTable.operatorId, ctx.operatorId),
+      eq(operatorIntegrationsTable.integrationType, integrationType),
+    ))
+    .returning({ id: operatorIntegrationsTable.id });
+
+  return {
+    content: deleted.length > 0
+      ? `Disconnected ${integrationType}. ${deleted.length} row(s) removed.`
+      : `No connected integration of type "${integrationType}" was found.`,
+  };
+}
+
+async function handleListSecrets(_rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const rows = await db
+    .select({ key: operatorSecretsTable.key })
+    .from(operatorSecretsTable)
+    .where(eq(operatorSecretsTable.operatorId, ctx.operatorId));
+
+  if (rows.length === 0) return { content: 'No secrets stored.' };
+  return { content: `Stored secret labels:\n${rows.map(r => `- ${r.key}`).join('\n')}\n\nValues are never returned by this tool. Use {{LABEL}} placeholders in http_request or pass the label to connect_with_secret.` };
+}
+
+async function handleRunTaskNow(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { name } = parseArgs<{ name?: string }>(rawArgs);
+  if (!name) return { content: 'run_task_now requires a "name".', meta: { terminateLoop: true } };
+
+  const [task] = await db
+    .select({ id: tasksTable.id })
+    .from(tasksTable)
+    .where(and(eq(tasksTable.operatorId, ctx.operatorId), eq(tasksTable.contextName, name)));
+
+  if (!task) return { content: `No task named "${name}" in this station.` };
+
+  const result = await runSingleTask(task.id, { rescheduleAfter: false });
+  return {
+    content: result.ok
+      ? `Task "${name}" executed in ${result.durationSec.toFixed(1)}s. Result: ${result.summary}`
+      : `Task "${name}" failed: ${result.summary}`,
+  };
+}
+
+async function handleListTasks(_rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const rows = await db
+    .select({
+      name: tasksTable.contextName,
+      schedule: tasksTable.taskType,
+      status: tasksTable.status,
+      lastRunAt: tasksTable.lastRunAt,
+      nextRunAt: tasksTable.nextRunAt,
+    })
+    .from(tasksTable)
+    .where(eq(tasksTable.operatorId, ctx.operatorId))
+    .orderBy(desc(tasksTable.createdAt));
+
+  if (rows.length === 0) return { content: 'No scheduled tasks.' };
+
+  const lines = rows.map((r) =>
+    `- "${r.name}" — ${r.schedule}, ${r.status ?? 'active'}` +
+    (r.lastRunAt ? `, last run ${r.lastRunAt.toISOString()}` : ', not yet run') +
+    (r.nextRunAt ? `, next ${r.nextRunAt.toISOString()}` : ''),
+  );
+  return { content: `Scheduled tasks (${rows.length}):\n${lines.join('\n')}` };
+}
+
+async function handleGetTaskHistory(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { name } = parseArgs<{ name?: string }>(rawArgs);
+  if (!name) return { content: 'get_task_history requires a "name".', meta: { terminateLoop: true } };
+
+  const [task] = await db
+    .select()
+    .from(tasksTable)
+    .where(and(eq(tasksTable.operatorId, ctx.operatorId), eq(tasksTable.contextName, name)));
+
+  if (!task) return { content: `No task named "${name}" in this station.` };
+
+  const payload = (task.payload ?? {}) as { lastRunSummary?: string; lastRunDurationSec?: number };
+  if (!task.lastRunAt) return { content: `Task "${name}" has not run yet.` };
+
+  return {
+    content: `Last run of "${name}":\n- At: ${task.lastRunAt.toISOString()}\n- Duration: ${payload.lastRunDurationSec ?? '?'}s\n- Summary: ${payload.lastRunSummary ?? '(empty)'}`,
+  };
+}
+
+async function handleStoreMemory(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { content, memoryType, weight } = parseArgs<{ content?: string; memoryType?: string; weight?: number }>(rawArgs);
+  if (!content || !memoryType) return { content: 'store_memory requires "content" and "memoryType".', meta: { terminateLoop: true } };
+  const allowed = ['fact', 'preference', 'context', 'event'];
+  if (!allowed.includes(memoryType)) return { content: `memoryType must be one of: ${allowed.join(', ')}.`, meta: { terminateLoop: true } };
+
+  const w = typeof weight === 'number' ? Math.max(0, Math.min(1, weight)) : 1.0;
+  // memoryType is validated against the allowed list above, so the cast to
+  // MemoryType is safe.
+  const stored = await storeMemory(
+    ctx.operatorId,
+    ctx.ownerId,
+    content,
+    memoryType as Parameters<typeof storeMemory>[3],
+    'user',
+    w,
+    false,
+    ctx.scope.scopeId,
+    ctx.scope.scopeTrust,
+  );
+  return { content: `Memory stored (id ${stored.id}, type ${memoryType}, weight ${w.toFixed(2)}). It enters the same decay/retrieval pipeline as auto-stored memories.` };
+}
+
+async function handleSearchMemory(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { query, topN } = parseArgs<{ query?: string; topN?: number }>(rawArgs);
+  if (!query) return { content: 'search_memory requires a "query".', meta: { terminateLoop: true } };
+
+  const embedding = await embed(query);
+  const hits = await searchMemory(ctx.operatorId, embedding, typeof topN === 'number' ? Math.max(1, Math.min(20, topN)) : 5);
+  if (hits.length === 0) return { content: `No matching memories for: "${query}".` };
+
+  const lines = hits.map((h, i) =>
+    `${i + 1}. [${h.memoryType}, sim ${h.similarity.toFixed(2)}] ${h.content}`,
+  );
+  return { content: `Top ${hits.length} memory hits for "${query}":\n${lines.join('\n')}` };
+}
+
+async function handleListMemories(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { limit } = parseArgs<{ limit?: number }>(rawArgs);
+  const n = typeof limit === 'number' ? Math.max(1, Math.min(50, limit)) : 10;
+
+  const rows = await db
+    .select({
+      id: operatorMemoryTable.id,
+      content: operatorMemoryTable.content,
+      memoryType: operatorMemoryTable.memoryType,
+      weight: operatorMemoryTable.weight,
+      createdAt: operatorMemoryTable.createdAt,
+    })
+    .from(operatorMemoryTable)
+    .where(eq(operatorMemoryTable.operatorId, ctx.operatorId))
+    .orderBy(desc(operatorMemoryTable.createdAt))
+    .limit(n);
+
+  if (rows.length === 0) return { content: 'No memories stored yet.' };
+  const lines = rows.map((r) =>
+    `- [${r.memoryType}, w${(r.weight ?? 1).toFixed(2)}, ${r.createdAt?.toISOString() ?? ''}] ${r.content.slice(0, 200)}`,
+  );
+  return { content: `Most recent ${rows.length} memories:\n${lines.join('\n')}` };
+}
+
+async function handleKbSearch(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { query, topN } = parseArgs<{ query?: string; topN?: number }>(rawArgs);
+  if (!query) return { content: 'kb_search requires a "query".', meta: { terminateLoop: true } };
+  const n = typeof topN === 'number' ? Math.max(1, Math.min(15, topN)) : 4;
+
+  const embedding = await embed(query);
+  const hits = await searchBothKbs(ctx.operatorId, embedding, n, 0.3, []);
+  if (hits.length === 0) return { content: `No KB entries matched: "${query}".` };
+
+  const lines = hits.map((h: { source?: string; content: string; similarity?: number; confidence?: number; entryId?: string }, i: number) =>
+    `${i + 1}. [${h.source ?? 'kb'}, sim ${(h.similarity ?? 0).toFixed(2)}, conf ${h.confidence ?? '?'}] (id ${h.entryId ?? '?'}) ${h.content.slice(0, 300)}`,
+  );
+  return { content: `Top ${hits.length} KB hits for "${query}":\n${lines.join('\n')}\n\nTo remove a learned entry the operator added, call kb_delete_learned with the id from this list.` };
+}
+
+async function handleKbDeleteLearned(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { entryId } = parseArgs<{ entryId?: string }>(rawArgs);
+  if (!entryId) return { content: 'kb_delete_learned requires "entryId".', meta: { terminateLoop: true } };
+
+  const [entry] = await db
+    .select()
+    .from(operatorKbTable)
+    .where(and(
+      eq(operatorKbTable.id, entryId),
+      eq(operatorKbTable.operatorId, ctx.operatorId),
+    ));
+
+  if (!entry) {
+    return { content: `No learned KB entry with id "${entryId}" belongs to this operator. (Owner-dropped KB entries cannot be reached by this tool.)` };
+  }
+  if (entry.isSystem) {
+    return { content: `KB entry "${entryId}" is a platform seed (isSystem=true). System entries are protected and cannot be deleted by the operator.` };
+  }
+
+  await db.delete(operatorKbTable).where(eq(operatorKbTable.id, entryId));
+  return { content: `Learned KB entry "${entryId}" deleted. (Source: ${entry.sourceName ?? '—'}.)` };
+}
+
+async function handleKbPendingList(_rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const rows = await db
+    .select({
+      id: operatorKbTable.id,
+      content: operatorKbTable.content,
+      sourceName: operatorKbTable.sourceName,
+      confidenceScore: operatorKbTable.confidenceScore,
+      createdAt: operatorKbTable.createdAt,
+    })
+    .from(operatorKbTable)
+    .where(and(
+      eq(operatorKbTable.operatorId, ctx.operatorId),
+      eq(operatorKbTable.verificationStatus, 'pending'),
+    ))
+    .orderBy(desc(operatorKbTable.createdAt))
+    .limit(20);
+
+  if (rows.length === 0) return { content: 'No pending KB entries.' };
+  const lines = rows.map((r) =>
+    `- id ${r.id} [conf ${r.confidenceScore ?? '?'}, ${r.createdAt?.toISOString() ?? ''}] from "${r.sourceName ?? '—'}": ${r.content.slice(0, 150)}…`,
+  );
+  return { content: `Pending KB entries (${rows.length}):\n${lines.join('\n')}` };
+}
+
+async function handleGetSelfInfo(_rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const [op] = await db
+    .select()
+    .from(operatorsTable)
+    .where(eq(operatorsTable.id, ctx.operatorId));
+
+  if (!op) return { content: 'Operator record not found.' };
+
+  const archetypes = (op.archetype as string[] | null) ?? [];
+  const lines = [
+    `Name: ${op.name}`,
+    `Id: ${op.id}`,
+    `Owner id: ${op.ownerId}`,
+    `Archetypes: ${archetypes.length > 0 ? archetypes.join(', ') : '—'}`,
+    `Model: ${op.defaultModel ?? '(platform default)'}`,
+    `Identity locked: ${op.layer1LockedAt ? 'yes' : 'no'}`,
+    `Safe Mode: ${op.safeMode ? 'on' : 'off'}`,
+    `Free Roaming: ${op.freeRoaming ? 'on' : 'off'}`,
+    `Evolution lock: ${op.growLockLevel ?? 'CONTROLLED'}`,
+  ];
+  return { content: lines.join('\n') };
+}
+
+async function handleListConversations(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { limit } = parseArgs<{ limit?: number }>(rawArgs);
+  const n = typeof limit === 'number' ? Math.max(1, Math.min(50, limit)) : 10;
+
+  const rows = await db
+    .select({
+      id: conversationsTable.id,
+      contextName: conversationsTable.contextName,
+      scopeId: conversationsTable.scopeId,
+      lastMessageAt: conversationsTable.lastMessageAt,
+    })
+    .from(conversationsTable)
+    .where(eq(conversationsTable.operatorId, ctx.operatorId))
+    .orderBy(desc(conversationsTable.lastMessageAt))
+    .limit(n);
+
+  if (rows.length === 0) return { content: 'No conversations yet.' };
+  const lines = rows.map((r) =>
+    `- "${r.contextName ?? '(untitled)'}" — scope ${r.scopeId ?? 'legacy'}, last ${r.lastMessageAt?.toISOString() ?? '—'} (id ${r.id})`,
+  );
+  return { content: `Recent conversations (${rows.length}):\n${lines.join('\n')}` };
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 //  DISPATCH — single entry point for chat.ts and mcpServer.ts
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -564,6 +927,25 @@ export async function dispatchTool(
     case 'resume_task':      return handleResumeTask(rawArgs, ctx, onProgress);
     case 'delete_task':      return handleDeleteTask(rawArgs, ctx, onProgress);
     case 'http_request':     return handleHttpRequest(rawArgs, ctx, onProgress);
+
+    // Wave 1
+    case 'list_integrations':      return handleListIntegrations(rawArgs, ctx);
+    case 'request_credential':     return handleRequestCredential(rawArgs, ctx);
+    case 'connect_with_secret':    return handleConnectWithSecret(rawArgs, ctx);
+    case 'disconnect_integration': return handleDisconnectIntegration(rawArgs, ctx);
+    case 'list_secrets':           return handleListSecrets(rawArgs, ctx);
+    case 'run_task_now':           return handleRunTaskNow(rawArgs, ctx);
+    case 'list_tasks':             return handleListTasks(rawArgs, ctx);
+    case 'get_task_history':       return handleGetTaskHistory(rawArgs, ctx);
+    case 'store_memory':           return handleStoreMemory(rawArgs, ctx);
+    case 'search_memory':          return handleSearchMemory(rawArgs, ctx);
+    case 'list_memories':          return handleListMemories(rawArgs, ctx);
+    case 'kb_search':              return handleKbSearch(rawArgs, ctx);
+    case 'kb_delete_learned':      return handleKbDeleteLearned(rawArgs, ctx);
+    case 'kb_pending_list':        return handleKbPendingList(rawArgs, ctx);
+    case 'get_self_info':          return handleGetSelfInfo(rawArgs, ctx);
+    case 'list_conversations':     return handleListConversations(rawArgs, ctx);
+
     default:
       return {
         content: `Tool "${name}" exists in the registry but has no handler implementation.`,

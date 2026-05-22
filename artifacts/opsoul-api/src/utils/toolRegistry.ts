@@ -21,10 +21,10 @@ import type { ToolDefinition } from './openrouter';
 export type ScopeType = 'owner' | 'public' | 'authenticated' | 'action' | 'channel';
 
 /** Conditions that gate whether a tool is offered in a given context. */
-export type Availability = 'always' | 'web' | 'secrets';
+export type Availability = 'always' | 'web' | 'secrets' | 'integration';
 
 /** Categories for admin/UI grouping. */
-export type ToolCategory = 'research' | 'workspace' | 'integration' | 'automation';
+export type ToolCategory = 'research' | 'workspace' | 'integration' | 'automation' | 'memory' | 'self' | 'communication';
 
 export interface RegisteredTool {
   /** Tool name as sent to the LLM. Must match handler dispatch. snake_case. */
@@ -51,6 +51,8 @@ export interface ToolContext {
   hasWebSearch: boolean;
   /** Names of stored secret labels for this operator (for http_request description). */
   liveSecrets: string[];
+  /** Names of connected integration types for this operator (gates 'integration'-availability tools). */
+  connectedIntegrations?: string[];
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -312,6 +314,268 @@ export const UNIVERSAL_TOOLS: RegisteredTool[] = [
     availability: 'secrets',
     category: 'integration',
   },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  //  WAVE 1 — INTEGRATION MGMT, TASK HELPERS, MEMORY, KB-LEARNED, SELF
+  //  Pure runtime tools — no Layer 0/1 access, no systemPrompt mutation.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  {
+    name: 'list_integrations',
+    displayName: 'List integrations',
+    description:
+      'Returns the operator\'s currently connected external services with status, integration type, and human-readable label. Read-only.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    scopes: '*',
+    availability: 'always',
+    category: 'integration',
+  },
+  {
+    name: 'request_credential',
+    displayName: 'Request credential',
+    description:
+      'Emits an inline connect-form card in the chat so the owner can drop a token mid-conversation. Used when the operator needs a credential it cannot derive from existing secrets. The card resolves to a real integration row on submit.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        integrationType: { type: 'string', description: 'Canonical integration identifier — e.g. "notion", "slack", "github", "linear", "hubspot", "telegram", "whatsapp", or any custom string for a one-off app.' },
+        label:           { type: 'string', description: 'Human-readable label shown on the card (e.g. "Connect Notion").' },
+        instructions:    { type: 'string', description: 'One short sentence explaining what the owner is about to do and why.' },
+        docsUrl:         { type: 'string', description: 'Optional URL pointing to where the owner can generate the token.' },
+        fields: {
+          type: 'array',
+          description: 'Form fields to render. The first field whose name is "token" is treated as the primary credential.',
+          items: {
+            type: 'object',
+            properties: {
+              name:        { type: 'string' },
+              label:       { type: 'string' },
+              type:        { type: 'string', enum: ['text', 'password', 'url', 'email', 'textarea'] },
+              placeholder: { type: 'string' },
+              required:    { type: 'boolean' },
+              hint:        { type: 'string' },
+            },
+            required: ['name', 'label', 'type'],
+          },
+        },
+      },
+      required: ['integrationType', 'label', 'fields'],
+    },
+    scopes: '*',
+    availability: 'always',
+    category: 'integration',
+  },
+  {
+    name: 'connect_with_secret',
+    displayName: 'Connect with stored secret',
+    description:
+      'Creates a connected integration using a stored secret as the token, instead of asking the owner to paste one. Useful when the owner already saved the key under Keys & Secrets and tells the operator to use it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        integrationType: { type: 'string', description: 'Canonical integration identifier (e.g. "github", "notion").' },
+        label:           { type: 'string', description: 'Integration label (e.g. "GitHub — main account").' },
+        secretKey:       { type: 'string', description: 'Name of the secret in Keys & Secrets (uppercase, e.g. "GITHUB_PAT"). Value is read server-side; never seen by the LLM.' },
+        baseUrl:         { type: 'string', description: 'Optional base URL when the integration is a custom-app endpoint.' },
+      },
+      required: ['integrationType', 'label', 'secretKey'],
+    },
+    scopes: '*',
+    availability: 'always',
+    category: 'integration',
+  },
+  {
+    name: 'disconnect_integration',
+    displayName: 'Disconnect integration',
+    description:
+      'Removes a connected integration by integrationType. The operator may invoke this on the owner\'s instruction; it deletes the credential row but never touches Keys & Secrets.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        integrationType: { type: 'string', description: 'Integration to disconnect (e.g. "notion").' },
+      },
+      required: ['integrationType'],
+    },
+    scopes: '*',
+    availability: 'always',
+    category: 'integration',
+  },
+  {
+    name: 'list_secrets',
+    displayName: 'List secret labels',
+    description:
+      'Returns the names of all secrets stored under Keys & Secrets for this operator. Values are never returned — only the labels — so the operator can know what credentials it can reference in http_request or connect_with_secret.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    scopes: '*',
+    availability: 'always',
+    category: 'integration',
+  },
+
+  {
+    name: 'run_task_now',
+    displayName: 'Run task now',
+    description:
+      'Immediately executes a scheduled task by name, in-process, without waiting for its next cron tick. The task\'s recurrence schedule continues unchanged afterward.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Task name as shown in the Tasks tab.' },
+      },
+      required: ['name'],
+    },
+    scopes: '*',
+    availability: 'always',
+    category: 'automation',
+  },
+  {
+    name: 'list_tasks',
+    displayName: 'List tasks',
+    description:
+      'Returns the operator\'s scheduled automations with name, schedule, status, last run time, and last run summary.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    scopes: '*',
+    availability: 'always',
+    category: 'automation',
+  },
+  {
+    name: 'get_task_history',
+    displayName: 'Get task history',
+    description:
+      'Returns the most recent execution record for a task — last run time, duration, and the 300-character summary that was stored.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Task name.' },
+      },
+      required: ['name'],
+    },
+    scopes: '*',
+    availability: 'always',
+    category: 'automation',
+  },
+
+  {
+    name: 'store_memory',
+    displayName: 'Store memory',
+    description:
+      'Writes a memory the operator explicitly chooses to keep — distinct from the automatic post-turn distillation. Goes through the same embedding + decay pipeline as auto-stored memories. Use when something in the conversation is worth carrying forward and the operator wants to commit to it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        content:    { type: 'string', description: 'The memory content as a self-contained sentence or short paragraph.' },
+        memoryType: { type: 'string', enum: ['fact', 'preference', 'context', 'event'], description: 'Category of memory.' },
+        weight:     { type: 'number', description: 'Importance 0.0–1.0. Higher weights survive decay longer. Default 1.0.' },
+      },
+      required: ['content', 'memoryType'],
+    },
+    scopes: '*',
+    availability: 'always',
+    category: 'memory',
+  },
+  {
+    name: 'search_memory',
+    displayName: 'Search memory',
+    description:
+      'Retrieves the operator\'s own memories matching a natural-language query. Returns the top-ranked hits with similarity scores. Use this when the operator needs to recall something specific mid-conversation that automatic retrieval did not surface.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'What you\'re looking for, in natural language.' },
+        topN:  { type: 'number', description: 'Number of hits to return. Default 5.' },
+      },
+      required: ['query'],
+    },
+    scopes: '*',
+    availability: 'always',
+    category: 'memory',
+  },
+  {
+    name: 'list_memories',
+    displayName: 'List recent memories',
+    description:
+      'Returns the operator\'s N most recent memories in reverse chronological order. Useful for surfacing recent context without a similarity query.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: 'Max entries to return. Default 10.' },
+      },
+      required: [],
+    },
+    scopes: '*',
+    availability: 'always',
+    category: 'memory',
+  },
+
+  {
+    name: 'kb_search',
+    displayName: 'Knowledge search',
+    description:
+      'Explicit query against the operator\'s knowledge base — both the owner-dropped KB and the operator-learned KB. Returns the most relevant entries with their source and confidence. Use when targeted recall is needed beyond the automatic context attached to each turn.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Natural-language query.' },
+        topN:  { type: 'number', description: 'Number of entries to return. Default 4.' },
+      },
+      required: ['query'],
+    },
+    scopes: '*',
+    availability: 'always',
+    category: 'research',
+  },
+  {
+    name: 'kb_delete_learned',
+    displayName: 'Delete learned KB entry',
+    description:
+      'Removes an entry the operator added to its own learned knowledge base. Owner-dropped KB entries are in a separate table and cannot be reached by this tool. System-seeded entries (marked isSystem) are also protected.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        entryId: { type: 'string', description: 'ID of the learned KB entry to remove (from kb_search results).' },
+      },
+      required: ['entryId'],
+    },
+    scopes: '*',
+    availability: 'always',
+    category: 'research',
+  },
+  {
+    name: 'kb_pending_list',
+    displayName: 'List pending KB entries',
+    description:
+      'Returns the operator-learned KB entries currently in pending verification status — entries the operator seeded that have not yet been validated by the verification pipeline.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    scopes: '*',
+    availability: 'always',
+    category: 'research',
+  },
+
+  {
+    name: 'get_self_info',
+    displayName: 'Self info',
+    description:
+      'Returns the operator\'s own metadata: id, name, archetypes, mandate summary, current model, owner identity, identity-lock state. Read-only introspection.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    scopes: '*',
+    availability: 'always',
+    category: 'self',
+  },
+  {
+    name: 'list_conversations',
+    displayName: 'List conversations',
+    description:
+      'Returns the operator\'s recent conversation threads with title, scope, and last-message time. Useful for the operator to know what threads it has been part of.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: 'Max threads to return. Default 10.' },
+      },
+      required: [],
+    },
+    scopes: '*',
+    availability: 'always',
+    category: 'self',
+  },
 ];
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -335,6 +599,7 @@ function isAvailable(tool: RegisteredTool, ctx: ToolContext): boolean {
   if (tool.availability === 'always') return true;
   if (tool.availability === 'web') return ctx.hasWebSearch;
   if (tool.availability === 'secrets') return ctx.liveSecrets.length > 0;
+  if (tool.availability === 'integration') return (ctx.connectedIntegrations?.length ?? 0) > 0;
   return false;
 }
 

@@ -37,11 +37,129 @@ function computeNextRunAt(schedule: string, from: Date): Date | null {
   return null;
 }
 
+/**
+ * Execute one task end-to-end. Extracted from the cron loop so the same
+ * code path runs whether the trigger is the hourly cron, the new MCP
+ * `run_task_now` tool, or the upcoming `/run-now` HTTP route.
+ *
+ * Returns a short summary for callers that want to relay status. The full
+ * lastRunSummary (300 chars) is also written to the task row.
+ */
+export async function runSingleTask(
+  taskId: string,
+  options: { rescheduleAfter: boolean } = { rescheduleAfter: true },
+): Promise<{ ok: boolean; summary: string; durationSec: number }> {
+  const startTime = Date.now();
+  const now = new Date();
+
+  const [task] = await db.select().from(tasksTable).where(eq(tasksTable.id, taskId));
+  if (!task) return { ok: false, summary: `Task ${taskId} not found`, durationSec: 0 };
+
+  try {
+    const [operator] = await db.select().from(operatorsTable).where(eq(operatorsTable.id, task.operatorId));
+    if (!operator) {
+      await db.update(tasksTable).set({ status: 'paused' }).where(eq(tasksTable.id, task.id));
+      return { ok: false, summary: `Operator ${task.operatorId} not found — task paused`, durationSec: 0 };
+    }
+
+    const payload = parseTaskPayload(task.payload);
+    const taskPrompt = task.prompt ?? payload.description ?? '';
+    if (!taskPrompt) {
+      if (options.rescheduleAfter) {
+        const nextRunAt = computeNextRunAt(task.taskType, now);
+        await db.update(tasksTable).set({ nextRunAt }).where(eq(tasksTable.id, task.id));
+      }
+      return { ok: false, summary: 'No prompt on task — skipped', durationSec: 0 };
+    }
+
+    const systemPromptText = assembleOperatorPrompt(operator);
+    const taskEmbedding = await embed(taskPrompt);
+
+    const [memoryHits, kbHits, skills] = await Promise.all([
+      searchMemory(operator.id, taskEmbedding),
+      searchBothKbs(operator.id, taskEmbedding, 4, 0.3, (operator.archetype as string[]) ?? []),
+      loadOperatorSkills(operator.id),
+    ]);
+
+    const messages: ChatMessage[] = [{ role: 'system', content: systemPromptText }];
+
+    if (kbHits.length > 0) {
+      messages.push({ role: 'user',      content: `[CONTEXT]\nKnowledge retrieved for this task:\n${buildRagContext(kbHits)}` });
+      messages.push({ role: 'assistant', content: 'Understood. I have absorbed the relevant knowledge.' });
+    }
+
+    if (memoryHits.length > 0) {
+      const memCtx = memoryHits.map(m => `[${m.memoryType}] ${m.content}`).join('\n');
+      messages.push({ role: 'user',      content: `[CONTEXT]\nMemory recalled from past conversations:\n${memCtx}` });
+      messages.push({ role: 'assistant', content: 'Understood. I remember this context.' });
+    }
+
+    messages.push({ role: 'user', content: `[SCHEDULED TASK: ${task.contextName}]\n${taskPrompt}` });
+
+    const { content, skillFired, skillName } = await runCapabilityLoop(
+      messages,
+      `[SCHEDULED TASK: ${task.contextName}] ${taskPrompt}`,
+      skills,
+      CHAT_MODEL,
+      operator.id,
+      operator.ownerId,
+    );
+
+    const durationSec = (Date.now() - startTime) / 1000;
+    const summary = content.slice(0, 300);
+
+    if (content) {
+      await storeMemory(
+        operator.id,
+        operator.ownerId,
+        `[Scheduled task: ${task.contextName}${skillFired ? ` (skill: ${skillName})` : ''}] ${summary}`,
+        'context',
+        'ai_distilled',
+        0.8,
+        false,
+      );
+    }
+
+    const nextRunAt = options.rescheduleAfter ? computeNextRunAt(task.taskType, now) : task.nextRunAt;
+    const updatedPayload: TaskPayload = {
+      ...payload,
+      lastRunSummary:     summary,
+      lastRunDurationSec: parseFloat(durationSec.toFixed(1)),
+    };
+
+    await db.update(tasksTable)
+      .set({ nextRunAt, lastRunAt: now, payload: updatedPayload })
+      .where(eq(tasksTable.id, task.id));
+
+    console.log(
+      `[TASKS] Task "${task.contextName}" (${task.id}) completed in ${durationSec.toFixed(1)}s` +
+      (skillFired ? ` [skill: ${skillName}]` : ''),
+    );
+
+    return { ok: true, summary, durationSec };
+  } catch (err) {
+    const durationSec = (Date.now() - startTime) / 1000;
+    const errorMsg = (err as Error).message;
+    console.error(`[TASKS] Task ${task.id} failed:`, errorMsg);
+    const payload = parseTaskPayload(task.payload);
+    const errorPayload: TaskPayload = {
+      ...payload,
+      lastRunSummary:     `Error: ${errorMsg?.slice(0, 200)}`,
+      lastRunDurationSec: parseFloat(durationSec.toFixed(1)),
+    };
+    const nextRunAt = options.rescheduleAfter ? computeNextRunAt(task.taskType, now) : task.nextRunAt;
+    await db.update(tasksTable)
+      .set({ nextRunAt, lastRunAt: now, payload: errorPayload })
+      .where(eq(tasksTable.id, task.id));
+    return { ok: false, summary: `Error: ${errorMsg}`, durationSec };
+  }
+}
+
 async function runDueTasks(): Promise<void> {
   const now = new Date();
 
   const dueTasks = await db
-    .select()
+    .select({ id: tasksTable.id })
     .from(tasksTable)
     .where(
       and(
@@ -56,114 +174,7 @@ async function runDueTasks(): Promise<void> {
   console.log(`[TASKS] ${dueTasks.length} task(s) due at ${now.toISOString()}`);
 
   for (const task of dueTasks) {
-    const startTime = Date.now();
-
-    try {
-      const [operator] = await db
-        .select()
-        .from(operatorsTable)
-        .where(eq(operatorsTable.id, task.operatorId));
-
-      if (!operator) {
-        console.warn(`[TASKS] Operator ${task.operatorId} not found for task ${task.id} — pausing task`);
-        await db.update(tasksTable).set({ status: 'paused' }).where(eq(tasksTable.id, task.id));
-        continue;
-      }
-
-      const payload = parseTaskPayload(task.payload);
-      const taskPrompt = task.prompt ?? payload.description ?? '';
-      if (!taskPrompt) {
-        console.warn(`[TASKS] Task ${task.id} has no prompt — advancing schedule to avoid retry spam`);
-        const nextRunAt = computeNextRunAt(task.taskType, now);
-        await db.update(tasksTable).set({ nextRunAt }).where(eq(tasksTable.id, task.id));
-        continue;
-      }
-
-      const systemPromptText = assembleOperatorPrompt(operator);
-
-      const taskEmbedding = await embed(taskPrompt);
-
-      const [memoryHits, kbHits, skills] = await Promise.all([
-        searchMemory(operator.id, taskEmbedding),
-        searchBothKbs(operator.id, taskEmbedding, 4, 0.3, (operator.archetype as string[]) ?? []),
-        loadOperatorSkills(operator.id),
-      ]);
-
-      const messages: ChatMessage[] = [
-        { role: 'system', content: systemPromptText },
-      ];
-
-      if (kbHits.length > 0) {
-        const kbContext = buildRagContext(kbHits);
-        messages.push({ role: 'user',      content: `[CONTEXT]\nKnowledge retrieved for this task:\n${kbContext}` });
-        messages.push({ role: 'assistant', content: 'Understood. I have absorbed the relevant knowledge.' });
-      }
-
-      if (memoryHits.length > 0) {
-        const memCtx = memoryHits.map(m => `[${m.memoryType}] ${m.content}`).join('\n');
-        messages.push({ role: 'user',      content: `[CONTEXT]\nMemory recalled from past conversations:\n${memCtx}` });
-        messages.push({ role: 'assistant', content: 'Understood. I remember this context.' });
-      }
-
-      messages.push({
-        role: 'user',
-        content: `[SCHEDULED TASK: ${task.contextName}]\n${taskPrompt}`,
-      });
-
-      const { content, skillFired, skillName } = await runCapabilityLoop(
-        messages,
-        `[SCHEDULED TASK: ${task.contextName}] ${taskPrompt}`,
-        skills,
-        CHAT_MODEL,
-        operator.id,
-        operator.ownerId,
-      );
-
-      const durationSec = (Date.now() - startTime) / 1000;
-      const summary = content.slice(0, 300);
-
-      if (content) {
-        await storeMemory(
-          operator.id,
-          operator.ownerId,
-          `[Scheduled task: ${task.contextName}${skillFired ? ` (skill: ${skillName})` : ''}] ${summary}`,
-          'context',
-          'ai_distilled',
-          0.8,
-          false,
-        );
-      }
-
-      const nextRunAt = computeNextRunAt(task.taskType, now);
-      const updatedPayload: TaskPayload = {
-        ...payload,
-        lastRunSummary:     summary,
-        lastRunDurationSec: parseFloat(durationSec.toFixed(1)),
-      };
-
-      await db.update(tasksTable)
-        .set({ nextRunAt, lastRunAt: now, payload: updatedPayload })
-        .where(eq(tasksTable.id, task.id));
-
-      console.log(
-        `[TASKS] Task "${task.contextName}" (${task.id}) completed in ${durationSec.toFixed(1)}s` +
-        (skillFired ? ` [skill: ${skillName}]` : ''),
-      );
-
-    } catch (err) {
-      console.error(`[TASKS] Task ${task.id} failed:`, (err as Error).message);
-      const nextRunAt = computeNextRunAt(task.taskType, now);
-      const durationSec = (Date.now() - startTime) / 1000;
-      const payload = parseTaskPayload(task.payload);
-      const errorPayload: TaskPayload = {
-        ...payload,
-        lastRunSummary:     `Error: ${(err as Error).message?.slice(0, 200)}`,
-        lastRunDurationSec: parseFloat(durationSec.toFixed(1)),
-      };
-      await db.update(tasksTable)
-        .set({ nextRunAt, lastRunAt: now, payload: errorPayload })
-        .where(eq(tasksTable.id, task.id));
-    }
+    await runSingleTask(task.id, { rescheduleAfter: true });
   }
 }
 
