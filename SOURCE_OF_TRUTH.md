@@ -230,6 +230,33 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 ## 8. Commit History — newest first
 
+### 2026-05-22 — Phase 3: Tasks rewrite (cron parser, hourly, edit, run-now, NOT YET DEPLOYED)
+
+**The old "custom" path was broken** (computeNextRunAt('custom', ...) returned null → tasks set to custom never ran again). Replaced with a real expression parser.
+
+**New utility:** `artifacts/opsoul-api/src/utils/taskSchedule.ts`
+- `computeNextRunAt(taskType, customSchedule, from)` — single source of truth for next-run resolution. Used by `tasksCron.ts` (the loop), `routes/tasks.ts` (initial + edits), and the MCP `run_task_now` tool.
+- Supports: `hourly`, `daily`, `weekly`, plus `cron` with any of these expression forms:
+  - `every 5 minutes` / `every 30 minutes` / `every 2 hours` / `every 6 hours`
+  - `at 09:00 daily`
+  - `at 14:30 on monday`
+  - 5-field cron: `0 9 * * 1-5`
+- `validateSchedule(...)` rejects unparseable expressions at the API boundary so the owner sees a clear error instead of a task that silently never fires. Past-time results are also rejected.
+
+**Backend:**
+- `routes/tasks.ts` accepts `schedule ∈ {hourly, daily, weekly, cron}` (was `daily, weekly, custom`). Validates expressions on create + update. PATCH recomputes `nextRunAt` when either the schedule type OR the cron expression changes (was only when type changed).
+- **New endpoint:** `POST /:taskId/run-now` runs the task immediately via `runSingleTask(id, {rescheduleAfter:false})` — the same executor the hourly cron and the MCP `run_task_now` tool use. Fires "extra," doesn't disturb the recurring schedule.
+
+**Hub UI (`TasksSection.tsx` full rewrite):**
+- Schedule dropdown shows `Hourly / Daily / Weekly / Custom (cron / expression)`.
+- Custom path gets a free-text input with hint string explaining accepted forms.
+- **Edit dialog** for any existing task (name, schedule, expression, prompt). Backend PATCH was already there — the UI just finally calls it.
+- **Run-now button** (⚡ icon) on every task row. Mutation hits `/run-now` and the toast shows the live result summary + duration. Status badge refreshes from the same query invalidation.
+- Next-run time displayed under the last-run line so the owner always knows when the task fires next.
+- Re-organized icon column: Run-now · Edit · Pause/Resume · Delete.
+
+**Hub types:** `Task.schedule` widened from `"daily" | "weekly" | "custom"` to `"hourly" | "daily" | "weekly" | "cron"`.
+
 ### 2026-05-22 — Phase 2: MCP wave 1 — 16 new tools (toolRegistry + toolHandlers + tasksCron extract, NOT YET DEPLOYED)
 
 **Tool count: 12 → 28.** New tools, all `availability: 'always'` (no auth/connectivity gating), all `scopes: '*'`:

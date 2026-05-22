@@ -178,7 +178,7 @@ export interface Task {
   id: string;
   operatorId: string;
   name: string;
-  schedule: "daily" | "weekly" | "custom";
+  schedule: "hourly" | "daily" | "weekly" | "cron";
   prompt: string;
   customSchedule?: string;
   status: string;

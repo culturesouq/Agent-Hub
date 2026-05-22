@@ -6,6 +6,8 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { eq, and, desc } from 'drizzle-orm';
 import crypto from 'crypto';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
+import { computeNextRunAt, validateSchedule } from '../utils/taskSchedule.js';
+import { runSingleTask } from '../cron/tasksCron.js';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -46,23 +48,22 @@ async function resolveOperator(req: Request, res: Response): Promise<string | nu
   return op.id;
 }
 
-function computeInitialNextRunAt(schedule: string): Date | null {
-  const now = Date.now();
-  if (schedule === 'daily')  return new Date(now + 24 * 60 * 60 * 1000);
-  if (schedule === 'weekly') return new Date(now + 7 * 24 * 60 * 60 * 1000);
-  return null;
+function computeInitialNextRunAt(schedule: string, customSchedule: string | null | undefined): Date | null {
+  return computeNextRunAt(schedule, customSchedule ?? null, new Date());
 }
+
+const SCHEDULE_VALUES = ['hourly', 'daily', 'weekly', 'cron'] as const;
 
 const CreateTaskSchema = z.object({
   name: z.string().min(1).max(200),
-  schedule: z.enum(['daily', 'weekly', 'custom']),
+  schedule: z.enum(SCHEDULE_VALUES),
   prompt: z.string().min(1).max(2000),
   customSchedule: z.string().optional(),
 });
 
 const UpdateTaskSchema = z.object({
   name: z.string().min(1).max(200).optional(),
-  schedule: z.enum(['daily', 'weekly', 'custom']).optional(),
+  schedule: z.enum(SCHEDULE_VALUES).optional(),
   prompt: z.string().min(1).max(2000).optional(),
   customSchedule: z.string().optional(),
   status: z.enum(['active', 'paused']).optional(),
@@ -110,6 +111,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   }
 
   const { name, schedule, prompt, customSchedule } = parsed.data;
+  const scheduleErr = validateSchedule(schedule, customSchedule);
+  if (scheduleErr) {
+    res.status(400).json({ error: scheduleErr });
+    return;
+  }
   const payload: TaskPayload = { customSchedule: customSchedule ?? null };
 
   const [created] = await db
@@ -123,7 +129,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       prompt,
       payload,
       status: 'active',
-      nextRunAt: computeInitialNextRunAt(schedule),
+      nextRunAt: computeInitialNextRunAt(schedule, customSchedule),
     })
     .returning();
 
@@ -155,13 +161,27 @@ router.patch('/:taskId', async (req: Request, res: Response): Promise<void> => {
   const currentPayload = parseTaskPayload(existing.payload);
 
   const newSchedule = schedule ?? existing.taskType;
-  const nextRunAt = schedule && schedule !== existing.taskType
-    ? computeInitialNextRunAt(schedule)
+  const newCustom = customSchedule ?? currentPayload.customSchedule ?? null;
+
+  if (schedule || customSchedule !== undefined) {
+    const scheduleErr = validateSchedule(newSchedule, newCustom);
+    if (scheduleErr) {
+      res.status(400).json({ error: scheduleErr });
+      return;
+    }
+  }
+
+  // Recompute nextRunAt when EITHER the schedule type or the custom expression changed.
+  const scheduleChanged =
+    (schedule !== undefined && schedule !== existing.taskType) ||
+    (customSchedule !== undefined && customSchedule !== currentPayload.customSchedule);
+  const nextRunAt = scheduleChanged
+    ? computeInitialNextRunAt(newSchedule, newCustom)
     : undefined;
 
   const updatedPayload: TaskPayload = {
     ...currentPayload,
-    customSchedule: customSchedule ?? currentPayload.customSchedule,
+    customSchedule: newCustom,
   };
 
   const [updated] = await db
@@ -179,6 +199,27 @@ router.patch('/:taskId', async (req: Request, res: Response): Promise<void> => {
 
   triggerSelfAwareness(operatorId, 'conversation_end').catch(() => {});
   res.json(serializeTask(updated));
+});
+
+router.post('/:taskId/run-now', async (req: Request, res: Response): Promise<void> => {
+  const operatorId = await resolveOperator(req, res);
+  if (!operatorId) return;
+
+  const [existing] = await db
+    .select({ id: tasksTable.id })
+    .from(tasksTable)
+    .where(and(eq(tasksTable.id, req.params.taskId as string), eq(tasksTable.operatorId, operatorId)));
+
+  if (!existing) {
+    res.status(404).json({ error: 'Task not found' });
+    return;
+  }
+
+  // Run the task inline using the same executor as the cron and the
+  // run_task_now MCP tool. rescheduleAfter:false keeps the recurring
+  // schedule's nextRunAt untouched — this fires extra, not instead.
+  const result = await runSingleTask(existing.id, { rescheduleAfter: false });
+  res.json(result);
 });
 
 router.delete('/:taskId', async (req: Request, res: Response): Promise<void> => {

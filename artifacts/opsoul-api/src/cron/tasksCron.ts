@@ -6,6 +6,7 @@ import { CHAT_MODEL } from '../utils/openrouter.js';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { storeMemory, searchMemory } from '../utils/memoryEngine.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
+import { computeNextRunAt as computeNext } from '../utils/taskSchedule.js';
 import {
   loadOperatorSkills,
   runCapabilityLoop,
@@ -31,10 +32,8 @@ function parseTaskPayload(raw: unknown): TaskPayload {
   };
 }
 
-function computeNextRunAt(schedule: string, from: Date): Date | null {
-  if (schedule === 'daily')  return new Date(from.getTime() + 24 * 60 * 60 * 1000);
-  if (schedule === 'weekly') return new Date(from.getTime() + 7 * 24 * 60 * 60 * 1000);
-  return null;
+function computeNextRunAt(schedule: string, from: Date, customSchedule?: string | null): Date | null {
+  return computeNext(schedule, customSchedule ?? null, from);
 }
 
 /**
@@ -66,7 +65,7 @@ export async function runSingleTask(
     const taskPrompt = task.prompt ?? payload.description ?? '';
     if (!taskPrompt) {
       if (options.rescheduleAfter) {
-        const nextRunAt = computeNextRunAt(task.taskType, now);
+        const nextRunAt = computeNextRunAt(task.taskType, now, parseTaskPayload(task.payload).customSchedule);
         await db.update(tasksTable).set({ nextRunAt }).where(eq(tasksTable.id, task.id));
       }
       return { ok: false, summary: 'No prompt on task — skipped', durationSec: 0 };
@@ -120,7 +119,7 @@ export async function runSingleTask(
       );
     }
 
-    const nextRunAt = options.rescheduleAfter ? computeNextRunAt(task.taskType, now) : task.nextRunAt;
+    const nextRunAt = options.rescheduleAfter ? computeNextRunAt(task.taskType, now, parseTaskPayload(task.payload).customSchedule) : task.nextRunAt;
     const updatedPayload: TaskPayload = {
       ...payload,
       lastRunSummary:     summary,
@@ -147,7 +146,7 @@ export async function runSingleTask(
       lastRunSummary:     `Error: ${errorMsg?.slice(0, 200)}`,
       lastRunDurationSec: parseFloat(durationSec.toFixed(1)),
     };
-    const nextRunAt = options.rescheduleAfter ? computeNextRunAt(task.taskType, now) : task.nextRunAt;
+    const nextRunAt = options.rescheduleAfter ? computeNextRunAt(task.taskType, now, parseTaskPayload(task.payload).customSchedule) : task.nextRunAt;
     await db.update(tasksTable)
       .set({ nextRunAt, lastRunAt: now, payload: errorPayload })
       .where(eq(tasksTable.id, task.id));
