@@ -11,9 +11,9 @@
 |---|---|
 | **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` |
 | **Container App** | `opsoul` (resource group `bani-studio-rg`, region `uaenorth`) |
-| **Active Revision** | `opsoul--0000068` (Healthy 2026-05-22 — Operator Station rewrite: 57 MCP tools, widget protocol, tasks/connections rewrite, growth health fixes) |
-| **Image** | `banistudioacr.azurecr.io/opsoul-api:station-rewrite-319f273` |
-| **Source commit (live)** | `319f273` — last of an 11-commit Operator Station rewrite (`404fb57` → `319f273`). PDF upload fix, widget protocol + TokenDropCard, 45 new MCP tools across 3 waves (12→57 total), Tasks rewrite with hourly/cron/edit/run-now, Connections rewrite folding WhatsApp+Telegram inline + MCP endpoint surfaced, API Access cleanup, growth self-awareness stale-refresh + raised growActivity baseline. **Zero changes to Soul/Layer 0-1-2/systemPrompt/KB content/identity locks — pure runtime layer per Claim 12.** Full report in `SUMMARY_REPORT.md`. |
+| **Active Revision** | `opsoul--0000070` (Healthy 2026-05-22T06:29Z — Artifacts archive tab next to Files; sibling of `00926b4`'s ui-gap fixes on top of `e515e4b` station rewrite) |
+| **Image** | `banistudioacr.azurecr.io/opsoul-api:artifacts-tab-00926b4` |
+| **Source commit (live)** | `00926b4` — Artifacts archive tab. `GET /api/operators/:id/artifacts` scans messagesTable for fenced `opsoul-widget` blocks (excludes transient connect_form); Hub `ArtifactsSection.tsx` renders each via the existing WidgetBlock, filter chips per kind, sits between Files and Connections in the nav. Builds on `e515e4b` (5 UI-gap fixes: every-N-hours preset, "unlocks N tools" badge, outbound activity per channel, Skills "Test fire" panel, `/render` slash command) and `319f273` (full station rewrite). |
 | **🛡 Rollback safety net (DO NOT DELETE)** | Three retained rollback fallbacks: (1) image `banistudioacr.azurecr.io/opsoul-api:upload-fix-dd7e32c` (rev `opsoul--0000066` — pre-station-rewrite), (2) image `banistudioacr.azurecr.io/opsoul-api:mcp-runtime-f9f23e4` (rev `opsoul--0000065` — MCP runtime layer, pre-upload-fix), (3) image `banistudioacr.azurecr.io/opsoul-api:webhook-fix-2c4ea80` (rev `opsoul--0000064` — pre-MCP). Owner directive 2026-05-19 (still in force): keep flagged, do **not** auto-prune; touch only on explicit owner directive. Rollback to pre-station-rewrite: `az containerapp update -n opsoul -g bani-studio-rg --image banistudioacr.azurecr.io/opsoul-api:upload-fix-dd7e32c`. Pre-MCP state: `--image banistudioacr.azurecr.io/opsoul-api:webhook-fix-2c4ea80`. |
 | **Live proof (2026-05-19)** | Nahil successfully called `http_request` tool against `https://nahilai.com/` via the new MCP runtime layer. Retrieved structured JSON, reported back: profile (Abu Dhabi admin), 5 active subsidies (Smart Irrigation, AgTech Grant, Organic Farming, Protected Agriculture, Water Desalination Access), empty sensors/seasons. Universal tool layer confirmed working in production on a real operator hitting real consumer-app data. |
 | **LLM model (entire stack)** | `moonshotai/kimi-k2.5` via OpenRouter — chat, distillation, GROW, sub-agent dispatch, vision, schema normalization, capability loop, all routes |
@@ -229,6 +229,31 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 ---
 
 ## 8. Commit History — newest first
+
+### 2026-05-22T06:29Z — Artifacts archive tab SHIPPED (`opsoul--0000070`, image `artifacts-tab-00926b4`)
+
+**Source commit:** `00926b4` feat(artifacts): durable archive tab next to Files
+**ACR run:** `dg7b` (2m11s, Succeeded)
+**Smoke:** `GET /api/models` → 200 in 218ms
+
+**What:** The Artifacts tab in the operator station that I parked in Phase 7 ("inline rendering is enough") is now built. Sits between Files and Connections in the sidebar. Scans every assistant message for fenced `opsoul-widget` blocks, excludes transient `connect_form` payloads, renders charts/tables/diagrams via the existing WidgetBlock dispatcher. Filter chips per kind. Empty state shows example prompts.
+
+**Files:**
+- `artifacts/opsoul-api/src/routes/artifacts.ts` — new route, mounted at `/api/operators/:id/artifacts`
+- `artifacts/opsoul-api/src/index.ts` — mount
+- `artifacts/opsoul-hub/src/components/operator/ArtifactsSection.tsx` — new
+- `artifacts/opsoul-hub/src/pages/OperatorDetail.tsx` — nav slot between Files and Connections
+
+### 2026-05-22T05:?Z — 5 UI-gap fixes SHIPPED (`opsoul--0000069`, image `ui-gaps-fixed-e515e4b`)
+
+**Source commit:** `e515e4b` fix(ui): 5 UI gaps from station-rewrite review
+
+Owner-flagged gaps from the post-rewrite review:
+1. **Tasks**: replaced bare "Hourly" with `Every N minutes / Every N hours / Daily / Weekly / Daily at HH:MM / Weekly at HH:MM on day / Advanced (cron)` presets + live preview line showing what's actually saved.
+2. **Connections**: each connected card shows a collapsible "Unlocks N tools" line with the actual tool names (Gmail→3, Notion→2, GitHub→3, …).
+3. **Connections**: every successful `send_telegram / send_whatsapp / send_slack` writes a `[OUTBOUND <type>]` row to messagesTable; GET /integrations counts them per channel and returns `{outbound: {count, lastSentAt}}`. Cards show "📤 N messages sent · last …".
+4. **Skills**: "Test fire" panel — new `POST /operators/:id/skills/test-tool` runs `dispatchTool` against owner-scope context, bypassing the LLM. Owner can verify any of the 57 tools directly.
+5. **Chat**: `/render <kind> <json>` slash command — intercepts client-side and injects a local-only assistant message with the fenced widget block. Lets owner preview connect_form / chart / table / mermaid widgets without the LLM choosing to call render_*.
 
 ### 2026-05-22 — Operator Station rewrite SHIPPED — all 11 phases (`opsoul--0000068`, image `station-rewrite-319f273`)
 
