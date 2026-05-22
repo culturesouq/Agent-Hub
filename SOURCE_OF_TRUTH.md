@@ -230,6 +230,14 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 ## 8. Commit History — newest first
 
+### 2026-05-22 — Phase 5: Skills section already MCP-live; small completions (NOT YET DEPLOYED)
+
+Skills section was already pulling from `buildToolManifest()` — when Phase 2 added 16 new tools to `toolRegistry.ts` they automatically started rendering in the SkillsSection grid (the manifest endpoint is the single source of truth).
+
+Two small completions for Phase 5:
+- `routes/operator-skills.ts`: now also passes `connectedIntegrations` to `buildToolManifest()`, so `availability:'integration'`-gated tools (Phase 6 comms tools + Phase 8 connected-app first-class tools) correctly show as available only when the matching integration is connected.
+- Hub `SkillsSection.tsx`: added category tints for the three new categories — `memory` (rose), `self` (slate), `communication` (cyan).
+
 ### 2026-05-22 — Phase 4: Connections rewrite + drop bottom Channels group (NOT YET DEPLOYED)
 
 **IntegrationsSection.tsx full rewrite** (cleaner shell + folded channel features):

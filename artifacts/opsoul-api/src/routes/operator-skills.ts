@@ -8,7 +8,7 @@ import { eq, and } from 'drizzle-orm';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
 import { isWebSearchAvailable } from '../utils/capabilityEngine.js';
-import { operatorSecretsTable } from '@workspace/db';
+import { operatorSecretsTable, operatorIntegrationsTable } from '@workspace/db';
 import { buildToolManifest } from '../utils/toolRegistry.js';
 
 const router = Router({ mergeParams: true });
@@ -153,10 +153,16 @@ router.get('/manifest', async (req: Request, res: Response): Promise<void> => {
   // sees exactly the same set the operator can call via the LLM and the
   // same set external MCP clients see at /mcp. Owner scope here matches
   // the auth context (chat route requires owner-level auth).
+  const integrationRows = await db
+    .select({ integrationType: operatorIntegrationsTable.integrationType })
+    .from(operatorIntegrationsTable)
+    .where(eq(operatorIntegrationsTable.operatorId, operatorId));
+
   const builtin = buildToolManifest({
     scopeType: 'owner',
     hasWebSearch: isWebSearchAvailable(),
     liveSecrets: secretRows.map((r) => r.key),
+    connectedIntegrations: integrationRows.map((r) => r.integrationType),
   })
     .filter((t) => t.available)
     .map((t) => ({

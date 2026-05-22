@@ -13,10 +13,13 @@ import { Download, Trash2, Plus, Sparkles, Search, Layers } from "lucide-react";
 import { format } from "date-fns";
 
 const CATEGORY_COLORS: Record<string, string> = {
-  research:    "bg-blue-500/10 text-blue-600 border-blue-500/30",
-  workspace:   "bg-emerald-500/10 text-emerald-600 border-emerald-500/30",
-  integration: "bg-purple-500/10 text-purple-600 border-purple-500/30",
-  automation:  "bg-amber-500/10 text-amber-600 border-amber-500/30",
+  research:      "bg-blue-500/10 text-blue-600 border-blue-500/30",
+  workspace:     "bg-emerald-500/10 text-emerald-600 border-emerald-500/30",
+  integration:   "bg-purple-500/10 text-purple-600 border-purple-500/30",
+  automation:    "bg-amber-500/10 text-amber-600 border-amber-500/30",
+  memory:        "bg-rose-500/10 text-rose-600 border-rose-500/30",
+  self:          "bg-slate-500/10 text-slate-600 border-slate-500/30",
+  communication: "bg-cyan-500/10 text-cyan-600 border-cyan-500/30",
 };
 
 export default function SkillsSection({ operatorId }: { operatorId: string }) {
