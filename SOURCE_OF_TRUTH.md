@@ -230,6 +230,22 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 ## 8. Commit History — newest first
 
+### 2026-05-22 — Phase 10: Growth math fixes — no prompt edits (NOT YET DEPLOYED)
+
+Per the audit, two growth issues:
+
+1. **"Some operators always 100%"** — root cause was `GET /grow/self-awareness` returning the stored row without ever recomputing. Stale value persisted forever if a trigger silently failed.
+
+   **Fix:** `routes/grow.ts:203-238` — the GET now treats a cached row as stale if `lastUpdated` is older than 6 hours OR missing. When stale, it recomputes inline (triggers `stale_refresh`), persists, and returns the fresh row. If recompute fails it still returns the stale value with a note rather than 502'ing, so the owner sees something.
+
+2. **growActivity stuck at 50** — the old default penalized operators for *correctly* not proposing growth (locked operators, drift-blocked operators, RLHF-trained models refusing to suggest self-modification). The score dragged down overall health for valid reasons.
+
+   **Fix:** `selfAwarenessEngine.ts:getGrowActivityScore` — baseline lifted from 50 to 70 when no proposals have fired. With proposals, score is `70 + appliedRatio * 30` (was `50 + appliedRatio * 50`) — still rewards owner-approved proposals, but the absence of any doesn't punish.
+
+**Not touched this phase** — the GROW prompt itself (`growEngine.ts`). The reframe from "self-modify" to "observe patterns" would likely unstick the LLM-refusal block (real RLHF behavior), but per the `feedback_no_prompt_changes` memory and SoT rule #7, prompt edits need word-by-word owner approval. **Flagged for a separate dedicated session.**
+
+Two new trigger values added to the `SelfAwarenessTrigger` union: `stale_refresh` and `no_cache` — so the lastUpdateTrigger column shows the operator why the row was last recomputed.
+
 ### 2026-05-22 — Phase 9: API Access cleanup — legacy dropped, v1 only (NOT YET DEPLOYED)
 
 The API Access page used to show **both** the legacy chat endpoint (`POST /operators/:id/conversations/:convId/messages` with the owner JWT) AND the v1 slot system (`POST /v1/chat` + `POST /v1/action` with per-slot API keys). Two auth models on one screen, with curl/JS/Python snippets only for the legacy auth.

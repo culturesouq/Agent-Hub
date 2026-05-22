@@ -24,7 +24,9 @@ export type SelfAwarenessTrigger =
   | 'capability_request'
   | 'integration_change'
   | 'force'
-  | 'owner_manual';
+  | 'owner_manual'
+  | 'stale_refresh'   // GET /self-awareness recomputed because cache was older than 6h
+  | 'no_cache';       // GET /self-awareness recomputed because no row existed yet
 
 export interface HealthScore {
   score: number;
@@ -340,9 +342,16 @@ function getMandateCoveragePercent(capabilityState: CapabilityState): number {
 }
 
 function getGrowActivityScore(soulState: SoulState): number {
-  if (soulState.growProposalCount === 0) return 50;
+  // When no GROW proposals have fired, the operator is either too young to
+  // have meaningful patterns yet, locked from growth, or the LLM is refusing
+  // to suggest self-modification (a known RLHF behavior). The old baseline
+  // of 50 punished operators for not changing — even when not changing was
+  // the correct outcome. Lift the no-proposal baseline to 70 so the absence
+  // of growth doesn't drag down overall health, and the score still rewards
+  // operators whose proposals get applied.
+  if (soulState.growProposalCount === 0) return 70;
   const appliedRatio = soulState.appliedProposalCount / soulState.growProposalCount;
-  return Math.min(Math.round(50 + appliedRatio * 50), 100);
+  return Math.min(Math.round(70 + appliedRatio * 30), 100);
 }
 
 function getSoulIntegrityScore(identityState: IdentityState): number {

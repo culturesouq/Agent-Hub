@@ -200,6 +200,11 @@ router.patch('/proposals/:proposalId/decide', async (req: Request, res: Response
   recomputeSelfAwareness(operatorId, 'grow_approved').catch(() => {});
 });
 
+/** Stale-after window for the cached self-awareness row. After this, GET
+ *  recomputes before returning so operators can't sit at outdated 100%
+ *  health forever when a trigger silently failed. */
+const SELF_AWARENESS_STALE_MS = 6 * 60 * 60 * 1000;
+
 router.get('/self-awareness', async (req: Request, res: Response): Promise<void> => {
   const operatorId = await resolveOperator(req, res);
   if (!operatorId) return;
@@ -209,15 +214,28 @@ router.get('/self-awareness', async (req: Request, res: Response): Promise<void>
     .from(selfAwarenessStateTable)
     .where(eq(selfAwarenessStateTable.operatorId, operatorId));
 
-  if (stored) {
+  const isStale = !stored || !stored.lastUpdated || (Date.now() - stored.lastUpdated.getTime()) > SELF_AWARENESS_STALE_MS;
+
+  if (stored && !isStale) {
     res.json(stored);
     return;
   }
 
   try {
-    const live = await buildSelfAwarenessState(operatorId);
-    res.json({ ...live, note: 'Live-computed — no cached state yet. POST /self-awareness/recompute to persist.' });
+    // Either no cache or cache is stale — recompute, persist, return fresh.
+    await recomputeSelfAwareness(operatorId, isStale && stored ? 'stale_refresh' : 'no_cache');
+    const [updated] = await db
+      .select()
+      .from(selfAwarenessStateTable)
+      .where(eq(selfAwarenessStateTable.operatorId, operatorId));
+    res.json(updated ?? stored ?? { error: 'No state available' });
   } catch (err) {
+    // If recompute fails, surface the stale value rather than 502 — owner
+    // still sees something, with a note that the refresh failed.
+    if (stored) {
+      res.json({ ...stored, note: `Recompute failed: ${(err as Error).message}` });
+      return;
+    }
     res.status(502).json({ error: 'Failed to compute self-awareness state', detail: (err as Error).message });
   }
 });
