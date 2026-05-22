@@ -230,6 +230,23 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 ## 8. Commit History — newest first
 
+### 2026-05-22 — Phase 7: Artifact renderers — chart, table, mermaid (NOT YET DEPLOYED)
+
+**Tool count: 37 → 40.** Three new render tools that emit `opsoul-widget` payloads:
+- `render_chart` (bar / line / pie, with title and `{label, value}[]` data) — Recharts in the Hub.
+- `render_table` (columns + 2D row strings, optional title) — semantic `<table>` with overflow scroll.
+- `render_diagram` (Mermaid source + title) — for now: styled source block with copy button + render-at-mermaid.live link. Mermaid lib not yet bundled. When it gets added, only `MermaidCard.tsx` changes — protocol and tool stay.
+
+**Hub:**
+- `widgets/ChartCard.tsx` — Recharts BarChart / LineChart / PieChart, palette + responsive container.
+- `widgets/TableCard.tsx` — sticky-header semantic table.
+- `widgets/MermaidCard.tsx` — source + copy + open-at-mermaid.live.
+- `WidgetBlock.tsx` updated to dispatch to the three new cards.
+
+**Schema widening:** `ToolDefinition.parameters.properties[*].items` already accepted nested `properties` — added recursive `items.items` for `render_table.rows` (array of arrays). Tiny, still backward-compat.
+
+**Out of scope this phase:** an "Artifacts" sub-tab under Files for archival. Inline rendering is the complete capability today — charts can be right-clicked to save PNG, mermaid sources copied, tables selected. If owner asks for an archive view later, the protocol's already there — just a Files-tab listing of past widget payloads.
+
 ### 2026-05-22 — Phase 6: MCP wave 2 — 9 new tools for outbound comms, files, research (NOT YET DEPLOYED)
 
 **Tool count: 28 → 37.**

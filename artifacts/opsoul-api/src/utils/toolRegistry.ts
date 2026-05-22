@@ -732,6 +732,87 @@ export const UNIVERSAL_TOOLS: RegisteredTool[] = [
     availability: 'always',
     category: 'research',
   },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  //  WAVE 2 (cont.) — ARTIFACT RENDERERS
+  //  Emit a fenced opsoul-widget block; ChatSection's WidgetBlock renders it.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  {
+    name: 'render_chart',
+    displayName: 'Render chart',
+    description:
+      'Renders a bar, line, or pie chart inline in the chat. Pass an array of {label, value} points. The chat surface draws the chart with Recharts; the operator sees it the same as the owner.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        chartType: { type: 'string', enum: ['bar', 'line', 'pie'], description: 'Chart shape.' },
+        title:     { type: 'string', description: 'Optional title shown above the chart.' },
+        data: {
+          type: 'array',
+          description: 'Series points. Each item must have label (string) and value (number).',
+          items: {
+            type: 'object',
+            properties: {
+              label: { type: 'string' },
+              value: { type: 'number' },
+            },
+            required: ['label', 'value'],
+          },
+        },
+      },
+      required: ['chartType', 'data'],
+    },
+    scopes: '*',
+    availability: 'always',
+    category: 'workspace',
+  },
+  {
+    name: 'render_table',
+    displayName: 'Render table',
+    description:
+      'Renders a tabular grid inline in the chat. Pass an array of column names and a 2D array of row values (strings).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title:   { type: 'string', description: 'Optional title shown above the table.' },
+        columns: {
+          type: 'array',
+          description: 'Column header strings.',
+          items: { type: 'string' },
+        },
+        rows: {
+          type: 'array',
+          description: 'Array of rows. Each row is an array of cell strings in the same order as columns.',
+          items: {
+            type: 'array',
+            items: { type: 'string' },
+          },
+        },
+      },
+      required: ['columns', 'rows'],
+    },
+    scopes: '*',
+    availability: 'always',
+    category: 'workspace',
+  },
+  {
+    name: 'render_diagram',
+    displayName: 'Render diagram (Mermaid)',
+    description:
+      'Renders a Mermaid diagram source inline in the chat. The chat surface displays the source with a copy button and a render link to mermaid.live; inline rendering ships later. Use for flowcharts, sequence diagrams, mind maps, gantt charts.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title:   { type: 'string', description: 'Optional title shown above the diagram.' },
+        diagram: { type: 'string', description: 'Full Mermaid source (e.g. "flowchart TD\\n  A --> B\\n  B --> C").' },
+      },
+      required: ['diagram'],
+    },
+    scopes: '*',
+    availability: 'always',
+    category: 'workspace',
+  },
 ];
 
 // ───────────────────────────────────────────────────────────────────────────

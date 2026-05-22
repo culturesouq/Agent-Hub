@@ -1123,6 +1123,45 @@ async function handleExtractPdfText(rawArgs: string, _ctx: ToolHandlerContext): 
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+//  WAVE 2 (cont.) — ARTIFACT RENDERERS
+//  Each tool emits a fenced opsoul-widget block. ChatSection's WidgetBlock
+//  detects it and renders the matching component (ChartCard/TableCard/
+//  MermaidCard). No DB write — these are pure presentation payloads.
+// ───────────────────────────────────────────────────────────────────────────
+
+function emitWidget(payload: unknown, afterText?: string): string {
+  return `\`\`\`opsoul-widget\n${JSON.stringify(payload)}\n\`\`\`${afterText ? `\n${afterText}` : ''}`;
+}
+
+async function handleRenderChart(rawArgs: string, _ctx: ToolHandlerContext): Promise<ToolResult> {
+  const args = parseArgs<{ chartType?: string; title?: string; data?: Array<{ label?: string; value?: number }> }>(rawArgs);
+  if (args.chartType !== 'bar' && args.chartType !== 'line' && args.chartType !== 'pie') {
+    return { content: 'render_chart requires chartType ∈ {bar, line, pie}.', meta: { terminateLoop: true } };
+  }
+  if (!Array.isArray(args.data)) {
+    return { content: 'render_chart requires a "data" array of {label, value} points.', meta: { terminateLoop: true } };
+  }
+  const data = args.data.filter((p): p is { label: string; value: number } =>
+    typeof p?.label === 'string' && typeof p?.value === 'number',
+  );
+  return { content: emitWidget({ kind: 'chart', chartType: args.chartType, title: args.title, data }) };
+}
+
+async function handleRenderTable(rawArgs: string, _ctx: ToolHandlerContext): Promise<ToolResult> {
+  const args = parseArgs<{ title?: string; columns?: string[]; rows?: string[][] }>(rawArgs);
+  if (!Array.isArray(args.columns) || !Array.isArray(args.rows)) {
+    return { content: 'render_table requires "columns" (string[]) and "rows" (string[][]).', meta: { terminateLoop: true } };
+  }
+  return { content: emitWidget({ kind: 'table', title: args.title, columns: args.columns, rows: args.rows }) };
+}
+
+async function handleRenderDiagram(rawArgs: string, _ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { title, diagram } = parseArgs<{ title?: string; diagram?: string }>(rawArgs);
+  if (!diagram) return { content: 'render_diagram requires "diagram" (Mermaid source).', meta: { terminateLoop: true } };
+  return { content: emitWidget({ kind: 'mermaid', title, diagram }) };
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 //  DISPATCH — single entry point for chat.ts and mcpServer.ts
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -1194,6 +1233,11 @@ export async function dispatchTool(
     case 'download_to_workspace':  return handleDownloadToWorkspace(rawArgs, ctx);
     case 'fetch_url':              return handleFetchUrl(rawArgs, ctx);
     case 'extract_pdf_text':       return handleExtractPdfText(rawArgs, ctx);
+
+    // Wave 2 — artifact renderers
+    case 'render_chart':           return handleRenderChart(rawArgs, ctx);
+    case 'render_table':           return handleRenderTable(rawArgs, ctx);
+    case 'render_diagram':         return handleRenderDiagram(rawArgs, ctx);
 
     default:
       return {
