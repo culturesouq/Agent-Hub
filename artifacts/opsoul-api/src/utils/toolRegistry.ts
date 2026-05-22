@@ -813,6 +813,252 @@ export const UNIVERSAL_TOOLS: RegisteredTool[] = [
     availability: 'always',
     category: 'workspace',
   },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  //  WAVE 3 — CONNECTED-APP FIRST-CLASS TOOLS
+  //  Each routes through executeHttpWithOAuth() so the integration's stored
+  //  token is injected server-side and Google OAuth refresh is automatic.
+  //  All require their integration to be connected (availability:'integration').
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // Gmail
+  {
+    name: 'gmail_send',
+    displayName: 'Gmail send',
+    description: 'Sends an email via the connected Gmail account. Standard RFC 2822 message — recipient, subject, body.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        to:      { type: 'string', description: 'Recipient email.' },
+        subject: { type: 'string', description: 'Subject line.' },
+        body:    { type: 'string', description: 'Plain-text body.' },
+      },
+      required: ['to', 'subject', 'body'],
+    },
+    scopes: '*', availability: 'integration', category: 'communication',
+  },
+  {
+    name: 'gmail_search',
+    displayName: 'Gmail search',
+    description: 'Searches the connected Gmail mailbox using Gmail query syntax. Returns up to 10 message metadata records (id, subject, from, date).',
+    inputSchema: {
+      type: 'object',
+      properties: { query: { type: 'string', description: 'Gmail search query (e.g. "from:foo@bar.com is:unread").' } },
+      required: ['query'],
+    },
+    scopes: '*', availability: 'integration', category: 'communication',
+  },
+  {
+    name: 'gmail_read',
+    displayName: 'Gmail read',
+    description: 'Fetches the body of a Gmail message by message id (obtained from gmail_search).',
+    inputSchema: {
+      type: 'object',
+      properties: { messageId: { type: 'string', description: 'Gmail message id.' } },
+      required: ['messageId'],
+    },
+    scopes: '*', availability: 'integration', category: 'communication',
+  },
+
+  // Calendar
+  {
+    name: 'calendar_create_event',
+    displayName: 'Calendar — create event',
+    description: 'Creates a new event on the primary Google Calendar. Times in ISO-8601 (e.g. "2026-05-25T10:00:00+04:00").',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        summary:     { type: 'string', description: 'Event title.' },
+        startIso:    { type: 'string', description: 'Start time (ISO 8601 with timezone).' },
+        endIso:      { type: 'string', description: 'End time (ISO 8601 with timezone).' },
+        description: { type: 'string', description: 'Optional description.' },
+        location:    { type: 'string', description: 'Optional location.' },
+      },
+      required: ['summary', 'startIso', 'endIso'],
+    },
+    scopes: '*', availability: 'integration', category: 'integration',
+  },
+  {
+    name: 'calendar_list_events',
+    displayName: 'Calendar — list events',
+    description: 'Returns up to 10 upcoming events from the primary calendar within the given window.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        timeMinIso: { type: 'string', description: 'Window start (ISO 8601). Default: now.' },
+        timeMaxIso: { type: 'string', description: 'Window end (ISO 8601). Default: 7 days from now.' },
+      },
+      required: [],
+    },
+    scopes: '*', availability: 'integration', category: 'integration',
+  },
+
+  // Drive
+  {
+    name: 'drive_search',
+    displayName: 'Drive search',
+    description: 'Searches the connected Google Drive for files matching a name fragment or query. Returns up to 10 results (id, name, mimeType).',
+    inputSchema: {
+      type: 'object',
+      properties: { query: { type: 'string', description: 'Search text (filename fragment or Drive query syntax).' } },
+      required: ['query'],
+    },
+    scopes: '*', availability: 'integration', category: 'integration',
+  },
+  {
+    name: 'drive_read_file',
+    displayName: 'Drive read file',
+    description: 'Downloads a Drive file by id and returns its text content (up to 10 KB). Google Docs are exported as plain text.',
+    inputSchema: {
+      type: 'object',
+      properties: { fileId: { type: 'string', description: 'Drive file id from drive_search.' } },
+      required: ['fileId'],
+    },
+    scopes: '*', availability: 'integration', category: 'integration',
+  },
+
+  // GitHub
+  {
+    name: 'github_create_issue',
+    displayName: 'GitHub — create issue',
+    description: 'Opens a new issue on a GitHub repo via the connected PAT.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        repo:  { type: 'string', description: 'Repo in "owner/name" form.' },
+        title: { type: 'string', description: 'Issue title.' },
+        body:  { type: 'string', description: 'Issue body (Markdown).' },
+      },
+      required: ['repo', 'title'],
+    },
+    scopes: '*', availability: 'integration', category: 'integration',
+  },
+  {
+    name: 'github_search',
+    displayName: 'GitHub search',
+    description: 'Searches GitHub for code, issues, or repositories. Up to 10 results returned.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        scope: { type: 'string', enum: ['code', 'issues', 'repositories'], description: 'What to search.' },
+        query: { type: 'string', description: 'GitHub search query.' },
+      },
+      required: ['scope', 'query'],
+    },
+    scopes: '*', availability: 'integration', category: 'integration',
+  },
+  {
+    name: 'github_read_file',
+    displayName: 'GitHub — read file',
+    description: 'Reads a file from a GitHub repo at a specific path. Returns decoded text content.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        repo: { type: 'string', description: 'owner/name' },
+        path: { type: 'string', description: 'File path within the repo.' },
+        ref:  { type: 'string', description: 'Branch/tag/commit ref. Default: default branch.' },
+      },
+      required: ['repo', 'path'],
+    },
+    scopes: '*', availability: 'integration', category: 'integration',
+  },
+
+  // Notion
+  {
+    name: 'notion_search',
+    displayName: 'Notion search',
+    description: 'Searches the connected Notion workspace for pages or databases matching the query. Returns up to 10 results.',
+    inputSchema: {
+      type: 'object',
+      properties: { query: { type: 'string', description: 'Search text.' } },
+      required: ['query'],
+    },
+    scopes: '*', availability: 'integration', category: 'integration',
+  },
+  {
+    name: 'notion_create_page',
+    displayName: 'Notion — create page',
+    description: 'Creates a new Notion page under a parent page or database.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        parentPageId: { type: 'string', description: 'Parent page id (32-char UUID without dashes also accepted).' },
+        title:        { type: 'string', description: 'Page title.' },
+        content:      { type: 'string', description: 'Body text (plain). Becomes a single paragraph block.' },
+      },
+      required: ['parentPageId', 'title'],
+    },
+    scopes: '*', availability: 'integration', category: 'integration',
+  },
+
+  // Slack
+  {
+    name: 'slack_search',
+    displayName: 'Slack search',
+    description: 'Searches messages across channels the connected Slack bot can read. Up to 10 results.',
+    inputSchema: {
+      type: 'object',
+      properties: { query: { type: 'string', description: 'Search query (supports Slack search modifiers like in:#channel).' } },
+      required: ['query'],
+    },
+    scopes: '*', availability: 'integration', category: 'communication',
+  },
+
+  // Linear
+  {
+    name: 'linear_create_issue',
+    displayName: 'Linear — create issue',
+    description: 'Creates a new issue in a Linear team. Title required, description optional.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        teamId:      { type: 'string', description: 'Linear team id (UUID).' },
+        title:       { type: 'string', description: 'Issue title.' },
+        description: { type: 'string', description: 'Optional description (Markdown).' },
+      },
+      required: ['teamId', 'title'],
+    },
+    scopes: '*', availability: 'integration', category: 'integration',
+  },
+  {
+    name: 'linear_search',
+    displayName: 'Linear search',
+    description: 'Searches Linear issues by text. Returns up to 10 issues with id, title, state, and assignee.',
+    inputSchema: {
+      type: 'object',
+      properties: { query: { type: 'string', description: 'Search text.' } },
+      required: ['query'],
+    },
+    scopes: '*', availability: 'integration', category: 'integration',
+  },
+
+  // HubSpot
+  {
+    name: 'hubspot_search_contact',
+    displayName: 'HubSpot — search contact',
+    description: 'Searches HubSpot contacts by name or email. Returns up to 10 contacts with id, name, email, company.',
+    inputSchema: {
+      type: 'object',
+      properties: { query: { type: 'string', description: 'Search text (name or email fragment).' } },
+      required: ['query'],
+    },
+    scopes: '*', availability: 'integration', category: 'integration',
+  },
+  {
+    name: 'hubspot_create_deal',
+    displayName: 'HubSpot — create deal',
+    description: 'Creates a new deal in HubSpot with a name, stage, and optional amount.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name:    { type: 'string', description: 'Deal name.' },
+        stage:   { type: 'string', description: 'Pipeline stage internal id (e.g. "appointmentscheduled").' },
+        amount:  { type: 'number', description: 'Optional deal amount.' },
+      },
+      required: ['name', 'stage'],
+    },
+    scopes: '*', availability: 'integration', category: 'integration',
+  },
 ];
 
 // ───────────────────────────────────────────────────────────────────────────

@@ -1162,6 +1162,184 @@ async function handleRenderDiagram(rawArgs: string, _ctx: ToolHandlerContext): P
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+//  WAVE 3 — CONNECTED-APP FIRST-CLASS TOOLS
+//  All route through executeHttpWithOAuth() so the integration's stored
+//  token is injected server-side and Google OAuth refresh is automatic.
+//  The LLM never sees raw credentials.
+// ───────────────────────────────────────────────────────────────────────────
+
+async function callOAuth(
+  operatorId: string,
+  method: string,
+  url: string,
+  body?: Record<string, unknown> | string,
+  extraHeaders?: Record<string, string>,
+): Promise<string> {
+  const isString = typeof body === 'string';
+  return executeHttpWithOAuth(operatorId, {
+    method,
+    url,
+    headers: { 'Content-Type': isString ? 'text/plain' : 'application/json', ...extraHeaders },
+    body: body === undefined ? undefined : isString ? (body as string) : JSON.stringify(body),
+  });
+}
+
+// Gmail —————————————————————————————————————————————————————————————
+
+async function handleGmailSend(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { to, subject, body } = parseArgs<{ to?: string; subject?: string; body?: string }>(rawArgs);
+  if (!to || !subject || body === undefined) return { content: 'gmail_send requires "to", "subject", "body".', meta: { terminateLoop: true } };
+  const raw = `To: ${to}\r\nSubject: ${subject}\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n${body}`;
+  const b64 = Buffer.from(raw, 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const result = await callOAuth(ctx.operatorId, 'POST', 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send', { raw: b64 });
+  return { content: result };
+}
+
+async function handleGmailSearch(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { query } = parseArgs<{ query?: string }>(rawArgs);
+  if (!query) return { content: 'gmail_search requires "query".', meta: { terminateLoop: true } };
+  const result = await callOAuth(ctx.operatorId, 'GET', `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=10`);
+  return { content: result };
+}
+
+async function handleGmailRead(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { messageId } = parseArgs<{ messageId?: string }>(rawArgs);
+  if (!messageId) return { content: 'gmail_read requires "messageId".', meta: { terminateLoop: true } };
+  const result = await callOAuth(ctx.operatorId, 'GET', `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}?format=full`);
+  return { content: result };
+}
+
+// Google Calendar ——————————————————————————————————————————————————————
+
+async function handleCalendarCreateEvent(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { summary, startIso, endIso, description, location } = parseArgs<{
+    summary?: string; startIso?: string; endIso?: string; description?: string; location?: string;
+  }>(rawArgs);
+  if (!summary || !startIso || !endIso) return { content: 'calendar_create_event requires "summary", "startIso", "endIso".', meta: { terminateLoop: true } };
+  const result = await callOAuth(ctx.operatorId, 'POST', 'https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+    summary, start: { dateTime: startIso }, end: { dateTime: endIso }, description, location,
+  });
+  return { content: result };
+}
+
+async function handleCalendarListEvents(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { timeMinIso, timeMaxIso } = parseArgs<{ timeMinIso?: string; timeMaxIso?: string }>(rawArgs);
+  const tMin = timeMinIso ?? new Date().toISOString();
+  const tMax = timeMaxIso ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(tMin)}&timeMax=${encodeURIComponent(tMax)}&maxResults=10&singleEvents=true&orderBy=startTime`;
+  return { content: await callOAuth(ctx.operatorId, 'GET', url) };
+}
+
+// Drive —————————————————————————————————————————————————————————————
+
+async function handleDriveSearch(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { query } = parseArgs<{ query?: string }>(rawArgs);
+  if (!query) return { content: 'drive_search requires "query".', meta: { terminateLoop: true } };
+  const q = `name contains '${query.replace(/'/g, "\\'")}'`;
+  return { content: await callOAuth(ctx.operatorId, 'GET', `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&pageSize=10&fields=files(id,name,mimeType)`) };
+}
+
+async function handleDriveReadFile(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { fileId } = parseArgs<{ fileId?: string }>(rawArgs);
+  if (!fileId) return { content: 'drive_read_file requires "fileId".', meta: { terminateLoop: true } };
+  // Try export-as-text first (works for Google Docs). For binary files, fall back to alt=media.
+  const exportRes = await callOAuth(ctx.operatorId, 'GET', `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/export?mimeType=text/plain`);
+  if (exportRes.startsWith('HTTP') || exportRes.includes('"error"')) {
+    return { content: (await callOAuth(ctx.operatorId, 'GET', `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`)).slice(0, 10000) };
+  }
+  return { content: exportRes.slice(0, 10000) };
+}
+
+// GitHub ————————————————————————————————————————————————————————————
+
+async function handleGithubCreateIssue(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { repo, title, body } = parseArgs<{ repo?: string; title?: string; body?: string }>(rawArgs);
+  if (!repo || !title) return { content: 'github_create_issue requires "repo" and "title".', meta: { terminateLoop: true } };
+  return { content: await callOAuth(ctx.operatorId, 'POST', `https://api.github.com/repos/${repo}/issues`, { title, body: body ?? '' }) };
+}
+
+async function handleGithubSearch(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { scope, query } = parseArgs<{ scope?: string; query?: string }>(rawArgs);
+  if (!scope || !query || !['code', 'issues', 'repositories'].includes(scope)) {
+    return { content: 'github_search requires scope ∈ {code, issues, repositories} and "query".', meta: { terminateLoop: true } };
+  }
+  return { content: await callOAuth(ctx.operatorId, 'GET', `https://api.github.com/search/${scope}?q=${encodeURIComponent(query)}&per_page=10`) };
+}
+
+async function handleGithubReadFile(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { repo, path, ref } = parseArgs<{ repo?: string; path?: string; ref?: string }>(rawArgs);
+  if (!repo || !path) return { content: 'github_read_file requires "repo" and "path".', meta: { terminateLoop: true } };
+  const url = `https://api.github.com/repos/${repo}/contents/${path}${ref ? `?ref=${encodeURIComponent(ref)}` : ''}`;
+  const result = await callOAuth(ctx.operatorId, 'GET', url, undefined, { Accept: 'application/vnd.github.raw' });
+  return { content: result.slice(0, 12000) };
+}
+
+// Notion ————————————————————————————————————————————————————————————
+
+async function handleNotionSearch(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { query } = parseArgs<{ query?: string }>(rawArgs);
+  if (!query) return { content: 'notion_search requires "query".', meta: { terminateLoop: true } };
+  return { content: await callOAuth(ctx.operatorId, 'POST', 'https://api.notion.com/v1/search', { query, page_size: 10 }, { 'Notion-Version': '2022-06-28' }) };
+}
+
+async function handleNotionCreatePage(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { parentPageId, title, content } = parseArgs<{ parentPageId?: string; title?: string; content?: string }>(rawArgs);
+  if (!parentPageId || !title) return { content: 'notion_create_page requires "parentPageId" and "title".', meta: { terminateLoop: true } };
+  const payload: Record<string, unknown> = {
+    parent: { page_id: parentPageId },
+    properties: { title: { title: [{ text: { content: title } }] } },
+  };
+  if (content) {
+    payload.children = [{ object: 'block', type: 'paragraph', paragraph: { rich_text: [{ type: 'text', text: { content } }] } }];
+  }
+  return { content: await callOAuth(ctx.operatorId, 'POST', 'https://api.notion.com/v1/pages', payload, { 'Notion-Version': '2022-06-28' }) };
+}
+
+// Slack ————————————————————————————————————————————————————————————
+
+async function handleSlackSearch(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { query } = parseArgs<{ query?: string }>(rawArgs);
+  if (!query) return { content: 'slack_search requires "query".', meta: { terminateLoop: true } };
+  return { content: await callOAuth(ctx.operatorId, 'GET', `https://slack.com/api/search.messages?query=${encodeURIComponent(query)}&count=10`) };
+}
+
+// Linear ————————————————————————————————————————————————————————————
+//  Linear uses a GraphQL API at https://api.linear.app/graphql
+
+async function handleLinearCreateIssue(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { teamId, title, description } = parseArgs<{ teamId?: string; title?: string; description?: string }>(rawArgs);
+  if (!teamId || !title) return { content: 'linear_create_issue requires "teamId" and "title".', meta: { terminateLoop: true } };
+  const mutation = `mutation IssueCreate($input: IssueCreateInput!) { issueCreate(input: $input) { success issue { id title identifier } } }`;
+  return { content: await callOAuth(ctx.operatorId, 'POST', 'https://api.linear.app/graphql', { query: mutation, variables: { input: { teamId, title, description } } }) };
+}
+
+async function handleLinearSearch(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { query } = parseArgs<{ query?: string }>(rawArgs);
+  if (!query) return { content: 'linear_search requires "query".', meta: { terminateLoop: true } };
+  const gql = `query Search($q: String!) { issues(filter: { title: { contains: $q } }, first: 10) { nodes { id identifier title state { name } assignee { name } } } }`;
+  return { content: await callOAuth(ctx.operatorId, 'POST', 'https://api.linear.app/graphql', { query: gql, variables: { q: query } }) };
+}
+
+// HubSpot ————————————————————————————————————————————————————————————
+
+async function handleHubspotSearchContact(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { query } = parseArgs<{ query?: string }>(rawArgs);
+  if (!query) return { content: 'hubspot_search_contact requires "query".', meta: { terminateLoop: true } };
+  return { content: await callOAuth(ctx.operatorId, 'POST', 'https://api.hubapi.com/crm/v3/objects/contacts/search', {
+    query, limit: 10,
+    properties: ['firstname', 'lastname', 'email', 'company'],
+  }) };
+}
+
+async function handleHubspotCreateDeal(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { name, stage, amount } = parseArgs<{ name?: string; stage?: string; amount?: number }>(rawArgs);
+  if (!name || !stage) return { content: 'hubspot_create_deal requires "name" and "stage".', meta: { terminateLoop: true } };
+  const properties: Record<string, unknown> = { dealname: name, dealstage: stage };
+  if (typeof amount === 'number') properties.amount = String(amount);
+  return { content: await callOAuth(ctx.operatorId, 'POST', 'https://api.hubapi.com/crm/v3/objects/deals', { properties }) };
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 //  DISPATCH — single entry point for chat.ts and mcpServer.ts
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -1238,6 +1416,25 @@ export async function dispatchTool(
     case 'render_chart':           return handleRenderChart(rawArgs, ctx);
     case 'render_table':           return handleRenderTable(rawArgs, ctx);
     case 'render_diagram':         return handleRenderDiagram(rawArgs, ctx);
+
+    // Wave 3 — connected-app first-class tools
+    case 'gmail_send':              return handleGmailSend(rawArgs, ctx);
+    case 'gmail_search':            return handleGmailSearch(rawArgs, ctx);
+    case 'gmail_read':              return handleGmailRead(rawArgs, ctx);
+    case 'calendar_create_event':   return handleCalendarCreateEvent(rawArgs, ctx);
+    case 'calendar_list_events':    return handleCalendarListEvents(rawArgs, ctx);
+    case 'drive_search':            return handleDriveSearch(rawArgs, ctx);
+    case 'drive_read_file':         return handleDriveReadFile(rawArgs, ctx);
+    case 'github_create_issue':     return handleGithubCreateIssue(rawArgs, ctx);
+    case 'github_search':           return handleGithubSearch(rawArgs, ctx);
+    case 'github_read_file':        return handleGithubReadFile(rawArgs, ctx);
+    case 'notion_search':           return handleNotionSearch(rawArgs, ctx);
+    case 'notion_create_page':      return handleNotionCreatePage(rawArgs, ctx);
+    case 'slack_search':            return handleSlackSearch(rawArgs, ctx);
+    case 'linear_create_issue':     return handleLinearCreateIssue(rawArgs, ctx);
+    case 'linear_search':           return handleLinearSearch(rawArgs, ctx);
+    case 'hubspot_search_contact':  return handleHubspotSearchContact(rawArgs, ctx);
+    case 'hubspot_create_deal':     return handleHubspotCreateDeal(rawArgs, ctx);
 
     default:
       return {

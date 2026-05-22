@@ -230,6 +230,21 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 ## 8. Commit History — newest first
 
+### 2026-05-22 — Phase 8: MCP wave 3 — 17 connected-app first-class tools (NOT YET DEPLOYED)
+
+**Tool count: 40 → 57.** All `availability:'integration'`, all routed through `executeHttpWithOAuth()` — the existing helper handles token decryption, Google OAuth refresh, domain detection, error formatting. The LLM never sees a raw credential.
+
+- **Gmail** (3): `gmail_send` (RFC 2822 base64-url-safe), `gmail_search` (Gmail query syntax), `gmail_read` (message by id)
+- **Calendar** (2): `calendar_create_event` (ISO times, primary calendar), `calendar_list_events` (default 7-day window)
+- **Drive** (2): `drive_search` (name-contains), `drive_read_file` (export-as-text first, alt=media fallback)
+- **GitHub** (3): `github_create_issue`, `github_search` (code | issues | repositories), `github_read_file` (raw bytes via Accept header)
+- **Notion** (2): `notion_search`, `notion_create_page` (parent + title + optional paragraph block, Notion-Version header)
+- **Slack** (1): `slack_search` (`send_slack` already in wave 2)
+- **Linear** (2): `linear_create_issue`, `linear_search` — Linear's GraphQL API, single endpoint with mutation/query bodies
+- **HubSpot** (2): `hubspot_search_contact` (CRM v3 search), `hubspot_create_deal`
+
+Helper `callOAuth(operatorId, method, url, body?, extraHeaders?)` wraps `executeHttpWithOAuth` for consistency.
+
 ### 2026-05-22 — Phase 7: Artifact renderers — chart, table, mermaid (NOT YET DEPLOYED)
 
 **Tool count: 37 → 40.** Three new render tools that emit `opsoul-widget` payloads:
