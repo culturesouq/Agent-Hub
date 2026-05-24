@@ -5,7 +5,6 @@ import { db, pool } from '@workspace/db';
 import { ownerKbTable, operatorsTable } from '@workspace/db';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { chunkText } from '../utils/chunker.js';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { eq, and } from 'drizzle-orm';
 
@@ -16,7 +15,11 @@ const IngestSchema = z.object({
   text: z.string().min(10, 'text must be at least 10 characters'),
   sourceName: z.string().max(200).optional(),
   sourceUrl: z.string().url().optional(),
-  sourceType: z.enum(['manual', 'url', 'file', 'pipeline']).default('manual'),
+  // sourceType is a label, not a behavior switch any more (all entries stay
+  // whole now). 'document' was being sent by the Hub UI after a file upload
+  // but was previously rejected as out-of-enum — added to keep file uploads
+  // from 400ing.
+  sourceType: z.enum(['manual', 'url', 'file', 'pipeline', 'document']).default('manual'),
 });
 
 async function resolveOperator(req: Request, res: Response): Promise<string | null> {
@@ -48,44 +51,34 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   const { text, sourceName, sourceUrl, sourceType } = parsed.data;
 
-  // Files are stored as a single entry — no chunking
-  const chunks = sourceType === 'file'
-    ? [{ content: text.trim(), chunkIndex: 0 }]
-    : chunkText(text);
-
-  if (chunks.length === 0) {
-    res.status(400).json({ error: 'Text produced no valid chunks' });
+  // Always store as a single entry — no chunking. Reference documents must
+  // stay whole so the operator pulls the full context when any part is
+  // relevant, instead of guessing from a 500-char fragment. Matches the
+  // operator-kb route. Owner direction 2026-05-24: "documents stay together
+  // for the operator's mental health" — regardless of size.
+  const fullText = text.trim();
+  if (!fullText) {
+    res.status(400).json({ error: 'Text produced no valid content' });
     return;
   }
 
-  // Embed only the first 30 000 chars to stay within model token limits
-  const embedded = await Promise.all(
-    chunks.map(async (c) => ({
-      chunk: c,
-      embedding: await embed(c.content.slice(0, 30000)),
-    })),
-  );
+  // Embed only the first 30 000 chars to stay within model token limits.
+  // The stored content is still the full text; the embedding samples the head.
+  const embedding = await embed(fullText.slice(0, 30000));
+  const vecStr = `[${embedding.join(',')}]`;
+  const id = crypto.randomUUID();
 
-  const inserted = await Promise.all(
-    embedded.map(async ({ chunk, embedding }) => {
-      const vecStr = `[${embedding.join(',')}]`;
-      const id = crypto.randomUUID();
-
-      await pool.query(
-        `INSERT INTO owner_kb (id, operator_id, owner_id, content, embedding, source_name, source_url, source_type, chunk_index, created_at)
-         VALUES ($1, $2, $3, $4, $5::vector, $6, $7, $8, $9, NOW())`,
-        [id, operatorId, req.owner!.ownerId, chunk.content, vecStr, sourceName ?? null, sourceUrl ?? null, sourceType, chunk.chunkIndex],
-      );
-
-      return { id, chunkIndex: chunk.chunkIndex, length: chunk.content.length };
-    }),
+  await pool.query(
+    `INSERT INTO owner_kb (id, operator_id, owner_id, content, embedding, source_name, source_url, source_type, chunk_index, created_at)
+     VALUES ($1, $2, $3, $4, $5::vector, $6, $7, $8, $9, NOW())`,
+    [id, operatorId, req.owner!.ownerId, fullText, vecStr, sourceName ?? null, sourceUrl ?? null, sourceType, 0],
   );
 
   res.status(201).json({
     ok: true,
     operatorId,
-    chunksIngested: inserted.length,
-    chunks: inserted,
+    chunksIngested: 1,
+    chunks: [{ id, chunkIndex: 0, length: fullText.length }],
     sourceName: sourceName ?? null,
   });
 
