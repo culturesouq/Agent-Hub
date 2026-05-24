@@ -292,6 +292,29 @@ Return ONLY valid JSON, no markdown, no explanation:
     return;
   }
 
+  // Canonical-taxonomy enforcement — the extraction prompt SAYS "from this
+  // exact list only" but LLMs occasionally drift across the two adjacent
+  // lists (e.g. Sonnet 2026-05-24 put role "Coach" into the archetype array
+  // for Istishari). The 9-archetype alphabet is patent-protected per Vision
+  // Lock § 5 item 3 — no additions, no silent drift. Strip any value that
+  // isn't in the canonical lists before persisting.
+  const archetypeSet = new Set<string>(BIRTH_ARCHETYPES);
+  const roleSet = new Set<string>(BIRTH_ROLES);
+  if (Array.isArray(extracted.archetype)) {
+    const dropped = extracted.archetype.filter(a => !archetypeSet.has(a));
+    if (dropped.length) {
+      console.warn(`[birth-extraction] dropped out-of-taxonomy archetypes for ${operatorId}: ${dropped.join(', ')}`);
+    }
+    extracted.archetype = extracted.archetype.filter(a => archetypeSet.has(a));
+  }
+  if (Array.isArray(extracted.roles)) {
+    const dropped = extracted.roles.filter(r => !roleSet.has(r));
+    if (dropped.length) {
+      console.warn(`[birth-extraction] dropped out-of-taxonomy roles for ${operatorId}: ${dropped.join(', ')}`);
+    }
+    extracted.roles = extracted.roles.filter(r => roleSet.has(r));
+  }
+
   if (!extracted.name || !extracted.rawIdentity || !extracted.archetype?.length || !extracted.mandate) return;
 
   await db.update(operatorsTable)
