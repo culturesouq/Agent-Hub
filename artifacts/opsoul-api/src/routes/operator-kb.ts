@@ -18,7 +18,7 @@ const IngestSchema = z.object({
   sourceTrustLevel: z
     .enum(['operator_self', 'user_provided', 'external_verified', 'external_unverified'])
     .default('operator_self'),
-  confidenceScore: z.number().int().min(0).max(100).default(40),
+  confidenceScore: z.number().int().min(75).max(100).default(75),
   intakeTags: z.array(z.string()).default([]),
   isPipelineIntake: z.boolean().default(false),
   privacyCleared: z.boolean().default(false),
@@ -26,7 +26,7 @@ const IngestSchema = z.object({
 });
 
 const PatchChunkSchema = z.object({
-  confidenceScore: z.number().int().min(0).max(100).optional(),
+  confidenceScore: z.number().int().min(75).max(100).optional(),
   verificationStatus: z
     .enum(['pending', 'verified', 'probation', 'blocked'])
     .optional(),

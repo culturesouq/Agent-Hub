@@ -105,7 +105,7 @@ const SendMessageSchema = z.object({
   stream: z.boolean().default(false),
   kbSearch: z.boolean().default(true),
   kbTopN: z.number().int().min(1).max(20).default(8),
-  kbMinConfidence: z.number().int().min(0).max(100).default(30),
+  kbMinConfidence: z.number().int().min(0).max(100).default(75),
   attachments: z.array(AttachmentSchema).optional(),
 });
 

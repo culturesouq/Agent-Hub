@@ -15,7 +15,11 @@ export interface VectorHit {
 }
 
 export const KB_TOP_N_CHUNKS = 8;
-export const KB_RETRIEVAL_MIN_CONFIDENCE = 30;
+// Confidence floor for KB retrieval. Raised from 30 → 75 (2026-05-24 evening,
+// owner direction) so unverified / pending entries (40-confidence default from
+// curiosity ingestion or pending review) never surface in operator context.
+// Anything below 75 stays in the table for review but does not feed retrieval.
+export const KB_RETRIEVAL_MIN_CONFIDENCE = 75;
 
 export async function searchOwnerKb(
   operatorId: string,

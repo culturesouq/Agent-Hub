@@ -107,8 +107,12 @@ export async function verifyAndStore(
     return { stored: false, status: 'skipped', reason: 'Single source only — corroboration required' };
   }
 
-  // All checks passed — store at score 40, status always pending
-  // Nothing enters as verified automatically. Ever.
+  // All checks passed — store at tier-derived confidence (75/85), status pending.
+  // Floor raised 2026-05-24 evening from 40 → 75 (owner direction): KB carries
+  // only entries that already cleared corroboration; unverified-tier sources
+  // never reach here (rejected above at the `!curiosity.tier` gate). Tier 1
+  // = 85 (high-trust corroborated), Tier 2 = 75 (acceptable corroborated).
+  const tierConfidence = curiosity.tier === 1 ? 85 : 75;
   const id = crypto.randomUUID();
   await pool.query(
     `INSERT INTO operator_kb
@@ -126,7 +130,7 @@ export async function verifyAndStore(
       sourceName || curiosity.bestSource || null,
       sourceUrl || curiosity.bestSource || null,
       curiosity.tier === 1 || curiosity.tier === 2 ? 'external_verified' : 'external_unverified',
-      40,
+      tierConfidence,
       [],
       false,
       true,
@@ -185,8 +189,10 @@ export async function persistKbSeedEntry(
     }
   } catch { /* non-critical — proceed */ }
 
-  // Clamp confidence to a sensible range: operator never enters anything as verified
-  const clampedConfidence = Math.max(40, Math.min(85, Math.round(confidence)));
+  // Clamp confidence to the platform's retrieval-eligible range. Floor raised
+  // 2026-05-24 evening from 40 → 75 (owner direction): KB carries only entries
+  // ≥75 so retrieval (KB_RETRIEVAL_MIN_CONFIDENCE = 75) finds them.
+  const clampedConfidence = Math.max(75, Math.min(85, Math.round(confidence)));
 
   try {
     const id = crypto.randomUUID();
