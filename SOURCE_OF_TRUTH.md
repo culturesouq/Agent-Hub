@@ -263,10 +263,11 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 ## 8. Commit History — newest first
 
-### 2026-05-24T~19:30Z — owner-kb: docs stay whole, chunker killed (NOT YET DEPLOYED)
+### 2026-05-24T~19:45Z — owner-kb: docs stay whole, chunker killed SHIPPED (`opsoul--0000074`, image `no-chunk-86f5c71`)
 
-**Source commit:** `(pending build)` owner-kb: store every doc whole, kill chunker for reference content
-**Status:** committed locally, ACR build pending
+**Source commit:** `86f5c71` owner-kb: store every doc whole, kill chunker for reference content
+**ACR run:** `dg89` (2m14s, Succeeded)
+**Health:** `opsoul--0000074` → Running / Healthy on first check after Activating
 
 **Why:** Istishari reported seeing scattered fragments of the FM API reference doc in his KB instead of the whole document. Owner direction: "documents stay together for the operator's mental health" — regardless of size. References, glossaries, contracts: the operator must pull the WHOLE doc when ANY part is relevant, not guess from a 500-char fragment.
 
