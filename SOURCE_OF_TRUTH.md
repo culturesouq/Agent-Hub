@@ -263,6 +263,50 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 ## 8. Commit History — newest first
 
+### 2026-05-24T~18:30Z — KB confidence floor 30 → 75 SHIPPED (`opsoul--0000073`, image `kb-floor-b62658f`)
+
+**Source commit:** `b62658f` kb: raise confidence floor to 75 across all paths (insert + retrieve)
+**ACR run:** `dg87` (2m17s, Succeeded)
+**Health:** `opsoul--0000073` → Running / Healthy on first check
+
+**Why:** Nahil reported 13 `ai_distilled` entries stuck at confidence 40 polluting his KB — user-behavior observations passing the curiosity corroboration filter and landing as pending knowledge. Owner direction: KB should carry only entries ≥75. Pending review queue is a separate concept (verification UI), not the retrieval pool.
+
+**Changes — 5 spots, all coordinated:**
+
+1. `utils/vectorSearch.ts:18` — `KB_RETRIEVAL_MIN_CONFIDENCE` 30 → 75. Filters auto-apply via every `searchOperatorKb` caller.
+2. `utils/kbIntake.ts:129` — `verifyAndStore` was inserting hardcoded 40. Now tier-derived: Tier 1 = 85, Tier 2 = 75.
+3. `utils/kbIntake.ts:189` — `persistKbSeedEntry` clamp `max(40, min(85, …))` → `max(75, min(85, …))`.
+4. `utils/skillExecutor.ts:434` — `kb_seed` skill clamp 40 → 75; default 65 → 80.
+5. `routes/operator-kb.ts:21,29` — Zod schemas now `min(75)` / `default(75)`. POSTing a sub-75 entry now structurally impossible.
+6. `routes/chat.ts:107` — `kbMinConfidence` Zod default 30 → 75.
+
+**Existing sub-75 rows** stay in operator_kb (invisible to retrieval). Admin can purge later via `DELETE /api/operator-kb/:id` or one-off SQL.
+
+### 2026-05-24T~07:00Z — Three root-cause fixes SHIPPED (`opsoul--0000072`, image `fixes-d52b338`)
+
+**Source commit:** `d52b338` chat-runtime: 3 root-cause fixes (kb int bug, history cap, integrations wired)
+**ACR run:** `dg86` (2m16s, Succeeded)
+**Health:** `opsoul--0000072` → Running / Healthy
+
+**Three real bugs found while investigating Istishari narration + Nahil's 265k-token blowout:**
+
+1. **`0.3 → integer` Postgres error** on KB search. `utils/toolHandlers.ts:785` (MCP `kb_search` tool) and `cron/tasksCron.ts:79` (scheduled-task KB retrieval) both passed `0.3` as `minConfidence` (4th arg of `searchBothKbs`) where the SQL filter is `WHERE confidence_score >= $3` against an integer column. Postgres rejected on every operator chat that fired kb_search. Same pattern as the telegram/whatsapp webhook fix from 2026-05-17 that missed these two siblings. Fix: `0.3 → 30`.
+
+2. **Unbounded conversation history caused Nahil's 265k blowout.** `buildMessageHistory(convId)` pulled ALL messages with no LIMIT. Long-running conversations accumulated past Kimi's 262k window. Fix: sliding window — last 40 messages, then trimmed further if estimated tokens > 60k. Also: `CONTEXT_WINDOW` hardcoded `128_000` (stale — Kimi is 262k, DeepSeek 164k) now reads from `resolveModel(...).config.contextWindow` so soul-anchor threshold scales with the actual model.
+
+3. **17 wave-3 connected-app tools never reached the LLM.** `toolListCtx` in `chat.ts` populated `liveSecrets` but not `connectedIntegrations`. Tools gated on `availability: 'integration'` were filtered out every turn because `(ctx.connectedIntegrations?.length ?? 0)` evaluated to 0. The UI loaded them via a different code path so they LOOKED connected. Fix: added `operatorIntegrationsTable` query to the `Promise.all`, populated `connectedIntegrations` field on toolListCtx.
+
+### 2026-05-24T~06:10Z — DeepSeek V3 → Kimi K2.5 runtime reverted (`opsoul--0000071`, image `kimi-revert-a449595`)
+
+**Source commit:** `a449595` llm-routing: revert DeepSeek V3 -> Kimi K2.5 runtime (same-day)
+**ACR run:** `dg85` (2m15s, Succeeded)
+
+Same-day reversal of `9a79757` (morning's Kimi → DeepSeek flip). Live diagnostic proved DeepSeek narrates instead of firing tool calls when offered — even with URL pattern triggering `execute` mode. Architecture (operator-driven `detectToolNeed` gating) stays unchanged per owner direction. Model has to fit it; Kimi does, DeepSeek doesn't.
+
+`BIRTH_MODEL_ID = 'anthropic/claude-sonnet-4.6'` untouched. Birth engine still on Sonnet.
+
+22 hardcoded `'deepseek/deepseek-chat-v3'` literals across 11 files flipped back to Kimi. DeepSeek entry kept catalogued in `modelRegistry.ts`, selectable per-operator if owner ever wants cheaper runtime + tool-use trade-off.
+
 ### 2026-05-22T06:29Z — Artifacts archive tab SHIPPED (`opsoul--0000070`, image `artifacts-tab-00926b4`)
 
 **Source commit:** `00926b4` feat(artifacts): durable archive tab next to Files
