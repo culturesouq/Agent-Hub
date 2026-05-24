@@ -12,6 +12,7 @@ import {
   tasksTable,
   operatorDeploymentSlotsTable,
   operatorSecretsTable,
+  operatorIntegrationsTable,
   ownersTable,
 } from '@workspace/db';
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
@@ -32,7 +33,7 @@ import { searchMemory, buildMemoryContext, distillMemoriesFromConversations } fr
 import type { MemoryHit } from '../utils/memoryEngine.js';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
-import { BIRTH_MODEL_ID } from '../utils/modelRegistry.js';
+import { BIRTH_MODEL_ID, resolveModel, DEFAULT_MODEL_ID } from '../utils/modelRegistry.js';
 import { decryptToken } from '@workspace/opsoul-utils/crypto';
 import type { ChatMessage, ToolDefinition } from '../utils/openrouter.js';
 import { buildOwnerScope, buildScopeContext, type ValidatedScope } from '../utils/scopeResolver.js';
@@ -148,6 +149,14 @@ async function resolveOperatorAndConv(
   return { operator, conv, scope };
 }
 
+// History budget caps to keep total prompt under model context windows.
+// Sliding window: take last N messages, then trim further if their estimated
+// token count exceeds the budget. Estimates 4 chars ≈ 1 token (matches the
+// soul-anchor math). 60k tokens leaves headroom for system prompt + KB +
+// memory + tool catalog + output even on the smallest catalogued model.
+const HISTORY_MAX_MESSAGES = 40;
+const HISTORY_MAX_TOKENS = 60_000;
+
 async function buildMessageHistory(convId: string): Promise<ChatMessage[]> {
   const msgs = await db
     .select({ role: messagesTable.role, content: messagesTable.content })
@@ -155,7 +164,7 @@ async function buildMessageHistory(convId: string): Promise<ChatMessage[]> {
     .where(eq(messagesTable.conversationId, convId))
     .orderBy(asc(messagesTable.createdAt));
 
-  return msgs.filter(m => {
+  const cleaned = msgs.filter(m => {
     // Sanitize corrupted assistant messages — "Human:" prefix is never valid
     // in an assistant turn; it means the model echoed the user during a bug.
     // Feeding it back would perpetuate the pattern every turn.
@@ -164,6 +173,17 @@ async function buildMessageHistory(convId: string): Promise<ChatMessage[]> {
     }
     return true;
   }) as ChatMessage[];
+
+  // Sliding window from the tail: keep the last HISTORY_MAX_MESSAGES, then
+  // walk backwards trimming the oldest until the estimated token count is
+  // under HISTORY_MAX_TOKENS. Newest turn always preserved.
+  const windowed = cleaned.slice(-HISTORY_MAX_MESSAGES);
+  let tokenEstimate = windowed.reduce((sum, m) => sum + Math.ceil((m.content?.length ?? 0) / 4), 0);
+  while (tokenEstimate > HISTORY_MAX_TOKENS && windowed.length > 1) {
+    const dropped = windowed.shift();
+    tokenEstimate -= Math.ceil((dropped?.content?.length ?? 0) / 4);
+  }
+  return windowed;
 }
 
 async function loadActiveSkills(operatorId: string): Promise<ActiveSkill[]> {
@@ -480,8 +500,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // Stale queries removed 2026-05-13 (C — chat.ts cleanup): the old [STATION]
   // injection prefetched integrations / tasks / files / slots into a literal
   // that was dumped into the operator prompt. The block was removed; the queries
-  // went with it. liveSecrets is kept — still used by httpRequestTool gating below.
-  const [skills, archetypeDefaultSkills, selfAwarenessRow, history, liveSecrets] = await Promise.all([
+  // went with it. liveSecrets + liveIntegrations are kept — used by the
+  // toolListCtx below to gate http_request and the wave-3 connected-app tools
+  // (gmail, calendar, drive, github, notion, slack, linear, hubspot).
+  const [skills, archetypeDefaultSkills, selfAwarenessRow, history, liveSecrets, liveIntegrations] = await Promise.all([
     loadActiveSkills(operator.id),
     loadArchetypeSkills((operator.archetype as string[]) ?? []),
     db.select().from(selfAwarenessStateTable).where(eq(selfAwarenessStateTable.operatorId, operator.id)).limit(1),
@@ -489,6 +511,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     db.select({ key: operatorSecretsTable.key })
       .from(operatorSecretsTable)
       .where(eq(operatorSecretsTable.operatorId, operator.id)),
+    db.select({ integrationType: operatorIntegrationsTable.integrationType })
+      .from(operatorIntegrationsTable)
+      .where(eq(operatorIntegrationsTable.operatorId, operator.id)),
   ]);
 
   const selfAwarenessData = selfAwarenessRow[0] ?? null;
@@ -541,10 +566,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     }
   }
 
-  // Q8 — Soul anchoring: if history token estimate exceeds 40% of 128k context window,
-  // reinject Layer 0 + Layer 1 at top of system prompt to reinforce identity.
-  const CONTEXT_WINDOW = 128_000;
-  const ANCHOR_THRESHOLD = Math.floor(CONTEXT_WINDOW * 0.4); // 51,200 tokens
+  // Q8 — Soul anchoring: if history token estimate exceeds 40% of the model's
+  // context window, reinject Layer 0 + Layer 1 at top of system prompt to
+  // reinforce identity. Context window comes from the operator's selected
+  // model so anchoring scales with what the LLM can actually carry.
+  const CONTEXT_WINDOW = resolveModel(operator.defaultModel || DEFAULT_MODEL_ID).config.contextWindow;
+  const ANCHOR_THRESHOLD = Math.floor(CONTEXT_WINDOW * 0.4);
   const historyTokenEstimate = history.reduce((sum, m) => sum + Math.ceil(m.content.length / 4), 0);
   const soulAnchorActive = historyTokenEstimate > ANCHOR_THRESHOLD;
 
@@ -762,6 +789,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     scopeType: 'owner' as const,
     hasWebSearch: isWebSearchAvailable(),
     liveSecrets: liveSecrets.map(s => s.key),
+    connectedIntegrations: liveIntegrations.map(i => i.integrationType),
   };
 
   // ─── STREAMING PATH ────────────────────────────────────────────────────────

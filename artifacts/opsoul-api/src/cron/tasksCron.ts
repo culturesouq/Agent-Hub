@@ -76,7 +76,7 @@ export async function runSingleTask(
 
     const [memoryHits, kbHits, skills] = await Promise.all([
       searchMemory(operator.id, taskEmbedding),
-      searchBothKbs(operator.id, taskEmbedding, 4, 0.3, (operator.archetype as string[]) ?? []),
+      searchBothKbs(operator.id, taskEmbedding, 4, 30, (operator.archetype as string[]) ?? []),
       loadOperatorSkills(operator.id),
     ]);
 

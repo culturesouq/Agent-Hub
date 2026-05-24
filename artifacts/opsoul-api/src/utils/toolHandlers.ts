@@ -782,7 +782,7 @@ async function handleKbSearch(rawArgs: string, ctx: ToolHandlerContext): Promise
   const n = typeof topN === 'number' ? Math.max(1, Math.min(15, topN)) : 4;
 
   const embedding = await embed(query);
-  const hits = await searchBothKbs(ctx.operatorId, embedding, n, 0.3, []);
+  const hits = await searchBothKbs(ctx.operatorId, embedding, n, 30, []);
   if (hits.length === 0) return { content: `No KB entries matched: "${query}".` };
 
   const lines = hits.map((h: { source?: string; content: string; similarity?: number; confidence?: number; entryId?: string }, i: number) =>
