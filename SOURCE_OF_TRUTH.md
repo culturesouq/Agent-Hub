@@ -269,6 +269,13 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 **ACR run:** `dg89` (2m14s, Succeeded)
 **Health:** `opsoul--0000074` → Running / Healthy on first check after Activating
 
+**Backfill — 16 historical docs coalesced 2026-05-24T~20:00Z:**
+- One-shot Node script (`/tmp/coalesce-kb.mjs`, since deleted): grouped `owner_kb` by `(operator_id, source_name)` with `COUNT(*) > 1`, found **16 chunked docs** spanning **4 operators**.
+- For each group: rebuilt the original text by concatenating chunks in `chunk_index` order with the 50-char overlap stripped from chunks 2…N, re-embedded the full text via `text-embedding-3-small`, updated the first row (oldest chunk_index) to carry the full content + fresh embedding, deleted the rest. Idempotent — second run found 0 groups.
+- Bumped `self_awareness_state.last_updated` + `last_update_trigger = 'kb_coalesce'` on each of the 4 affected operators so the next chat turn re-aligns against the whole docs instead of the absorbed fragments.
+- Largest doc coalesced: "Live Nahil — Backend Reality (as of 2026-05-20)" — 67 chunks → 1 row, 29,909 chars (Nahil's operator).
+- Other notable docs restored whole: "Founder Moment — Istishari's Reference (KB)" (16 → 1, 6,877 chars for Istishari), "KB Doc — Nahil — Intelligence Book Endpoints" (7 → 1).
+
 **Why:** Istishari reported seeing scattered fragments of the FM API reference doc in his KB instead of the whole document. Owner direction: "documents stay together for the operator's mental health" — regardless of size. References, glossaries, contracts: the operator must pull the WHOLE doc when ANY part is relevant, not guess from a 500-char fragment.
 
 **Root cause:** `routes/owner-kb.ts:54` ran `chunkText()` on every upload unless `sourceType === 'file'`. The Hub UI's file upload path sends `sourceType: 'document'` (not `'file'`), so the no-chunk branch was unreachable from the UI. Both file uploads and text paste got chunked at fixed 500-char windows.
