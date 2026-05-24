@@ -32,6 +32,7 @@ import { searchMemory, buildMemoryContext, distillMemoriesFromConversations } fr
 import type { MemoryHit } from '../utils/memoryEngine.js';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
+import { BIRTH_MODEL_ID } from '../utils/modelRegistry.js';
 import { decryptToken } from '@workspace/opsoul-utils/crypto';
 import type { ChatMessage, ToolDefinition } from '../utils/openrouter.js';
 import { buildOwnerScope, buildScopeContext, type ValidatedScope } from '../utils/scopeResolver.js';
@@ -272,12 +273,15 @@ Extract exactly:
 Return ONLY valid JSON, no markdown, no explanation:
 {"name":"...","rawIdentity":"...","archetype":["..."],"roles":["..."],"mandate":"..."}`;
 
+  // Birth-time extraction uses Sonnet (BIRTH_MODEL_ID). One-time, identity-
+  // critical — irreversible once Layer 1 locks. Worth paying for quality on
+  // this single call rather than running the cheaper runtime default.
   const result = await chatCompletion(
     [
       { role: 'system', content: 'You extract structured identity data from conversations. Return only valid JSON, no markdown, no explanation.' },
       { role: 'user', content: extractionPrompt },
     ],
-    { model: CHAT_MODEL },
+    { model: BIRTH_MODEL_ID },
   );
 
   let extracted: { name: string; rawIdentity: string; archetype: string[]; roles: string[]; mandate: string };

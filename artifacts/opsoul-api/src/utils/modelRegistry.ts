@@ -77,15 +77,30 @@ export interface ProviderConfig {
  * or other OpenRouter model strings keep working unchanged.
  */
 const PROVIDERS: Record<string, ProviderConfig> = {
-  // ── Kimi (Moonshot AI) via OpenRouter — the current default ────────────
+  // ── DeepSeek V3 via OpenRouter — the current default for runtime ─────
+  // Picked 2026-05-24 to replace Kimi as the platform default. Reasoning:
+  // (a) ~9x cheaper output than Kimi K2.5, (b) Kimi's Agent Swarm advantage
+  // never applied to OpSoul (operators are multi-role, not swarm), (c) bridge
+  // to Hajeri-3B when its inference path is production-ready.
+  'deepseek/deepseek-chat-v3': {
+    provider: 'openrouter',
+    adapter: 'openai-compat',
+    baseURL: 'https://openrouter.ai/api/v1',
+    apiKeyEnv: 'OPENROUTER_API_KEY',
+    label: 'DeepSeek V3',
+    description: 'DeepSeek — strong reasoning, 164K context, cost-efficient runtime',
+    badge: 'Default',
+    contextWindow: 164_000,
+  },
+
+  // ── Kimi (Moonshot AI) via OpenRouter — kept available, no longer default ─
   'moonshotai/kimi-k2.5': {
     provider: 'openrouter',
     adapter: 'openai-compat',
     baseURL: 'https://openrouter.ai/api/v1',
     apiKeyEnv: 'OPENROUTER_API_KEY',
     label: 'Kimi K2.5',
-    description: 'Moonshot AI — multimodal, agent swarm paradigm, 262K context',
-    badge: 'Default',
+    description: 'Moonshot AI — multimodal, 262K context',
     contextWindow: 262144,
   },
 
@@ -184,8 +199,21 @@ const PROVIDERS: Record<string, ProviderConfig> = {
  * Default model when an operator has no defaultModel set OR when an
  * unknown model ID is encountered. Matches the historical CHAT_MODEL
  * constant from openrouter.ts so existing behavior is unchanged.
+ *
+ * Changed 2026-05-24: was 'moonshotai/kimi-k2.5'. Switched to DeepSeek V3
+ * for cost (~9x cheaper output) and because Kimi's Agent Swarm rationale
+ * never applied to OpSoul (operators are multi-role, not coordinated swarm).
+ * Birth engine is separately hardcoded to Sonnet 4.6 in chat.ts (one-time
+ * identity-critical extraction worth the per-birth cost).
  */
-export const DEFAULT_MODEL_ID = 'moonshotai/kimi-k2.5';
+export const DEFAULT_MODEL_ID = 'deepseek/deepseek-chat-v3';
+
+/**
+ * Birth-time model used by chat.ts:extractBirthIdentity. Sonnet 4.6 chosen
+ * because birth is irreversible and identity-critical; cost is paid once
+ * per operator. Kept separate from DEFAULT_MODEL_ID so runtime stays cheap.
+ */
+export const BIRTH_MODEL_ID = 'anthropic/claude-sonnet-4.6';
 
 /**
  * Look up the provider config for a model.

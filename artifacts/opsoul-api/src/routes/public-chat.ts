@@ -341,7 +341,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     : CHAT_MODEL;
   // Force vision-capable model when image attachments are present
   if (attachments && attachments.some((a) => a.type === 'image')) {
-    model = 'moonshotai/kimi-k2.5';
+    model = 'deepseek/deepseek-chat-v3';
   }
 
   // ── STREAM PATH ────────────────────────────────────────────────────────────

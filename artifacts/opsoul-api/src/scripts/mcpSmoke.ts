@@ -154,7 +154,7 @@ const models = listAvailableModels();
 expect(`at least 5 models catalogued (got ${models.length})`, models.length >= 5);
 
 const expectedModels = [
-  'moonshotai/kimi-k2.5',
+  'deepseek/deepseek-chat-v3',
   'hajeri-3b-v2',
   'openai/gpt-5',
   'anthropic/claude-sonnet-4.6',
@@ -174,9 +174,9 @@ expect(
 // ── Model resolution ──────────────────────────────────────────────────
 section('resolveModel()');
 
-const kimi = resolveModel('moonshotai/kimi-k2.5');
+const kimi = resolveModel('deepseek/deepseek-chat-v3');
 expect(`Kimi resolves to OpenRouter`, kimi.config.provider === 'openrouter');
-expect(`Kimi sendAs is unchanged`, kimi.sendAs === 'moonshotai/kimi-k2.5');
+expect(`Kimi sendAs is unchanged`, kimi.sendAs === 'deepseek/deepseek-chat-v3');
 
 const gpt5 = resolveModel('openai/gpt-5');
 expect(`GPT-5 resolves to OpenAI`, gpt5.config.provider === 'openai');

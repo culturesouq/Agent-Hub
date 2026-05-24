@@ -156,7 +156,7 @@ The patent draft (IPPT-2026-000028, not yet filed) needs these reconciliations b
 | **DB migration — `operator_main_memory`** | Schema in repo, NOT run on prod. Owner must approve and run `pnpm --filter opsoul-db push`. |
 | **DB migration — `operator_memory.scopeId`** | Default changed to `'legacy'`, NOT run. Safe (Postgres applies default to new rows only). |
 | **Known bugs (May 9 list)** | All 8 fixed and shipped. See history below. |
-| **LLM provider alternative — Kimi K2.6 + DeepSeek V3** | **Direction set 2026-05-11, validation pending.** See "LLM Routing Strategy" below this table. |
+| **LLM provider alternative — Kimi K2.6 + DeepSeek V3** | **REVISED 2026-05-24** — Owner flipped Kimi → DeepSeek V3 platform-wide for runtime + Sonnet 4.6 for birth only. Multi-role-not-swarm clarification made the Kimi rationale moot. See "LLM Routing Strategy" below for new lock. |
 | **UI/backend default model mismatch** | **CLOSED 2026-05-19** on branch `feat/mcp-runtime-layer`. `SettingsSection.tsx` now fetches the model list from new `GET /api/models` endpoint (backed by `utils/modelRegistry.ts`). Hardcoded MODELS array (Sonnet 4.5 / Haiku 4.5 / Gemini Flash 2.0 — stale) removed. UI fallback default flipped to `"moonshotai/kimi-k2.5"` matching `CHAT_MODEL` so Save-without-change keeps the operator on its actual default, never silently flipping. NOT DEPLOYED — included in the MCP branch awaiting smoke test. |
 | **OpenRouter credit monitoring** | Open. Low-credit conditions cause silent quirky behavior (model substitution, narration drift). Add a credit-balance check + UI banner when balance drops below a threshold. |
 | **Per-message model record** | Open. Currently no DB column captures which model handled which message — only console.log of auto-routing decisions. Hard to audit operator behavior after the fact. Add `model` column to `messages` table when migration window opens. |
@@ -177,7 +177,30 @@ The raw collection step (crawling, scraping, parsing) may be bulk — that's plu
 
 **How it shapes UI / tooling:** Nahil Desk and Submit-to-VAEL must present items one-at-a-time for review (not as a queue dashboard tempting the owner to mass-approve). If a queue view is ever built, "approve all" / "bulk approve" must be absent. SRAG promotion-to-insight inherits the same rule.
 
-### LLM Routing Strategy — pending validation (2026-05-11)
+### LLM Routing Strategy — REVISED 2026-05-24 (single-user simplification)
+
+**Owner clarification (2026-05-24):** OpSoul operators are **multi-role under one soul**, NOT a coordinated swarm of N sub-agents. The "Kimi Agent Swarm parallel" rationale from 2026-05-11 below was a category mistake — Kimi's swarm architecture solves a different problem than OpSoul's multi-role design. With that rationale gone, the only remaining argument for Kimi was identity-preservation early-report intuitions, which are now superseded by cost reality.
+
+**New routing (locked 2026-05-24, single-user OpSoul, OpenRouter-only):**
+
+| Use | Model | Why |
+|---|---|---|
+| **Runtime — operator brains, distillation, GROW, KB intake, skills, curiosity, memory** | **DeepSeek V3** (`deepseek/deepseek-chat-v3`) | ~9× cheaper output than Kimi; reasoning quality acceptable; single model across all runtime paths for simplicity |
+| **Birth engine only** (`extractBirthIdentity` in chat.ts) | **Sonnet 4.6** (`anthropic/claude-sonnet-4.6`) | One-time per operator, identity-critical, irreversible once Layer 1 locks — worth paying for quality |
+| **Bridge target when ready** | Hajeri 3B v2 | Once Identity SFT on the new burnin baseline (`hajeri_v2_burnin_resume.pt`) passes voice probes — replaces DeepSeek for runtime |
+
+**Llama variants excluded** — they narrate by default ("Let me think...", "I'll do X then Y"), which violates Vision Lock § 4 architectural rule against narration.
+
+**Code changes shipped 2026-05-24:**
+- `utils/modelRegistry.ts`: added `deepseek/deepseek-chat-v3` entry; `DEFAULT_MODEL_ID` flipped from Kimi → DeepSeek V3; new export `BIRTH_MODEL_ID = 'anthropic/claude-sonnet-4.6'`.
+- `routes/chat.ts:extractBirthIdentity`: imports + uses `BIRTH_MODEL_ID` instead of `CHAT_MODEL`. Comment added explaining why birth gets the more expensive model.
+- 22 hardcoded `'moonshotai/kimi-k2.5'` literal strings across 11 files (`kbIntake.ts`, `operatorCapabilityLoop.ts`, `growEngine.ts`, `skillExecutor.ts` ×7, `memoryEngine.ts`, `curiosityEngine.ts`, `mcpSmoke.ts` ×3, `operators.ts` ×2, `integrations.ts`, `public-crud.ts` ×2, `public-chat.ts`) flipped to `'deepseek/deepseek-chat-v3'`.
+- TypeScript clean (`npx tsc --noEmit` exits 0).
+- NOT YET DEPLOYED — awaiting owner ship-it.
+
+**Validation gate that was in the 2026-05-11 plan: simplified for single-user OpSoul.** Owner is the only user; no production rollout risk; if voice drifts after switch, flip the constants back in one commit and re-deploy. Skip the formal 4-vector validation suite. Owner runs Istishari smoke test post-deploy and reverts if anything reads off.
+
+### LLM Routing Strategy — original direction (2026-05-11, SUPERSEDED by 2026-05-24)
 
 Direction locked, not yet swapped in code. Trigger: Moonshot released **Kimi K2.6** on 2026-04-20 — open-weight 1T-param MoE, 256K context, with an **Agent Swarm system scaling to 300 sub-agents and 4,000 coordinated steps**. That swarm architecture is the closest external analogue to OpSoul's multi-role / multi-archetype framework (§5 item 3 + patent claims 13, 20), making it the right candidate to host operator brains at ~4× lower cost than Claude Sonnet 4.5.
 
