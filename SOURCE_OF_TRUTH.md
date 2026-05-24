@@ -263,6 +263,22 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 ## 8. Commit History — newest first
 
+### 2026-05-24T~19:30Z — owner-kb: docs stay whole, chunker killed (NOT YET DEPLOYED)
+
+**Source commit:** `(pending build)` owner-kb: store every doc whole, kill chunker for reference content
+**Status:** committed locally, ACR build pending
+
+**Why:** Istishari reported seeing scattered fragments of the FM API reference doc in his KB instead of the whole document. Owner direction: "documents stay together for the operator's mental health" — regardless of size. References, glossaries, contracts: the operator must pull the WHOLE doc when ANY part is relevant, not guess from a 500-char fragment.
+
+**Root cause:** `routes/owner-kb.ts:54` ran `chunkText()` on every upload unless `sourceType === 'file'`. The Hub UI's file upload path sends `sourceType: 'document'` (not `'file'`), so the no-chunk branch was unreachable from the UI. Both file uploads and text paste got chunked at fixed 500-char windows.
+
+**Fix:**
+- `routes/owner-kb.ts`: dropped `chunkText` call; every upload now stores as ONE row in `owner_kb`. Embedding still samples the first 30k chars (model token limit) but the stored `content` is the full text.
+- `routes/owner-kb.ts` Zod schema: `sourceType` enum now accepts `'document'` too (UI was getting 400s on file uploads).
+- `routes/operator-kb.ts` was already correct (literally "Always store as a single entry — no chunking" since launch). owner-kb now matches.
+
+**Existing chunked rows** stay in DB. Cleanup is owner-driven via `DELETE /api/operators/:id/owner-kb/:chunkId` or one-off SQL on `chunk_index > 0`.
+
 ### 2026-05-24T~18:30Z — KB confidence floor 30 → 75 SHIPPED (`opsoul--0000073`, image `kb-floor-b62658f`)
 
 **Source commit:** `b62658f` kb: raise confidence floor to 75 across all paths (insert + retrieve)
