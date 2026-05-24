@@ -177,28 +177,38 @@ The raw collection step (crawling, scraping, parsing) may be bulk — that's plu
 
 **How it shapes UI / tooling:** Nahil Desk and Submit-to-VAEL must present items one-at-a-time for review (not as a queue dashboard tempting the owner to mass-approve). If a queue view is ever built, "approve all" / "bulk approve" must be absent. SRAG promotion-to-insight inherits the same rule.
 
-### LLM Routing Strategy — REVISED 2026-05-24 (single-user simplification)
+### LLM Routing Strategy — REVISED 2026-05-24 (evening — reverted to Kimi runtime)
 
-**Owner clarification (2026-05-24):** OpSoul operators are **multi-role under one soul**, NOT a coordinated swarm of N sub-agents. The "Kimi Agent Swarm parallel" rationale from 2026-05-11 below was a category mistake — Kimi's swarm architecture solves a different problem than OpSoul's multi-role design. With that rationale gone, the only remaining argument for Kimi was identity-preservation early-report intuitions, which are now superseded by cost reality.
+**Same-day reversal.** The morning flip Kimi → DeepSeek V3 (rev `opsoul--llm-flip` shipped) was cost-driven. Live diagnostic same evening proved DeepSeek narrates instead of firing tool calls — even when the operator (`detectToolNeed`) presented tools. Diagnostic prompt:
+```
+"Call GET https://foundermoment.ai/api/agent/tools and return the actual
+ JSON response body verbatim. Do not summarize."
+```
+DeepSeek response: *"I cannot make external HTTP requests or call APIs directly. I'm an AI confined to this conversation environment..."* — clean model-with-no-tool-use voice, even though the operator HAD offered the http_request tool (URL pattern triggered `execute` mode and the operator carries the FM secret).
 
-**New routing (locked 2026-05-24, single-user OpSoul, OpenRouter-only):**
+OpSoul's architecture is operator-driven: operator decides per-turn whether to present tools; LLM must reliably fire them when offered. DeepSeek doesn't. Architecture stays unchanged (patent-protected). Runtime LLM reverted.
+
+**Locked routing (2026-05-24 evening, single-user OpSoul, OpenRouter-only):**
 
 | Use | Model | Why |
 |---|---|---|
-| **Runtime — operator brains, distillation, GROW, KB intake, skills, curiosity, memory** | **DeepSeek V3** (`deepseek/deepseek-chat-v3`) | ~9× cheaper output than Kimi; reasoning quality acceptable; single model across all runtime paths for simplicity |
-| **Birth engine only** (`extractBirthIdentity` in chat.ts) | **Sonnet 4.6** (`anthropic/claude-sonnet-4.6`) | One-time per operator, identity-critical, irreversible once Layer 1 locks — worth paying for quality |
-| **Bridge target when ready** | Hajeri 3B v2 | Once Identity SFT on the new burnin baseline (`hajeri_v2_burnin_resume.pt`) passes voice probes — replaces DeepSeek for runtime |
+| **Runtime — operator brains, distillation, GROW, KB intake, skills, curiosity, memory** | **Kimi K2.5** (`moonshotai/kimi-k2.5`) | Reliable tool-use in operator-driven architecture; ~$2.50/M output is acceptable for single-user OpSoul |
+| **Birth engine only** (`extractBirthIdentity` in chat.ts) | **Sonnet 4.6** (`anthropic/claude-sonnet-4.6`) | Unchanged from morning. One-time per operator, identity-critical, irreversible — worth Sonnet quality |
+| **Bridge target when ready** | Hajeri 3B v2 | Once Identity SFT on `hajeri_v2_burnin_resume.pt` passes voice + tool-use probes — replaces Kimi |
 
-**Llama variants excluded** — they narrate by default ("Let me think...", "I'll do X then Y"), which violates Vision Lock § 4 architectural rule against narration.
+**DeepSeek V3 kept catalogued** in the model registry but no longer default. Operators can still select it per-operator if they explicitly want cheaper runtime and accept the tool-use trade-off.
 
-**Code changes shipped 2026-05-24:**
-- `utils/modelRegistry.ts`: added `deepseek/deepseek-chat-v3` entry; `DEFAULT_MODEL_ID` flipped from Kimi → DeepSeek V3; new export `BIRTH_MODEL_ID = 'anthropic/claude-sonnet-4.6'`.
-- `routes/chat.ts:extractBirthIdentity`: imports + uses `BIRTH_MODEL_ID` instead of `CHAT_MODEL`. Comment added explaining why birth gets the more expensive model.
-- 22 hardcoded `'moonshotai/kimi-k2.5'` literal strings across 11 files (`kbIntake.ts`, `operatorCapabilityLoop.ts`, `growEngine.ts`, `skillExecutor.ts` ×7, `memoryEngine.ts`, `curiosityEngine.ts`, `mcpSmoke.ts` ×3, `operators.ts` ×2, `integrations.ts`, `public-crud.ts` ×2, `public-chat.ts`) flipped to `'deepseek/deepseek-chat-v3'`.
-- TypeScript clean (`npx tsc --noEmit` exits 0).
-- NOT YET DEPLOYED — awaiting owner ship-it.
+**Llama variants still excluded** — narrate by default.
 
-**Validation gate that was in the 2026-05-11 plan: simplified for single-user OpSoul.** Owner is the only user; no production rollout risk; if voice drifts after switch, flip the constants back in one commit and re-deploy. Skip the formal 4-vector validation suite. Owner runs Istishari smoke test post-deploy and reverts if anything reads off.
+**Code changes shipped 2026-05-24 evening:**
+- `utils/modelRegistry.ts`: `DEFAULT_MODEL_ID` flipped back to `'moonshotai/kimi-k2.5'`; `'Default'` badge moved from DeepSeek to Kimi entry; DeepSeek entry retained in registry; comment block updated with morning-flip + evening-revert history.
+- 22 hardcoded `'deepseek/deepseek-chat-v3'` literals across the same 11 files flipped back to `'moonshotai/kimi-k2.5'`.
+- `BIRTH_MODEL_ID = 'anthropic/claude-sonnet-4.6'` untouched — birth engine still on Sonnet.
+- `routes/chat.ts:extractBirthIdentity` still uses `BIRTH_MODEL_ID` — untouched.
+- TypeScript clean.
+- NOT YET DEPLOYED — awaiting owner ship-it (per `feedback_batch_deploys_dont_drip`).
+
+**Post-deploy verification:** rerun the diagnostic prompt above. Expect Kimi to fire `http_request` and return the actual `/api/agent/tools` JSON (31 tools, Phase-1 names starting with "Idea Validation", "Problem Definition", etc.) rather than narrating.
 
 ### LLM Routing Strategy — original direction (2026-05-11, SUPERSEDED by 2026-05-24)
 

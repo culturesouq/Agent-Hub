@@ -71,7 +71,7 @@ Return ONLY valid JSON, no explanation:
   try {
     const result = await chatCompletion(
       [{ role: 'user', content: prompt }],
-      'deepseek/deepseek-chat-v3',
+      'moonshotai/kimi-k2.5',
     );
 
     const text = result.content.trim();

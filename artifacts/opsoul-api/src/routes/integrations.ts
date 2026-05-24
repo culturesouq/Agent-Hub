@@ -264,7 +264,7 @@ router.post('/connect-app', async (req: Request, res: Response): Promise<void> =
             },
             { role: 'user', content: JSON.stringify(raw).slice(0, 4000) },
           ],
-          'deepseek/deepseek-chat-v3',
+          'moonshotai/kimi-k2.5',
         );
         try {
           appSchema = JSON.parse(normalized.content.trim().replace(/```json\n?|\n?```/g, ''));

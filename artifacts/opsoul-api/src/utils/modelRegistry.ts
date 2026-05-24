@@ -77,31 +77,34 @@ export interface ProviderConfig {
  * or other OpenRouter model strings keep working unchanged.
  */
 const PROVIDERS: Record<string, ProviderConfig> = {
-  // ── DeepSeek V3 via OpenRouter — the current default for runtime ─────
-  // Picked 2026-05-24 to replace Kimi as the platform default. Reasoning:
-  // (a) ~9x cheaper output than Kimi K2.5, (b) Kimi's Agent Swarm advantage
-  // never applied to OpSoul (operators are multi-role, not swarm), (c) bridge
-  // to Hajeri-3B when its inference path is production-ready.
-  'deepseek/deepseek-chat-v3': {
-    provider: 'openrouter',
-    adapter: 'openai-compat',
-    baseURL: 'https://openrouter.ai/api/v1',
-    apiKeyEnv: 'OPENROUTER_API_KEY',
-    label: 'DeepSeek V3',
-    description: 'DeepSeek — strong reasoning, 164K context, cost-efficient runtime',
-    badge: 'Default',
-    contextWindow: 164_000,
-  },
-
-  // ── Kimi (Moonshot AI) via OpenRouter — kept available, no longer default ─
+  // ── Kimi (Moonshot AI) via OpenRouter — runtime default ──────────────
+  // Restored as default 2026-05-24 (same day as the brief DeepSeek flip).
+  // DeepSeek narrated instead of calling tools when offered — model wasn't
+  // strong enough at tool-use within OpSoul's operator-driven architecture
+  // (operator gates tools via detectToolNeed; LLM must reliably fire when
+  // they're presented). Kimi's tool-use is more reliable in this setup.
   'moonshotai/kimi-k2.5': {
     provider: 'openrouter',
     adapter: 'openai-compat',
     baseURL: 'https://openrouter.ai/api/v1',
     apiKeyEnv: 'OPENROUTER_API_KEY',
     label: 'Kimi K2.5',
-    description: 'Moonshot AI — multimodal, 262K context',
+    description: 'Moonshot AI — multimodal, 262K context, strong tool-use',
+    badge: 'Default',
     contextWindow: 262144,
+  },
+
+  // ── DeepSeek V3 via OpenRouter — available, not default ──────────────
+  // Cheaper output (~9x) but weaker at tool dispatch in operator-driven
+  // flows. Kept catalogued for operators who want it explicitly.
+  'deepseek/deepseek-chat-v3': {
+    provider: 'openrouter',
+    adapter: 'openai-compat',
+    baseURL: 'https://openrouter.ai/api/v1',
+    apiKeyEnv: 'OPENROUTER_API_KEY',
+    label: 'DeepSeek V3',
+    description: 'DeepSeek — 164K context, cost-efficient',
+    contextWindow: 164_000,
   },
 
   // ── Hajeri 3B v2 (custom OpSoul model, hosted on RunPod) ────────────────
@@ -200,13 +203,16 @@ const PROVIDERS: Record<string, ProviderConfig> = {
  * unknown model ID is encountered. Matches the historical CHAT_MODEL
  * constant from openrouter.ts so existing behavior is unchanged.
  *
- * Changed 2026-05-24: was 'moonshotai/kimi-k2.5'. Switched to DeepSeek V3
- * for cost (~9x cheaper output) and because Kimi's Agent Swarm rationale
- * never applied to OpSoul (operators are multi-role, not coordinated swarm).
- * Birth engine is separately hardcoded to Sonnet 4.6 in chat.ts (one-time
- * identity-critical extraction worth the per-birth cost).
+ * Routing history 2026-05-24:
+ *   morning: Kimi K2.5 → DeepSeek V3 (cost-driven flip)
+ *   evening: DeepSeek V3 → Kimi K2.5 (reverted — DeepSeek narrated when
+ *            tools were offered; OpSoul's operator-driven architecture
+ *            relies on the LLM reliably firing tool calls when the
+ *            operator presents them, which Kimi handles better)
+ *
+ * Birth engine stays on Sonnet 4.6 (BIRTH_MODEL_ID) — separate concern.
  */
-export const DEFAULT_MODEL_ID = 'deepseek/deepseek-chat-v3';
+export const DEFAULT_MODEL_ID = 'moonshotai/kimi-k2.5';
 
 /**
  * Birth-time model used by chat.ts:extractBirthIdentity. Sonnet 4.6 chosen
