@@ -22,6 +22,8 @@ import { assembleOperatorPrompt } from '../utils/systemPrompt.js';
 import { distillActionTaskPattern } from '../utils/memoryEngine.js';
 import { buildScopeContext, type ValidatedScope } from '../utils/scopeResolver.js';
 import { OperatorAgent } from '../utils/operatorAgent.js';
+import { buildOperatorToolset } from '../utils/operatorToolset.js';
+import { runSyncAgentLoop } from '../utils/operatorAgentLoop.js';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { eq, and } from 'drizzle-orm';
 
@@ -259,24 +261,38 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     ? operator.defaultModel
     : CHAT_MODEL;
 
-  // STEP 2 — Operator dispatches the LLM as its executor for this action.
-  // The operator owns the call (it set the action context, built the
-  // system prompt). The LLM computes the action result; the operator
-  // validates before returning to the calling workflow.
-  //
+  // ── FULL UNIVERSAL TOOL SUBSTRATE (Claims 4 / 9 / 31 / 36 / D-4) ──
+  // Action API used to dispatch with `{ model }` only — silently capability-
+  // stripped relative to the owner Hub. Per [[expand-never-cut]] the operator
+  // now receives the FULL universal tool catalogue filtered by the action
+  // scope's allowlist (the registry enforces — we do not subset further).
+  // Action scope synthesized here (no conv row exists for action calls).
+  const actionToolset = buildOperatorToolset({
+    operatorId: slot.operatorId,
+    ownerId: slot.ownerId,
+    conversationId: `action:${slot.slotId}`, // synthetic — no conv row
+    scope: actionScope,
+    mandate: operator.mandate ?? '',
+    liveSecrets: liveSecrets.map(s => s.key),
+    connectedIntegrations: liveIntegrations.map(i => i.type).filter((t): t is string => typeof t === 'string'),
+  });
+
+  // STEP 2 — Operator dispatches the LLM via the shared sync agent loop,
+  // which exposes the FULL universal tool catalogue for the action scope.
   // Per [[no-fallbacks]] + Claim 13: on LLM failure, propagate the real
   // upstream error as structured JSON. NEVER substitute synthetic operator
-  // voice in the action result. The previous code path had no try/catch
-  // around executeSync — LLM failure crashed the request with a 500.
+  // voice in the action result.
   let result;
   try {
-    result = await actionAgent.executeSync(
-      [
+    result = await runSyncAgentLoop({
+      agent: actionAgent,
+      toolset: actionToolset,
+      messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: actionText },
       ],
-      { model: resolvedModel },
-    );
+      model: resolvedModel,
+    });
   } catch (llmErr: unknown) {
     console.error('[public-crud] action LLM error', llmErr);
     const status = (llmErr as { status?: number })?.status ?? null;

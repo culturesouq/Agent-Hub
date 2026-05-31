@@ -8,6 +8,8 @@ import {
   messagesTable,
   operatorSkillsTable,
   platformSkillsTable,
+  operatorSecretsTable,
+  operatorIntegrationsTable,
 } from '@workspace/db';
 import { requireSlotKey } from '../middleware/requireSlotKey.js';
 import { buildSlotScope, buildScopeContext } from '../utils/scopeResolver.js';
@@ -17,6 +19,8 @@ import type { MemoryHit } from '../utils/memoryEngine.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { assembleOperatorPrompt, buildTemporalContext, containsTimeKeywords } from '../utils/systemPrompt.js';
 import { OperatorAgent } from '../utils/operatorAgent.js';
+import { buildOperatorToolset } from '../utils/operatorToolset.js';
+import { runSyncAgentLoop } from '../utils/operatorAgentLoop.js';
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
 import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import type { ChatMessage, ContentPart } from '../utils/openrouter.js';
@@ -344,6 +348,26 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     model = 'moonshotai/kimi-k2.5';
   }
 
+  // ── FULL UNIVERSAL TOOL SUBSTRATE (Claims 4 / 9 / 31 / 36 / D-4) ──
+  // Slot deploys used to dispatch with `{ model }` only — silently capability-
+  // stripped relative to the owner Hub. Per [[expand-never-cut]] the operator
+  // now receives the FULL universal tool catalogue, filtered by the registry's
+  // scope + availability rules (the only gate). Conversation ID is required
+  // by tool handlers; for public scope we use the in-memory sessionId.
+  const [pcSecretRows, pcIntegrationRows] = await Promise.all([
+    db.select({ key: operatorSecretsTable.key }).from(operatorSecretsTable).where(eq(operatorSecretsTable.operatorId, slot.operatorId)),
+    db.select({ type: operatorIntegrationsTable.integrationType }).from(operatorIntegrationsTable).where(eq(operatorIntegrationsTable.operatorId, slot.operatorId)),
+  ]);
+  const toolset = buildOperatorToolset({
+    operatorId: slot.operatorId,
+    ownerId: slot.ownerId,
+    conversationId: scope.writesHistory ? (conv?.id ?? sessionId) : sessionId,
+    scope,
+    mandate: operator.mandate ?? '',
+    liveSecrets: pcSecretRows.map(s => s.key),
+    connectedIntegrations: pcIntegrationRows.map(i => i.type).filter((t): t is string => typeof t === 'string'),
+  });
+
   // ── STREAM PATH ────────────────────────────────────────────────────────────
   if (stream) {
     res.setHeader('Content-Type', 'text/event-stream');
@@ -351,18 +375,24 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
 
-    let fullContent = '';
-
     try {
-      // STEP 2 — Operator dispatches the LLM as streaming executor for
-      // this turn. The operator owns the call; the LLM's voice is
-      // established by the operator's identity in the system prompt;
-      // chunks stream to the user under the operator's name.
-      for await (const chunk of agent.executeStreaming(messages, { model })) {
-        if (chunk.delta) {
-          fullContent += chunk.delta;
-          res.write(`data: ${JSON.stringify({ delta: chunk.delta })}\n\n`);
-        }
+      // STEP 2 — Operator dispatches the LLM as streaming executor for this
+      // turn. With the universal tool catalogue wired (Claims 4/9/31/36) the
+      // operator may decide to use tools across multiple iterations; the
+      // sync agent loop handles the iteration + dispatch then we emit the
+      // final operator-voice content as a single SSE delta. Token-by-token
+      // streaming inside the loop is owner-Hub only (chat.ts) — slot deploys
+      // get tool capability + full-message delivery instead of per-token
+      // delivery. Trade documented in Phase 1B SoT.
+      const loopResult = await runSyncAgentLoop({
+        agent,
+        toolset,
+        messages,
+        model,
+      });
+      const fullContent = loopResult.content;
+      if (fullContent) {
+        res.write(`data: ${JSON.stringify({ delta: fullContent })}\n\n`);
       }
 
       let finalContent = fullContent;
@@ -420,10 +450,16 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   // ── SYNC PATH ──────────────────────────────────────────────────────────────
   } else {
-    let result;
+    let loopResult;
     try {
-      // STEP 2 — Operator dispatches the LLM as its executor for this turn.
-      result = await agent.executeSync(messages, { model });
+      // STEP 2 — Operator dispatches the LLM via the shared sync agent loop,
+      // which exposes the FULL universal tool catalogue (Claims 4/9/31/36).
+      loopResult = await runSyncAgentLoop({
+        agent,
+        toolset,
+        messages,
+        model,
+      });
     } catch (llmErr: unknown) {
       // Per [[no-fallbacks]] + Claim 13: never substitute synthetic operator
       // voice on LLM failure. Propagate the real upstream error so the caller
@@ -446,7 +482,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const finalContent = result.content;
+    const finalContent = loopResult.content;
 
     if (scope.writesHistory && conv) {
       await db.insert(messagesTable).values({

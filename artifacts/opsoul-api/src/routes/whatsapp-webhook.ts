@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import crypto from 'crypto';
 import { db } from '@workspace/db';
-import { operatorIntegrationsTable, operatorsTable, conversationsTable, messagesTable } from '@workspace/db';
+import { operatorIntegrationsTable, operatorsTable, conversationsTable, messagesTable, operatorSecretsTable } from '@workspace/db';
 import { decryptToken } from '@workspace/opsoul-utils/crypto';
 import { chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import { assembleOperatorPrompt } from '../utils/systemPrompt.js';
@@ -9,6 +9,8 @@ import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { searchMemory, buildMemoryContext } from '../utils/memoryEngine.js';
 import { buildChannelScope, buildScopeContext } from '../utils/scopeResolver.js';
 import { OperatorAgent } from '../utils/operatorAgent.js';
+import { buildOperatorToolset } from '../utils/operatorToolset.js';
+import { runSyncAgentLoop } from '../utils/operatorAgentLoop.js';
 import { eq, and, asc, sql } from 'drizzle-orm';
 import OpenAI, { toFile } from 'openai';
 import { embed } from '@workspace/opsoul-utils/ai';
@@ -333,12 +335,39 @@ router.post('/:operatorId', async (req: RequestWithRawBody, res: Response): Prom
       ? operator.defaultModel
       : CHAT_MODEL;
 
+    // ── FULL UNIVERSAL TOOL SUBSTRATE (Claims 4 / 9 / 31 / 36 / D-4) ──
+    // Channel surfaces (Telegram, WhatsApp) used to dispatch with `{ model }`
+    // only — silently capability-stripped. Per [[expand-never-cut]] the
+    // operator now receives the FULL universal tool catalogue here, filtered
+    // by the registry's scope + availability rules (the only gate). Load
+    // the operator's stored secret labels + connected integrations so
+    // http_request can interpolate {{secret-label}} placeholders and
+    // integration-availability tools resolve correctly.
+    const [secretRows, integrationRows] = await Promise.all([
+      db.select({ key: operatorSecretsTable.key }).from(operatorSecretsTable).where(eq(operatorSecretsTable.operatorId, operator.id)),
+      db.select({ type: operatorIntegrationsTable.integrationType }).from(operatorIntegrationsTable).where(eq(operatorIntegrationsTable.operatorId, operator.id)),
+    ]);
+    const toolset = buildOperatorToolset({
+      operatorId: operator.id,
+      ownerId: operator.ownerId,
+      conversationId: conv.id,
+      scope,
+      mandate: operator.mandate ?? '',
+      liveSecrets: secretRows.map(s => s.key),
+      connectedIntegrations: integrationRows.map(i => i.type).filter((t): t is string => typeof t === 'string'),
+    });
+
     // STEP 2 — Operator dispatches the LLM as its executor for this turn.
     // The operator owns the call. The LLM produces text in the operator's
-    // voice; the operator validates it (next step) before the route
-    // delivers it via WhatsApp.
-    const result = await agent.executeSync(chatMessages, { model });
-    const finalContent = result.content;
+    // voice via the shared sync agent loop, which handles tool calls if the
+    // operator decides to use them (up to MAX_ITER iterations).
+    const loopResult = await runSyncAgentLoop({
+      agent,
+      toolset,
+      messages: chatMessages,
+      model,
+    });
+    const finalContent = loopResult.content;
 
     await db.insert(messagesTable).values({
       id: crypto.randomUUID(),
