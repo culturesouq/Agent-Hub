@@ -11,8 +11,8 @@
 |---|---|
 | **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` |
 | **Container App** | `opsoul` (resource group `bani-studio-rg`, region `uaenorth`) |
-| **Active Revision** | `opsoul--0000070` (Healthy 2026-05-22T06:29Z — Artifacts archive tab next to Files; sibling of `00926b4`'s ui-gap fixes on top of `e515e4b` station rewrite) |
-| **Image** | `banistudioacr.azurecr.io/opsoul-api:artifacts-tab-00926b4` |
+| **Active Revision** | `opsoul--0000075` (Healthy 2026-05-22T06:29Z — Artifacts archive tab next to Files; sibling of `00926b4`'s ui-gap fixes on top of `e515e4b` station rewrite) |
+| **Image** | `banistudioacr.azurecr.io/opsoul-api:phase-2b-integrated-d33ae33` |
 | **Source commit (live)** | `00926b4` — Artifacts archive tab. `GET /api/operators/:id/artifacts` scans messagesTable for fenced `opsoul-widget` blocks (excludes transient connect_form); Hub `ArtifactsSection.tsx` renders each via the existing WidgetBlock, filter chips per kind, sits between Files and Connections in the nav. Builds on `e515e4b` (5 UI-gap fixes: every-N-hours preset, "unlocks N tools" badge, outbound activity per channel, Skills "Test fire" panel, `/render` slash command) and `319f273` (full station rewrite). |
 | **🛡 Rollback safety net (DO NOT DELETE)** | Three retained rollback fallbacks: (1) image `banistudioacr.azurecr.io/opsoul-api:upload-fix-dd7e32c` (rev `opsoul--0000066` — pre-station-rewrite), (2) image `banistudioacr.azurecr.io/opsoul-api:mcp-runtime-f9f23e4` (rev `opsoul--0000065` — MCP runtime layer, pre-upload-fix), (3) image `banistudioacr.azurecr.io/opsoul-api:webhook-fix-2c4ea80` (rev `opsoul--0000064` — pre-MCP). Owner directive 2026-05-19 (still in force): keep flagged, do **not** auto-prune; touch only on explicit owner directive. Rollback to pre-station-rewrite: `az containerapp update -n opsoul -g bani-studio-rg --image banistudioacr.azurecr.io/opsoul-api:upload-fix-dd7e32c`. Pre-MCP state: `--image banistudioacr.azurecr.io/opsoul-api:webhook-fix-2c4ea80`. |
 | **Live proof (2026-05-19)** | Nahil successfully called `http_request` tool against `https://nahilai.com/` via the new MCP runtime layer. Retrieved structured JSON, reported back: profile (Abu Dhabi admin), 5 active subsidies (Smart Irrigation, AgTech Grant, Organic Farming, Protected Agriculture, Water Desalination Access), empty sensors/seasons. Universal tool layer confirmed working in production on a real operator hitting real consumer-app data. |
@@ -331,7 +331,7 @@ Same-day reversal of `9a79757` (morning's Kimi → DeepSeek flip). Live diagnost
 
 22 hardcoded `'deepseek/deepseek-chat-v3'` literals across 11 files flipped back to Kimi. DeepSeek entry kept catalogued in `modelRegistry.ts`, selectable per-operator if owner ever wants cheaper runtime + tool-use trade-off.
 
-### 2026-05-22T06:29Z — Artifacts archive tab SHIPPED (`opsoul--0000070`, image `artifacts-tab-00926b4`)
+### 2026-05-22T06:29Z — Artifacts archive tab SHIPPED (`opsoul--0000075`, image `artifacts-tab-00926b4`)
 
 **Source commit:** `00926b4` feat(artifacts): durable archive tab next to Files
 **ACR run:** `dg7b` (2m11s, Succeeded)
@@ -3500,4 +3500,90 @@ The full closed-backend distribution strategy is locked in memory `[[closed-back
 - [ ] `lib/api-zod` Orval duplicate re-exports (10 TS2308 errors)
 - [ ] Missing `@types/node` in `lib/integrations-openrouter-ai` + `lib/integrations-openai-ai-server` + react types in `lib/mockup-sandbox`
 - Owner picks: address in a focused small-pass after deploy OR roll into Phase 4
+
+
+---
+
+## 2026-05-31 — DEPLOY: rev `opsoul--0000075` (Phase 1B + 2 + 2B integrated)
+
+### Deploy facts
+- **Live URL**: `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/`
+- **Container App**: `opsoul` (rg `bani-studio-rg`, region `uaenorth`)
+- **Active Revision**: `opsoul--0000075` (Healthy, Running, Provisioned 2026-05-31T08:09:30Z)
+- **Image**: `banistudioacr.azurecr.io/opsoul-api:phase-2b-integrated-d33ae33`
+- **Image digest**: `sha256:a3480bbf9ef9ae81e939e6ed19148d4608ce3ad13b1c1d6d1087210830e5acf6`
+- **Source commit (live)**: `d33ae33` on `main` (51 commits ahead of pre-cleanup baseline `e35e265`)
+- **Build**: `az acr build` Run ID `dg8e`, 2m12s
+- **Health verify**: `GET /api/models` returns 200 with 9-model registry including `hajeri-3b-v2`; revision provisioning state `Succeeded`, running state `Running`, health state `Healthy`
+
+### What landed in this deploy (vs prior live rev `opsoul--0000075`)
+
+**Phase 1B (22 commits) — Patent-critical backend fixes:**
+- Layer 1 lock guard on PATCH `/api/operators/:id` (Claim 16/22/44 — invalidation hole closed)
+- All synthetic fallback strings killed across `public-chat`, `public-crud`, `telegram-webhook`, `whatsapp-webhook`, history filters, distillation (Claim 13)
+- LLM retry / exponential backoff / per-turn budget added to `openrouter.ts` (Claim 21)
+- Layer 2 PII regex backstop on `storeMainMemory` (Claim 3 belt-and-suspenders)
+- `public-crud.ts` try/catch + model deparameterization
+- Soul-anchor decay exemption: `soul_anchored` column + decay-skip + API (Claim 25)
+- Source-trust ladder expanded 3-tier → 5-tier (Claim 32 — D-3 owner directive)
+- Full Hub tool set wired to all 5 surfaces via `buildOperatorToolset` + `runSyncAgentLoop` (Claims 4/9/31/36 — D-4 owner directive)
+- Archetype/role lists deduped into `constants/archetypes.ts`
+- Backend architecture-secret leaks stripped (requireAdmin.ts)
+
+**Phase 2 (11 commits) — UI cleanup + Firecrawl D-6 integration:**
+- OperatorDetail wires CapabilityRequestsSection under Brain nav group
+- Operator portraits switched from external Unsplash URLs to local `/images/persona-*.png`; orphan `PERSONA_GLOWS` removed
+- Chat error tone reframed per `[[errors-as-investigation]]` (5 strings)
+- UI architecture-secret leak sweep (Sovereign / GROW / Layer-N labels) → STAGE_LABELS rename, generic copy
+- AdminPage VAEL Desk removal (~329 LOC of inert dead code per SoT 2026-05-22 §890 pre-approval — the one valid deletion)
+- Operator quick-switcher dropdown added to OperatorDetail header
+- Firecrawl D-6 Free-tier integration: new `lib/integrations/firecrawl` Apache-2.0 package + 5 MCP tools + DB schema `operator_firecrawl_usage` + .env.example
+- KB UI gains SRAG entry points: entity-type, required-tags, Stop-Crawl panel
+
+**Phase 2B (8 closure commits) — Integration + zero-slip pass:**
+- Wired KB UI SRAG fields end-to-end (entityType + tags columns on both KB tables + Stop-Crawl POST endpoint — no more forward-compat ignored)
+- LLM budget defaults bumped 4096/2048 → 65536/4096 to match `HISTORY_MAX_TOKENS=60000`
+- Claim 5 operator-collaborative firewall surfaces stubbed at every chat/public-chat/webhook/action entry via new `operatorFirewall.ts` (5(a) input tagger + 5(b) leak detector; current implementation is no-op; Phase 4 fills in)
+- `noUnusedLocals: true` enforced workspace-wide; 40 violations cleared across 28 files
+- One last fallback string slip in `tasksCron.ts` (hardcoded `role:'assistant'` "Understood. I have absorbed..." priming) replaced with `role:'system'`
+- Cross-package type-check clean across opsoul-api + opsoul-hub + lib/db + lib/opsoul-utils + lib/api-client-react + lib/integrations/firecrawl
+
+### Schema changes auto-applied on startup
+- `l1_memories.soul_anchored BOOLEAN DEFAULT FALSE`
+- `l2_memories.soul_anchored BOOLEAN DEFAULT FALSE`
+- `operator_kb.entity_type` + intake tags
+- `owner_kb.entity_type` + intake tags
+- `operator_firecrawl_usage` table (per-operator per-day credit ledger)
+
+All applied via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` in `index.ts:setupDatabase()` — no separate migration step.
+
+### Rollback safety net (DO NOT DELETE) — updated
+Four retained rollback fallbacks (oldest → newest):
+1. `banistudioacr.azurecr.io/opsoul-api:webhook-fix-2c4ea80` (rev `0000064` — pre-MCP)
+2. `banistudioacr.azurecr.io/opsoul-api:mcp-runtime-f9f23e4` (rev `0000065` — MCP runtime layer)
+3. `banistudioacr.azurecr.io/opsoul-api:upload-fix-dd7e32c` (rev `0000066` — pre-station-rewrite)
+4. `banistudioacr.azurecr.io/opsoul-api:phase-2b-integrated-d33ae33` (rev `0000070` — prior live, pre-Phase-1B/2/2B)
+
+Owner directive 2026-05-19 (still in force): keep flagged, do **not** auto-prune; touch only on explicit owner directive.
+
+Rollback commands (in priority of recency):
+- Pre-Phase-1B/2/2B: `az containerapp update -n opsoul -g bani-studio-rg --image banistudioacr.azurecr.io/opsoul-api:phase-2b-integrated-d33ae33`
+- Pre-station-rewrite: `az containerapp update -n opsoul -g bani-studio-rg --image banistudioacr.azurecr.io/opsoul-api:upload-fix-dd7e32c`
+- Pre-MCP state: `az containerapp update -n opsoul -g bani-studio-rg --image banistudioacr.azurecr.io/opsoul-api:webhook-fix-2c4ea80`
+
+### Git state cleanup (post-deploy)
+- All Phase 1B + Phase 2 + Phase 2B work merged into `main` (fast-forward)
+- Pushed to `origin/main` (repo: culturesouq/Agent-Hub)
+- Local branches deleted (merged): `phase-1b-patent-critical`, `phase-2-ship-ready`, `phase-2b-integrated`
+- Worktree at `/Users/bstar/opsoul-audit-p2` removed
+- `MEMORY-REFRESH-NEEDED.md` removed (Phase 3 processed memories already)
+- Audit reports committed to repo as paper trail (5 files; PHASE0/Architecture/UI/Firecrawl-MCP/Small-Vael)
+
+### Active Plans — post-deploy state
+- [x] ✅ OpSoul cleanup deploy live at rev `opsoul--0000075`
+- [x] ✅ Git pushed to origin/main
+- [x] ✅ Branches + worktree cleaned up
+- [ ] **Owner: send patent submission package to Lavender.IP (tomorrow)** — files ready in `/Users/bstar/OPSOUL_RED/` (Summary EN+AR, Description EN+AR, Diagrams_v2 + Bilingual, Claims_EN_v2, Glossary_v2_diff)
+- [ ] **Then watch Hajeri together** (SFT pass 1 ~80% complete; loss 4.4 descending; judge only after loss<3 + pass complete per owner standing rule)
+- [ ] **Post-patent**: commercial track per detailed plan (npm scopes, REST API, hosted console, Stripe, design-partner quiet launch)
 
