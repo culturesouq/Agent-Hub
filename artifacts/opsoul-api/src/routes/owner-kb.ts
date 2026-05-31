@@ -11,6 +11,11 @@ import { eq, and } from 'drizzle-orm';
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
 
+// SRAG canonical entity types — every KB entry classifies as one of these
+// six shapes so retrieval can filter on shape, not just text. UI + backend
+// + DB column all share the same enum.
+const ENTITY_TYPES = ['fact', 'insight', 'entity', 'event', 'reference', 'procedure'] as const;
+
 const IngestSchema = z.object({
   text: z.string().min(10, 'text must be at least 10 characters'),
   sourceName: z.string().max(200).optional(),
@@ -20,6 +25,14 @@ const IngestSchema = z.object({
   // but was previously rejected as out-of-enum — added to keep file uploads
   // from 400ing.
   sourceType: z.enum(['manual', 'url', 'file', 'pipeline', 'document']).default('manual'),
+  // SRAG entity classification (Phase 2B Commit 1). UI defaults to 'fact';
+  // backend defaults to 'reference' to match column default — explicit value
+  // from the UI always wins.
+  entityType: z.enum(ENTITY_TYPES).default('reference'),
+  // SRAG tags — REQUIRED. At least one non-empty tag per entry so the row
+  // stays retrievable beyond pure vector similarity. UI enforces, backend
+  // enforces as belt-and-suspenders. Per [[srag]] discipline.
+  tags: z.array(z.string().min(1)).min(1, 'at least one tag is required'),
 });
 
 async function resolveOperator(req: Request, res: Response): Promise<string | null> {
@@ -49,7 +62,18 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  const { text, sourceName, sourceUrl, sourceType } = parsed.data;
+  const { text, sourceName, sourceUrl, sourceType, entityType, tags } = parsed.data;
+
+  // Dedupe + trim tags here too so the DB always stores a clean canonical
+  // form (UI does the same; we don't trust client to be the only guard).
+  const cleanTags = Array.from(new Set(tags.map(t => t.trim()).filter(Boolean)));
+  if (cleanTags.length === 0) {
+    res.status(400).json({
+      error: 'Validation failed',
+      issues: { tags: ['at least one non-empty tag is required'] },
+    });
+    return;
+  }
 
   // Always store as a single entry — no chunking. Reference documents must
   // stay whole so the operator pulls the full context when any part is
@@ -69,17 +93,25 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   const id = crypto.randomUUID();
 
   await pool.query(
-    `INSERT INTO owner_kb (id, operator_id, owner_id, content, embedding, source_name, source_url, source_type, chunk_index, created_at)
-     VALUES ($1, $2, $3, $4, $5::vector, $6, $7, $8, $9, NOW())`,
-    [id, operatorId, req.owner!.ownerId, fullText, vecStr, sourceName ?? null, sourceUrl ?? null, sourceType, 0],
+    `INSERT INTO owner_kb
+       (id, operator_id, owner_id, content, embedding, source_name, source_url,
+        source_type, chunk_index, entity_type, intake_tags, created_at)
+     VALUES ($1,$2,$3,$4,$5::vector,$6,$7,$8,$9,$10,$11,NOW())`,
+    [
+      id, operatorId, req.owner!.ownerId, fullText, vecStr,
+      sourceName ?? null, sourceUrl ?? null, sourceType, 0,
+      entityType, cleanTags,
+    ],
   );
 
   res.status(201).json({
     ok: true,
     operatorId,
     chunksIngested: 1,
-    chunks: [{ id, chunkIndex: 0, length: fullText.length }],
+    chunks: [{ id, chunkIndex: 0, length: fullText.length, entityType, tags: cleanTags }],
     sourceName: sourceName ?? null,
+    entityType,
+    tags: cleanTags,
   });
 
   triggerSelfAwareness(operatorId, 'kb_learn').catch(() => {});
@@ -97,6 +129,8 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
       sourceUrl: ownerKbTable.sourceUrl,
       sourceType: ownerKbTable.sourceType,
       chunkIndex: ownerKbTable.chunkIndex,
+      entityType: ownerKbTable.entityType,
+      tags: ownerKbTable.intakeTags,
       createdAt: ownerKbTable.createdAt,
     })
     .from(ownerKbTable)

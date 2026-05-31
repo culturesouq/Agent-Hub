@@ -11,6 +11,10 @@ import { eq, and, gte, ne } from 'drizzle-orm';
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
 
+// SRAG canonical entity types — shared with owner-kb route. Keep enums
+// in sync (six shapes total).
+const ENTITY_TYPES = ['fact', 'insight', 'entity', 'event', 'reference', 'procedure'] as const;
+
 const IngestSchema = z.object({
   text: z.string().min(10),
   sourceName: z.string().max(200).optional(),
@@ -19,7 +23,13 @@ const IngestSchema = z.object({
     .enum(['operator_self', 'user_provided', 'external_verified', 'external_unverified'])
     .default('operator_self'),
   confidenceScore: z.number().int().min(75).max(100).default(75),
-  intakeTags: z.array(z.string()).default([]),
+  // Pipeline callers (kbIntake, platformKbSeed, autoInstall) still send
+  // intakeTags directly. UI sends `tags` (SRAG nomenclature). Both feed
+  // the same column. At least one of the two must yield a non-empty list
+  // — enforced in the handler below.
+  intakeTags: z.array(z.string()).optional(),
+  tags: z.array(z.string().min(1)).optional(),
+  entityType: z.enum(ENTITY_TYPES).default('reference'),
   isPipelineIntake: z.boolean().default(false),
   privacyCleared: z.boolean().default(false),
   contentCleared: z.boolean().default(false),
@@ -64,6 +74,22 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   const data = parsed.data;
 
+  // SRAG tags discipline — at least one tag required for owner-driven
+  // writes (UI sends `tags`). Pipeline writes (kbIntake/seed/autoInstall)
+  // can pass through with no tags; they're flagged isPipelineIntake=true
+  // and run a different curation path. Owner manual entries MUST tag.
+  const incomingTags = Array.from(new Set([
+    ...(data.tags ?? []),
+    ...(data.intakeTags ?? []),
+  ].map(t => t.trim()).filter(Boolean)));
+  if (!data.isPipelineIntake && incomingTags.length === 0) {
+    res.status(400).json({
+      error: 'Validation failed',
+      issues: { tags: ['at least one non-empty tag is required for owner-entered knowledge'] },
+    });
+    return;
+  }
+
   // Always store as a single entry — no chunking
   const fullText = data.text.trim();
   if (!fullText) {
@@ -80,14 +106,16 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     `INSERT INTO operator_kb
        (id, operator_id, owner_id, content, embedding, source_name, source_url,
         source_trust_level, confidence_score, intake_tags, is_pipeline_intake,
-        privacy_cleared, content_cleared, verification_status, chunk_index, created_at)
-     VALUES ($1,$2,$3,$4,$5::vector,$6,$7,$8,$9,$10,$11,$12,$13,'pending',$14,NOW())`,
+        privacy_cleared, content_cleared, verification_status, chunk_index,
+        entity_type, created_at)
+     VALUES ($1,$2,$3,$4,$5::vector,$6,$7,$8,$9,$10,$11,$12,$13,'pending',$14,$15,NOW())`,
     [
       id, operatorId, req.owner!.ownerId, fullText, vecStr,
       data.sourceName ?? null, data.sourceUrl ?? null,
-      data.sourceTrustLevel, data.confidenceScore, data.intakeTags,
+      data.sourceTrustLevel, data.confidenceScore, incomingTags,
       data.isPipelineIntake, data.privacyCleared, data.contentCleared,
       0,
+      data.entityType,
     ],
   );
 
@@ -95,7 +123,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     ok: true,
     operatorId,
     chunksIngested: 1,
-    chunks: [{ id, chunkIndex: 0, length: fullText.length }],
+    chunks: [{ id, chunkIndex: 0, length: fullText.length, entityType: data.entityType, tags: incomingTags }],
+    entityType: data.entityType,
+    tags: incomingTags,
   });
 
   triggerSelfAwareness(operatorId, 'kb_learn').catch(() => {});
@@ -120,6 +150,10 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
       sourceUrl: operatorKbTable.sourceUrl,
       sourceTrustLevel: operatorKbTable.sourceTrustLevel,
       intakeTags: operatorKbTable.intakeTags,
+      // Mirror under the SRAG name too so the UI can read either field
+      // without caring about back-compat label drift.
+      tags: operatorKbTable.intakeTags,
+      entityType: operatorKbTable.entityType,
       chunkIndex: operatorKbTable.chunkIndex,
       flagReason: operatorKbTable.flagReason,
       createdAt: operatorKbTable.createdAt,

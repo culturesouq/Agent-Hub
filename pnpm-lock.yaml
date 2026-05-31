@@ -365,6 +365,9 @@ importers:
       '@workspace/db':
         specifier: workspace:*
         version: link:../../lib/db
+      '@workspace/integrations-firecrawl':
+        specifier: workspace:*
+        version: link:../../lib/integrations/firecrawl
       '@workspace/opsoul-utils':
         specifier: workspace:*
         version: link:../../lib/opsoul-utils
@@ -709,6 +712,8 @@ importers:
       p-retry:
         specifier: ^7.1.1
         version: 7.1.1
+
+  lib/integrations/firecrawl: {}
 
   lib/opsoul-utils:
     dependencies:

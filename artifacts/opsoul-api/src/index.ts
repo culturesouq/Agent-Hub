@@ -34,6 +34,7 @@ import contactRouter from './routes/contact.js';
 import googleIntegrationRouter from './routes/google-integration.js';
 import operatorSecretsRouter from './routes/operator-secrets.js';
 import deploymentSlotsRouter from './routes/deployment-slots.js';
+import firecrawlRouter from './routes/firecrawl.js';
 import publicChatRouter from './routes/public-chat.js';
 import publicCrudRouter from './routes/public-crud.js';
 import telegramWebhookRouter from './routes/telegram-webhook.js';
@@ -155,6 +156,7 @@ app.use('/api/contact', contactRouter);
 app.use('/api/integrations/google', googleIntegrationRouter);
 app.use('/api/operators/:operatorId/secrets', operatorSecretsRouter);
 app.use('/api/operators/:operatorId/slots', deploymentSlotsRouter);
+app.use('/api/operators/:operatorId/firecrawl', firecrawlRouter);
 app.use('/v1/chat', publicLimiter, publicChatRouter);
 app.use('/v1/action', publicLimiter, publicCrudRouter);
 app.use('/webhooks/telegram', webhookLimiter, telegramWebhookRouter);
@@ -236,6 +238,32 @@ async function setupDatabase(): Promise<void> {
     console.log('[db] operator_main_memory.soul_anchored column ensured');
   } catch (err) {
     console.error('[db] Failed to ensure operator_main_memory.soul_anchored column:', (err as Error).message);
+  }
+
+  // ── SRAG entity_type + tags backfill (Phase 2B Commit 1) ───────────────
+  // KB UI requires both fields on every write. operator_kb already has
+  // intake_tags; owner_kb needs it added. Both tables get entity_type so
+  // retrieval can filter on shape (fact/insight/entity/event/reference/
+  // procedure) in addition to vector similarity. Default 'reference' for
+  // any legacy row that pre-dates the column. NOT NULL so writes that
+  // forget the column blow up loudly instead of silently defaulting.
+  try {
+    await pool.query(`ALTER TABLE operator_kb ADD COLUMN IF NOT EXISTS entity_type TEXT NOT NULL DEFAULT 'reference'`);
+    console.log('[db] operator_kb.entity_type column ensured');
+  } catch (err) {
+    console.error('[db] Failed to ensure operator_kb.entity_type column:', (err as Error).message);
+  }
+  try {
+    await pool.query(`ALTER TABLE owner_kb ADD COLUMN IF NOT EXISTS entity_type TEXT NOT NULL DEFAULT 'reference'`);
+    console.log('[db] owner_kb.entity_type column ensured');
+  } catch (err) {
+    console.error('[db] Failed to ensure owner_kb.entity_type column:', (err as Error).message);
+  }
+  try {
+    await pool.query(`ALTER TABLE owner_kb ADD COLUMN IF NOT EXISTS intake_tags TEXT[] NOT NULL DEFAULT ARRAY[]::text[]`);
+    console.log('[db] owner_kb.intake_tags column ensured');
+  } catch (err) {
+    console.error('[db] Failed to ensure owner_kb.intake_tags column:', (err as Error).message);
   }
 }
 

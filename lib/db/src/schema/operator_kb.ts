@@ -17,6 +17,11 @@ export const operatorKbTable = pgTable('operator_kb', {
   flagReason: text('flag_reason'),
   chunkIndex: integer('chunk_index'),
   intakeTags: text('intake_tags').array().default([]),
+  // SRAG entity classification — every entry is one of the canonical six
+  // entity types (fact / insight / entity / event / reference / procedure)
+  // so retrieval can filter on shape, not just on text match. Owner UI
+  // requires this on every write (KbSection dialog).
+  entityType: text('entity_type').default('reference'),
   isPipelineIntake: boolean('is_pipeline_intake').default(false),
   privacyCleared: boolean('privacy_cleared').default(false),
   contentCleared: boolean('content_cleared').default(false),
