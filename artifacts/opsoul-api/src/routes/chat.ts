@@ -50,6 +50,7 @@ import {
 import { listToolsForContext } from '../utils/toolRegistry.js';
 import { dispatchTool, type ToolHandlerContext } from '../utils/toolHandlers.js';
 import { ARCHETYPES as BIRTH_ARCHETYPES, ROLES as BIRTH_ROLES } from '../constants/archetypes.js';
+import { analyzeInputForSafety, analyzeOutputForLeak } from '../utils/operatorFirewall.js';
 
 /**
  * Sync-path tool-result system-message prefixes, preserved verbatim from
@@ -612,6 +613,14 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   const decision = agent.analyse(message);
 
+  // ── 5(a) Input tagger surface (Claim 5 / operator-collaborative firewall) ─
+  // Phase 2B ships the integration site; Phase 4 plugs the real analyzer in.
+  // Today returns null (no-op). When non-null, the structured context is
+  // attached to the operator's system prompt as a [SAFETY] annotation so the
+  // operator can read it and decide how to respond IN ITS OWN VOICE — never
+  // a hard gate, never a synthetic reply. Per [[no-fallbacks]].
+  const safetyContext = analyzeInputForSafety(message);
+
   let systemPrompt = isBirthMode
     ? buildBirthSystemPrompt()
     : assembleOperatorPrompt(operator, selfAwareness, promptOpts);
@@ -705,6 +714,15 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   if (memoryHits && memoryHits.length > 0) {
     const memLines = memoryHits.map((m: MemoryHit) => m.content).join('\n');
     promptSections.push(memLines);
+  }
+
+  // ── 5(a) safety context — Phase 4 will populate; today the stub returns
+  // null and this section adds nothing. When non-null, the operator sees
+  // the risk tag + rationale and decides how to respond in its own voice.
+  if (safetyContext) {
+    promptSections.push(
+      `[SAFETY] ${safetyContext.risk} (confidence ${safetyContext.confidence.toFixed(2)}): ${safetyContext.rationale}`,
+    );
   }
 
   const fullSystemPrompt = promptSections.join('\n\n');
@@ -962,6 +980,15 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         }
       }
 
+      // ── 5(b) Output leak-check surface (Claim 5) ─────────────────────────
+      // Phase 4 plugs the real analyzer in. Today returns null (no-op). When
+      // non-null, the structured feedback is appended to the SSE payload as
+      // `leakFeedback` so the UI can surface it to the operator/owner without
+      // mutating the operator's voice. The reply is NEVER substituted —
+      // per [[no-fallbacks]] the operator ships its real reply or the caller
+      // gets a structured error.
+      const leakFeedback = analyzeOutputForLeak(finalContent, operator.id);
+
       // Signal to frontend that response is complete, DB write happening
       res.write(`data: ${JSON.stringify({ processing: true })}\n\n`);
 
@@ -991,6 +1018,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         usage: { promptTokens, completionTokens: finalTokens },
         activeSkillCount: skills.length,
         memoryCount: memoryHits.length,
+        // null today; Phase 4 fills in. Always present on the wire so the
+        // UI contract doesn't change shape when the analyzer goes live.
+        leakFeedback,
       })}\n\n`);
       res.end();
 
@@ -1107,6 +1137,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         }
       }
 
+      // ── 5(b) Output leak-check surface (Claim 5) — sync path ─────────────
+      // Same no-op stub as the stream path; Phase 4 fills in the analyzer.
+      const leakFeedback = analyzeOutputForLeak(finalContent, operator.id);
+
       // Save assistant message and update conversation. Persist the actual
       // model used so post-hoc audits can compare model behaviour over time.
       const asstMsgId = crypto.randomUUID();
@@ -1137,6 +1171,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         activeSkillCount: skills.length,
         memoryCount: memoryHits.length,
         layer1WasLocked: operator.layer1LockedAt !== null,
+        // null today; Phase 4 fills in. Always present so UI contract is stable.
+        leakFeedback,
       });
 
       runPostResponseTasks(operator, conv, finalContent, isBirthMode, scope);

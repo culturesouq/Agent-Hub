@@ -10,6 +10,7 @@ import { searchMemory, buildMemoryContext } from '../utils/memoryEngine.js';
 import { buildChannelScope, buildScopeContext } from '../utils/scopeResolver.js';
 import { OperatorAgent } from '../utils/operatorAgent.js';
 import { buildOperatorToolset } from '../utils/operatorToolset.js';
+import { analyzeInputForSafety, analyzeOutputForLeak } from '../utils/operatorFirewall.js';
 import { runSyncAgentLoop } from '../utils/operatorAgentLoop.js';
 import { eq, and, asc, sql } from 'drizzle-orm';
 import OpenAI, { toFile } from 'openai';
@@ -324,6 +325,15 @@ router.post('/:operatorId', async (req: RequestWithRawBody, res: Response): Prom
     if (ragCtx) promptSections.push(ragCtx);
     if (memCtx) promptSections.push(memCtx);
 
+    // ── 5(a) Input tagger surface (Claim 5) — whatsapp channel ────────────
+    // Stub returns null today; Phase 4 will populate.
+    const safetyContext = analyzeInputForSafety(userMessage);
+    if (safetyContext) {
+      promptSections.push(
+        `[SAFETY] ${safetyContext.risk} (confidence ${safetyContext.confidence.toFixed(2)}): ${safetyContext.rationale}`,
+      );
+    }
+
     const history = await buildConvHistory(conv.id);
 
     const chatMessages: ChatMessage[] = [
@@ -368,6 +378,14 @@ router.post('/:operatorId', async (req: RequestWithRawBody, res: Response): Prom
       model,
     });
     const finalContent = loopResult.content;
+
+    // ── 5(b) Output leak-check surface (Claim 5) — whatsapp channel ───────
+    // Stub returns null today; Phase 4 fills in. WhatsApp is one-way so we
+    // log for owner-side review; never mutate the operator's reply.
+    const leakFeedback = analyzeOutputForLeak(finalContent, operator.id);
+    if (leakFeedback) {
+      console.warn(`[whatsapp-webhook] leak feedback for operator=${operator.id}: ${leakFeedback.kind} — ${leakFeedback.suggestion}`);
+    }
 
     await db.insert(messagesTable).values({
       id: crypto.randomUUID(),

@@ -24,6 +24,7 @@ import { buildScopeContext, type ValidatedScope } from '../utils/scopeResolver.j
 import { OperatorAgent } from '../utils/operatorAgent.js';
 import { buildOperatorToolset } from '../utils/operatorToolset.js';
 import { runSyncAgentLoop } from '../utils/operatorAgentLoop.js';
+import { analyzeInputForSafety, analyzeOutputForLeak } from '../utils/operatorFirewall.js';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { eq, and } from 'drizzle-orm';
 
@@ -247,11 +248,20 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     `- Response shape: JSON when the action implies data, plain text when it implies explanation, a mix when both apply`,
   ].join('\n');
 
-  const systemPrompt = assembleOperatorPrompt(
+  let systemPrompt = assembleOperatorPrompt(
     operator,
     undefined,
     { scopeLine: crudScopeLine },
   );
+
+  // ── 5(a) Input tagger surface (Claim 5) — action API ──────────────────
+  // Stub returns null today; Phase 4 will populate. When non-null the
+  // [SAFETY] annotation is appended to the operator's system prompt for
+  // this single action turn.
+  const safetyContext = analyzeInputForSafety(actionText);
+  if (safetyContext) {
+    systemPrompt = `${systemPrompt}\n\n[SAFETY] ${safetyContext.risk} (confidence ${safetyContext.confidence.toFixed(2)}): ${safetyContext.rationale}`;
+  }
 
   // Resolve via the same pattern chat.ts uses: operator default if set and
   // not the auto sentinel, otherwise the platform CHAT_MODEL from the
@@ -310,7 +320,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  res.json({ result: result.content });
+  // ── 5(b) Output leak-check surface (Claim 5) — action API ─────────────
+  // Stub returns null today; Phase 4 fills in. Always included on the wire
+  // so the contract is stable when Phase 4 lights up.
+  const leakFeedback = analyzeOutputForLeak(result.content, slot.operatorId);
+
+  res.json({ result: result.content, leakFeedback });
 
   // Action scope contributes to GROW via PII-free task pattern memory
   distillActionTaskPattern(

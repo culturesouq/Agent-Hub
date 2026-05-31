@@ -21,6 +21,7 @@ import { assembleOperatorPrompt, buildTemporalContext, containsTimeKeywords } fr
 import { OperatorAgent } from '../utils/operatorAgent.js';
 import { buildOperatorToolset } from '../utils/operatorToolset.js';
 import { runSyncAgentLoop } from '../utils/operatorAgentLoop.js';
+import { analyzeInputForSafety, analyzeOutputForLeak } from '../utils/operatorFirewall.js';
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
 import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import type { ChatMessage, ContentPart } from '../utils/openrouter.js';
@@ -304,6 +305,17 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     promptSections.push((memoryHits as MemoryHit[]).map(m => m.content).join('\n'));
   }
 
+  // ── 5(a) Input tagger surface (Claim 5) — public-chat ────────────────────
+  // Stub returns null today; Phase 4 will populate. When non-null the [SAFETY]
+  // annotation rides as part of the system prompt so the operator's reasoning
+  // loop sees it and decides how to respond in its own voice (never gated).
+  const safetyContext = analyzeInputForSafety(message);
+  if (safetyContext) {
+    promptSections.push(
+      `[SAFETY] ${safetyContext.risk} (confidence ${safetyContext.confidence.toFixed(2)}): ${safetyContext.rationale}`,
+    );
+  }
+
   const messages: ChatMessage[] = [
     { role: 'system', content: promptSections.join('\n\n') },
     ...history,
@@ -423,8 +435,17 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         ]);
       }
 
+      // ── 5(b) Output leak-check surface (Claim 5) — public-chat stream ────
+      // Stub returns null today; Phase 4 fills in. Always included on the
+      // SSE done payload so the contract is stable when Phase 4 lights up.
+      const streamLeakFeedback = analyzeOutputForLeak(finalContent, slot.operatorId);
       const responseConvId = scope.writesHistory ? conv!.id : sessionId;
-      res.write(`data: ${JSON.stringify({ done: true, conversationId: responseConvId, scopeId: scope.scopeId })}\n\n`);
+      res.write(`data: ${JSON.stringify({
+        done: true,
+        conversationId: responseConvId,
+        scopeId: scope.scopeId,
+        leakFeedback: streamLeakFeedback,
+      })}\n\n`);
       res.end();
     } catch (streamErr: unknown) {
       // Per [[no-fallbacks]] + Claim 13: NEVER substitute synthetic operator
@@ -510,11 +531,14 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       ]);
     }
 
+    // ── 5(b) Output leak-check surface (Claim 5) — public-chat sync ───────
+    const syncLeakFeedback = analyzeOutputForLeak(finalContent, slot.operatorId);
     const responseConvId = scope.writesHistory ? conv!.id : sessionId;
     res.json({
       conversationId: responseConvId,
       message: { role: 'assistant', content: finalContent },
       scopeId: scope.scopeId,
+      leakFeedback: syncLeakFeedback,
     });
   }
 });
