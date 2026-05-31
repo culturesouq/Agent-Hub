@@ -166,7 +166,7 @@ export default function IdentitySection({ operator, panel }: Props) {
                 value={confirmedName}
                 onChange={e => setConfirmedName(e.target.value)}
                 className="bg-background/50"
-                placeholder="e.g. Nahil"
+                placeholder="e.g. Aria"
                 autoFocus
               />
               <div className="flex gap-2">

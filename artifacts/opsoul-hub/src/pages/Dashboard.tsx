@@ -400,9 +400,9 @@ function AnalyticsPanel({ operators }: { operators: Operator[] | undefined }) {
 
 const PLAN_FEATURES = [
   "Up to 3 AI operators",
-  "Persistent soul & memory",
-  "GROW evolution engine",
-  "Knowledge base (5MB)",
+  "Persistent identity & memory",
+  "Continuous evolution engine",
+  "Your own knowledge base",
   "API access",
   "Community support",
 ];

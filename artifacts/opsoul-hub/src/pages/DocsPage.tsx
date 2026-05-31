@@ -252,8 +252,8 @@ export default function DocsPage() {
               <DocStubSection
                 id="doc-growth"
                 icon="trending_up"
-                title="Growth (GROW)"
-                description="GROW is the autonomous self-evolution engine. It analyzes conversation patterns, generates behavioral proposals, and — with owner approval — applies targeted updates to the Operator's Soul and directive stack."
+                title="Growth"
+                description="Operators evolve continuously from real use. The system reviews conversation patterns, generates behavioral proposals, and — with owner approval — applies targeted updates to the Operator's identity and instructions."
               />
 
               {/* Execution */}
@@ -295,7 +295,7 @@ export default function DocsPage() {
                 id="doc-admin"
                 icon="admin_panel_settings"
                 title="Admin"
-                description="Admin access provides a platform-level overview: all Operators, all Owners, audit logs, and system health metrics. Only accounts with Sovereign Admin access may view this panel."
+                description="Admin access provides a platform-level overview: all Operators, all Owners, audit logs, and system health metrics. Only accounts with platform-admin access may view this panel."
               />
               <DocStubSection
                 id="doc-api"

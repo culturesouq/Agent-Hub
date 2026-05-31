@@ -57,12 +57,17 @@ interface AdminMessage {
 
 type Tab = "overview" | "owners" | "operators" | "drift";
 
-const LAYER_LABELS: Record<string, string> = {
-  l0_ai_builder: "L0 · AI Builder",
-  l1_foundation: "L1 · Foundation",
-  l2_behavioral: "L2 · Behavioral",
-  l3_domain:     "L3 · Domain",
-  l4_platform:   "L4 · Platform",
+// Stage labels used by future admin-side configuration views. Names are
+// intentionally generic (not the internal architecture vocabulary) so the
+// admin surface never exposes the platform's internal structure to screenshots
+// or demos. The keys remain on the API contract; only the human-readable
+// labels are generic.
+const STAGE_LABELS: Record<string, string> = {
+  l0_ai_builder: "Provisioning",
+  l1_foundation: "Identity",
+  l2_behavioral: "Personality",
+  l3_domain:     "Expertise",
+  l4_platform:   "Platform",
 };
 
 interface VaelRunState {
@@ -588,7 +593,7 @@ export default function AdminPage() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-primary font-mono tracking-widest text-xs uppercase animate-pulse">
-          Initializing Sovereign Console...
+          Initializing Workspace Admin...
         </div>
       </div>
     );
@@ -766,7 +771,7 @@ export default function AdminPage() {
           <div className="flex items-center gap-2">
             <span className="status-beacon" />
             <span className="font-label text-[10px] uppercase tracking-[0.2em] text-secondary">
-              Sovereign Console
+              Workspace Admin
             </span>
           </div>
         </div>
@@ -785,7 +790,7 @@ export default function AdminPage() {
         {/* Page title */}
         <div className="mb-12">
           <h1 className="headline-lg text-4xl md:text-5xl font-bold text-on-surface mb-3">
-            Sovereign <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">Command Center</span>
+            Platform <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">Admin</span>
           </h1>
           <p className="font-sans text-on-surface-variant text-sm">
             Full platform visibility. All operators, all owners, all intelligence streams.
@@ -977,7 +982,7 @@ export default function AdminPage() {
               <table className="w-full">
                 <thead>
                   <tr className="bg-surface-container-high/50">
-                    {["Operator", "Owner", "Messages", "Drift", "GROW Lock", "Safe Mode", "Actions"].map((h) => (
+                    {["Operator", "Owner", "Messages", "Drift", "Evolution Lock", "Safe Mode", "Actions"].map((h) => (
                       <th key={h} className="pl-6 pr-4 py-3 text-left font-label text-[10px] uppercase tracking-widest text-muted-foreground">
                         {h}
                       </th>
