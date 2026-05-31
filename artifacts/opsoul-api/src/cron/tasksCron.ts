@@ -82,15 +82,27 @@ export async function runSingleTask(
 
     const messages: ChatMessage[] = [{ role: 'system', content: systemPromptText }];
 
+    // Per [[no-fallbacks]]: never synthesize 'assistant' turns. Previous
+    // version pushed user+assistant alternating pairs ("Understood. I have
+    // absorbed...") to prime the model. That's synthetic operator voice —
+    // even though it never reached the DB (in-memory message array only,
+    // not db.insert(messagesTable)), it still has the operator pretending
+    // to speak. The clean pattern: append KB / memory as the system prompt
+    // tail. The chat.ts owner-Hub path uses the same approach and is the
+    // reference we converge with.
     if (kbHits.length > 0) {
-      messages.push({ role: 'user',      content: `[CONTEXT]\nKnowledge retrieved for this task:\n${buildRagContext(kbHits)}` });
-      messages.push({ role: 'assistant', content: 'Understood. I have absorbed the relevant knowledge.' });
+      messages.push({
+        role: 'system',
+        content: `[CONTEXT]\nKnowledge retrieved for this task:\n${buildRagContext(kbHits)}`,
+      });
     }
 
     if (memoryHits.length > 0) {
       const memCtx = memoryHits.map(m => `[${m.memoryType}] ${m.content}`).join('\n');
-      messages.push({ role: 'user',      content: `[CONTEXT]\nMemory recalled from past conversations:\n${memCtx}` });
-      messages.push({ role: 'assistant', content: 'Understood. I remember this context.' });
+      messages.push({
+        role: 'system',
+        content: `[CONTEXT]\nMemory recalled from past conversations:\n${memCtx}`,
+      });
     }
 
     messages.push({ role: 'user', content: `[SCHEDULED TASK: ${task.contextName}]\n${taskPrompt}` });
