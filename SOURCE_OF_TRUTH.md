@@ -3063,3 +3063,12 @@ The stack trace will name the file + line where the failing query lives. Once we
 - Change the column to `numeric(3,2)` if 0-1 scale is intentional
 - Reject the input with a friendly 400 at the API layer
 
+
+
+---
+
+## Phase 2 — Ship-ready cleanup + Firecrawl (2026-05-31)
+
+Branch `phase-2-ship-ready` off `main` (HEAD `e35e265`). Owner approved D-6 (Free Firecrawl tier) and `[[expand-never-cut]]`. No deploys, no merge, no push.
+
+- `678f0a0` — Commit 1: OperatorDetail nav wires CapabilityRequestsSection under Brain group (component + backend already existed, only the nav entry was missing). Owner gains in-product approve/deny path for operator-raised capability requests (Claim 11).
