@@ -1,4 +1,4 @@
-import { pgTable, text, real, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, text, real, boolean, timestamp } from 'drizzle-orm/pg-core';
 import { vector } from './types';
 
 export const operatorMemoryTable = pgTable('operator_memory', {
@@ -15,4 +15,11 @@ export const operatorMemoryTable = pgTable('operator_memory', {
   createdAt: timestamp('created_at').defaultNow(),
   scopeId:    text('scope_id').notNull().default('legacy'),
   scopeTrust: text('scope_trust').default('owner'),
+  /**
+   * Soul-anchor decay exemption (Claim 25). Rows marked true are skipped by
+   * the decay sweep — identity-critical memories the operator (or GROW)
+   * has flagged as part of its core self. Default false; promotion to true
+   * is explicit. DDL ensured at startup via setupDatabase().
+   */
+  soulAnchored: boolean('soul_anchored').notNull().default(false),
 });

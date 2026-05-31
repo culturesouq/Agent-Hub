@@ -357,6 +357,10 @@ export async function decayMemoriesForOperator(operatorId?: string): Promise<{
   decayed: number;
   archived: number;
 }> {
+  // Soul-anchor decay exemption (Claim 25). Rows flagged soul_anchored=true
+  // are identity-critical — the operator (or GROW) declared them part of
+  // its core self. They must never decay or archive; the decay sweep skips
+  // them at the SELECT boundary.
   let query = db
     .select()
     .from(operatorMemoryTable)
@@ -364,6 +368,7 @@ export async function decayMemoriesForOperator(operatorId?: string): Promise<{
       and(
         isNotNull(operatorMemoryTable.decayStartedAt),
         isNull(operatorMemoryTable.archivedAt),
+        eq(operatorMemoryTable.soulAnchored, false),
       ),
     );
 
@@ -376,6 +381,7 @@ export async function decayMemoriesForOperator(operatorId?: string): Promise<{
           eq(operatorMemoryTable.operatorId, operatorId),
           isNotNull(operatorMemoryTable.decayStartedAt),
           isNull(operatorMemoryTable.archivedAt),
+          eq(operatorMemoryTable.soulAnchored, false),
         ),
       );
   }
@@ -403,6 +409,48 @@ export async function decayMemoriesForOperator(operatorId?: string): Promise<{
   }
 
   return { decayed, archived };
+}
+
+// ─── Soul-anchor a memory (Claim 25) ──────────────────────────────────────────
+//
+// Marks a memory row in either Layer 1 (operator_memory) or Layer 2
+// (operator_main_memory) as soul_anchored=true so it is exempt from the decay
+// sweep above. Identity-critical memories the operator or GROW has flagged as
+// part of its core self go through here. Caller is responsible for authority
+// — the function does not check who is requesting (route-level concern).
+//
+// Returns true if a row was updated, false if no matching row was found.
+
+export async function setMemorySoulAnchor(
+  layer: 'layer1' | 'layer2',
+  memoryId: string,
+  operatorId: string,
+  soulAnchored: boolean,
+): Promise<boolean> {
+  if (layer === 'layer1') {
+    const result = await db
+      .update(operatorMemoryTable)
+      .set({ soulAnchored })
+      .where(
+        and(
+          eq(operatorMemoryTable.id, memoryId),
+          eq(operatorMemoryTable.operatorId, operatorId),
+        ),
+      )
+      .returning({ id: operatorMemoryTable.id });
+    return result.length > 0;
+  }
+  const result = await db
+    .update(operatorMainMemoryTable)
+    .set({ soulAnchored })
+    .where(
+      and(
+        eq(operatorMainMemoryTable.id, memoryId),
+        eq(operatorMainMemoryTable.operatorId, operatorId),
+      ),
+    )
+    .returning({ id: operatorMainMemoryTable.id });
+  return result.length > 0;
 }
 
 // ─── Distillation prompts ─────────────────────────────────────────────────────
