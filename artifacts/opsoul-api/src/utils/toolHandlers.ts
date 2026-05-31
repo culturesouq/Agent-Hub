@@ -54,6 +54,14 @@ import {
 import { getTool } from './toolRegistry.js';
 import { runSingleTask } from '../cron/tasksCron.js';
 import type { ScopeType } from './toolRegistry.js';
+import {
+  firecrawl,
+  type ScrapeArgs as FcScrapeArgs,
+  type MapArgs as FcMapArgs,
+  type CrawlArgs as FcCrawlArgs,
+  type ExtractArgs as FcExtractArgs,
+  type SearchArgs as FcSearchArgs,
+} from '@workspace/integrations-firecrawl';
 
 // ───────────────────────────────────────────────────────────────────────────
 //  TYPES
@@ -1366,6 +1374,141 @@ async function handleHubspotCreateDeal(rawArgs: string, ctx: ToolHandlerContext)
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+//  Wave 4 — Firecrawl handlers (D-6 Free tier, owner-approved 2026-05-31)
+//
+//  All danger knobs (allowExternalLinks, unbounded limit, missing excludePaths)
+//  are HARDCODED here, NOT exposed via the toolRegistry schema. The LLM
+//  cannot override these because the registry only lists the safe subset.
+//
+//  (Imports for these handlers live at the top of the file alongside the
+//  other module imports — TS/ESM requires imports at module top level.)
+// ───────────────────────────────────────────────────────────────────────────
+
+const FC_TRUNCATE = 12_000;          // markdown chars to return to LLM per page
+const FC_EXTRACT_TRUNCATE = 16_000;  // JSON chars to return for extract
+const FC_HARD_PAGE_CAP = 500;        // Free-tier monthly safety net
+const FC_HARD_DEPTH_CAP = 4;
+const FC_EXTRACT_MAX_URLS = 20;      // /extract is per-token priced — bound it
+
+/** Default nav/utility path prefixes that should never be crawled. */
+const FC_NAV_EXCLUDE_DEFAULTS = [
+  '/login', '/signup', '/sign-in', '/sign-up', '/register',
+  '/cart', '/checkout', '/account', '/profile',
+  '/privacy', '/terms', '/cookie', '/sitemap',
+  '/search', '/tag/', '/tags/', '/category/', '/categories/',
+  '/author/', '/page/', '/api/', '/wp-admin/', '/wp-login.php',
+];
+
+async function handleFirecrawlScrape(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const a = parseArgs<FcScrapeArgs>(rawArgs);
+  if (!a.url) {
+    return { content: 'firecrawl_scrape requires "url".', meta: { terminateLoop: true } };
+  }
+  const r = await firecrawl.scrape(
+    { url: a.url, formats: ['markdown'], onlyMainContent: a.onlyMainContent ?? true },
+    ctx.operatorId,
+  );
+  if (!r.success) {
+    return {
+      content: `Firecrawl scrape did not return content (${r.error ?? 'no detail'}). The URL may be unreachable, blocked, or behind auth.`,
+      meta: { terminateLoop: true },
+    };
+  }
+  const md = (r.data?.markdown ?? '').toString();
+  if (!md.trim()) {
+    return { content: `Firecrawl returned an empty page for ${a.url}.` };
+  }
+  return { content: md.slice(0, FC_TRUNCATE) };
+}
+
+async function handleFirecrawlMap(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const a = parseArgs<FcMapArgs>(rawArgs);
+  if (!a.url) {
+    return { content: 'firecrawl_map requires "url".', meta: { terminateLoop: true } };
+  }
+  const r = await firecrawl.map(a, ctx.operatorId);
+  if (!r.success) {
+    return {
+      content: `Firecrawl map did not return links (${r.error ?? 'no detail'}).`,
+      meta: { terminateLoop: true },
+    };
+  }
+  const links = r.data?.links ?? [];
+  return { content: `Found ${links.length} links from ${a.url}:\n${links.slice(0, 200).join('\n')}` };
+}
+
+async function handleFirecrawlCrawl(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const a = parseArgs<FcCrawlArgs>(rawArgs);
+  if (!a.url) {
+    return { content: 'firecrawl_crawl requires "url".', meta: { terminateLoop: true } };
+  }
+  // Hard guardrails — see audit report § 6 (nav-page fix + external-link drift)
+  const safe: FcCrawlArgs = {
+    url: a.url,
+    limit: Math.min(a.limit ?? 50, FC_HARD_PAGE_CAP),
+    maxDiscoveryDepth: Math.min(a.maxDiscoveryDepth ?? 2, FC_HARD_DEPTH_CAP),
+    allowExternalLinks: false,                // hardcoded — never trust LLM here
+    allowSubdomains: false,
+    ignoreQueryParameters: true,
+    includePaths: a.includePaths,
+    excludePaths: [...(a.excludePaths ?? []), ...FC_NAV_EXCLUDE_DEFAULTS],
+    scrapeOptions: { formats: ['markdown'], onlyMainContent: true },
+  };
+  const r = await firecrawl.crawl(safe, ctx.operatorId);
+  if (!r.success || !r.id) {
+    return {
+      content: `Firecrawl crawl could not start (${r.error ?? 'no job id returned'}).`,
+      meta: { terminateLoop: true },
+    };
+  }
+  return {
+    content: `Crawl started for ${a.url}. Job id: ${r.id}. Cap: ${safe.limit} pages, depth ${safe.maxDiscoveryDepth}. External links and subdomains will not be followed. Poll with firecrawl_crawl + the job id to retrieve pages once status='completed'.`,
+  };
+}
+
+async function handleFirecrawlExtract(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const a = parseArgs<FcExtractArgs>(rawArgs);
+  if (!a.urls?.length) {
+    return { content: 'firecrawl_extract requires a non-empty "urls" array.', meta: { terminateLoop: true } };
+  }
+  if (!a.prompt && !a.schema) {
+    return { content: 'firecrawl_extract requires either a "prompt" or a JSON "schema".', meta: { terminateLoop: true } };
+  }
+  const cappedUrls = a.urls.slice(0, FC_EXTRACT_MAX_URLS);
+  const r = await firecrawl.extract(
+    { urls: cappedUrls, prompt: a.prompt, schema: a.schema, enableWebSearch: a.enableWebSearch },
+    ctx.operatorId,
+  );
+  if (!r.success) {
+    return {
+      content: `Firecrawl extract did not return data (${r.error ?? 'no detail'}).`,
+      meta: { terminateLoop: true },
+    };
+  }
+  const payload = JSON.stringify(r.data ?? null);
+  return { content: payload.slice(0, FC_EXTRACT_TRUNCATE) };
+}
+
+async function handleFirecrawlSearch(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const a = parseArgs<FcSearchArgs>(rawArgs);
+  if (!a.query) {
+    return { content: 'firecrawl_search requires "query".', meta: { terminateLoop: true } };
+  }
+  const r = await firecrawl.search({ query: a.query, limit: a.limit ?? 5 }, ctx.operatorId);
+  if (!r.success) {
+    return {
+      content: `Firecrawl search returned no results (${r.error ?? 'no detail'}).`,
+      meta: { terminateLoop: true },
+    };
+  }
+  const items = r.data?.data ?? [];
+  const formatted = items
+    .map((it, i) => `${i + 1}. ${it.title ?? '(untitled)'} — ${it.url}${it.markdown ? '\n   ' + it.markdown.slice(0, 240).replace(/\s+/g, ' ') + (it.markdown.length > 240 ? '…' : '') : ''}`)
+    .join('\n');
+  return { content: formatted || `No results for "${a.query}".` };
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 //  DISPATCH — single entry point for chat.ts and mcpServer.ts
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -1461,6 +1604,13 @@ export async function dispatchTool(
     case 'linear_search':           return handleLinearSearch(rawArgs, ctx);
     case 'hubspot_search_contact':  return handleHubspotSearchContact(rawArgs, ctx);
     case 'hubspot_create_deal':     return handleHubspotCreateDeal(rawArgs, ctx);
+
+    // Wave 4 — Firecrawl
+    case 'firecrawl_scrape':        return handleFirecrawlScrape(rawArgs, ctx);
+    case 'firecrawl_map':           return handleFirecrawlMap(rawArgs, ctx);
+    case 'firecrawl_crawl':         return handleFirecrawlCrawl(rawArgs, ctx);
+    case 'firecrawl_extract':       return handleFirecrawlExtract(rawArgs, ctx);
+    case 'firecrawl_search':        return handleFirecrawlSearch(rawArgs, ctx);
 
     default:
       return {

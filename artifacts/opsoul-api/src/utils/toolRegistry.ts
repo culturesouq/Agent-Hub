@@ -21,7 +21,7 @@ import type { ToolDefinition } from './openrouter';
 export type ScopeType = 'owner' | 'public' | 'authenticated' | 'action' | 'channel';
 
 /** Conditions that gate whether a tool is offered in a given context. */
-export type Availability = 'always' | 'web' | 'secrets' | 'integration';
+export type Availability = 'always' | 'web' | 'secrets' | 'integration' | 'firecrawl';
 
 /** Categories for admin/UI grouping. */
 export type ToolCategory = 'research' | 'workspace' | 'integration' | 'automation' | 'memory' | 'self' | 'communication';
@@ -53,6 +53,8 @@ export interface ToolContext {
   liveSecrets: string[];
   /** Names of connected integration types for this operator (gates 'integration'-availability tools). */
   connectedIntegrations?: string[];
+  /** Is Firecrawl available (FIRECRAWL_API_KEY configured)? Gates the 5 firecrawl_* tools. */
+  hasFirecrawl?: boolean;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -1059,6 +1061,103 @@ export const UNIVERSAL_TOOLS: RegisteredTool[] = [
     },
     scopes: '*', availability: 'integration', category: 'integration',
   },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Wave 4 — Firecrawl (D-6 Free tier, owner-approved 2026-05-31)
+  // Thin wrappers around lib/integrations/firecrawl. All schema fields shown
+  // to the LLM are conservative — the dangerous knobs (allowExternalLinks,
+  // unbounded limit) are handled at the handler level, NOT exposed here.
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    name: 'firecrawl_scrape',
+    displayName: 'Firecrawl scrape',
+    description:
+      'Fetches a single URL and returns its main content as markdown. Use for one-off page reads when you need clean, parseable content (no navigation chrome, no ads).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'Absolute https URL to scrape.' },
+        onlyMainContent: { type: 'boolean', description: 'Default true. Strip nav/footers/ads.' },
+      },
+      required: ['url'],
+    },
+    scopes: '*',
+    availability: 'firecrawl',
+    category: 'research',
+  },
+  {
+    name: 'firecrawl_map',
+    displayName: 'Firecrawl map',
+    description:
+      'Discovers URLs reachable from a starting domain — returns a list of links without fetching their content. Use to plan a crawl or survey a site before scraping.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        url:    { type: 'string', description: 'Absolute https URL to start mapping from.' },
+        search: { type: 'string', description: 'Optional filter — only return links matching this substring.' },
+        limit:  { type: 'number', description: 'Optional max links to return (Firecrawl default: 5000).' },
+      },
+      required: ['url'],
+    },
+    scopes: '*',
+    availability: 'firecrawl',
+    category: 'research',
+  },
+  {
+    name: 'firecrawl_crawl',
+    displayName: 'Firecrawl crawl',
+    description:
+      'Starts an asynchronous deep crawl of a domain. Returns a job id. Page limit is capped at 500 by the platform (Free-tier budget). External links and subdomains are never followed. Common nav/utility paths (/login, /cart, /category/, /tag/, /api/) are pre-filtered.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        url:               { type: 'string', description: 'Seed URL to crawl from.' },
+        limit:             { type: 'number', description: 'Max pages to fetch. Capped at 500.' },
+        maxDiscoveryDepth: { type: 'number', description: 'How deep from the seed to follow links. Capped at 4.' },
+        includePaths:      { type: 'array', items: { type: 'string' }, description: 'Optional URL-path prefixes to include (e.g. ["/docs/", "/blog/"]).' },
+        excludePaths:      { type: 'array', items: { type: 'string' }, description: 'Optional URL-path prefixes to exclude.' },
+      },
+      required: ['url'],
+    },
+    scopes: '*',
+    availability: 'firecrawl',
+    category: 'research',
+  },
+  {
+    name: 'firecrawl_extract',
+    displayName: 'Firecrawl extract',
+    description:
+      'Pulls structured data out of one or more URLs using a JSON schema and/or a natural-language prompt. Use when you need typed fields (names, dates, prices) rather than raw markdown. Limited to 20 URLs per call.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        urls:   { type: 'array', items: { type: 'string' }, description: 'URLs to extract from (max 20).' },
+        prompt: { type: 'string', description: 'Natural-language description of what to extract.' },
+        schema: { type: 'object', description: 'Optional JSON Schema describing the expected output shape.' },
+      },
+      required: ['urls'],
+    },
+    scopes: '*',
+    availability: 'firecrawl',
+    category: 'research',
+  },
+  {
+    name: 'firecrawl_search',
+    displayName: 'Firecrawl search',
+    description:
+      'Searches the web and returns top results. Optionally scrapes the result pages in the same call so you get titles + URLs + markdown content together.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Search query.' },
+        limit: { type: 'number', description: 'Max results to return. Default 5.' },
+      },
+      required: ['query'],
+    },
+    scopes: '*',
+    availability: 'firecrawl',
+    category: 'research',
+  },
 ];
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -1083,6 +1182,7 @@ function isAvailable(tool: RegisteredTool, ctx: ToolContext): boolean {
   if (tool.availability === 'web') return ctx.hasWebSearch;
   if (tool.availability === 'secrets') return ctx.liveSecrets.length > 0;
   if (tool.availability === 'integration') return (ctx.connectedIntegrations?.length ?? 0) > 0;
+  if (tool.availability === 'firecrawl') return !!ctx.hasFirecrawl;
   return false;
 }
 

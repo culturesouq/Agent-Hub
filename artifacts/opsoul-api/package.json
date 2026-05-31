@@ -13,6 +13,7 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@types/node-cron": "^3.0.11",
     "@workspace/db": "workspace:*",
+    "@workspace/integrations-firecrawl": "workspace:*",
     "@workspace/opsoul-utils": "workspace:*",
     "bcrypt": "^5.1.1",
     "cheerio": "^1.2.0",
