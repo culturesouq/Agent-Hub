@@ -3345,3 +3345,159 @@ This strategy is locked as memory `[[closed-backend-distribution]]` for persiste
 ### Standing rule (per 2026-05-31 owner directive)
 > Always update Active Plans on every pivot. Never delete completed items — mark ✅. This section is the durable plan-of-record; if we get distracted, this is where we resume.
 
+
+### Hajeri SFT — U400 chat observation (2026-05-31 ~16:00)
+
+- Loss at U525: ~4.4 (descended from 5.5 at U25, slow)
+- Chat test at U400 showed: trained discretion STRONG, but coherence degrading + "favorite books" refusal template leaking into wrong contexts + math regressed + word-salad spew at end
+- Diagnosis: model collapsing to cheapest learnable patterns (refusal templates) at expense of fluency (multi-turn, casual)
+- DECISION PENDING (owner): Option A let it run, Option B stop + reduce refusal cap 3000→500 + add template randomization + restart from KD2-Final
+- See chat transcript in session log (2026-05-31)
+
+
+### Phase 2B closure (2026-05-31)
+
+- Branch `phase-2b-integrated` ready for owner review (41 commits ahead of main)
+- All slips closed: 3 forward-compat KB fields wired end-to-end, 40 unused imports cleared workspace-wide, 1 fallback string fixed in tasksCron.ts, 0 arch leaks remaining, LLM budget defaults bumped to match HISTORY_MAX_TOKENS
+- `noUnusedLocals: true` now enforced workspace-wide
+- All packages compile clean (api + hub + lib/db + lib/opsoul-utils + lib/api-client-react + lib/integrations/firecrawl)
+- Pre-existing baseline issues flagged: lib/api-zod Orval duplicates (10 TS2308) + missing @types/node in 3 packages — OUT OF Phase 2B scope, future cleanup pass needed
+
+### Phase 3 (2026-05-31)
+
+- `[[opsoul-03-integer-bug]]` memory rewritten as RESOLVED (commit d52b338, 2026-05-24)
+- `[[opsoul-mcp-buildout]]` memory rewritten as SHIPPED (chat.ts refactor landed, MCP on main, Phase 1B/2/2B all extend the runtime)
+- MEMORY-REFRESH-NEEDED.md picked up and processed
+
+
+---
+
+## CORRECTIONS + REPRIORITIZATION (2026-05-31, owner directive)
+
+### Hajeri training reframing
+
+Owner correction: don't judge Hajeri mid-training. U400 chat test was 10 messages on a model that:
+- Hasn't completed pass 1 (20% remaining)
+- Loss still above 4 (target: below 3 for coherence)
+- Hasn't mastered any SFT chunk yet
+
+Don't compare Hajeri to normal models — custom-arch + cross-tokenizer KD + small-corpus SFT settles differently. **Verdict moment = after loss<3 AND pass complete.** Until then, observe only. No alarm at template-leak / multi-lingual confusion / fluency dips mid-pass — those are the patterns still settling.
+
+Standing rule: report Hajeri training state objectively (numbers + observations) but do NOT recommend Option A/B/C interventions until owner asks OR loss<3 reached.
+
+### Order of operations (corrected)
+
+1. **NOW**: Owner reviews `phase-2b-integrated` branch
+2. **NOW (if good)**: Merge `phase-2b-integrated` → `main` locally
+3. **NOW**: **SHIP OpSoul cleanup deploy** — Phase 1B + 2 + 2B all approved by owner = deploy. This unblocks the live production from the audit-discovered bugs.
+4. **NOW (parallel)**: Owner ships patent submission package to Lavender.IP (priority date lock)
+5. **AFTER patent ships**: Commercial work begins (npm scopes, REST API, hosted console, Stripe)
+6. **AFTER commercial first-revenue**: Hajeri-12B coherence becomes the brand-quality upgrade for paying customers
+
+### Commercial track DETAILED PLAN (deferred until after patent filing)
+
+The full closed-backend distribution strategy is locked in memory `[[closed-backend-distribution]]` and earlier SoT section "2026-05-31 STRATEGIC LOCK". Sequenced detailed plan:
+
+#### Pre-launch infrastructure (1 day after patent ships)
+- Reserve `@opsoul` org on npm (free; takes 10 min)
+- Reserve `@hajeri` org on npm (free; takes 10 min)
+- Register DNS: `console.opsoul.dev`, `api.opsoul.dev`, `docs.opsoul.dev`, `console.hajeri.ai` or equivalent (owner picks domains)
+- Stripe products: 3 tiers (Free / Pro / Enterprise) for OpSoul + per-token pricing for Hajeri API
+- GitHub orgs: `opsoul` and `hajeri` (public for client packages; private for backend)
+
+#### Week 1 — Backend customer-facing API surface
+- Design REST API spec for customer-facing endpoints (operator CRUD scoped to customerId, KB CRUD, chat, MCP-passthrough, billing status, usage metrics)
+- Implement customer-auth middleware (Stripe customer ID ↔ API key mapping; reuse Foundermoment pattern)
+- Implement per-customer rate limiting (tier-based via existing tier system)
+- Implement customer-scoped operator/KB/memory isolation — extends existing scope isolation per Claim 12; add `customerId` foreign key everywhere; verify no cross-customer leak via scope-isolated query layer
+- OpenAPI/Swagger spec generated from Zod schemas (reuse `lib/api-zod`)
+- Webhook receiver for Stripe events (subscription create / cancel / payment failed / usage record)
+- Quota tracking per customer (per-API-call, per-token, per-MB-KB-storage)
+
+#### Week 2 — Thin client packages (Apache-2.0 npm publish)
+- `@opsoul/types` — TypeScript types extracted from `lib/api-spec` + `lib/api-zod` (no runtime code, ~300 lines)
+- `@hajeri/client` — Hajeri inference client (OpenAI-compatible interface; auth + retry + streaming; ~500 lines)
+- `@opsoul/client` — OpSoul platform client (operator/KB/memory/chat methods; auth + retry; ~800 lines)
+- `@opsoul/mcp-bridge` — MCP server that proxies external MCP clients (Claude/Cursor/Anthropic-CLI) to customer's OpSoul backend instance (~400 lines)
+- Each package: Apache-2.0 LICENSE, README, examples folder, JSDoc on all public APIs, semver, GitHub repo with CI for lint+test+publish
+
+#### Week 3 — Customer console + docs
+- Deploy hosted UI to `console.opsoul.dev` using existing `artifacts/opsoul-hub/` as production build (minified, source maps stripped, no devtools-debugging hooks)
+- Customer signup flow: Stripe Checkout → webhook fires → auto-create OpSoul account + API key → email customer welcome + console URL
+- Customer settings page: API key management (rotate, revoke, multi-key for staging vs prod), usage stats dashboard, billing portal link (Stripe-hosted; no custom billing UI to maintain)
+- Docs site (`docs.opsoul.dev`): API reference (generated from OpenAPI), Quickstart (5-min from signup to first operator), MCP setup guide (how to connect external Claude/Cursor), Operator-building guide (birth conversation walkthrough), Pricing page
+- Branding: minimal — no marketing copy promises beyond what works
+
+#### Week 4 — Quiet launch
+- 3-5 external design partners (NOT owner's own apps — needs honest feedback from people who didn't build it)
+- Onboard each via self-service Stripe Free tier; observe friction; iterate UX
+- Free tier open initially to validate self-service; throttle if abuse appears
+- No press, no social, no announcement — pure word-of-mouth design-partner test
+- Feedback loop: weekly conversations with each partner; consolidate to SoT
+
+#### Month 2 — Iterate from design-partner feedback
+- Fix top-3 friction points from partner feedback
+- Add features partners actually need (don't speculate)
+- Performance optimization based on production load
+
+#### Month 3 — Hajeri-12B coherence + commercial launch
+- Hajeri-12B reaches coherence (per `[[project-hajeri-12b-build]]`)
+- Hajeri inference server upgraded to 12B → customers feel quality jump without code change (transparent backend upgrade)
+- Vael-as-Service Enterprise tier opens (managed Vael per customer)
+- Owner's own apps (Foundermoment, Authentic Tour, Hafeet, Bani, Nahil) migrate to consume same Hajeri backend (eat own dogfood — proves performance + reduces operational cost)
+- Now ready for actual marketing launch (HackerNews, ProductHunt, dev Twitter)
+
+#### Revenue model (pricing TBD when customer-side data exists)
+- **Free tier**: limited operators (1-2), limited KB size (50 MB), limited API calls (1000/day), best-effort no SLA — signal demand + generate referrals
+- **Pro tier ($X/month)**: more operators, more KB storage, higher API quota, email support business hours, Stripe-handled billing
+- **Enterprise tier (custom contract)**: unlimited / per-negotiation, includes Vael-as-Service, white-label console domain option, dedicated capacity guarantees, email-only no-SLA support unless added cost
+- **Hajeri API tokens**: $/M tokens — cheaper than OpenAI; price-point lets owner own unit economics on own inference
+- **Bundle pricing**: OpSoul Pro + Hajeri API credits bundled at discount
+
+#### Operational responsibilities (owner-only)
+- Monitor backend stack health (Azure Container Apps logs; same pattern as Foundermoment)
+- Monitor Hajeri inference health (RunPod uptime; replace pod if crashed)
+- Handle Stripe webhooks (automated; manual only for refunds/disputes)
+- Respond to support emails (paid tiers; business hours only)
+- Patch deploys (security + critical bug fixes)
+- Periodic cron tasks (usage rollup, expired-key cleanup, etc.)
+- NO per-customer custom development
+- NO 24/7 SLA on free tier
+- NO multi-tenant infra burden (single backend; customers scope-isolated)
+
+
+### ACTIVE PLANS — UPDATED 2026-05-31 (post-corrections)
+
+**Immediate (this session):**
+- [x] ✅ Phase 0/1A/1A-2/1A-3/1B/2/2B/3 all complete
+- [ ] **Owner: review `phase-2b-integrated` branch** (41 commits ahead of main)
+- [ ] **Owner: merge `phase-2b-integrated` → `main`** (locally)
+- [ ] **Owner: SHIP OpSoul deploy** (the cleanup work is approved; production gets the audit-discovered fixes)
+- [ ] **Owner: ship patent submission package to Lavender.IP** (priority date lock — files ready in `/Users/bstar/OPSOUL_RED/`)
+
+**Hajeri (parallel, observe only):**
+- [ ] SFT pass 1 in progress (~80% through; loss 4.4 descending slowly)
+- [ ] **Standing rule**: judge ONLY after loss<3 AND pass complete; until then, observe, no interventions, no Option-A/B recommendations
+- [ ] Owner downloads checkpoints per his cadence; chat-tests per `[[chat-beats-probes]]`
+- [ ] Decisions after SFT completes (not before)
+
+**Post-patent (commercial track, detailed plan above):**
+- [ ] Day-1: npm scope reservations + DNS + Stripe products
+- [ ] Week 1: backend customer-facing REST API + auth + rate-limit + customer scoping
+- [ ] Week 2: publish 4 thin client npm packages
+- [ ] Week 3: deploy hosted console + docs site
+- [ ] Week 4: quiet launch with 3-5 external design partners
+- [ ] Month 2: iterate from partner feedback
+- [ ] Month 3: Hajeri-12B coherence + commercial launch + own-apps dogfood + marketing
+
+**Operator architecture (longer-horizon):**
+- [ ] Scope isolation full build (Claim 12 — patent-protected, partially implemented; complete before commercial scaling)
+- [ ] Claim 5 firewall full implementation (5(a) input tagger + 5(b) leak detector — stubs wired in Phase 2B; full implementation Phase 4)
+- [ ] Model-level memory (per `[[hajeri-model-level-memory]]`)
+- [ ] Fourth-priority operator (per `[[opsoul-operators]]`)
+
+**Pre-existing baseline cleanup (deferred):**
+- [ ] `lib/api-zod` Orval duplicate re-exports (10 TS2308 errors)
+- [ ] Missing `@types/node` in `lib/integrations-openrouter-ai` + `lib/integrations-openai-ai-server` + react types in `lib/mockup-sandbox`
+- Owner picks: address in a focused small-pass after deploy OR roll into Phase 4
+
