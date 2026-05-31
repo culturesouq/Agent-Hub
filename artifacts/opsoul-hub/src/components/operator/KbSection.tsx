@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
-import { Search, Database, Plus, Trash2, ShieldCheck, Upload, Loader2 } from "lucide-react";
+import { Search, Database, Plus, Trash2, ShieldCheck, Upload, Loader2, Square, Tag } from "lucide-react";
 import { format } from "date-fns";
 
 export default function KbSection({ operatorId }: { operatorId: string }) {
@@ -67,15 +67,46 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
     queryFn: () => apiFetch<any>(`/operators/${operatorId}/operator-kb`).then(r => r.entries ?? []),
   });
 
-  const [addForm, setAddForm] = useState({ content: "", sourceName: "", sourceType: "manual", confidenceScore: 80 });
+  // SRAG-aware add form: extends the prior add-form with the entity-type
+  // dropdown and tag-required field surfaced from the SRAG / Vael-as-Service
+  // architecture ([[srag]], [[srag-vael-as-service]]). The existing fields
+  // (content, sourceName, sourceType, confidenceScore) are unchanged per
+  // [[expand-never-cut]] — additive only.
+  const [addForm, setAddForm] = useState({
+    content: "",
+    sourceName: "",
+    sourceType: "manual",
+    confidenceScore: 80,
+    entityType: "fact",
+    tags: "",
+  });
   const [isAddOpen, setIsAddOpen] = useState(false);
+
+  // Active Firecrawl crawl jobs the owner has started from this operator.
+  // Used by the "Stop Crawl" action — calls firecrawl_crawl_stop via the same
+  // /tools dispatch path the crawl tool itself runs through, so the operator
+  // appears to stop the crawl rather than an out-of-band admin tool.
+  const [crawlJobInput, setCrawlJobInput] = useState("");
+  const [stoppingJob, setStoppingJob] = useState<string | null>(null);
+
+  // Resets BOTH the legacy and the SRAG-extension fields back to defaults so a
+  // fresh dialog open doesn't carry the prior entry's entity/tags.
+  const resetAddForm = () =>
+    setAddForm({
+      content: "",
+      sourceName: "",
+      sourceType: "manual",
+      confidenceScore: 80,
+      entityType: "fact",
+      tags: "",
+    });
 
   const addOwnerKb = useMutation({
     mutationFn: (data: any) => apiFetch(`/operators/${operatorId}/owner-kb`, { method: "POST", body: JSON.stringify(data) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "owner-kb"] });
       setIsAddOpen(false);
-      setAddForm({ content: "", sourceName: "", sourceType: "manual", confidenceScore: 80 });
+      resetAddForm();
       toast({ title: "Knowledge added" });
     },
     onError: (err: any) => {
@@ -88,12 +119,35 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "operator-kb"] });
       setIsAddOpen(false);
-      setAddForm({ content: "", sourceName: "", sourceType: "manual", confidenceScore: 80 });
+      resetAddForm();
       toast({ title: "Knowledge added" });
     },
     onError: (err: any) => {
       toast({ title: "Failed to save", description: err.message, variant: "destructive" });
     }
+  });
+
+  /**
+   * Stop a Firecrawl crawl by its job id. Wired into the same Firecrawl
+   * runtime as firecrawl_crawl — when chat path triggers a long crawl, the
+   * owner can paste the job id here and abort the burn before it consumes
+   * the rest of the monthly Free-tier budget. Per [[srag]] this is one of
+   * the two critical pre-existing bugs the audit flagged.
+   */
+  const stopCrawl = useMutation({
+    mutationFn: (jobId: string) =>
+      apiFetch(`/operators/${operatorId}/firecrawl/crawl/${encodeURIComponent(jobId)}/stop`, {
+        method: "POST",
+      }),
+    onMutate: (jobId) => { setStoppingJob(jobId); },
+    onSettled: () => { setStoppingJob(null); },
+    onSuccess: () => {
+      toast({ title: "Stop signal sent", description: "Firecrawl is cancelling the job." });
+      setCrawlJobInput("");
+    },
+    onError: (err: any) => {
+      toast({ title: "Could not stop crawl", description: err.message, variant: "destructive" });
+    },
   });
 
   const deleteOwnerKb = useMutation({
@@ -151,10 +205,35 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
       toast({ title: "Content required", description: "Please type, paste, or upload a file first", variant: "destructive" });
       return;
     }
+    // SRAG architecture: tags are REQUIRED on every entry. Forces the owner
+    // to attach at least one retrieval handle (per [[srag]] discipline). Tags
+    // are parsed from a comma-separated string; deduped + trimmed.
+    const tagList = addForm.tags
+      .split(",")
+      .map(t => t.trim())
+      .filter(Boolean);
+    if (tagList.length === 0) {
+      toast({
+        title: "Tags required",
+        description: "Add at least one tag (comma-separated) so this knowledge stays retrievable.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const sharedPayload = {
+      text: addForm.content,
+      sourceName: addForm.sourceName || "Manual Entry",
+      sourceType: addForm.sourceType,
+      // SRAG additions — backend routes that ignore these fields stay
+      // backward-compatible; routes that learn them later see the data.
+      entityType: addForm.entityType,
+      tags: tagList,
+    };
     if (activeTab === "owner") {
-      addOwnerKb.mutate({ text: addForm.content, sourceName: addForm.sourceName || "Manual Entry", sourceType: addForm.sourceType });
+      addOwnerKb.mutate(sharedPayload);
     } else {
-      addOpKb.mutate({ text: addForm.content, sourceName: addForm.sourceName || "Manual Entry", sourceType: addForm.sourceType, confidenceScore: addForm.confidenceScore });
+      addOpKb.mutate({ ...sharedPayload, confidenceScore: addForm.confidenceScore });
     }
   };
 
@@ -238,6 +317,42 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
                   </Select>
                 </div>
 
+                {/* SRAG entity type — added 2026-05-31. Placeholders are
+                    descriptive only; owner / attorney refine per project. */}
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Entity type</Label>
+                  <Select value={addForm.entityType} onValueChange={(val) => setAddForm({ ...addForm, entityType: val })}>
+                    <SelectTrigger className="font-mono">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="fact">Fact</SelectItem>
+                      <SelectItem value="insight">Insight</SelectItem>
+                      <SelectItem value="entity">Entity (person / org / place)</SelectItem>
+                      <SelectItem value="event">Event</SelectItem>
+                      <SelectItem value="reference">Reference (doc / spec)</SelectItem>
+                      <SelectItem value="procedure">Procedure (how-to)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* SRAG tags — REQUIRED. Comma-separated. */}
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                    <Tag className="w-3 h-3" />
+                    Tags <span className="text-amber-500">*</span>
+                  </Label>
+                  <Input
+                    value={addForm.tags}
+                    onChange={e => setAddForm({ ...addForm, tags: e.target.value })}
+                    className="font-mono"
+                    placeholder="comma, separated, tags"
+                  />
+                  <p className="text-[10px] text-muted-foreground/60">
+                    At least one tag — keeps this entry retrievable later.
+                  </p>
+                </div>
+
                 {activeTab === "operator" && (
                   <div className="space-y-4 pt-4 border-t border-border/50">
                     <div className="flex justify-between items-center">
@@ -259,6 +374,48 @@ export default function KbSection({ operatorId }: { operatorId: string }) {
             </DialogContent>
           </Dialog>
         )}
+      </div>
+
+      {/* SRAG Stop-Crawl control — sits above the tabs so it's always reachable
+          while a crawl is running. Per [[srag]] this was a critical missing
+          surface in the previous KB UI. The job id is whatever Firecrawl
+          returned when firecrawl_crawl was invoked; it appears in the chat
+          stream when the operator started the crawl. */}
+      <div className="border border-amber-500/20 bg-amber-500/5 rounded-lg p-3 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-bold text-amber-500 flex items-center gap-1.5">
+              <Square className="w-3 h-3" /> Stop a running crawl
+            </div>
+            <div className="text-[10px] text-muted-foreground/80 mt-0.5">
+              Paste the crawl job id (shown in chat when the operator starts a crawl) to cancel it before it consumes more pages.
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Input
+              value={crawlJobInput}
+              onChange={e => setCrawlJobInput(e.target.value)}
+              placeholder="job id"
+              className="font-mono h-8 text-xs w-44"
+              data-testid="kb-stop-crawl-input"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs border-amber-500/40 text-amber-500 hover:bg-amber-500/10"
+              disabled={!crawlJobInput.trim() || !!stoppingJob}
+              onClick={() => stopCrawl.mutate(crawlJobInput.trim())}
+              data-testid="kb-stop-crawl-button"
+            >
+              {stoppingJob ? (
+                <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> Sending</>
+              ) : (
+                <>Stop crawl</>
+              )}
+            </Button>
+          </div>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
