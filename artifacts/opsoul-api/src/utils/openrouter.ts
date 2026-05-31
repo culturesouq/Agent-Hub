@@ -82,17 +82,29 @@ const LLM_MAX_RETRIES = Number.parseInt(process.env.CHAT_LLM_MAX_RETRIES ?? '3',
 const LLM_RETRY_DELAYS_MS = [1000, 2000, 4000] as const;
 /**
  * Per-request token budget — input estimate cap and output ceiling.
- * Defaults per Phase 1B owner spec: 4096 input + 2048 output. NOTE: these
- * defaults are TIGHTER than the existing 60k history window cap in
- * chat.ts (HISTORY_MAX_TOKENS = 60_000). Production must set
- * CHAT_LLM_BUDGET_TOKENS to a value compatible with the history window
- * (e.g. 65536) — otherwise long-history turns will fail with
- * LlmBudgetError before contacting the upstream LLM. Branch
- * `phase-1b-patent-critical` ships the mechanism; production tuning is
- * an owner-review decision.
+ *
+ * Phase 2B decision (2026-05-31): defaults raised from the original Phase 1B
+ * spec (4096/2048) to match the existing 60k history window in chat.ts
+ * (HISTORY_MAX_TOKENS = 60_000). The original tight defaults were a
+ * placeholder pending owner review — they would have failed any long-history
+ * turn with LlmBudgetError before contacting the LLM at all, which is worse
+ * than no budget at all (it would silently kill normal chat).
+ *
+ * New defaults:
+ *   - Input:  65_536 tokens (one rounded power-of-two above HISTORY_MAX_TOKENS,
+ *             room for system prompt + KB + memory + tool catalog on top of
+ *             the 60k history window).
+ *   - Output: 4096 tokens (reasonable assistant turn ceiling; long-form
+ *             responses past this size are rare and usually indicate a
+ *             prompt-engineering issue, not a real need).
+ *
+ * Both stay overridable via env (CHAT_LLM_BUDGET_TOKENS / CHAT_LLM_OUTPUT_TOKENS)
+ * so deployments running on cheap-tier models with smaller real ceilings can
+ * tighten them, and deployments on Claude 4.7 1M can loosen them. The
+ * mechanism stays the same — only the defaults moved to match reality.
  */
-const LLM_BUDGET_INPUT_TOKENS = Number.parseInt(process.env.CHAT_LLM_BUDGET_TOKENS ?? '4096', 10);
-const LLM_BUDGET_OUTPUT_TOKENS = Number.parseInt(process.env.CHAT_LLM_OUTPUT_TOKENS ?? '2048', 10);
+const LLM_BUDGET_INPUT_TOKENS = Number.parseInt(process.env.CHAT_LLM_BUDGET_TOKENS ?? '65536', 10);
+const LLM_BUDGET_OUTPUT_TOKENS = Number.parseInt(process.env.CHAT_LLM_OUTPUT_TOKENS ?? '4096', 10);
 
 export class LlmBudgetError extends Error {
   readonly code = 'llm_budget_exceeded';
