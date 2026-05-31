@@ -67,13 +67,16 @@ export async function logLayer1Violation(
 // never reach a GROW proposal. Hard rejects the entire proposal if found.
 // Runs BEFORE enforceLayer1Lock and BEFORE storage.
 
-const PII_PATTERNS: { pattern: RegExp; label: string }[] = [
+export const PII_PATTERNS: { pattern: RegExp; label: string }[] = [
   {
     pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/,
     label: 'email_address',
   },
   {
-    pattern: /\b(?:\+\d{1,3}[\s\-]?)?\(?\d{3,4}\)?[\s.\-]?\d{3,4}[\s.\-]?\d{3,4}\b/,
+    // Generic intl + UAE-shaped phone numbers (050/055/056 etc.) — broader
+    // than the original GROW pattern so the Layer 2 backstop catches Gulf
+    // mobile formats the distiller is most likely to surface.
+    pattern: /(?:\+?\d{1,3}[\s\-]?)?\(?0?5\d{1}\)?[\s.\-]?\d{3,4}[\s.\-]?\d{3,4}|\b(?:\+\d{1,3}[\s\-]?)?\(?\d{3,4}\)?[\s.\-]?\d{3,4}[\s.\-]?\d{3,4}\b/,
     label: 'phone_number',
   },
   {
@@ -100,7 +103,54 @@ const PII_PATTERNS: { pattern: RegExp; label: string }[] = [
     pattern: /\bthe\s+(?:user|client|customer)\s+(?:who|that)\s+\w+/i,
     label: 'specific_user_reference',
   },
+  // ── Layer 2 backstop additions — financial / identity formats the GROW
+  // proposal corpus historically would not include, but the Layer 2
+  // distiller might surface if the upstream LLM ignored the
+  // ABSOLUTE-PII prompt. Belt-and-suspenders per Phase 1B audit H-7.
+  {
+    pattern: /\b(?:\d[ -]*?){13,19}\b/,
+    label: 'credit_card_like',
+  },
+  {
+    pattern: /\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b/,
+    label: 'iban_like',
+  },
+  {
+    // National ID-like — UAE Emirates ID is 784-YYYY-XXXXXXX-D (15 digits)
+    pattern: /\b784[\s\-]?\d{4}[\s\-]?\d{7}[\s\-]?\d\b|\b\d{3}[\s\-]?\d{4}[\s\-]?\d{7}[\s\-]?\d\b/,
+    label: 'emirates_id_like',
+  },
+  {
+    // IPv4 — loose; conservative since false positives are acceptable for redact
+    pattern: /\b(?:\d{1,3}\.){3}\d{1,3}\b/,
+    label: 'ipv4_address',
+  },
 ];
+
+/**
+ * Shared helper — sweeps a single text string for PII matches and returns
+ * either a redacted copy (in-place [REDACTED:<category>] markers) and the
+ * list of matched categories, or null matches if no PII was found.
+ *
+ * Used by the Layer 2 distillation backstop in `memoryEngine.storeMainMemory`
+ * to catch any PII the distiller LLM emits despite the absolute-prohibition
+ * prompt. Patent-relevant per Claim 3 (PII firewall is a structural
+ * prohibition, not LLM trust alone) and Phase 1B audit H-7.
+ */
+export function redactPii(text: string): { redacted: string; matchedLabels: string[] } {
+  const matched = new Set<string>();
+  let working = text;
+  for (const { pattern, label } of PII_PATTERNS) {
+    // Build a fresh global-flag variant so all occurrences get replaced.
+    const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
+    const re = new RegExp(pattern.source, flags);
+    if (re.test(working)) {
+      matched.add(label);
+      working = working.replace(re, `[REDACTED:${label}]`);
+    }
+  }
+  return { redacted: working, matchedLabels: Array.from(matched) };
+}
 
 /** Recursively extracts all string leaf values from an object or array */
 function extractTextValues(value: unknown): string[] {

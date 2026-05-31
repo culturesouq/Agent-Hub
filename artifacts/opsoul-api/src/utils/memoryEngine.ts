@@ -5,6 +5,7 @@ import { eq, and, isNull, isNotNull, inArray, desc } from 'drizzle-orm';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { chatCompletion } from './openrouter.js';
 import { verifyAndStore } from './kbIntake.js';
+import { redactPii } from './growGuards.js';
 
 export const MEMORY_TOP_N = 8;
 export const MEMORY_MIN_SIMILARITY = 0.55;
@@ -283,6 +284,24 @@ export async function storeMainMemory(
   confidence: number,
   sourceScope: string,
 ): Promise<typeof operatorMainMemoryTable.$inferSelect> {
+  // ─── Layer 2 PII regex backstop (Phase 1B audit H-7 / Claim 3) ────────────
+  // The Layer 2 distillation prompt opens with "## ABSOLUTE RULE — ZERO PII"
+  // and enumerates the forbidden categories. That is LLM trust. Below we
+  // sweep the distiller's output with the same PII pattern set GROW uses
+  // (extended with credit-card / IBAN / Emirates-ID / IPv4 backstops) and
+  // redact in place before the row is written. The patent claim language
+  // requires a "structural prohibition" — regex enforcement IS that
+  // structure; the prompt is the cooperative layer above it.
+  const piiSweep = redactPii(content);
+  if (piiSweep.matchedLabels.length > 0) {
+    console.warn(`[storeMainMemory] PII backstop redacted ${piiSweep.matchedLabels.length} category/categories before Layer 2 write`, {
+      operatorId,
+      sourceScope,
+      matchedLabels: piiSweep.matchedLabels,
+    });
+    content = piiSweep.redacted;
+  }
+
   const embedding = await embed(content);
   const vecStr = `[${embedding.join(',')}]`;
 
