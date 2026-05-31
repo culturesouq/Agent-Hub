@@ -28,12 +28,14 @@ import ArtifactsSection from "@/components/operator/ArtifactsSection";
 import CapabilityRequestsSection from "@/components/operator/CapabilityRequestsSection";
 
 
+// Local PNGs (same set Dashboard uses) — keeps operator portraits offline-safe,
+// privacy-respecting (no external CDN hit per page load), and visually consistent
+// between Dashboard cards and OperatorDetail header.
 const PERSONA_IMAGES = [
-  "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=400&q=80",
-  "https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=400&q=80",
-  "https://images.unsplash.com/photo-1675557009875-79c69a33e26c?w=400&q=80",
+  "/images/persona-founder.png",
+  "/images/persona-executive.png",
+  "/images/persona-consultant.png",
 ];
-const PERSONA_GLOWS = ["#9b59f4", "#22d3ee", "#ec4899"];
 
 function OperatorAvatar({ name }: { name: string }) {
   const letter = name.charAt(0).toUpperCase();
