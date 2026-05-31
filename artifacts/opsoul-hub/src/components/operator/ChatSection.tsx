@@ -451,7 +451,11 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
         previewUrl: data.type === "image" ? `data:${data.mimeType};base64,${data.base64}` : undefined,
       }]);
     } catch (err: any) {
-      dispatch({ type: "ERROR", message: `Upload failed: ${err.message ?? "Please try again."}` });
+      const detail = err?.message ? ` (${err.message})` : "";
+      dispatch({
+        type: "ERROR",
+        message: `That file didn't make it through${detail}. Checking the upload path — you can try a smaller file, a different format, or pick it again.`,
+      });
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -472,7 +476,10 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
       mediaRecorderRef.current = recorder;
       setRecording(true);
     } catch {
-      dispatch({ type: "ERROR", message: "Microphone access denied. Allow microphone access in browser settings." });
+      dispatch({
+        type: "ERROR",
+        message: "I can't reach the microphone — the browser may not have given permission yet. Check the mic icon in the address bar, allow access, then tap the mic again.",
+      });
     }
   };
 
@@ -501,7 +508,11 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
       const data = await res.json();
       if (data.transcript) setInput(prev => prev ? `${prev} ${data.transcript}` : data.transcript);
     } catch (err: any) {
-      dispatch({ type: "ERROR", message: `Transcription failed: ${err.message ?? "Please try again."}` });
+      const detail = err?.message ? ` (${err.message})` : "";
+      dispatch({
+        type: "ERROR",
+        message: `The voice clip didn't transcribe${detail}. Checking the audio pipeline — you can record again, or type the message instead.`,
+      });
     } finally {
       setTranscribing(false);
       mediaRecorderRef.current = null;
@@ -544,7 +555,12 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
       });
 
       if (!response.ok) {
-        dispatch({ type: "ERROR", message: `Server error ${response.status}. Please try again.` });
+        // Investigation-framed (per [[errors-as-investigation]]): describe what
+        // happened, what the user can try, no terminal-failure phrasing.
+        dispatch({
+          type: "ERROR",
+          message: `The server returned ${response.status} for that message. Your text is still in the box — retry, or try rephrasing while I check what's going on.`,
+        });
         return;
       }
 
@@ -625,7 +641,12 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
       if (err?.name === "AbortError") {
         dispatch({ type: "ABORT" });
       } else {
-        dispatch({ type: "ERROR", message: "Connection lost. Please try again." });
+        // Investigation-framed: the stream dropped mid-flight; tell the user
+        // what happened and what to try next, not "it's broken, give up".
+        dispatch({
+          type: "ERROR",
+          message: "The connection dropped before the reply finished. Checking the link — you can resend, or wait a moment and try again.",
+        });
       }
       abortControllerRef.current = null;
     }

@@ -26,3 +26,4 @@ export * from './contact_submissions';
 export * from './password_resets';
 export * from './operator_secrets';
 export * from './operator_deployment_slots';
+export * from './operator_firecrawl_usage';

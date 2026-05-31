@@ -55,11 +55,12 @@ const SERVER_CAPABILITIES = {
  */
 function buildListContext(
   handlerCtx: ToolHandlerContext,
-  options: { hasWebSearch: boolean; liveSecrets: string[] },
+  options: { hasWebSearch: boolean; hasFirecrawl?: boolean; liveSecrets: string[] },
 ): ToolContext {
   return {
     scopeType: handlerCtx.scope.scopeType,
     hasWebSearch: options.hasWebSearch,
+    hasFirecrawl: options.hasFirecrawl ?? false,
     liveSecrets: options.liveSecrets,
   };
 }
@@ -69,6 +70,8 @@ export interface CreateMcpServerOptions {
   handlerCtx: ToolHandlerContext;
   /** Whether web_search infrastructure is configured (mirrors isWebSearchAvailable()). */
   hasWebSearch: boolean;
+  /** Whether Firecrawl is configured (mirrors isFirecrawlAvailable()). Defaults to false. */
+  hasFirecrawl?: boolean;
   /** Names of stored secret labels for this operator (so http_request shows them). */
   liveSecrets: string[];
 }
@@ -87,6 +90,7 @@ export function createMcpServerForContext(opts: CreateMcpServerOptions): Server 
 
   const listCtx = buildListContext(opts.handlerCtx, {
     hasWebSearch: opts.hasWebSearch,
+    hasFirecrawl: opts.hasFirecrawl,
     liveSecrets: opts.liveSecrets,
   });
 

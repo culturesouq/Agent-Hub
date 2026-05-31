@@ -1,14 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { apiFetch } from "@/lib/api";
 import { Operator, HealthScore } from "@/types";
 import {
   ArrowLeft, MessageSquare, Brain, Activity,
   User, Zap, Archive, Network,
   CheckSquare, FileText, Settings2, Key, Code2, AlertTriangle,
-  Star, ChevronRight, Sparkles,
-  Shield, ShieldCheck, Menu, X, Cpu,
+  Star, ChevronRight, ChevronDown, Sparkles,
+  Shield, ShieldCheck, Menu, X, Cpu, ShieldAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -25,14 +25,17 @@ import PersonalitySection from "@/components/operator/PersonalitySection";
 import KbSection from "@/components/operator/KbSection";
 import FilesSection from "@/components/operator/FilesSection";
 import ArtifactsSection from "@/components/operator/ArtifactsSection";
+import CapabilityRequestsSection from "@/components/operator/CapabilityRequestsSection";
 
 
+// Local PNGs (same set Dashboard uses) — keeps operator portraits offline-safe,
+// privacy-respecting (no external CDN hit per page load), and visually consistent
+// between Dashboard cards and OperatorDetail header.
 const PERSONA_IMAGES = [
-  "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=400&q=80",
-  "https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=400&q=80",
-  "https://images.unsplash.com/photo-1675557009875-79c69a33e26c?w=400&q=80",
+  "/images/persona-founder.png",
+  "/images/persona-executive.png",
+  "/images/persona-consultant.png",
 ];
-const PERSONA_GLOWS = ["#9b59f4", "#22d3ee", "#ec4899"];
 
 function OperatorAvatar({ name }: { name: string }) {
   const letter = name.charAt(0).toUpperCase();
@@ -44,6 +47,94 @@ function OperatorAvatar({ name }: { name: string }) {
   return (
     <div className={`w-9 h-9 rounded-xl ${color} flex items-center justify-center shrink-0`}>
       <span className="text-white font-bold text-base leading-none">{letter}</span>
+    </div>
+  );
+}
+
+/**
+ * Header-mounted operator quick-switcher. Reuses the existing `["operators"]`
+ * query (Dashboard populates the same cache) so we don't fire a second
+ * network request. Click an item -> wouter `setLocation` jumps to that
+ * operator's detail without a full page reload. Listed-other operators only
+ * (current one is hidden). Click-outside + Escape close the panel.
+ */
+function OperatorPicker({ currentId, currentName }: { currentId: string; currentName: string }) {
+  const [open, setOpen] = useState(false);
+  const [, setLocation] = useLocation();
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const { data: operators } = useQuery({
+    queryKey: ["operators"],
+    queryFn: () => apiFetch<Operator[]>("/operators"),
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const others = (operators ?? []).filter(o => o.id !== currentId);
+  // If there are no other operators, render nothing — picker would only show
+  // the current operator as the active item, which is what the header already
+  // does. Avoids a useless click target.
+  if (others.length === 0) return null;
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="hidden md:flex items-center gap-1.5 text-xs font-label text-muted-foreground hover:text-foreground border border-border/40 hover:border-border rounded px-2 py-1 transition-colors"
+        title="Switch operator"
+        data-testid="operator-picker-trigger"
+      >
+        <span className="truncate max-w-32 font-bold text-foreground">{currentName}</span>
+        <ChevronDown className={`w-3 h-3 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div
+          className="absolute right-0 top-full mt-1.5 w-60 bg-popover border border-border rounded-lg shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150"
+          role="menu"
+        >
+          <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border/50 font-label">
+            Switch to
+          </div>
+          <div className="max-h-80 overflow-y-auto">
+            {others.map(op => (
+              <button
+                key={op.id}
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  setLocation(`/operators/${op.id}`);
+                }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors flex items-center gap-2.5"
+                data-testid={`operator-picker-item-${op.id}`}
+              >
+                <OperatorAvatar name={op.name} />
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold text-foreground truncate">{op.name}</div>
+                  {op.roles && op.roles.length > 0 && (
+                    <div className="text-[10px] text-muted-foreground truncate">
+                      {op.roles.slice(0, 2).join(" · ")}
+                    </div>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -148,6 +239,7 @@ const NAV_MAIN: NavItem[] = [
       { kind: "leaf", id: "skills",               label: "Skills",           icon: Zap,          depth: 1 },
       { kind: "leaf", id: "memory",               label: "Memory",           icon: Archive,      depth: 1 },
       { kind: "leaf", id: "grow",                 label: "Growth",           icon: Activity,     depth: 1 },
+      { kind: "leaf", id: "capabilities",         label: "Capability Requests", icon: ShieldAlert, depth: 1 },
     ],
   },
   { kind: "leaf", id: "tasks",       label: "Tasks",       icon: CheckSquare, depth: 0 },
@@ -171,7 +263,7 @@ const NAV_BOTTOM: NavItem[] = [
   { kind: "leaf", id: "feedback", label: "Leave Feedback", icon: Star, depth: 0 },
 ];
 
-const BRAIN_LEAVES    = ["soul", "skills", "memory", "grow"];
+const BRAIN_LEAVES    = ["soul", "skills", "memory", "grow", "capabilities"];
 const SETTINGS_LEAVES = ["settings.model", "settings.secrets", "settings.api", "settings.behavior", "settings.evolution", "settings.danger"];
 
 export default function OperatorDetail({ id }: { id: string }) {
@@ -261,6 +353,7 @@ export default function OperatorDetail({ id }: { id: string }) {
       case "skills":             return <SkillsSection operatorId={id} />;
       case "memory":              return <MemorySection operatorId={id} />;
       case "grow":               return <GrowSection operatorId={id} saData={saData} />;
+      case "capabilities":       return <CapabilityRequestsSection operatorId={id} />;
       case "tasks":              return <TasksSection operatorId={id} />;
       case "files":              return <FilesSection operator={operator} />;
       case "artifacts":          return <ArtifactsSection operatorId={id} />;
@@ -321,6 +414,7 @@ export default function OperatorDetail({ id }: { id: string }) {
         </div>
 
         <div className="flex items-center gap-2">
+          <OperatorPicker currentId={id} currentName={operator.name} />
           {operator.safeMode && (
             <div className="flex items-center gap-1.5 text-xs border border-amber-500/30 rounded px-2 py-0.5 bg-amber-500/10 text-amber-500">
               <Shield className="w-3 h-3" />

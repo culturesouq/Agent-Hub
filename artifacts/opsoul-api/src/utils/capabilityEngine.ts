@@ -1,7 +1,17 @@
 import { webSearch } from './webSearch.js';
+import { isFirecrawlAvailable as fcAvailable } from '@workspace/integrations-firecrawl';
 
 export function isWebSearchAvailable(): boolean {
   return !!process.env.SERPER_API_KEY;
+}
+
+/**
+ * Firecrawl availability gate (Wave 4). Mirrors isWebSearchAvailable() so
+ * the MCP server + chat.ts can decide whether to surface the firecrawl_*
+ * tools in this request's ToolContext.
+ */
+export function isFirecrawlAvailable(): boolean {
+  return fcAvailable();
 }
 
 export interface WebSearchCapabilityResult {
