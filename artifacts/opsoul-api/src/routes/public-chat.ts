@@ -397,11 +397,24 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       res.write(`data: ${JSON.stringify({ done: true, conversationId: responseConvId, scopeId: scope.scopeId })}\n\n`);
       res.end();
     } catch (streamErr: unknown) {
-      const streamStatus = (streamErr as { status?: number })?.status;
-      const streamMsg = streamStatus === 402
-        ? 'AI service temporarily unavailable. Please try again shortly.'
-        : 'Stream failed. Please try again.';
-      res.write(`data: ${JSON.stringify({ error: streamMsg })}\n\n`);
+      // Per [[no-fallbacks]] + Claim 13: NEVER substitute synthetic operator
+      // voice when the LLM call fails. Emit a structured error event so the
+      // SSE caller can render its own diagnostic per [[errors-as-investigation]].
+      // Crucially: do NOT persist a fake `role:'assistant'` row to history —
+      // the operator never said anything this turn, and writing a fake reply
+      // would pollute Layer 1 + Layer 2 distillation downstream.
+      console.error('[public-chat] streaming LLM error', streamErr);
+      const streamStatus = (streamErr as { status?: number })?.status ?? null;
+      const streamCode = (streamErr as { code?: string })?.code ?? null;
+      const streamRawMessage = (streamErr as { message?: string })?.message ?? null;
+      res.write(`data: ${JSON.stringify({
+        error: 'llm_invocation_failed',
+        upstreamStatus: streamStatus,
+        upstreamCode: streamCode,
+        upstreamMessage: streamRawMessage,
+        operatorId: slot.operatorId,
+        scopeId: scope.scopeId,
+      })}\n\n`);
       res.end();
     }
 
@@ -412,12 +425,24 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       // STEP 2 — Operator dispatches the LLM as its executor for this turn.
       result = await agent.executeSync(messages, { model });
     } catch (llmErr: unknown) {
-      const status = (llmErr as { status?: number })?.status;
-      if (status === 402) {
-        res.status(503).json({ error: 'AI service temporarily unavailable. Please try again shortly.' });
-      } else {
-        res.status(502).json({ error: 'AI service error. Please try again.' });
-      }
+      // Per [[no-fallbacks]] + Claim 13: never substitute synthetic operator
+      // voice on LLM failure. Propagate the real upstream error so the caller
+      // can decide (per [[errors-as-investigation]]). Status: 502 unless
+      // upstream explicitly returned 402 (payment required) — then 503 so
+      // the caller can tell auth-failure apart from generic provider error.
+      console.error('[public-chat] sync LLM error', llmErr);
+      const status = (llmErr as { status?: number })?.status ?? null;
+      const code = (llmErr as { code?: string })?.code ?? null;
+      const rawMessage = (llmErr as { message?: string })?.message ?? null;
+      const httpStatus = status === 402 ? 503 : 502;
+      res.status(httpStatus).json({
+        error: 'llm_invocation_failed',
+        upstreamStatus: status,
+        upstreamCode: code,
+        upstreamMessage: rawMessage,
+        operatorId: slot.operatorId,
+        scopeId: scope.scopeId,
+      });
       return;
     }
 

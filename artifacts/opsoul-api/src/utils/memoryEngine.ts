@@ -505,12 +505,18 @@ export async function distillMemoriesFromConversations(
   if (convs.length === 0) return { storedLayer1: 0, storedLayer2: 0, extracted: 0, memories: [] };
 
   const convIds = convs.map((c) => c.id);
-  const messages = await db
+  const messagesRaw = await db
     .select({ role: messagesTable.role, content: messagesTable.content })
     .from(messagesTable)
     .where(inArray(messagesTable.conversationId, convIds))
     .orderBy(desc(messagesTable.createdAt))
     .limit(DISTILL_MESSAGE_LIMIT);
+
+  // Skip diagnostic rows ('system_error' written by webhook channels on LLM
+  // failure per [[no-fallbacks]]) — they carry no operator voice and must
+  // never feed Layer 1 or Layer 2 distillation. Only 'user' and 'assistant'
+  // turns enter the distiller.
+  const messages = messagesRaw.filter((m) => m.role === 'user' || m.role === 'assistant');
 
   if (messages.length === 0) return { storedLayer1: 0, storedLayer2: 0, extracted: 0, memories: [] };
 

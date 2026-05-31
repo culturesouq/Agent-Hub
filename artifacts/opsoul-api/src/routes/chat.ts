@@ -165,6 +165,10 @@ async function buildMessageHistory(convId: string): Promise<ChatMessage[]> {
     .orderBy(asc(messagesTable.createdAt));
 
   const cleaned = msgs.filter(m => {
+    // Drop diagnostic rows (system_error) — webhook channels write these on
+    // LLM failure per [[no-fallbacks]]; they carry no operator voice and
+    // must not leak into the next turn's history.
+    if (m.role !== 'user' && m.role !== 'assistant') return false;
     // Sanitize corrupted assistant messages — "Human:" prefix is never valid
     // in an assistant turn; it means the model echoed the user during a bug.
     // Feeding it back would perpetuate the pattern every turn.
@@ -271,7 +275,10 @@ async function extractBirthIdentity(operatorId: string, conversationId: string):
     .where(eq(messagesTable.conversationId, conversationId))
     .orderBy(asc(messagesTable.createdAt));
 
+  // Birth-time identity extraction must never see system_error diagnostic
+  // rows — they carry no operator voice. Per [[no-fallbacks]].
   const transcript = msgs
+    .filter(m => m.role === 'user' || m.role === 'assistant')
     .map(m => `${m.role === 'user' ? 'Owner' : 'Operator'}: ${m.content}`)
     .join('\n');
 

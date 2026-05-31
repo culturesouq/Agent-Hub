@@ -98,6 +98,9 @@ async function buildConvHistory(convId: string): Promise<ChatMessage[]> {
     .orderBy(asc(messagesTable.createdAt));
 
   return msgs.filter((m) => {
+    // Drop diagnostic rows (system_error) — they carry no operator voice and
+    // must not leak into the next turn's history per [[no-fallbacks]].
+    if (m.role !== 'user' && m.role !== 'assistant') return false;
     if (m.role === 'assistant' && typeof m.content === 'string' && m.content.trimStart().startsWith('Human:')) {
       return false;
     }
@@ -170,8 +173,17 @@ router.post('/:operatorId', async (req: Request, res: Response): Promise<void> =
       const transcript = await openai.audio.transcriptions.create({ model: 'whisper-1', file });
       userMessage = transcript.text;
     } catch (err: unknown) {
+      // Per [[no-fallbacks]]: avoid synthetic operator-voice substitution
+      // even on transcription failure. Frame as out-of-band delivery
+      // diagnostic so the user knows the voice did not reach the operator,
+      // without putting fake words in the operator's mouth.
       console.error('[telegram-webhook] transcription error', err);
-      await sendTelegramMessage(botToken, chatId, 'Sorry, I could not transcribe your voice message.');
+      const rawMessage = (err as { message?: string })?.message ?? null;
+      await sendTelegramMessage(
+        botToken,
+        chatId,
+        `[Voice transcription failed${rawMessage ? `: ${rawMessage}` : ''}. The operator did not receive the voice message; please retry or send text.]`,
+      ).catch((sendErr) => console.error('[telegram-webhook] failed to deliver transcription diagnostic', sendErr));
       return;
     }
   } else if (message.photo) {
@@ -280,23 +292,44 @@ router.post('/:operatorId', async (req: Request, res: Response): Promise<void> =
 
     await sendTelegramMessage(botToken, chatId, finalContent);
   } catch (err: unknown) {
+    // Per [[no-fallbacks]] + Claim 13: never substitute synthetic operator
+    // voice on LLM failure, and NEVER persist a fake reply as
+    // `role:'assistant'` (that fake voice would feed Layer 1 + Layer 2
+    // distillation and pollute the operator's memory forever). Telegram is
+    // a one-way channel, so the user must see something — we send an
+    // out-of-band diagnostic clearly framed as a delivery error, not the
+    // operator's voice. The diagnostic is persisted with role 'system_error'
+    // so history readers (and memory distillers) can identify and skip it.
     console.error('[telegram-webhook] reply error', err);
-    const errorReply = 'Sorry, I encountered an error. Please try again.';
-    await sendTelegramMessage(botToken, chatId, errorReply);
+    const status = (err as { status?: number })?.status ?? null;
+    const code = (err as { code?: string })?.code ?? null;
+    const rawMessage = (err as { message?: string })?.message ?? null;
+    const diagnostic = `[Delivery error — your message reached the operator but the reply could not be produced. Upstream status: ${status ?? 'unknown'}${code ? ` / ${code}` : ''}.]`;
+    try {
+      await sendTelegramMessage(botToken, chatId, diagnostic);
+    } catch (sendErr) {
+      console.error('[telegram-webhook] failed to deliver diagnostic', sendErr);
+    }
     try {
       await db.insert(messagesTable).values({
         id: crypto.randomUUID(),
         operatorId,
         conversationId: conv.id,
-        role: 'assistant',
-        content: errorReply,
+        role: 'system_error',
+        content: JSON.stringify({
+          error: 'llm_invocation_failed',
+          upstreamStatus: status,
+          upstreamCode: code,
+          upstreamMessage: rawMessage,
+          deliveredDiagnostic: diagnostic,
+        }),
       });
       await db
         .update(conversationsTable)
-        .set({ messageCount: sql`message_count + 2`, lastMessageAt: new Date() })
+        .set({ lastMessageAt: new Date() })
         .where(eq(conversationsTable.id, conv.id));
     } catch {
-      // best-effort
+      // best-effort — diagnostic logging only
     }
   }
 });
