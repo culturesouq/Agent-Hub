@@ -3095,3 +3095,253 @@ Branch `phase-2-ship-ready` off `main` (HEAD `e35e265`). Owner approved D-6 (Fre
 - `f588c5e` — Commit 6: OperatorDetail header gains operator quick-switcher (dropdown). Reuses existing `["operators"]` React Query cache (no extra fetch), lists every operator except current, jumps via wouter `setLocation`, closes on click-outside / Escape, hides itself when no other operators exist.
 - `6811abf` — Commit 7: Firecrawl D-6 Free-tier integration. New `lib/integrations/firecrawl` package (Apache-2.0) — thin REST wrapper around `/v2/scrape /map /crawl /crawl/{id} /cancel /extract /search` with process-wide semaphore (max 10) + `looksLikeNavPage` post-filter. Registry side wired in `toolRegistry.ts` (new `firecrawl` availability bucket + `hasFirecrawl` on `ToolContext` + 5 RegisteredTool entries). Handlers in `toolHandlers.ts` hardcode `limit≤500`, `allowExternalLinks:false`, depth≤4, and a 14-entry nav-path excludePaths default. `utils/mcpServer.ts` passes the new flag through `buildListContext`. `utils/capabilityEngine.ts` exposes `isFirecrawlAvailable()`. New DB schema `operator_firecrawl_usage` (operator+date unique) for per-operator daily credit ledger. `.env.example` documents `FIRECRAWL_API_KEY`. No keys generated. `routes/mcp.ts` and `routes/chat.ts` wiring left for Phase 1B merge.
 - `7ba1255` — Commit 8: KbSection gains SRAG entry points — entity-type dropdown (fact / insight / entity / event / reference / procedure), tags-required field with comma-parse + dedupe + submit validation, and a Stop-Crawl panel above the tabs that POSTs `/operators/:id/firecrawl/crawl/:jobId/stop`. Additive only; existing source-type chip + CRUD untouched. Backend routes for entityType/tags/firecrawl-stop are forward-compat (ignored unknowns) until Phase 1B catches up.
+
+---
+
+## Phase 2B — Integration + Quality (2026-05-31)
+
+Integration branch `phase-2b-integrated` off `main` (HEAD `e35e265`). Merged `phase-1b-patent-critical` (22 commits) + `phase-2-ship-ready` (11 commits) cleanly — one conflict in SOURCE_OF_TRUTH.md (resolved by keeping both Phase 1B + Phase 2 sections in chronological order). Then ran the owner's closure pass: close every slip, fragment, and forward-compat shortcut.
+
+- Merge `008396f` — `phase-1b-patent-critical` integrated (backend foundation, 22 commits).
+- Merge `b790a41` — `phase-2-ship-ready` integrated (UI + Firecrawl + KB UI, 11 commits).
+- `31e84f5` — Commit 1: KB UI SRAG fields wired end-to-end. Closes the "backend ignored unknowns harmlessly" slip the Phase 2 agent flagged. New `entity_type` column on both `operator_kb` + `owner_kb`; `intake_tags` added to `owner_kb` (operator_kb already had it). Both columns `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` in `index.ts setupDatabase()`. POST routes require non-empty `tags` (UI sends `tags`, pipeline callers send `intakeTags` — both feed same column). GET routes return both fields. New Firecrawl stop-crawl route at `POST /api/operators/:operatorId/firecrawl/crawl/:jobId/stop` wraps `firecrawl.crawlStop()` with requireAuth + owner→operator scope + 503/502 structured errors.
+- `a3007e0` — Commit 2: bumped LLM budget defaults from 4096/2048 to 65536/4096 to match `HISTORY_MAX_TOKENS = 60_000` ceiling. The Phase 1B placeholder would have failed every long-history turn before contacting the LLM; defaults now match reality. Env overrides preserved.
+- `3d4e178` — Commit 3: Claim 5 firewall surface ships today. `utils/operatorFirewall.ts` exports `analyzeInputForSafety()` + `analyzeOutputForLeak()` as no-op stubs (return null). Wired at every entry point: chat.ts (stream + sync), public-chat.ts (stream + sync), public-crud.ts, telegram-webhook.ts, whatsapp-webhook.ts. When stubs return non-null (Phase 4 fills in): input wraps as `[SAFETY]` annotation in promptSections; output rides as `leakFeedback` on every response payload. Per [[no-fallbacks]]: never substitutes operator reply, only annotates.
+- `[commit-4-sha]` — Commit 4: unused-imports + dead-code sweep. Flipped `tsconfig.base.json noUnusedLocals: true`. 40 violations cleared across 28 files (16 backend + 12 hub). Notable: removed dead pre-MCP skill pre-load block in public-chat.ts + public-crud.ts (computed but never consumed after agent loop refactor); exported `INTEGRATION_CAPABILITIES`, `GROW_LOCK_DESCRIPTIONS`, `STAGE_LABELS`, `PERSONA_GLOWS`, `GoogleLogo` per [[expand-never-cut]] to keep latent infrastructure without TS complaint. Added `@types/node` devDep to `@workspace/integrations-firecrawl` for standalone type-check.
+- `[commit-5+6-sha]` — Commit 5+6: architecture-leak + fallback-string final sweeps. Architecture sweep confirmed zero user-facing UI strings expose Layer 0..4 / GROW evolution / Sovereign architecture / two-layer memory / scope isolation; all hits are code comments / owner-authenticated routes / API field names (intentionally kept). Fallback-string sweep found ONE real slip: `cron/tasksCron.ts` had two hardcoded synthetic `role: 'assistant'` priming turns ("Understood. I have absorbed...") for KB / memory injection. Replaced with `role: 'system'` to match chat.ts pattern — operator no longer "speaks" inside prompt assembly.
+- Cross-package type-check: `lib/db`, `lib/opsoul-utils`, `lib/api-client-react`, `lib/integrations/firecrawl`, `artifacts/opsoul-api`, `artifacts/opsoul-hub` all compile clean under strict (`tsc --noEmit`). Pre-existing baseline issues in `lib/api-zod` (duplicate re-exports from generated client) and `lib/integrations-openrouter-ai` / `lib/integrations-openai-ai-server` / `lib/mockup-sandbox` (missing types) verified pre-existing on `main` — not introduced by 1B/2/2B and out of scope here.
+- Integration verification (read-only code check, no servers run): PATCH `/api/operators/:id` with locked field → 403 with structured `constraint: layer1_lock` payload ✓ (operators.ts:350-363). Operator response with LLM failure → no fake `role='assistant'` row, `role='system_error'` diagnostic ✓ (telegram-webhook.ts:368, whatsapp-webhook.ts equivalent). KB write with missing tags → 400 with structured issue ✓ (both owner-kb.ts + operator-kb.ts). Firecrawl tool call respects `Math.min(limit, FC_HARD_PAGE_CAP=500)` + `allowExternalLinks: false` hardcoded ✓ (toolHandlers.ts:1388,1447). CapabilityRequests page reachable from Brain nav ✓ (OperatorDetail.tsx:240). Operator quick-switcher uses cached `["operators"]` query + wouter `setLocation` + Escape/click-outside close ✓ (OperatorDetail.tsx:59-130).
+- `MEMORY-REFRESH-NEEDED.md` extended with Phase 2B additions: `[[srag]]` Stop-Crawl + nav-filter + external-link guards all shipped; `[[no-fallbacks]]` system_error convention now consistent everywhere; `[[opsoul-runtime-layer]]` validated via firecrawl as concrete instance.
+
+Branch state: `phase-2b-integrated` is owner-review-ready. No deploy, no push, no merge to main per task constraints. 33 commits ahead of main (22 from phase-1b + 11 from phase-2 + 2 merge commits + 6 phase-2B closure commits).
+
+---
+
+## 2026-05-31 — STRATEGIC LOCK: Closed-Backend Distribution Model (anti-big-tech threat model)
+
+### Why this strategy exists
+
+Owner's correct observation: patent + npm publishing alone do NOT protect against large competitors (OpenAI, Microsoft, Anthropic, Google, state-backed Chinese labs). Such competitors can:
+
+1. Read the patent (public after filing) — gets the architectural blueprint
+2. Read npm source (public when published) — gets the implementation
+3. Clone with 100× resources in 3-6 months
+4. Out-litigate a solo founder for years; founder loses on legal costs regardless of merit
+
+Patent alone protects against small/legitimate competitors who fear legal cost. Patent does NOT protect against large entities whose calculus is "we'll out-spend you in court."
+
+### The architectural answer
+
+**Closed-source backend + closed-source UI (hosted by owner) + thin-client npm packages.**
+
+Customers see what users see — a working product API and a hosted console. Customers never see the implementation. Patent + closed-source + speed-of-iteration combine into a real moat. This is the model that scaled OpenAI, Anthropic, Pinecone, Stripe — none of them open-source their core, all of them distribute via API + thin clients.
+
+### Three-layer stack (canonical)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  CUSTOMER'S BROWSER / CUSTOMER'S APPLICATION                    │
+│  ──────────────────────────────────────────                      │
+│  • console.opsoul.dev  (hosted UI — owner-served, closed source)│
+│  • Customer's own app  (uses @opsoul/client npm package)        │
+│  • External MCP client (uses @opsoul/mcp-bridge npm package)    │
+└────────────────────────────────┬────────────────────────────────┘
+                                 │ HTTPS (REST/WebSocket/MCP)
+                                 │
+┌────────────────────────────────▼────────────────────────────────┐
+│  🔒  OWNER'S BACKEND (CLOSED-SOURCE, OWNER-HOSTED) 🔒          │
+│  ─────────────────────────────────────────                       │
+│  • OpSoul platform: operator engine, GROW, memory,              │
+│    MCP runtime, scope isolation (Claim 12),                     │
+│    operator-collaborative firewall (Claim 5),                   │
+│    5-tier source trust (Claim 32),                              │
+│    trained discretion, soul-anchor decay (Claim 25),            │
+│    Layer 1 lock (Claims 2/16/22/44)                             │
+│  • Hajeri inference: model weights, prompts, KV cache,          │
+│    multi-model registry, identity preservation                  │
+│  • Customer scoping: per-tenant via customerId on every         │
+│    operation; reuses existing scope-isolation architecture      │
+│  • Auth: Stripe customer ID ↔ API key mapping; rate limit       │
+│    per tier; no human support beyond email                      │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### What customers DO see
+
+1. **Rendered hosted UI** at `console.opsoul.dev` (or branded subdomain for enterprise):
+   - Same React/Vite UI from `artifacts/opsoul-hub/` — already built
+   - Served by owner's backend, production-minified, source maps stripped
+   - UI shape reveals user-experience (operator picker, KB editor, chat) — NOT backend mechanisms
+   - Equivalent to chat.openai.com: visible to anyone with a browser, source code never exposed
+2. **REST/WebSocket API** for programmatic access:
+   - OpenAPI/Swagger spec published as documentation
+   - Auth via API keys, rate-limited per tier
+3. **Thin npm client packages** (Apache-2.0, owner publishes; no business logic):
+   - `@hajeri/client` — Hajeri inference API client (~500 lines)
+   - `@opsoul/client` — OpSoul platform API client (~800 lines)
+   - `@opsoul/types` — TypeScript types only (~300 lines)
+   - `@opsoul/mcp-bridge` — MCP server that proxies external MCP clients to OpSoul backend (~400 lines)
+
+### What customers do NOT see
+
+| Component | Stays where |
+|-----------|-------------|
+| Operator engine (`artifacts/opsoul-api/`) | Owner's backend only |
+| GROW evolution engine + 4 hard-block guards | Owner's backend only |
+| Memory architecture (L1/L2, scope isolation, soul-anchor decay, PII regex backstop) | Owner's backend only |
+| Curiosity engine + 5-tier source trust + dual corroboration | Owner's backend only |
+| Operator-collaborative firewall (input tagger / output leak-detector) | Owner's backend only |
+| MCP runtime layer (toolRegistry, toolHandlers, dispatch) | Owner's backend only |
+| Operator constitution / Layer 4 prompts | Owner's backend only |
+| Hajeri model weights / configs / training pipelines | Owner's backend only |
+| `artifacts/opsoul-hub/` UI source code | Owner's backend only (served as production bundle) |
+| Patent-protected mechanisms (Claims 2-46) | All implemented in private code |
+
+### Operating model (low-headache, not no-headache)
+
+**SaaS (rejected):** per-customer infra, 24/7 SLA, human support, multi-tenant operational stress, support-team scaling.
+
+**Backend API (this):** single backend instance (same operational pattern as Foundermoken / Authentic Tour / Hafeet), self-service onboarding via Stripe Checkout, automatic API key provision, tier-based rate limits, email-only support for paying tiers, free tier best-effort no support.
+
+**Operational burden comparison:**
+- Roughly equivalent to running Foundermoken
+- One stack to monitor (backend + Hajeri inference)
+- No per-customer customization
+- No human-touch onboarding
+- Total work: monitoring + occasional patch deploys + Stripe webhook handling + cron tasks (same as existing apps)
+
+### Revenue streams (no SaaS = simpler billing, no support overhead)
+
+| Stream | Pricing pattern | Operational cost |
+|--------|-----------------|------------------|
+| Hajeri API tokens | $/M tokens (cheaper than OpenAI; owner controls unit economics on own inference) | Inference server only |
+| OpSoul API usage | Per-operator-call or per-MB-of-KB-content tier | Backend already running |
+| OpSoul Pro subscription | Monthly recurring with usage allowance | Stripe handles billing |
+| OpSoul Enterprise tier | Custom contracts, includes Vael-as-Service, white-label console domain, dedicated capacity | Email-only support, no SLA negotiation per tier |
+| Vael-as-Service | Managed Vael instance for customers who want curation outsourced (subset of Enterprise) | One Vael instance per customer; minimal vs full SaaS |
+
+### License lock (L-1 through L-5)
+
+| ID | Decision | Why |
+|----|----------|-----|
+| **L-1** | License: Apache-2.0 for thin client packages; PROPRIETARY closed-source for everything else (server, UI, inference, model) | Apache-2.0 maximises client adoption + has explicit patent grant protecting both owner and users; proprietary backend never exposed |
+| **L-2** | npm scopes: `@opsoul/*` and `@hajeri/*`; reserve both on npm immediately after patent priority date locks | Brand alignment, prevents squatters; scope reservation costs $0 |
+| **L-3** | Package boundaries: only thin clients on npm (`@hajeri/client`, `@opsoul/client`, `@opsoul/types`, `@opsoul/mcp-bridge`); NO `@opsoul/server` package ever | Server stays closed; clients are API wrappers with zero business logic |
+| **L-4** | Sequence: patent priority date → build customer-facing REST API on top of OpSoul backend → publish 4 thin clients → self-service Stripe onboarding → quiet launch | Each step de-risks the next; clients can't be published until backend API is stable; onboarding can't run until billing wired |
+| **L-5** | Operating model: closed-source backend on owner's Azure / RunPod / Container Apps; one stack; customers consume via API + hosted console + npm clients | Single ops surface; uses existing infrastructure pattern from Foundermoken et al. |
+
+### Defence-in-depth (the actual moat)
+
+| Layer | Mechanism | Strength against big tech |
+|-------|-----------|---------------------------|
+| 1 | Closed-source backend + closed-source UI source code | Strongest — they cannot read, must reverse-engineer from API behaviour |
+| 2 | Patent (filed via Lavender.IP, priority date locked) | Combined with #1: if they figure it out, legal claim exists |
+| 3 | Speed of iteration (small team ships faster than corporate clone teams) | Strong — adds compounding distance |
+| 4 | Hajeri brand + first-mover network effects | Real, grows with adoption |
+| 5 | Customer data residency in your scope-isolated DB | Switching cost — customer can't easily extract operator+memory state |
+
+This is exactly the moat structure OpenAI used vs every "open-source GPT clone" team that emerged 2022-2024. They didn't bet on patents. They bet on "you can't see what we do," shipping speed, and brand. We use the same playbook with patent as a legal backstop, not the primary defence.
+
+### To-do list (sequenced, no overlap with current OpSoul cleanup phases)
+
+#### Pre-publish gate (must complete before any npm scope reservation)
+- [ ] Phase 1A-2 patent submission package landed at Lavender.IP (priority date locked)
+- [ ] Phase 2B integration + quality pass merged into main (clean codebase)
+- [ ] Phase 3 memory refresh applied (stale memories updated)
+
+#### Week 1 (after pre-publish gate)
+- [ ] Reserve `@opsoul` npm organisation/scope (free)
+- [ ] Reserve `@hajeri` npm organisation/scope (free)
+- [ ] Register `console.opsoul.dev` (or chosen domain) subdomain DNS
+- [ ] Stripe product setup: Free / Pro / Enterprise tier products
+
+#### Week 2 — Backend customer-facing API surface
+- [ ] Design REST API spec for customer-facing endpoints (operator CRUD, KB CRUD, chat, MCP-passthrough, billing-status)
+- [ ] Implement customer-auth middleware (Stripe customer ID ↔ API key)
+- [ ] Implement per-customer rate limiting (tier-based)
+- [ ] Implement customer-scoped operator/KB/memory isolation (extends existing scope isolation)
+- [ ] Write OpenAPI/Swagger spec for documentation site
+
+#### Week 3 — Thin client packages (npm publish)
+- [ ] `@opsoul/types` — TypeScript types extracted from `lib/api-spec` / `lib/api-zod`
+- [ ] `@hajeri/client` — Hajeri inference client (OpenAI-compatible)
+- [ ] `@opsoul/client` — OpSoul platform client
+- [ ] `@opsoul/mcp-bridge` — MCP server that proxies external clients to OpSoul backend
+- [ ] All four with: Apache-2.0 LICENSE, README, examples, JSDoc, semantic versioning, GitHub repo
+
+#### Week 4 — Customer console + docs
+- [ ] Deploy hosted UI to `console.opsoul.dev` (existing `artifacts/opsoul-hub/` reused; production build minified, source maps stripped)
+- [ ] Customer signup flow: Stripe Checkout → API key auto-provision → console login
+- [ ] Customer settings page: API keys, usage stats, billing portal (Stripe-hosted)
+- [ ] Docs site (`docs.opsoul.dev` or similar): API reference, quickstart, MCP setup, operator-building guide
+
+#### Month 2 — Quiet launch
+- [ ] 3-5 design partners (external — not own apps; needs honest feedback)
+- [ ] Onboard each via self-service; observe friction; iterate
+- [ ] Free tier initially open to validate self-service; throttle if abuse appears
+
+#### Month 3 — Hajeri-12B coherence + commercial launch
+- [ ] Hajeri-12B training reaches coherence (per `[[project-hajeri-12b-build]]`)
+- [ ] Hajeri inference server upgraded to 12B → customers feel quality jump without code change
+- [ ] Vael-as-Service Enterprise tier opens (managed Vael per customer)
+- [ ] Foundermoken / Authentic Tour / Hafeet / Bani migrate to consume same Hajeri backend (eat own dog food)
+
+### Saved as memory
+
+This strategy is locked as memory `[[closed-backend-distribution]]` for persistence across sessions.
+
+
+---
+
+## ACTIVE PLANS (live state — update on every pivot, do NOT delete completed items, mark them ✅)
+
+### Patent filing — Lavender.IP
+- [x] ✅ Phase 0 gap audit
+- [x] ✅ Phase 1A claims_v2 drafted
+- [x] ✅ Phase 1A-2 Summary + Description (EN+AR) drafted
+- [x] ✅ Phase 1A-3 Diagrams_v2 + Diagrams_Bilingual_v2 drafted
+- [x] ✅ Description files updated to reference Diagrams_v2
+- [ ] **NEXT: Owner sends 4 submission files + diagrams + claims_v2 + glossary diff to Lavender.IP** (priority date lock)
+- [ ] Lavender review claims_v2 before examination filing
+- [ ] Lavender prosecution
+
+### OpSoul codebase cleanup
+- [x] ✅ Phase 1B backend (22 commits on `phase-1b-patent-critical`)
+- [x] ✅ Phase 2 UI + Firecrawl (11 commits on `phase-2-ship-ready`)
+- [ ] Phase 2B integration + zero-slip pass (running — agent `a32a90863ae80c40a`)
+- [ ] Phase 3 memory refresh (after 2B) — mark `[[opsoul-03-integer-bug]]` resolved, `[[opsoul-mcp-buildout]]` shipped
+- [ ] **Owner merges 2B integration branch to main** (no deploy still)
+- [ ] **Owner deploys when all phases clean**
+
+### Closed-Backend Distribution (commercial path)
+- [x] ✅ Strategy locked (L-1 through L-5)
+- [x] ✅ Saved as memory `[[closed-backend-distribution]]`
+- [x] ✅ Full detail in SoT 2026-05-31 STRATEGIC LOCK section
+- [ ] After patent ships: Week 1 — reserve `@opsoul` + `@hajeri` npm scopes; register `console.opsoul.dev` DNS; Stripe product setup
+- [ ] Week 2 — customer-facing REST API + auth + rate limit + customer scoping + OpenAPI spec
+- [ ] Week 3 — publish `@opsoul/types`, `@hajeri/client`, `@opsoul/client`, `@opsoul/mcp-bridge` (Apache-2.0)
+- [ ] Week 4 — deploy hosted console at `console.opsoul.dev`; Stripe signup flow; docs site
+- [ ] Month 2 — quiet launch with 3-5 external design partners
+
+### Hajeri training (parallel track, independent of OpSoul work)
+- [ ] SFT Pass 1 in progress (RunPod A6000, ~16hr credit; loss descending from 5.5 → 4.4 over 350+ updates)
+- [ ] Owner downloads checkpoints every U100 for chat-testing (per `[[chat-beats-probes]]`)
+- [ ] Decide post-SFT: more passes vs ship as gatekeeper SFT-1
+- [ ] Migrate to Hajeri-12B when coherence reached (per `[[project-hajeri-12b-build]]`)
+- [ ] Eventually: Hajeri 12B replaces Kimi as default brain in OpSoul model registry
+
+### Vael / SRAG (queued for after OpSoul cleanup)
+- [ ] Decide between Qwen-7B swap (Agent D recommendation, $0.13/mo) vs DeepSeek-R1-Distill-Qwen-8B free via Groq (owner's "Zero-Dollar Core" interest)
+- [ ] Add Firecrawl Free tier setup (already coded in Phase 2 Commit 7; needs API key + monitoring)
+- [ ] Fix pre-existing SRAG bugs (nav-page pre-filter + external link drift — already addressed by Firecrawl 3-cap implementation; verify after Phase 2B merge)
+- [ ] SRAG separate patent filing (per `[[opsoul-patent-claims]]`)
+
+### Operator architecture (post-cleanup)
+- [ ] **Scope isolation** (per `[[scope-isolation]]`) — patent-protected, NOT yet built; priority build before scaling operators
+- [ ] **Operator-collaborative firewall full build** (Claim 5(a)+(b) implementation as Phase 4 — currently stub interfaces from Phase 2B)
+- [ ] **Model-level memory** (per `[[hajeri-model-level-memory]]`) — bring OpSoul memory architecture down to Hajeri inference (post-burnin)
+- [ ] **Fourth-priority operator** — TBD per `[[opsoul-operators]]`
+
+### Standing rule (per 2026-05-31 owner directive)
+> Always update Active Plans on every pivot. Never delete completed items — mark ✅. This section is the durable plan-of-record; if we get distracted, this is where we resume.
+
