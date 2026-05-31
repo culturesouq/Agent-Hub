@@ -15,7 +15,9 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
     .where(eq(ownersTable.id, ownerId));
 
   if (!owner?.isSovereignAdmin) {
-    res.status(403).json({ error: 'Sovereign admin access required' });
+    // Generic phrasing — do not leak platform-internal vocabulary
+    // ("Sovereign") to non-admin callers per architecture-as-secret.
+    res.status(403).json({ error: 'Administrator access required' });
     return;
   }
 
