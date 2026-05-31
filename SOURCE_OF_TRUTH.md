@@ -3070,4 +3070,5 @@ The stack trace will name the file + line where the failing query lives. Once we
 Branch `phase-1b-patent-critical` off `main` (HEAD `e35e265`). Owner approved all 6 decisions and the standing `[[expand-never-cut]]` principle. No deploys, no merge to main, owner reviews at end.
 
 - `fbe682c` — Claim 16 / Layer 1 lock: PATCH `/api/operators/:id` now refuses locked-field writes with 403 + structured constraint payload; uses the same `LAYER_1_LOCKED_FIELDS` set GROW imports from `growGuards.ts`.
+- `a2fbdc8` — Claim 13 / no-fallbacks: removed all 8 synthetic operator-voice fallback strings across `public-chat.ts` (4), `telegram-webhook.ts` (2), `whatsapp-webhook.ts` (2). Webhook channels now persist diagnostic rows with `role='system_error'` (never `'assistant'`); distillation + history readers filter to user/assistant only so the diagnostics never feed memory or future turns.
 
