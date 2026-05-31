@@ -4,7 +4,7 @@ import { db } from '@workspace/db';
 import { operatorIntegrationsTable, operatorsTable } from '@workspace/db';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { eq, and } from 'drizzle-orm';
-import { encryptToken, decryptToken } from '@workspace/opsoul-utils/crypto';
+import { encryptToken } from '@workspace/opsoul-utils/crypto';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { autoInstallIntegrationSkills } from '../utils/autoInstallIntegrationSkills.js';
 

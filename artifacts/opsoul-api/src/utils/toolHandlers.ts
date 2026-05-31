@@ -36,7 +36,6 @@ import {
   operatorSecretsTable,
   operatorMemoryTable,
   operatorKbTable,
-  ownerKbTable,
   operatorsTable,
   conversationsTable,
 } from '@workspace/db';

@@ -6,18 +6,14 @@ import {
   operatorSkillsTable,
   platformSkillsTable,
   operatorIntegrationsTable,
-  operatorDeploymentSlotsTable,
   operatorSecretsTable,
-  tasksTable,
-  operatorFilesTable,
 } from '@workspace/db';
 import { requireSlotKey } from '../middleware/requireSlotKey.js';
-import { chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
+import { CHAT_MODEL } from '../utils/openrouter.js';
 import { executeSkill } from '../utils/skillExecutor.js';
 import { detectSkillTrigger } from '../utils/skillTriggerEngine.js';
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
 import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
-import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { assembleOperatorPrompt } from '../utils/systemPrompt.js';
 import { distillActionTaskPattern } from '../utils/memoryEngine.js';
 import { buildScopeContext, type ValidatedScope } from '../utils/scopeResolver.js';
@@ -25,7 +21,6 @@ import { OperatorAgent } from '../utils/operatorAgent.js';
 import { buildOperatorToolset } from '../utils/operatorToolset.js';
 import { runSyncAgentLoop } from '../utils/operatorAgentLoop.js';
 import { analyzeInputForSafety, analyzeOutputForLeak } from '../utils/operatorFirewall.js';
-import { embed } from '@workspace/opsoul-utils/ai';
 import { eq, and } from 'drizzle-orm';
 
 const router = Router();
@@ -152,78 +147,23 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     } catch { /* fall through to LLM */ }
   }
 
-  // ── KB context ──
-  let ragContext = '';
-  try {
-    const embedding = await embed(action);
-    const kbHits = await searchBothKbs(slot.operatorId, embedding, 5, 30, operator.archetype ?? [], operator.domainTags ?? []);
-    ragContext = buildRagContext(kbHits);
-  } catch { /* non-fatal */ }
-
-  // ── Station data ──
-  const [liveIntegrations, liveTasks, liveFiles, liveSlots, liveSecrets] = await Promise.all([
-    db.select({
-      type: operatorIntegrationsTable.integrationType,
-      label: operatorIntegrationsTable.integrationLabel,
-      status: operatorIntegrationsTable.status,
-      scopes: operatorIntegrationsTable.scopes,
-    }).from(operatorIntegrationsTable).where(eq(operatorIntegrationsTable.operatorId, slot.operatorId)),
-    db.select({
-      name: tasksTable.contextName,
-      status: tasksTable.status,
-      payload: tasksTable.payload,
-    }).from(tasksTable).where(eq(tasksTable.operatorId, slot.operatorId)),
-    db.select({ filename: operatorFilesTable.filename })
-      .from(operatorFilesTable)
-      .where(eq(operatorFilesTable.operatorId, slot.operatorId)),
-    db.select({
-      name: operatorDeploymentSlotsTable.name,
-      surfaceType: operatorDeploymentSlotsTable.surfaceType,
-      apiKeyPreview: operatorDeploymentSlotsTable.apiKeyPreview,
-      isActive: operatorDeploymentSlotsTable.isActive,
-      allowedOrigins: operatorDeploymentSlotsTable.allowedOrigins,
-    }).from(operatorDeploymentSlotsTable).where(eq(operatorDeploymentSlotsTable.operatorId, slot.operatorId)),
-    db.select({ key: operatorSecretsTable.key })
-      .from(operatorSecretsTable)
-      .where(eq(operatorSecretsTable.operatorId, slot.operatorId)),
-  ]);
-
-  const liveStation = {
-    integrations: liveIntegrations.map(i => ({
-      type: i.type ?? '',
-      label: i.label ?? '',
-      status: i.status ?? 'unknown',
-      scopes: i.scopes ?? null,
-    })),
-    tasks: liveTasks.map(t => {
-      const p = (t.payload ?? {}) as Record<string, unknown>;
-      return {
-        name: t.name ?? 'Unnamed task',
-        status: t.status ?? 'active',
-        payload: p,
-        lastRunAt: (p.lastRunAt as string | null) ?? null,
-        lastRunSummary: (p.lastRunSummary as string | null) ?? null,
-      };
-    }),
-    fileCount: liveFiles.length,
-    fileNames: liveFiles.map(f => f.filename),
-    deploymentSlots: liveSlots.map(s => ({
-      name: s.name,
-      surfaceType: s.surfaceType,
-      apiKeyPreview: s.apiKeyPreview,
-      isActive: s.isActive ?? false,
-      allowedOrigins: s.allowedOrigins ?? null,
-    })),
-    secretLabels: liveSecrets.map(s => s.key),
-  };
+  // KB + station + skill injection pre-MCP removed — the agent loop's
+  // universal toolset (buildOperatorToolset → Claims 4/9/31/36) gives the
+  // operator first-class tool access to kb_search, list_integrations,
+  // list_tasks, list_files, list_slots, list_secrets, and skill triggers.
+  // Pre-loading them into a prompt block was redundant after the MCP
+  // refactor (ragContext / liveStation / activeSkills were all computed
+  // and never read). liveSecrets is still loaded below for the http_request
+  // tool's {{secret-label}} interpolation. liveIntegrations is still loaded
+  // below to gate the connected-app tools.
 
   // ── LLM fallback — pure function, no conversation stored ──
-  const activeSkills = allSkills.map(s => ({
-    name: s.name,
-    instructions: s.instructions,
-    outputFormat: s.outputFormat ?? undefined,
-    customInstructions: s.customInstructions ?? undefined,
-  }));
+  const liveSecrets = await db.select({ key: operatorSecretsTable.key })
+    .from(operatorSecretsTable)
+    .where(eq(operatorSecretsTable.operatorId, slot.operatorId));
+  const liveIntegrations = await db.select({ type: operatorIntegrationsTable.integrationType })
+    .from(operatorIntegrationsTable)
+    .where(eq(operatorIntegrationsTable.operatorId, slot.operatorId));
 
   // Action-scope context: tells the operator they are processing an automated
   // action call (no human reading directly). buildScopeContext provides the

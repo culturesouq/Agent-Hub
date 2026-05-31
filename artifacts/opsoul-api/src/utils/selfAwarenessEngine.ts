@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { db, pool } from '@workspace/db';
+import { db } from '@workspace/db';
 import {
   operatorsTable,
   selfAwarenessStateTable,
@@ -15,7 +15,7 @@ import {
   opsLogsTable,
   operatorFilesTable,
 } from '@workspace/db';
-import { eq, and, count, avg, desc, not, isNull, inArray, sql, gte, lt, isNotNull } from 'drizzle-orm';
+import { eq, and, count, avg, desc, isNull, sql, gte, lt } from 'drizzle-orm';
 
 export type SelfAwarenessTrigger =
   | 'conversation_end'

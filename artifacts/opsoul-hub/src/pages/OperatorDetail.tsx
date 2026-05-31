@@ -10,8 +10,6 @@ import {
   Star, ChevronRight, ChevronDown, Sparkles,
   Shield, ShieldCheck, Menu, X, Cpu, ShieldAlert,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { useToast } from "@/hooks/use-toast";
 
 import ChatSection from "@/components/operator/ChatSection";
 import MemorySection from "@/components/operator/MemorySection";
@@ -267,7 +265,6 @@ const BRAIN_LEAVES    = ["soul", "skills", "memory", "grow", "capabilities"];
 const SETTINGS_LEAVES = ["settings.model", "settings.secrets", "settings.api", "settings.behavior", "settings.evolution", "settings.danger"];
 
 export default function OperatorDetail({ id }: { id: string }) {
-  const { toast } = useToast();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("chat");
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(["brain"]));

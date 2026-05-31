@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { db } from '@workspace/db';
 import { operatorIntegrationsTable, operatorsTable, ownersTable, messagesTable } from '@workspace/db';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { eq, and, sql, desc, like } from 'drizzle-orm';
+import { eq, and, sql, like } from 'drizzle-orm';
 import { encryptToken, decryptToken } from '@workspace/opsoul-utils/crypto';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { chatCompletion } from '../utils/openrouter.js';

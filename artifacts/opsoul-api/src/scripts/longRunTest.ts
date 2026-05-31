@@ -10,7 +10,6 @@
  *   pnpm --filter @workspace/opsoul-api run test:longrun -- --sessions=3     (fewer sessions)
  */
 
-import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -186,7 +185,11 @@ function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function shuffle<T>(arr: T[]): T[] {
+// Latent helper — has no current call sites but is retained per
+// [[expand-never-cut]] because randomized-order scenario walks are a
+// natural extension of this long-run test harness. Exported to keep
+// noUnusedLocals quiet under the strict tsc sweep.
+export function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));

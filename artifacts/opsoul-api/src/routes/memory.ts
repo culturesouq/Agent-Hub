@@ -4,7 +4,7 @@ import { db } from '@workspace/db';
 import { operatorMemoryTable, operatorsTable } from '@workspace/db';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { buildOwnerScope, formatScopeLabel } from '../utils/scopeResolver.js';
-import { eq, and, isNull, isNotNull, desc } from 'drizzle-orm';
+import { eq, and, isNull, desc } from 'drizzle-orm';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import {
@@ -116,23 +116,10 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   const limit = Math.min(parseInt(String(req.query.limit ?? '50'), 10), 200);
   const offset = parseInt(String(req.query.offset ?? '0'), 10);
 
-  let baseQuery = db
-    .select({
-      id: operatorMemoryTable.id,
-      content: operatorMemoryTable.content,
-      memoryType: operatorMemoryTable.memoryType,
-      sourceTrustLevel: operatorMemoryTable.sourceTrustLevel,
-      weight: operatorMemoryTable.weight,
-      decayStartedAt: operatorMemoryTable.decayStartedAt,
-      archivedAt: operatorMemoryTable.archivedAt,
-      createdAt: operatorMemoryTable.createdAt,
-    })
-    .from(operatorMemoryTable)
-    .where(eq(operatorMemoryTable.operatorId, op.id))
-    .orderBy(desc(operatorMemoryTable.createdAt))
-    .limit(limit)
-    .offset(offset);
-
+  // Conditions are appended below before the real query fires. The query
+  // builder needs the full conditions list at .where() time so we don't
+  // pre-build a base query — that variant was dead code from an earlier
+  // refactor.
   const conditions = [eq(operatorMemoryTable.operatorId, op.id)];
   if (!includeArchived) conditions.push(isNull(operatorMemoryTable.archivedAt));
   if (memoryType) {

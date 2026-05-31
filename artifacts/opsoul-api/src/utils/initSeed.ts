@@ -1,8 +1,8 @@
 import { db } from '@workspace/db';
 import { platformSkillsTable, ownersTable, operatorsTable } from '@workspace/db';
-import { eq, and, inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
-import { OWNER_EMAIL, OWNER_OPERATORS } from './ownerOperatorsSeed';
+import { OWNER_OPERATORS } from './ownerOperatorsSeed';
 export { OWNER_EMAIL } from './ownerOperatorsSeed';
 import { seedPlatformKb } from './platformKbSeed.js';
 
@@ -230,15 +230,10 @@ export async function runInitSeed(): Promise<void> {
     console.log('[initSeed] Blank operator already exists — skipping.');
   }
 
-  // ── Owner operators (by email lookup) ───────────────────────────────────
-  const ownerRows = await db
-    .select({ id: ownersTable.id })
-    .from(ownersTable)
-    .where(eq(ownersTable.email, OWNER_EMAIL))
-    .limit(1);
-
   // Operator seeding is manual — operators are built one by one intentionally.
-  // Do NOT auto-seed operators on startup.
+  // Do NOT auto-seed operators on startup. The OWNER_EMAIL lookup that used
+  // to live here drove an auto-seed branch that's no longer reached; removing
+  // the dead query along with the dead branch.
 }
 
 // ── Exported: call this after login/register for instant operator seeding ──

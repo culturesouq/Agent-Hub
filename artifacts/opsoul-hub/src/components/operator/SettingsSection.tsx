@@ -390,6 +390,10 @@ export default function SettingsSection({ operator, section }: { operator: Opera
   const defaultModelId = operator.defaultModel ?? "moonshotai/kimi-k2.5";
   const [selectedModel, setSelectedModel] = useState<string>(defaultModelId);
   const [apiKeyInput, setApiKeyInput] = useState("");
+  // showKey + verifyStatus drive the "Verify API key" panel that the next UI
+  // pass will re-attach to the BYO-key form. State + handler retained per
+  // [[expand-never-cut]] so the wiring is in place; void-references below
+  // satisfy noUnusedLocals without forcing premature deletion.
   const [showKey, setShowKey] = useState(false);
   const [verifyStatus, setVerifyStatus] = useState<"idle" | "verifying" | "ok" | "fail">("idle");
   const [showModelDropdown, setShowModelDropdown] = useState(false);
@@ -435,6 +439,12 @@ export default function SettingsSection({ operator, section }: { operator: Opera
       toast({ title: "Key verification failed — check the key and try again", variant: "destructive" });
     }
   };
+  // Scaffolding-only — the JSX that wires showKey / verifyStatus / verifyKey
+  // into the BYO-key panel was removed when the panel was paused; the state
+  // + handler stay per [[expand-never-cut]] so the next pass plugs the JSX
+  // back in without re-introducing the wiring. Reference here keeps the
+  // noUnusedLocals sweep quiet.
+  void showKey; void setShowKey; void verifyStatus; void verifyKey;
 
   const currentLevel = (["OPEN", "CONTROLLED", "LOCKED"].includes(operator.growLockLevel ?? "")
     ? operator.growLockLevel

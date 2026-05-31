@@ -303,7 +303,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     el.style.height = Math.min(el.scrollHeight, 200) + "px";
   }, [input]);
 
-  const { data: convos, isLoading: convosLoading } = useQuery({
+  const { data: convos } = useQuery({
     queryKey: ["operators", operatorId, "conversations"],
     queryFn: async () => {
       const res = await apiFetch<{ conversations: Conversation[] }>(`/operators/${operatorId}/conversations`);

@@ -11,10 +11,7 @@ import {
 import { eq, and, desc, inArray } from 'drizzle-orm';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { runGrowCycle } from '../utils/growEngine.js';
-import {
-  buildSelfAwarenessState,
-  recomputeSelfAwareness,
-} from '../utils/selfAwarenessEngine.js';
+import { recomputeSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { buildSystemPrompt } from '../utils/systemPrompt.js';
 import type { OperatorIdentity } from '../utils/systemPrompt.js';
 import { chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';

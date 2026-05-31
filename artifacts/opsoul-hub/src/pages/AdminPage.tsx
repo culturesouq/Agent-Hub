@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
 import { apiFetch } from "@/lib/api";
@@ -62,7 +62,7 @@ type Tab = "overview" | "owners" | "operators" | "drift";
 // admin surface never exposes the platform's internal structure to screenshots
 // or demos. The keys remain on the API contract; only the human-readable
 // labels are generic.
-const STAGE_LABELS: Record<string, string> = {
+export const STAGE_LABELS: Record<string, string> = {
   l0_ai_builder: "Provisioning",
   l1_foundation: "Identity",
   l2_behavioral: "Personality",
@@ -134,6 +134,9 @@ export default function AdminPage() {
   const [inspectLoading, setInspectLoading] = useState(false);
 
 
+  // Relative-time formatter retained per [[expand-never-cut]]. The Inspect
+  // panel will reattach this for activity timestamps; void-reference below
+  // keeps noUnusedLocals quiet without forcing premature deletion.
   function timeAgo(dateStr: string): string {
     const diff = Date.now() - new Date(dateStr).getTime();
     const s = Math.floor(diff / 1000);
@@ -149,6 +152,7 @@ export default function AdminPage() {
     const yr = Math.floor(mo / 12);
     return `${yr} year${yr === 1 ? "" : "s"} ago`;
   }
+  void timeAgo;
 
 
 

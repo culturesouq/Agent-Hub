@@ -1,5 +1,4 @@
 import crypto from 'crypto';
-import cron from 'node-cron';
 import { db } from '@workspace/db';
 import {
   operatorsTable,

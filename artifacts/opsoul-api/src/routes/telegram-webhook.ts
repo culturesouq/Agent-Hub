@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { db } from '@workspace/db';
 import { operatorIntegrationsTable, operatorsTable, conversationsTable, messagesTable, operatorSecretsTable } from '@workspace/db';
 import { decryptToken } from '@workspace/opsoul-utils/crypto';
-import { chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
+import { CHAT_MODEL } from '../utils/openrouter.js';
 import { assembleOperatorPrompt } from '../utils/systemPrompt.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { searchMemory, buildMemoryContext } from '../utils/memoryEngine.js';

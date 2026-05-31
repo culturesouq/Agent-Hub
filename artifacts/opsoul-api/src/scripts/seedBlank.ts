@@ -3,7 +3,7 @@ import {
   operatorsTable,
   ownersTable,
 } from '@workspace/db';
-import { eq, isNotNull } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 
 const DATABASE_URL = process.env.DATABASE_URL;

@@ -5,7 +5,6 @@ import {
   operatorsTable,
   messagesTable,
   conversationsTable,
-  selfAwarenessStateTable,
   opsLogsTable,
 } from '@workspace/db';
 import { requireAuth } from '../middleware/requireAuth.js';

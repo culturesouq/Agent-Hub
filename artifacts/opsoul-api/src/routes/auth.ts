@@ -7,7 +7,7 @@ import { hashToken } from '@workspace/opsoul-utils/crypto';
 import { signAccessToken, refreshTokenExpiresAt } from '../utils/jwt.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { eq, and, isNull } from 'drizzle-orm';
-import { sendEmail, forgotPasswordEmail, welcomeEmail } from '../lib/email.js';
+import { sendEmail, forgotPasswordEmail } from '../lib/email.js';
 import { seedOwnerOperators, OWNER_EMAIL } from '../utils/initSeed.js';
 
 const router = Router();

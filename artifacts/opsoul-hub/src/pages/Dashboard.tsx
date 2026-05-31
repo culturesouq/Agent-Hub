@@ -76,7 +76,11 @@ const PERSONA_IMAGES = [
   "/images/persona-executive.png",
   "/images/persona-consultant.png",
 ];
-const PERSONA_GLOWS   = ["rgba(205,150,255,0.30)", "rgba(64,206,243,0.25)", "rgba(255,106,159,0.22)"];
+// Retained per [[expand-never-cut]] — paired with PERSONA_IMAGES / PERSONA_ACCENTS
+// as the operator-card palette set. The glow tint was peeled out of the card
+// CSS during the Phase 2 portrait refactor; reintroducing a halo effect on
+// hover later pulls these directly without redeclaration drift.
+export const PERSONA_GLOWS   = ["rgba(205,150,255,0.30)", "rgba(64,206,243,0.25)", "rgba(255,106,159,0.22)"];
 const PERSONA_ACCENTS = ["#1B4FD8", "#3B82F6", "#6366F1"];
 
 function OperatorCard({ operator, onClick }: { operator: Operator; onClick: () => void }) {

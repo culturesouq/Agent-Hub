@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { db } from '@workspace/db';
 import { conversationsTable, operatorsTable, messagesTable } from '@workspace/db';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { buildOwnerScope, formatScopeLabel } from '../utils/scopeResolver.js';
 
 const router = Router({ mergeParams: true });

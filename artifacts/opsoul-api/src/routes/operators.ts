@@ -16,7 +16,7 @@ import { recomputeSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { seedPlatformKb } from '../utils/platformKbSeed.js';
 import { LAYER_1_LOCKED_FIELDS } from '../utils/growGuards.js';
 import { ARCHETYPES as VALID_ARCHETYPES, ROLES as VALID_ROLES } from '../constants/archetypes.js';
-import { encryptToken, decryptToken } from '@workspace/opsoul-utils/crypto';
+import { encryptToken } from '@workspace/opsoul-utils/crypto';
 import { eq, and, isNull } from 'drizzle-orm';
 import { ZodError } from 'zod';
 

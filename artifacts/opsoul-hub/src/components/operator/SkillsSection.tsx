@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Download, Trash2, Plus, Sparkles, Search, Layers, Zap, Loader2, ChevronDown } from "lucide-react";
+import { Download, Trash2, Plus, Sparkles, Search, Layers, Zap, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 
 const CATEGORY_COLORS: Record<string, string> = {

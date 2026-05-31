@@ -6,8 +6,6 @@ import {
   operatorsTable,
   conversationsTable,
   messagesTable,
-  operatorSkillsTable,
-  platformSkillsTable,
   operatorSecretsTable,
   operatorIntegrationsTable,
 } from '@workspace/db';
@@ -22,12 +20,10 @@ import { OperatorAgent } from '../utils/operatorAgent.js';
 import { buildOperatorToolset } from '../utils/operatorToolset.js';
 import { runSyncAgentLoop } from '../utils/operatorAgentLoop.js';
 import { analyzeInputForSafety, analyzeOutputForLeak } from '../utils/operatorFirewall.js';
-import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
-import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
+import { CHAT_MODEL } from '../utils/openrouter.js';
 import type { ChatMessage, ContentPart } from '../utils/openrouter.js';
 
 import { embed } from '@workspace/opsoul-utils/ai';
-import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
 import { eq, and, desc, sql } from 'drizzle-orm';
 
 const router = Router();
@@ -129,8 +125,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     scopeType: scope.scopeType,
   });
 
-  const decision = agent.analyse(message);
-
   // ── Find or create conversation (DB-backed for persistent scopes only) ──
   let conv: typeof conversationsTable.$inferSelect | undefined;
   // For public scope: use an in-memory session key instead of DB conversation.
@@ -205,56 +199,13 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     }));
   }
 
-  // ── Skills ──
-  const installedRows = await db
-    .select({
-      id: operatorSkillsTable.id,
-      skillId: operatorSkillsTable.skillId,
-      customInstructions: operatorSkillsTable.customInstructions,
-      name: platformSkillsTable.name,
-      instructions: platformSkillsTable.instructions,
-      outputFormat: platformSkillsTable.outputFormat,
-      triggerDescription: platformSkillsTable.triggerDescription,
-      integrationType: platformSkillsTable.integrationType,
-    })
-    .from(operatorSkillsTable)
-    .innerJoin(platformSkillsTable, eq(operatorSkillsTable.skillId, platformSkillsTable.id))
-    .where(and(eq(operatorSkillsTable.operatorId, slot.operatorId), eq(operatorSkillsTable.isActive, true)));
-
-  const installedNames = new Set(installedRows.map(s => s.name));
-  const archetypeDefaults = await loadArchetypeSkills(operator.archetype ?? ['All']);
-
-  const allSkills: InstalledSkill[] = [
-    ...installedRows.map(s => ({
-      installId:          s.id,
-      skillId:            s.skillId,
-      name:               s.name,
-      triggerDescription: s.triggerDescription ?? '',
-      instructions:       s.instructions,
-      outputFormat:       s.outputFormat ?? null,
-      customInstructions: s.customInstructions ?? null,
-      integrationType:    s.integrationType ?? null,
-    })),
-    ...archetypeDefaults
-      .filter(a => !installedNames.has(a.name))
-      .map(a => ({
-        installId:          a.installId,
-        skillId:            a.skillId,
-        name:               a.name,
-        triggerDescription: a.triggerDescription,
-        instructions:       a.instructions,
-        outputFormat:       a.outputFormat,
-        customInstructions: null,
-        integrationType:    a.integrationType ?? null,
-      })),
-  ];
-
-  const activeSkills = allSkills.map(s => ({
-    name:         s.name,
-    description:  s.triggerDescription,
-    instructions: s.instructions,
-    outputFormat: s.outputFormat ?? undefined,
-  }));
+  // Skills are surfaced to the operator through the universal toolset
+  // (buildOperatorToolset below — Phase 1B / Claims 4/9/31/36). The
+  // pre-MCP pattern of pre-loading installed + archetype-default skills
+  // into an LLM-prompt block is gone in this surface; the agent loop
+  // discovers + dispatches through the registry instead. Removed dead
+  // installedRows/allSkills/activeSkills computation — they were assigned
+  // but never read after the MCP refactor.
 
   // ── Memory + KB search ──
   let memoryHits: MemoryHit[] = [];

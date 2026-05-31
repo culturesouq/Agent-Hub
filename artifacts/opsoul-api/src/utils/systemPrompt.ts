@@ -211,7 +211,14 @@ You are honest about uncertainty. When the data does not support a strong conclu
 Your north star: the right call, backed by the right evidence, made by someone who now understands why. That is what good analysis actually looks like.`,
 };
 
-const INTEGRATION_CAPABILITIES: Record<string, { what: string; read: string; write: string }> = {
+// Latent capability tables — retained per [[expand-never-cut]]. Were wired
+// into the STATION prompt-injection block that was removed 2026-05-13 when
+// curiosity was moved under operator self-awareness (chat.ts cleanup notes).
+// Kept in place because the data is canonical + reusable when a future
+// surface (capabilities API, integration-help endpoint, GROW lock UI) wants
+// it. Exported so the table is importable by any future surface without
+// re-declaration drift, and so noUnusedLocals doesn't flag the declaration.
+export const INTEGRATION_CAPABILITIES: Record<string, { what: string; read: string; write: string }> = {
   gmail: {
     what: 'Gmail email',
     read: 'read email threads and search messages',
@@ -257,7 +264,9 @@ const INTEGRATION_CAPABILITIES: Record<string, { what: string; read: string; wri
 // Operator self-awareness of evolution state — natural prose, not raw lock-state
 // strings. The GROW engine reads its lock state directly from the DB; these
 // strings are only what the operator hears about its own state in conversation.
-const GROW_LOCK_DESCRIPTIONS: Record<string, string> = {
+// Latent — see INTEGRATION_CAPABILITIES above for why this stays. Exported
+// so future GROW-lock UI / capabilities API can import without redeclaring.
+export const GROW_LOCK_DESCRIPTIONS: Record<string, string> = {
   OPEN: 'My evolution is open right now — small changes settle in on their own.',
   CONTROLLED: "My evolution requires my owner's blessing before any change takes effect.",
   LOCKED: 'My evolution is paused right now.',

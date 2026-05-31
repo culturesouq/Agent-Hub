@@ -9,8 +9,6 @@ import {
   operatorSkillsTable,
   platformSkillsTable,
   selfAwarenessStateTable,
-  tasksTable,
-  operatorDeploymentSlotsTable,
   operatorSecretsTable,
   operatorIntegrationsTable,
   ownersTable,
@@ -29,18 +27,18 @@ import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { assembleOperatorPrompt, buildBirthSystemPrompt, buildTemporalContext, containsTimeKeywords } from '../utils/systemPrompt.js';
 import { OperatorAgent } from '../utils/operatorAgent.js';
 import type { SelfAwarenessSnapshot, BuildSystemPromptOpts } from '../utils/systemPrompt.js';
-import { searchMemory, buildMemoryContext, distillMemoriesFromConversations } from '../utils/memoryEngine.js';
+import { searchMemory, distillMemoriesFromConversations } from '../utils/memoryEngine.js';
 import type { MemoryHit } from '../utils/memoryEngine.js';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
-import { streamChat, chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
+import { chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import { BIRTH_MODEL_ID, resolveModel, DEFAULT_MODEL_ID } from '../utils/modelRegistry.js';
 import { decryptToken } from '@workspace/opsoul-utils/crypto';
-import type { ChatMessage, ToolDefinition } from '../utils/openrouter.js';
+import type { ChatMessage } from '../utils/openrouter.js';
 import { buildOwnerScope, buildScopeContext, type ValidatedScope } from '../utils/scopeResolver.js';
 import { scrapeUrl } from '../utils/urlScraper.js';
 import type { ContentPart } from '../utils/openrouter.js';
 import { verifyAndStore } from '../utils/kbIntake.js';
-import { eq, and, ne, asc, sql, desc } from 'drizzle-orm';
+import { eq, and, asc, sql } from 'drizzle-orm';
 import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
 import { isWebSearchAvailable } from '../utils/capabilityEngine.js';
 import {
@@ -566,13 +564,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   });
   const promptOpts: BuildSystemPromptOpts = { sycophancyWarning, soulAnchorActive, languageInstruction, scopeLine };
 
-  // Merge archetype-born skills with owner-installed skills.
-  // Installed skills win on name conflict — archetype defaults fill in the rest.
+  // The set of installed skill names — used downstream by buildAgencySkills()
+  // to merge archetype-born defaults with owner-installed skills (installed
+  // wins on name conflict). The merged list itself is rebuilt inside the
+  // tool / skill detection paths below; we don't need to materialise it here.
   const installedNames = new Set(skills.map((s: any) => s.name));
-  const mergedSkills: ActiveSkill[] = [
-    ...skills,
-    ...(archetypeDefaultSkills.filter(a => !installedNames.has(a.name)) as unknown as ActiveSkill[]),
-  ];
 
   let kbContext = '';
   let memoryHits: MemoryHit[] = [];

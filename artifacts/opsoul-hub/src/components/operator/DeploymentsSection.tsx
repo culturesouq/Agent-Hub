@@ -4,9 +4,9 @@ import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Globe, Lock, Code2, Copy, CheckCircle2, Plus, Trash2,
+  Globe, Code2, Copy, CheckCircle2, Plus, Trash2,
   Eye, EyeOff, ChevronDown, ChevronUp, AlertTriangle, Zap,
-  MessageSquare, User, Cpu, RefreshCw,
+  User, Cpu, RefreshCw,
 } from "lucide-react";
 
 interface DeploymentSlot {
