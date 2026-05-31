@@ -3063,3 +3063,11 @@ The stack trace will name the file + line where the failing query lives. Once we
 - Change the column to `numeric(3,2)` if 0-1 scale is intentional
 - Reject the input with a friendly 400 at the API layer
 
+---
+
+## Phase 1B — Patent-critical fixes (2026-05-31)
+
+Branch `phase-1b-patent-critical` off `main` (HEAD `e35e265`). Owner approved all 6 decisions and the standing `[[expand-never-cut]]` principle. No deploys, no merge to main, owner reviews at end.
+
+- `fbe682c` — Claim 16 / Layer 1 lock: PATCH `/api/operators/:id` now refuses locked-field writes with 403 + structured constraint payload; uses the same `LAYER_1_LOCKED_FIELDS` set GROW imports from `growGuards.ts`.
+
