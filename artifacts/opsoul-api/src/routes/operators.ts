@@ -14,6 +14,7 @@ import {
 import { chatCompletion, MODEL_OPTIONS, CHAT_MODEL } from '../utils/openrouter.js';
 import { recomputeSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { seedPlatformKb } from '../utils/platformKbSeed.js';
+import { LAYER_1_LOCKED_FIELDS } from '../utils/growGuards.js';
 import { encryptToken, decryptToken } from '@workspace/opsoul-utils/crypto';
 import { eq, and, isNull } from 'drizzle-orm';
 import { ZodError } from 'zod';
@@ -384,6 +385,27 @@ router.patch('/:id', async (req: Request, res: Response): Promise<void> => {
   if (Object.keys(data).length === 0) {
     res.status(400).json({ error: 'No fields provided to update' });
     return;
+  }
+
+  // Layer 1 structural lock (Claim 16). Once locked, the same field set GROW
+  // refuses to propose changes for must also be refused by this admin route.
+  // Birth flow and GROW both honour the lock — until now this route was the
+  // single bypass. Lock status is server-trusted via the `layer1LockedAt`
+  // column; nothing inside the request body can override it.
+  if (op.layer1LockedAt !== null) {
+    const attemptedLockedFields = Object.keys(data).filter((field) => LAYER_1_LOCKED_FIELDS.has(field));
+    if (attemptedLockedFields.length > 0) {
+      res.status(403).json({
+        error: 'Layer 1 is locked',
+        constraint: 'layer1_lock',
+        operatorId: op.id,
+        lockedAt: op.layer1LockedAt,
+        attemptedFields: attemptedLockedFields,
+        lockedFieldSet: Array.from(LAYER_1_LOCKED_FIELDS),
+        message: 'These fields are part of the operator\'s locked identity and cannot be modified after the lock is set. Mutable settings (safeMode, freeRoaming, toolUsePolicy) may still be updated without the locked fields.',
+      });
+      return;
+    }
   }
 
   const [updated] = await db
