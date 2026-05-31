@@ -12,7 +12,7 @@ import {
   operatorFilesTable,
 } from '@workspace/db';
 import { requireSlotKey } from '../middleware/requireSlotKey.js';
-import { chatCompletion } from '../utils/openrouter.js';
+import { chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import { executeSkill } from '../utils/skillExecutor.js';
 import { detectSkillTrigger } from '../utils/skillTriggerEngine.js';
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
@@ -128,9 +128,13 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     try {
       trigger.operatorId = slot.operatorId;
       trigger.operatorOwnerId = slot.ownerId;
+      // Resolve via the same pattern chat.ts uses: operator default if set
+      // and not the auto sentinel, otherwise the platform CHAT_MODEL from
+      // the registry. Was hardcoded 'moonshotai/kimi-k2.5' — coupled action
+      // surface to one provider regardless of operator config.
       const skillModel = operator.defaultModel && operator.defaultModel !== 'opsoul/auto'
         ? operator.defaultModel
-        : 'moonshotai/kimi-k2.5';
+        : CHAT_MODEL;
       const skillResult = await executeSkill(trigger, skillModel);
       res.json({ result: skillResult.output, skill: trigger.name });
       distillActionTaskPattern(
@@ -247,21 +251,48 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     { scopeLine: crudScopeLine },
   );
 
+  // Resolve via the same pattern chat.ts uses: operator default if set and
+  // not the auto sentinel, otherwise the platform CHAT_MODEL from the
+  // registry. Was hardcoded 'moonshotai/kimi-k2.5' — coupled action surface
+  // to one provider regardless of operator config.
   const resolvedModel = operator.defaultModel && operator.defaultModel !== 'opsoul/auto'
     ? operator.defaultModel
-    : 'moonshotai/kimi-k2.5';
+    : CHAT_MODEL;
 
   // STEP 2 — Operator dispatches the LLM as its executor for this action.
   // The operator owns the call (it set the action context, built the
   // system prompt). The LLM computes the action result; the operator
   // validates before returning to the calling workflow.
-  const result = await actionAgent.executeSync(
-    [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: actionText },
-    ],
-    { model: resolvedModel },
-  );
+  //
+  // Per [[no-fallbacks]] + Claim 13: on LLM failure, propagate the real
+  // upstream error as structured JSON. NEVER substitute synthetic operator
+  // voice in the action result. The previous code path had no try/catch
+  // around executeSync — LLM failure crashed the request with a 500.
+  let result;
+  try {
+    result = await actionAgent.executeSync(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: actionText },
+      ],
+      { model: resolvedModel },
+    );
+  } catch (llmErr: unknown) {
+    console.error('[public-crud] action LLM error', llmErr);
+    const status = (llmErr as { status?: number })?.status ?? null;
+    const code = (llmErr as { code?: string })?.code ?? null;
+    const rawMessage = (llmErr as { message?: string })?.message ?? null;
+    const httpStatus = status === 402 ? 503 : 502;
+    res.status(httpStatus).json({
+      error: 'llm_invocation_failed',
+      upstreamStatus: status,
+      upstreamCode: code,
+      upstreamMessage: rawMessage,
+      operatorId: slot.operatorId,
+      action,
+    });
+    return;
+  }
 
   res.json({ result: result.content });
 
