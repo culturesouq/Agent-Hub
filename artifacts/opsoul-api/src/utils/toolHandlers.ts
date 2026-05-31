@@ -1501,9 +1501,10 @@ async function handleFirecrawlSearch(rawArgs: string, ctx: ToolHandlerContext): 
       meta: { terminateLoop: true },
     };
   }
-  const items = r.data?.data ?? [];
+  const items = (r.data?.data ?? []) as Array<{ url: string; title?: string; markdown?: string }>;
   const formatted = items
-    .map((it, i) => `${i + 1}. ${it.title ?? '(untitled)'} — ${it.url}${it.markdown ? '\n   ' + it.markdown.slice(0, 240).replace(/\s+/g, ' ') + (it.markdown.length > 240 ? '…' : '') : ''}`)
+    .map((it: { url: string; title?: string; markdown?: string }, i: number) =>
+      `${i + 1}. ${it.title ?? '(untitled)'} — ${it.url}${it.markdown ? '\n   ' + it.markdown.slice(0, 240).replace(/\s+/g, ' ') + (it.markdown.length > 240 ? '…' : '') : ''}`)
     .join('\n');
   return { content: formatted || `No results for "${a.query}".` };
 }
