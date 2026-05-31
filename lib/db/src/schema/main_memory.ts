@@ -24,5 +24,12 @@ export const operatorMainMemoryTable = pgTable('operator_main_memory', {
   platformCandidate:    boolean('platform_candidate').notNull().default(false),
   platformReviewedAt:   timestamp('platform_reviewed_at'),
   platformVerdict:      text('platform_verdict'), // 'approved' | 'rejected'
+  /**
+   * Soul-anchor decay exemption (Claim 25). Rows marked true are skipped by
+   * the decay sweep — identity-critical memories the operator (or GROW) has
+   * flagged as part of its core self. Default false; promotion to true is
+   * explicit. DDL ensured at startup via setupDatabase().
+   */
+  soulAnchored:         boolean('soul_anchored').notNull().default(false),
   createdAt:            timestamp('created_at').defaultNow(),
 });

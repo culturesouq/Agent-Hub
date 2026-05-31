@@ -14,6 +14,8 @@ import {
 import { chatCompletion, MODEL_OPTIONS, CHAT_MODEL } from '../utils/openrouter.js';
 import { recomputeSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { seedPlatformKb } from '../utils/platformKbSeed.js';
+import { LAYER_1_LOCKED_FIELDS } from '../utils/growGuards.js';
+import { ARCHETYPES as VALID_ARCHETYPES, ROLES as VALID_ROLES } from '../constants/archetypes.js';
 import { encryptToken, decryptToken } from '@workspace/opsoul-utils/crypto';
 import { eq, and, isNull } from 'drizzle-orm';
 import { ZodError } from 'zod';
@@ -64,56 +66,10 @@ router.post('/bootstrap-preview', async (req: Request, res: Response): Promise<v
     return;
   }
 
-  const VALID_ARCHETYPES = ['Executor', 'Advisor', 'Expert', 'Connector', 'Creator', 'Guardian', 'Builder', 'Catalyst', 'Analyst'] as const;
-
-  const VALID_ROLES = [
-    // Strategy & Leadership
-    'Strategist', 'Chief of Staff', 'General Manager', 'Team Lead', 'Department Head', 'Portfolio Manager', 'Change Manager',
-    // Research & Knowledge
-    'Researcher', 'Research Director', 'Domain Expert', 'Knowledge Manager', 'Information Scientist', 'Librarian', 'Curator', 'Archivist', 'Scientific Advisor', 'Technical Advisor', 'Innovation Advisor',
-    // Project & Program
-    'Project Manager', 'Program Manager', 'Operations Manager', 'Quality Manager', 'Process Engineer', 'Quality Assurance Advisor',
-    // Business & Analysis
-    'Business Analyst', 'Data Analyst', 'Pricing Analyst', 'Strategic Analyst', 'Market Research Analyst',
-    // Finance & Accounting
-    'Financial Advisor', 'Investment Advisor', 'Wealth Manager', 'Tax Advisor', 'Audit Advisor', 'Treasury Advisor', 'Controller', 'Accounts Advisor', 'Insurance Advisor',
-    // Sales & Marketing
-    'Sales Advisor', 'Marketing Strategist', 'Brand Manager', 'Product Manager', 'Growth Strategist', 'Customer Success Manager', 'Channel Manager', 'Partnership Advisor', 'Content Strategist', 'Social Media Strategist', 'SEO Advisor',
-    // Operations & Supply
-    'Procurement Advisor', 'Supply Chain Advisor', 'Logistics Advisor', 'Inventory Manager', 'Vendor Manager', 'Manufacturing Advisor', 'Maritime Advisor', 'Aviation Advisor', 'Transportation Advisor',
-    // Government, Policy & Diplomacy
-    'Policy Analyst', 'Compliance Officer', 'Regulatory Advisor', 'Governance Advisor', 'Public Affairs Advisor', 'Public Sector Advisor', 'Diplomat', 'Trade Advisor', 'Customs Advisor', 'Foreign Affairs Advisor', 'Defense Advisor', 'Public Procurement Advisor', 'Tax Policy Advisor',
-    // Communications & Media
-    'Communications Officer', 'Public Relations Advisor', 'Spokesperson', 'Media Advisor', 'Speechwriter', 'Journalist', 'Editor', 'Copywriter', 'Content Writer', 'Crisis Communications Advisor',
-    // Intelligence & Security
-    'Intelligence Analyst', 'Risk Officer', 'Risk Analyst', 'Security Advisor', 'Cybersecurity Advisor', 'Investigations Officer', 'Forensic Analyst', 'Threat Intelligence Advisor',
-    // Legal
-    'Legal Reviewer', 'Contracts Advisor', 'Intellectual Property Advisor', 'Compliance Counsel', 'Privacy Advisor', 'Mediator', 'Arbitrator', 'Paralegal Advisor',
-    // People & Culture
-    'HR Advisor', 'Talent Advisor', 'Recruitment Advisor', 'Compensation Advisor', 'Benefits Advisor', 'Organizational Development Advisor', 'Diversity Advisor', 'Employee Relations Advisor',
-    // Coaching
-    'Coach', 'Wellness Coach', 'Leadership Coach', 'Career Coach', 'Performance Coach', 'Founder Coach', 'Pitch Coach', 'Mental Health Coach',
-    // Education & Training
-    'Educator', 'Tutor', 'Faculty Advisor', 'Academic Advisor', 'Training Advisor', 'Curriculum Designer', 'Instructional Designer', 'Education Policy Advisor',
-    // Technology & Engineering
-    'Technology Advisor', 'Software Architect', 'Solutions Architect', 'Systems Analyst', 'Data Engineer', 'DevOps Advisor', 'Cloud Advisor', 'Database Advisor', 'Network Advisor', 'AI Advisor', 'IT Advisor', 'Platform Advisor', 'Frontend Advisor', 'Backend Advisor', 'Mobile Advisor',
-    // Design & Creative
-    'Creative Director', 'Art Director', 'Product Designer', 'UX Designer', 'UI Designer', 'Brand Designer', 'Visual Designer', 'Service Designer', 'Design Researcher', 'Storyteller', 'Game Designer', 'Industrial Designer',
-    // Health & Wellbeing
-    'Health Advisor', 'Medical Advisor', 'Nutritional Advisor', 'Wellness Strategist', 'Public Health Advisor', 'Healthcare Policy Advisor', 'Pharmaceutical Advisor',
-    // Sustainability & Environment
-    'Sustainability Advisor', 'Environmental Advisor', 'Climate Advisor', 'ESG Advisor', 'Energy Advisor', 'Renewable Energy Advisor', 'Water Advisor', 'Conservation Advisor',
-    // Agriculture & Food
-    'Agricultural Advisor', 'Food Security Advisor', 'Aquaculture Advisor',
-    // Real Estate & Built Environment
-    'Real Estate Advisor', 'Property Manager', 'Construction Advisor', 'Architecture Advisor', 'Urban Planner', 'Facilities Advisor', 'Civil Engineering Advisor',
-    // Entrepreneurship & Venture
-    'Startup Advisor', 'Venture Advisor', 'Incubator Advisor', 'Fundraising Advisor', 'Exit Strategy Advisor',
-    // Culture, Arts & Tourism
-    'Cultural Affairs Advisor', 'Heritage Advisor', 'Museum Advisor', 'Performing Arts Advisor', 'Music Advisor', 'Film Advisor', 'Literary Advisor', 'Tourism Advisor',
-    // Executive Support
-    'Executive Assistant', 'Account Advisor',
-  ] as const;
+  // VALID_ARCHETYPES + VALID_ROLES come from ../constants/archetypes.ts —
+  // single source of truth across this file + routes/chat.ts. Local aliases
+  // (BIRTH_ARCHETYPES / VALID_ARCHETYPES) kept at the call sites for grep
+  // and to preserve the original variable names used by the prompt below.
 
   const LAYER_0_CORE = [
     'emotionally intelligent and genuinely reads the room',
@@ -384,6 +340,27 @@ router.patch('/:id', async (req: Request, res: Response): Promise<void> => {
   if (Object.keys(data).length === 0) {
     res.status(400).json({ error: 'No fields provided to update' });
     return;
+  }
+
+  // Layer 1 structural lock (Claim 16). Once locked, the same field set GROW
+  // refuses to propose changes for must also be refused by this admin route.
+  // Birth flow and GROW both honour the lock — until now this route was the
+  // single bypass. Lock status is server-trusted via the `layer1LockedAt`
+  // column; nothing inside the request body can override it.
+  if (op.layer1LockedAt !== null) {
+    const attemptedLockedFields = Object.keys(data).filter((field) => LAYER_1_LOCKED_FIELDS.has(field));
+    if (attemptedLockedFields.length > 0) {
+      res.status(403).json({
+        error: 'Layer 1 is locked',
+        constraint: 'layer1_lock',
+        operatorId: op.id,
+        lockedAt: op.layer1LockedAt,
+        attemptedFields: attemptedLockedFields,
+        lockedFieldSet: Array.from(LAYER_1_LOCKED_FIELDS),
+        message: 'These fields are part of the operator\'s locked identity and cannot be modified after the lock is set. Mutable settings (safeMode, freeRoaming, toolUsePolicy) may still be updated without the locked fields.',
+      });
+      return;
+    }
   }
 
   const [updated] = await db

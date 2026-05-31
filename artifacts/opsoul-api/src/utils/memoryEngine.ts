@@ -5,6 +5,7 @@ import { eq, and, isNull, isNotNull, inArray, desc } from 'drizzle-orm';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { chatCompletion } from './openrouter.js';
 import { verifyAndStore } from './kbIntake.js';
+import { redactPii } from './growGuards.js';
 
 export const MEMORY_TOP_N = 8;
 export const MEMORY_MIN_SIMILARITY = 0.55;
@@ -283,6 +284,24 @@ export async function storeMainMemory(
   confidence: number,
   sourceScope: string,
 ): Promise<typeof operatorMainMemoryTable.$inferSelect> {
+  // ─── Layer 2 PII regex backstop (Phase 1B audit H-7 / Claim 3) ────────────
+  // The Layer 2 distillation prompt opens with "## ABSOLUTE RULE — ZERO PII"
+  // and enumerates the forbidden categories. That is LLM trust. Below we
+  // sweep the distiller's output with the same PII pattern set GROW uses
+  // (extended with credit-card / IBAN / Emirates-ID / IPv4 backstops) and
+  // redact in place before the row is written. The patent claim language
+  // requires a "structural prohibition" — regex enforcement IS that
+  // structure; the prompt is the cooperative layer above it.
+  const piiSweep = redactPii(content);
+  if (piiSweep.matchedLabels.length > 0) {
+    console.warn(`[storeMainMemory] PII backstop redacted ${piiSweep.matchedLabels.length} category/categories before Layer 2 write`, {
+      operatorId,
+      sourceScope,
+      matchedLabels: piiSweep.matchedLabels,
+    });
+    content = piiSweep.redacted;
+  }
+
   const embedding = await embed(content);
   const vecStr = `[${embedding.join(',')}]`;
 
@@ -338,6 +357,10 @@ export async function decayMemoriesForOperator(operatorId?: string): Promise<{
   decayed: number;
   archived: number;
 }> {
+  // Soul-anchor decay exemption (Claim 25). Rows flagged soul_anchored=true
+  // are identity-critical — the operator (or GROW) declared them part of
+  // its core self. They must never decay or archive; the decay sweep skips
+  // them at the SELECT boundary.
   let query = db
     .select()
     .from(operatorMemoryTable)
@@ -345,6 +368,7 @@ export async function decayMemoriesForOperator(operatorId?: string): Promise<{
       and(
         isNotNull(operatorMemoryTable.decayStartedAt),
         isNull(operatorMemoryTable.archivedAt),
+        eq(operatorMemoryTable.soulAnchored, false),
       ),
     );
 
@@ -357,6 +381,7 @@ export async function decayMemoriesForOperator(operatorId?: string): Promise<{
           eq(operatorMemoryTable.operatorId, operatorId),
           isNotNull(operatorMemoryTable.decayStartedAt),
           isNull(operatorMemoryTable.archivedAt),
+          eq(operatorMemoryTable.soulAnchored, false),
         ),
       );
   }
@@ -384,6 +409,48 @@ export async function decayMemoriesForOperator(operatorId?: string): Promise<{
   }
 
   return { decayed, archived };
+}
+
+// ─── Soul-anchor a memory (Claim 25) ──────────────────────────────────────────
+//
+// Marks a memory row in either Layer 1 (operator_memory) or Layer 2
+// (operator_main_memory) as soul_anchored=true so it is exempt from the decay
+// sweep above. Identity-critical memories the operator or GROW has flagged as
+// part of its core self go through here. Caller is responsible for authority
+// — the function does not check who is requesting (route-level concern).
+//
+// Returns true if a row was updated, false if no matching row was found.
+
+export async function setMemorySoulAnchor(
+  layer: 'layer1' | 'layer2',
+  memoryId: string,
+  operatorId: string,
+  soulAnchored: boolean,
+): Promise<boolean> {
+  if (layer === 'layer1') {
+    const result = await db
+      .update(operatorMemoryTable)
+      .set({ soulAnchored })
+      .where(
+        and(
+          eq(operatorMemoryTable.id, memoryId),
+          eq(operatorMemoryTable.operatorId, operatorId),
+        ),
+      )
+      .returning({ id: operatorMemoryTable.id });
+    return result.length > 0;
+  }
+  const result = await db
+    .update(operatorMainMemoryTable)
+    .set({ soulAnchored })
+    .where(
+      and(
+        eq(operatorMainMemoryTable.id, memoryId),
+        eq(operatorMainMemoryTable.operatorId, operatorId),
+      ),
+    )
+    .returning({ id: operatorMainMemoryTable.id });
+  return result.length > 0;
 }
 
 // ─── Distillation prompts ─────────────────────────────────────────────────────
@@ -505,12 +572,18 @@ export async function distillMemoriesFromConversations(
   if (convs.length === 0) return { storedLayer1: 0, storedLayer2: 0, extracted: 0, memories: [] };
 
   const convIds = convs.map((c) => c.id);
-  const messages = await db
+  const messagesRaw = await db
     .select({ role: messagesTable.role, content: messagesTable.content })
     .from(messagesTable)
     .where(inArray(messagesTable.conversationId, convIds))
     .orderBy(desc(messagesTable.createdAt))
     .limit(DISTILL_MESSAGE_LIMIT);
+
+  // Skip diagnostic rows ('system_error' written by webhook channels on LLM
+  // failure per [[no-fallbacks]]) — they carry no operator voice and must
+  // never feed Layer 1 or Layer 2 distillation. Only 'user' and 'assistant'
+  // turns enter the distiller.
+  const messages = messagesRaw.filter((m) => m.role === 'user' || m.role === 'assistant');
 
   if (messages.length === 0) return { storedLayer1: 0, storedLayer2: 0, extracted: 0, memories: [] };
 

@@ -12,7 +12,7 @@ import {
   operatorFilesTable,
 } from '@workspace/db';
 import { requireSlotKey } from '../middleware/requireSlotKey.js';
-import { chatCompletion } from '../utils/openrouter.js';
+import { chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import { executeSkill } from '../utils/skillExecutor.js';
 import { detectSkillTrigger } from '../utils/skillTriggerEngine.js';
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
@@ -22,6 +22,8 @@ import { assembleOperatorPrompt } from '../utils/systemPrompt.js';
 import { distillActionTaskPattern } from '../utils/memoryEngine.js';
 import { buildScopeContext, type ValidatedScope } from '../utils/scopeResolver.js';
 import { OperatorAgent } from '../utils/operatorAgent.js';
+import { buildOperatorToolset } from '../utils/operatorToolset.js';
+import { runSyncAgentLoop } from '../utils/operatorAgentLoop.js';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { eq, and } from 'drizzle-orm';
 
@@ -128,9 +130,13 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     try {
       trigger.operatorId = slot.operatorId;
       trigger.operatorOwnerId = slot.ownerId;
+      // Resolve via the same pattern chat.ts uses: operator default if set
+      // and not the auto sentinel, otherwise the platform CHAT_MODEL from
+      // the registry. Was hardcoded 'moonshotai/kimi-k2.5' — coupled action
+      // surface to one provider regardless of operator config.
       const skillModel = operator.defaultModel && operator.defaultModel !== 'opsoul/auto'
         ? operator.defaultModel
-        : 'moonshotai/kimi-k2.5';
+        : CHAT_MODEL;
       const skillResult = await executeSkill(trigger, skillModel);
       res.json({ result: skillResult.output, skill: trigger.name });
       distillActionTaskPattern(
@@ -247,21 +253,62 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     { scopeLine: crudScopeLine },
   );
 
+  // Resolve via the same pattern chat.ts uses: operator default if set and
+  // not the auto sentinel, otherwise the platform CHAT_MODEL from the
+  // registry. Was hardcoded 'moonshotai/kimi-k2.5' — coupled action surface
+  // to one provider regardless of operator config.
   const resolvedModel = operator.defaultModel && operator.defaultModel !== 'opsoul/auto'
     ? operator.defaultModel
-    : 'moonshotai/kimi-k2.5';
+    : CHAT_MODEL;
 
-  // STEP 2 — Operator dispatches the LLM as its executor for this action.
-  // The operator owns the call (it set the action context, built the
-  // system prompt). The LLM computes the action result; the operator
-  // validates before returning to the calling workflow.
-  const result = await actionAgent.executeSync(
-    [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: actionText },
-    ],
-    { model: resolvedModel },
-  );
+  // ── FULL UNIVERSAL TOOL SUBSTRATE (Claims 4 / 9 / 31 / 36 / D-4) ──
+  // Action API used to dispatch with `{ model }` only — silently capability-
+  // stripped relative to the owner Hub. Per [[expand-never-cut]] the operator
+  // now receives the FULL universal tool catalogue filtered by the action
+  // scope's allowlist (the registry enforces — we do not subset further).
+  // Action scope synthesized here (no conv row exists for action calls).
+  const actionToolset = buildOperatorToolset({
+    operatorId: slot.operatorId,
+    ownerId: slot.ownerId,
+    conversationId: `action:${slot.slotId}`, // synthetic — no conv row
+    scope: actionScope,
+    mandate: operator.mandate ?? '',
+    liveSecrets: liveSecrets.map(s => s.key),
+    connectedIntegrations: liveIntegrations.map(i => i.type).filter((t): t is string => typeof t === 'string'),
+  });
+
+  // STEP 2 — Operator dispatches the LLM via the shared sync agent loop,
+  // which exposes the FULL universal tool catalogue for the action scope.
+  // Per [[no-fallbacks]] + Claim 13: on LLM failure, propagate the real
+  // upstream error as structured JSON. NEVER substitute synthetic operator
+  // voice in the action result.
+  let result;
+  try {
+    result = await runSyncAgentLoop({
+      agent: actionAgent,
+      toolset: actionToolset,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: actionText },
+      ],
+      model: resolvedModel,
+    });
+  } catch (llmErr: unknown) {
+    console.error('[public-crud] action LLM error', llmErr);
+    const status = (llmErr as { status?: number })?.status ?? null;
+    const code = (llmErr as { code?: string })?.code ?? null;
+    const rawMessage = (llmErr as { message?: string })?.message ?? null;
+    const httpStatus = status === 402 ? 503 : 502;
+    res.status(httpStatus).json({
+      error: 'llm_invocation_failed',
+      upstreamStatus: status,
+      upstreamCode: code,
+      upstreamMessage: rawMessage,
+      operatorId: slot.operatorId,
+      action,
+    });
+    return;
+  }
 
   res.json({ result: result.content });
 

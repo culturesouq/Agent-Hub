@@ -3063,3 +3063,21 @@ The stack trace will name the file + line where the failing query lives. Once we
 - Change the column to `numeric(3,2)` if 0-1 scale is intentional
 - Reject the input with a friendly 400 at the API layer
 
+---
+
+## Phase 1B — Patent-critical fixes (2026-05-31)
+
+Branch `phase-1b-patent-critical` off `main` (HEAD `e35e265`). Owner approved all 6 decisions and the standing `[[expand-never-cut]]` principle. No deploys, no merge to main, owner reviews at end.
+
+- `fbe682c` — Claim 16 / Layer 1 lock: PATCH `/api/operators/:id` now refuses locked-field writes with 403 + structured constraint payload; uses the same `LAYER_1_LOCKED_FIELDS` set GROW imports from `growGuards.ts`.
+- `a2fbdc8` — Claim 13 / no-fallbacks: removed all 8 synthetic operator-voice fallback strings across `public-chat.ts` (4), `telegram-webhook.ts` (2), `whatsapp-webhook.ts` (2). Webhook channels now persist diagnostic rows with `role='system_error'` (never `'assistant'`); distillation + history readers filter to user/assistant only so the diagnostics never feed memory or future turns.
+- `94239b5` — Claim 21 / retry + budget: `openrouter.ts` now does bounded exponential backoff (3 attempts, 1s/2s/4s) on 5xx/408/429/network errors, short-circuits on 4xx, and enforces per-turn token budget (LLM_BUDGET_INPUT_TOKENS / LLM_BUDGET_OUTPUT_TOKENS env-driven, defaults 4096+2048 per spec — production needs to widen these to 65536/8192 before merge or budget rejects long-history turns).
+- `a513c5a` — Claim 3 / Layer 2 PII regex backstop: shared `redactPii()` helper in growGuards.ts (extends existing PII_PATTERNS with credit-card / IBAN / Emirates-ID / IPv4 backstops + widens phone regex for UAE prefixes); wired into `memoryEngine.storeMainMemory` as in-place redaction with [REDACTED:<label>] markers + console logging.
+- `c10186d` — public-crud hardening: wrapped `executeSync` in try/catch (LLM failure now returns structured 502 instead of crashing) and replaced two hardcoded `'moonshotai/kimi-k2.5'` defaults with `CHAT_MODEL` registry import so action surface honours operator's `defaultModel` column.
+- `2e2dc9b` — Claim 25 / soul-anchor decay exemption: added `soul_anchored BOOLEAN NOT NULL DEFAULT FALSE` to both `operator_memory` + `operator_main_memory` (schema + setupDatabase DDL); decay sweep now skips anchored rows at SELECT; `setMemorySoulAnchor` helper + PATCH/POST endpoints surface the capability for GROW / owner / future operator self-tag.
+- `839d0df` — Claim 32 / 5-tier source trust: `SourceTier` widened to 1|2|3|4|5|null; new `classifyDomainTier()` host-suffix classifier; evaluator prompt rewritten to canonical Tier 3-5 (T1/T2 are KB-only); `lowestTrustTier` flag added to `CuriosityResult` payload.
+- `27f4549` — Claims 4/9/31/36 / D-4 / full tool wiring: new shared helpers `operatorToolset.ts` (`buildOperatorToolset`) + `operatorAgentLoop.ts` (`runSyncAgentLoop`); wired into `public-chat.ts` (both stream + sync), `public-crud.ts`, `telegram-webhook.ts`, `whatsapp-webhook.ts`. Slot deploys, action API, and channel webhooks now receive the FULL universal tool catalogue. Streaming path uses sync loop and emits final content as single SSE delta — token-by-token streaming remains owner-Hub only (chat.ts).
+- `ac56e48` — dedupe archetype + role lists: new `artifacts/opsoul-api/src/constants/archetypes.ts` is the single source of truth (ARCHETYPES + ROLES). `routes/chat.ts` + `routes/operators.ts` both import via aliased names to preserve local read-flow. No name changes (Phase 1A workstream owns those).
+- `16af7cf` — backend architecture-leak strip: only material leak was `middleware/requireAdmin.ts` returning `'Sovereign admin access required'` to non-admin callers — now generic `'Administrator access required'`. Owner-only grow/lock endpoints left as-is (owner authored the architecture); code comments unchanged (developer-only).
+- `0a6e3c9` — `MEMORY-REFRESH-NEEDED.md` written for main-session pickup: `[[opsoul-03-integer-bug]]` resolved at `d52b338`; `[[opsoul-mcp-buildout]]` outdated (MCP shipped on main; chat.ts refactor complete).
+

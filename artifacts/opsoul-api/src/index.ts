@@ -218,6 +218,25 @@ async function setupDatabase(): Promise<void> {
   } catch (err) {
     console.error('[db] Failed to ensure is_system column:', (err as Error).message);
   }
+
+  // ── Soul-anchor decay exemption (Claim 25) ─────────────────────────────
+  // Rows in both memory tables that carry soul_anchored=true are skipped by
+  // decayMemoriesForOperator. Default false; promotion to true is explicit
+  // (GROW, owner, or operator self-tag). Belt-and-suspenders DDL via
+  // IF NOT EXISTS so a fresh deploy + a re-deploy both converge to the same
+  // schema state.
+  try {
+    await pool.query(`ALTER TABLE operator_memory ADD COLUMN IF NOT EXISTS soul_anchored BOOLEAN NOT NULL DEFAULT FALSE`);
+    console.log('[db] operator_memory.soul_anchored column ensured');
+  } catch (err) {
+    console.error('[db] Failed to ensure operator_memory.soul_anchored column:', (err as Error).message);
+  }
+  try {
+    await pool.query(`ALTER TABLE operator_main_memory ADD COLUMN IF NOT EXISTS soul_anchored BOOLEAN NOT NULL DEFAULT FALSE`);
+    console.log('[db] operator_main_memory.soul_anchored column ensured');
+  } catch (err) {
+    console.error('[db] Failed to ensure operator_main_memory.soul_anchored column:', (err as Error).message);
+  }
 }
 
 async function start(): Promise<void> {

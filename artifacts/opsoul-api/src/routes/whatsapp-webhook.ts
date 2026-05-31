@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import crypto from 'crypto';
 import { db } from '@workspace/db';
-import { operatorIntegrationsTable, operatorsTable, conversationsTable, messagesTable } from '@workspace/db';
+import { operatorIntegrationsTable, operatorsTable, conversationsTable, messagesTable, operatorSecretsTable } from '@workspace/db';
 import { decryptToken } from '@workspace/opsoul-utils/crypto';
 import { chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import { assembleOperatorPrompt } from '../utils/systemPrompt.js';
@@ -9,6 +9,8 @@ import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { searchMemory, buildMemoryContext } from '../utils/memoryEngine.js';
 import { buildChannelScope, buildScopeContext } from '../utils/scopeResolver.js';
 import { OperatorAgent } from '../utils/operatorAgent.js';
+import { buildOperatorToolset } from '../utils/operatorToolset.js';
+import { runSyncAgentLoop } from '../utils/operatorAgentLoop.js';
 import { eq, and, asc, sql } from 'drizzle-orm';
 import OpenAI, { toFile } from 'openai';
 import { embed } from '@workspace/opsoul-utils/ai';
@@ -113,6 +115,9 @@ async function buildConvHistory(convId: string): Promise<ChatMessage[]> {
     .orderBy(asc(messagesTable.createdAt));
 
   return msgs.filter((m) => {
+    // Drop diagnostic rows (system_error) — they carry no operator voice and
+    // must not leak into the next turn's history per [[no-fallbacks]].
+    if (m.role !== 'user' && m.role !== 'assistant') return false;
     if (m.role === 'assistant' && typeof m.content === 'string' && m.content.trimStart().startsWith('Human:')) {
       return false;
     }
@@ -234,8 +239,17 @@ router.post('/:operatorId', async (req: RequestWithRawBody, res: Response): Prom
       const transcript = await openai.audio.transcriptions.create({ model: 'whisper-1', file });
       userMessage = transcript.text;
     } catch (err: unknown) {
+      // Per [[no-fallbacks]]: avoid synthetic operator-voice substitution
+      // even on transcription failure. Send out-of-band delivery diagnostic
+      // so the user knows the voice did not reach the operator.
       console.error('[whatsapp-webhook] transcription error', err);
-      await sendWhatsAppMessage(accessToken, phoneNumberId, from, 'Sorry, I could not transcribe your voice message.');
+      const rawMessage = (err as { message?: string })?.message ?? null;
+      await sendWhatsAppMessage(
+        accessToken,
+        phoneNumberId,
+        from,
+        `[Voice transcription failed${rawMessage ? `: ${rawMessage}` : ''}. The operator did not receive the voice message; please retry or send text.]`,
+      ).catch((sendErr) => console.error('[whatsapp-webhook] failed to deliver transcription diagnostic', sendErr));
       return;
     }
   } else if (msgType === 'image') {
@@ -321,12 +335,39 @@ router.post('/:operatorId', async (req: RequestWithRawBody, res: Response): Prom
       ? operator.defaultModel
       : CHAT_MODEL;
 
+    // ── FULL UNIVERSAL TOOL SUBSTRATE (Claims 4 / 9 / 31 / 36 / D-4) ──
+    // Channel surfaces (Telegram, WhatsApp) used to dispatch with `{ model }`
+    // only — silently capability-stripped. Per [[expand-never-cut]] the
+    // operator now receives the FULL universal tool catalogue here, filtered
+    // by the registry's scope + availability rules (the only gate). Load
+    // the operator's stored secret labels + connected integrations so
+    // http_request can interpolate {{secret-label}} placeholders and
+    // integration-availability tools resolve correctly.
+    const [secretRows, integrationRows] = await Promise.all([
+      db.select({ key: operatorSecretsTable.key }).from(operatorSecretsTable).where(eq(operatorSecretsTable.operatorId, operator.id)),
+      db.select({ type: operatorIntegrationsTable.integrationType }).from(operatorIntegrationsTable).where(eq(operatorIntegrationsTable.operatorId, operator.id)),
+    ]);
+    const toolset = buildOperatorToolset({
+      operatorId: operator.id,
+      ownerId: operator.ownerId,
+      conversationId: conv.id,
+      scope,
+      mandate: operator.mandate ?? '',
+      liveSecrets: secretRows.map(s => s.key),
+      connectedIntegrations: integrationRows.map(i => i.type).filter((t): t is string => typeof t === 'string'),
+    });
+
     // STEP 2 — Operator dispatches the LLM as its executor for this turn.
     // The operator owns the call. The LLM produces text in the operator's
-    // voice; the operator validates it (next step) before the route
-    // delivers it via WhatsApp.
-    const result = await agent.executeSync(chatMessages, { model });
-    const finalContent = result.content;
+    // voice via the shared sync agent loop, which handles tool calls if the
+    // operator decides to use them (up to MAX_ITER iterations).
+    const loopResult = await runSyncAgentLoop({
+      agent,
+      toolset,
+      messages: chatMessages,
+      model,
+    });
+    const finalContent = loopResult.content;
 
     await db.insert(messagesTable).values({
       id: crypto.randomUUID(),
@@ -344,23 +385,44 @@ router.post('/:operatorId', async (req: RequestWithRawBody, res: Response): Prom
 
     await sendWhatsAppMessage(accessToken, phoneNumberId, from, finalContent);
   } catch (err: unknown) {
+    // Per [[no-fallbacks]] + Claim 13: never substitute synthetic operator
+    // voice on LLM failure, and NEVER persist a fake reply as
+    // `role:'assistant'` (that fake voice would feed Layer 1 + Layer 2
+    // distillation and pollute the operator's memory forever). WhatsApp is
+    // a one-way channel, so the user must see something — send an
+    // out-of-band diagnostic clearly framed as a delivery error, not the
+    // operator's voice. Diagnostic persisted with role 'system_error' so
+    // memory distillers and history readers can identify and skip it.
     console.error('[whatsapp-webhook] reply error', err);
-    const errorReply = 'Sorry, I encountered an error. Please try again.';
-    await sendWhatsAppMessage(accessToken, phoneNumberId, from, errorReply);
+    const status = (err as { status?: number })?.status ?? null;
+    const code = (err as { code?: string })?.code ?? null;
+    const rawMessage = (err as { message?: string })?.message ?? null;
+    const diagnostic = `[Delivery error — your message reached the operator but the reply could not be produced. Upstream status: ${status ?? 'unknown'}${code ? ` / ${code}` : ''}.]`;
+    try {
+      await sendWhatsAppMessage(accessToken, phoneNumberId, from, diagnostic);
+    } catch (sendErr) {
+      console.error('[whatsapp-webhook] failed to deliver diagnostic', sendErr);
+    }
     try {
       await db.insert(messagesTable).values({
         id: crypto.randomUUID(),
         operatorId,
         conversationId: conv.id,
-        role: 'assistant',
-        content: errorReply,
+        role: 'system_error',
+        content: JSON.stringify({
+          error: 'llm_invocation_failed',
+          upstreamStatus: status,
+          upstreamCode: code,
+          upstreamMessage: rawMessage,
+          deliveredDiagnostic: diagnostic,
+        }),
       });
       await db
         .update(conversationsTable)
-        .set({ messageCount: sql`message_count + 2`, lastMessageAt: new Date() })
+        .set({ lastMessageAt: new Date() })
         .where(eq(conversationsTable.id, conv.id));
     } catch {
-      // best-effort
+      // best-effort — diagnostic logging only
     }
   }
 });

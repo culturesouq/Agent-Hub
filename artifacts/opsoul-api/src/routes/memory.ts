@@ -14,6 +14,7 @@ import {
   searchMemory,
   distillMemoriesFromConversations,
   decayMemoriesForOperator,
+  setMemorySoulAnchor,
   MEMORY_MIN_SIMILARITY,
   MEMORY_TOP_N,
 } from '../utils/memoryEngine.js';
@@ -55,6 +56,13 @@ const UpdateMemorySchema = z.object({
   weight: z.number().min(0).max(1).optional(),
   startDecay: z.boolean().optional(),
   unarchive: z.boolean().optional(),
+  // Claim 25 — soul-anchor exempts the row from the decay sweep.
+  soulAnchored: z.boolean().optional(),
+});
+
+const SoulAnchorSchema = z.object({
+  layer: z.enum(['layer1', 'layer2']),
+  soulAnchored: z.boolean(),
 });
 
 const SearchMemorySchema = z.object({
@@ -211,6 +219,9 @@ router.patch('/:memId', async (req: Request, res: Response): Promise<void> => {
     updates.archivedAt = null;
     updates.weight = Math.max(parsed.data.weight ?? existing.weight ?? 0.1, 0.1);
   }
+  if (parsed.data.soulAnchored !== undefined) {
+    updates.soulAnchored = parsed.data.soulAnchored;
+  }
 
   if (parsed.data.content !== undefined && parsed.data.content !== existing.content) {
     updates.content = parsed.data.content;
@@ -226,6 +237,38 @@ router.patch('/:memId', async (req: Request, res: Response): Promise<void> => {
 
   const { embedding: _, ...safe } = updated;
   res.json(safe);
+});
+
+// Dedicated soul-anchor endpoint (Claim 25). Works against either layer so
+// callers (GROW, owner Hub, future operator self-tag tool) can promote an
+// identity-critical memory row to decay-exempt without going through the
+// scoped PATCH /:memId path (which only addresses Layer 1).
+router.post('/:memId/soul-anchor', async (req: Request, res: Response): Promise<void> => {
+  const op = await resolveOperator(req, res);
+  if (!op) return;
+
+  const parsed = SoulAnchorSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Validation failed', issues: parsed.error.flatten().fieldErrors });
+    return;
+  }
+
+  const updated = await setMemorySoulAnchor(
+    parsed.data.layer,
+    req.params.memId as string,
+    op.id,
+    parsed.data.soulAnchored,
+  );
+  if (!updated) {
+    res.status(404).json({ error: 'Memory row not found in the specified layer' });
+    return;
+  }
+  res.json({
+    ok: true,
+    memoryId: req.params.memId,
+    layer: parsed.data.layer,
+    soulAnchored: parsed.data.soulAnchored,
+  });
 });
 
 router.delete('/:memId', async (req: Request, res: Response): Promise<void> => {
