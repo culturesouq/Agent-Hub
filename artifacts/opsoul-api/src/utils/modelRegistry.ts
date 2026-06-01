@@ -210,16 +210,18 @@ const PROVIDERS: Record<string, ProviderConfig> = {
  *            relies on the LLM reliably firing tool calls when the
  *            operator presents them, which Kimi handles better)
  *
- * Birth engine stays on Sonnet 4.6 (BIRTH_MODEL_ID) — separate concern.
+ * Birth engine also uses Kimi K2.5 — owner directive 2026-06-01: OpSoul runs
+ * Kimi-only, no other LLM access anywhere (birth included). Per [[no-fallbacks]]
+ * and patent-architecture lock — every dispatch path goes through the same model.
  */
 export const DEFAULT_MODEL_ID = 'moonshotai/kimi-k2.5';
 
 /**
- * Birth-time model used by chat.ts:extractBirthIdentity. Sonnet 4.6 chosen
- * because birth is irreversible and identity-critical; cost is paid once
- * per operator. Kept separate from DEFAULT_MODEL_ID so runtime stays cheap.
+ * Birth-time model. Was anthropic/claude-sonnet-4.6 historically (one-time
+ * identity-extraction cost). Changed 2026-06-01 to also use Kimi K2.5 — owner
+ * directive: OpSoul is Kimi-only, no Claude/GPT/Gemini at runtime including birth.
  */
-export const BIRTH_MODEL_ID = 'anthropic/claude-sonnet-4.6';
+export const BIRTH_MODEL_ID = DEFAULT_MODEL_ID;
 
 /**
  * Look up the provider config for a model.
