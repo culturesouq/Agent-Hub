@@ -4374,3 +4374,22 @@ psql "$DATABASE_URL" -f scripts/2026-06-01-enforce-kimi-only.sql
 **Not touched in this commit**: `growEngine.ts` stale variable names (`claudeRaw`, `claudeReasoning`, `parseClaudeResponse`). Runtime is Kimi (`GROW_MODEL` constant); only the variable names carry historical labels. Cosmetic rename deferred so this commit stays focused on the runtime change.
 
 **[[no-fallbacks]] compliance**: yes. The change removes a hardcoded non-Kimi runtime path. The `operator.defaultModel` override path is preserved because that's explicit per-operator configuration, not fallback.
+
+
+### 2026-06-01 — Deploy: opsoul--0000076 (Kimi-only enforcement LIVE)
+
+**Sequence:**
+
+1. `git push origin main` — `f1c444f..1b8e874` pushed to `culturesouq/Agent-Hub` (2 commits: 16f89d9 enforce-Kimi-only + 1b8e874 SoT update)
+2. `az acr build --registry banistudioacr --image opsoul-api:kimi-only-1b8e874 -f Dockerfile .` — succeeded, build digests `sha256:89f819f0…` / `sha256:2cf067cf…`
+3. `az containerapp update -n opsoul -g bani-studio-rg --image banistudioacr.azurecr.io/opsoul-api:kimi-only-1b8e874` — new revision `opsoul--0000076` created server-side (client timed out polling — transient Azure CLI ConnectionResetError, ignored)
+4. Polled revision health until terminal: `opsoul--0000076` reached **Healthy** state, **Active=True**, **Traffic=100%**, image `kimi-only-1b8e874`
+5. Smoke `/api/models` → **HTTP 200** in 135ms — new code serving
+
+**Active Revision**: `opsoul--0000076` (Healthy 2026-06-01T~15:15Z — Kimi-only enforcement on top of opsoul--0000075 station rewrite + Phase 1B/2/2B integrated cleanup)
+
+**Source commit (live)**: `16f89d9` "enforce Kimi-only: BIRTH_MODEL_ID -> DEFAULT_MODEL_ID + DB cleanup SQL"
+
+**Pending (owner-run when ready)**: `psql "$DATABASE_URL" -f scripts/2026-06-01-enforce-kimi-only.sql` — resets any `operators.default_model` that's non-Kimi to `'opsoul/auto'`. Code is correct without this; SQL closes the last per-operator-override loophole.
+
+**Rollback** (if needed): `az containerapp update -n opsoul -g bani-studio-rg --image banistudioacr.azurecr.io/opsoul-api:phase-2b-integrated-d33ae33` → reverts to opsoul--0000075 (pre-Kimi-enforcement).
