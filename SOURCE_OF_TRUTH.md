@@ -4331,3 +4331,46 @@ Subtitle: *"From Hajeri Foundation to Multi-Operator Governance — A UAE Archit
 
 Paper transforms from "UAE built an AI" (descriptive) to "UAE proposes a doctrine for AI in the international order" (theoretical contribution + policy framework + existence proof). Editorial fit + Davos keynote material.
 
+
+
+### 2026-06-01 — Kimi-only enforced across runtime (incl. operator birth)
+
+**Trigger**: owner ran a chat session that surfaced "Claude" responses + "I don't have HTTP tool" denial — investigation traced two possible causes:
+1. **Claude.ai (web product)** mistaken for a Nahil operator session — separate product, no OpSoul wiring
+2. **`BIRTH_MODEL_ID = 'anthropic/claude-sonnet-4.6'`** — one legacy runtime path still using Claude for one-time operator-birth identity extraction (`chat.ts:265`)
+
+Owner directive (verbatim): *"i want you to go deep there and all kimi , there no access for any other LLm"*
+
+**Audit**: every LLM dispatch site in `artifacts/opsoul-api/src/`:
+
+| Site | Model |
+|---|---|
+| `modelRegistry.ts:215` DEFAULT_MODEL_ID | `moonshotai/kimi-k2.5` ✓ |
+| `modelRegistry.ts:222` BIRTH_MODEL_ID (BEFORE) | `anthropic/claude-sonnet-4.6` ❌ |
+| `modelRegistry.ts:222` BIRTH_MODEL_ID (AFTER) | `DEFAULT_MODEL_ID` (= Kimi) ✓ |
+| `utils/openrouter.ts` CHAT_MODEL | `DEFAULT_MODEL_ID` (= Kimi) ✓ |
+| `utils/openrouter.ts` KB_MODEL | `DEFAULT_MODEL_ID` (= Kimi) ✓ |
+| `utils/growEngine.ts` GROW_MODEL | `moonshotai/kimi-k2.5` (var names still "claude*" — cosmetic, deferred) ✓ |
+| `chat.ts:534` runtime | `operator.defaultModel || DEFAULT_MODEL_ID` — per-operator override path stays (used intentionally; not fallback) |
+| `public-chat.ts`, `public-crud.ts`, `telegram-webhook.ts`, `whatsapp-webhook.ts` | same selector → Kimi |
+| `modelRegistry.ts:100-177` registry dropdown (Claude/GPT/DeepSeek/Gemini entries) | metadata only, picker UI, not runtime defaults |
+| `scripts/mcpSmoke.ts` | smoke test, not runtime |
+
+**Code change** (`artifacts/opsoul-api/src/utils/modelRegistry.ts`):
+```diff
+-export const BIRTH_MODEL_ID = 'anthropic/claude-sonnet-4.6';
++export const BIRTH_MODEL_ID = DEFAULT_MODEL_ID;
+```
+
+**DB cleanup script** (`scripts/2026-06-01-enforce-kimi-only.sql`): resets any `operators.default_model` that is non-Kimi to `'opsoul/auto'` (which resolves to Kimi via selector). Idempotent. Run when DB reachable:
+```bash
+psql "$DATABASE_URL" -f scripts/2026-06-01-enforce-kimi-only.sql
+```
+
+**Commit**: `16f89d9` — "enforce Kimi-only: BIRTH_MODEL_ID -> DEFAULT_MODEL_ID + DB cleanup SQL"
+
+**Deploy**: pending (this commit). Once revision `opsoul--00000XX` lands, every dispatch path (chat, birth, GROW, KB, public-chat, all webhooks) is Kimi-only. No Claude/GPT/Gemini at runtime.
+
+**Not touched in this commit**: `growEngine.ts` stale variable names (`claudeRaw`, `claudeReasoning`, `parseClaudeResponse`). Runtime is Kimi (`GROW_MODEL` constant); only the variable names carry historical labels. Cosmetic rename deferred so this commit stays focused on the runtime change.
+
+**[[no-fallbacks]] compliance**: yes. The change removes a hardcoded non-Kimi runtime path. The `operator.defaultModel` override path is preserved because that's explicit per-operator configuration, not fallback.
