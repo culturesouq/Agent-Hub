@@ -166,6 +166,8 @@ The patent draft (IPPT-2026-000028, not yet filed) needs these reconciliations b
 | **Nahil "hi" → "Server error 404"** | **Root cause confirmed + fixed 2026-05-13.** Nahil's owner conv list contained a stray conversation (`cc494a1d`) I accidentally created at 10:30 today via a smoke test (POST /v1/chat with `userId: "farmer-test-42"`). That conv was stored with `owner_id = <real owner>` but `scope_id = "authenticated:farmer-test-42"`. The `/api/operators/:id/conversations` GET endpoint filtered by `owner_id` + `scope_type='authenticated'` but NOT by `scope_id`, so Hub UI received both convs, picked the newer one (the polluted one) as active. The subsequent POST to `/messages` was correctly rejected by `chat.ts:298` because the chat handler DOES filter by `scope_id` — returns 404 "Conversation not found" — and Hub UI displayed "Server error 404. Please try again." Two fixes: (a) deleted the stray conv row + its 2 messages via SQL admin op, (b) patched `conversations.ts` list query to filter `scope_id = buildOwnerScope().scopeId` exactly. List endpoint and messages endpoint now agree on the scope. Architectural fix — applies to every operator going forward. |
 | **GROW levels: collapse 4 + safeMode → real 3** | **Deferred 2026-05-19 — refactor is major, current default (CONTROLLED) works, no live risk today.** Current code has `growLockLevel` enum {OPEN, CONTROLLED, LOCKED, FROZEN} + `safe_mode` boolean. Real intent (owner directive): 3 levels — `LOCKED` (proposals fire, all decisions require owner approval — currently MISSING), `CONTROLLED` (LLM verifies + decides — current default behaviour), `NO_GROW` (engine off — currently spread across LOCKED/FROZEN/safeMode). Refactor scope: rewrite `categoriseFields` + `runGrowCycle` (`growEngine.ts`), drop `safe_mode` column, drop OPEN/FROZEN values, DB migration to map existing operators (OPEN→CONTROLLED, LOCKED/FROZEN/safeMode→NO_GROW). Default is CONTROLLED, no operators are at OPEN, refactor changes zero current behaviour — safe to leave parked. **Trigger to pick up:** first operator that needs LOCKED-with-approval (high-stakes — anything money-touching) — owner decides timing. Full plan in `/Users/bstar/OPSOUL_RED/PATENT_AUDIT_2026-05-18.md` FIX item #5. |
 | **MCP + tool catalog buildout** | **BUILT 2026-05-19 on branch `feat/mcp-runtime-layer` (8 commits, TypeScript clean, NOT DEPLOYED).** Single source of truth `utils/toolRegistry.ts` for the 12 universal builder tools, MCP-shaped, scope+availability gating. `utils/toolHandlers.ts` `dispatchTool()` is the single execution path used by chat.ts AND the new `/api/operators/:id/conversations/:convId/mcp` HTTP endpoint — internal and external both share the same handlers. Frontend `/skills/manifest` now sources from the registry too. Universal model adapter (`utils/modelRegistry.ts`) added: operators can run on Hajeri/Claude/GPT/Kimi/Gemini by setting `defaultModel`. chat.ts shrank 2261→1133 lines (1128 deleted duplicate dispatch). Patent-protected mechanisms untouched (skill trigger engine Claim 12, system prompt Layers 0–4, scope isolation, memory engine, GROW engine). Awaiting owner 4-operator smoke test before deploy. Full state in `[[project-opsoul-mcp-buildout]]` memory file. See § 8 entry below. |
+| **Support Operator — create + wire (Hares / الحارس)** | **NEW 2026-06-01** (after Nahil audit deploy). Nahil's app side now emits errors to `nahil.support_events` AND fire-and-forwards them to a separate Support Operator's `/v1/action` slot. Owner must: (1) create the operator in OpSoul via conversational birth flow per `[[feedback-operator-creation]]` — suggested name **Hares / الحارس** ("the guardian"). Role: monitor Nahil app errors, suggest fixes, alert admin. Does NOT mimic Nahil's voice — has its own identity. (2) Copy issued API key into Nahil's Azure env `SUPPORT_OPERATOR_API_KEY`. (3) Optional: set `SUPPORT_OPERATOR_URL` if a different OpSoul instance is used (defaults to `OPSOUL_API_URL`). Until step 2: Nahil records events to DB (visible in `Admin → Support Operator` tab), no `/v1/action` POST fires — no breakage. Reference: `/Users/bstar/nahil_2/docs/SUPPORT_OPERATOR.md` for the conversational creation prompt + role description. **Decision pending for Foundermoment**: per Nahil SoT §16.31, owner planned ONE dual-scoped operator (`nahil.support` + `fm.support`) rather than per-app. Confirm scope-split before creating. |
+| **Nahil-side audit deployed** | **CLOSED 2026-06-01.** Downstream contract changes that affect Nahil operator behavior — see § 8 entry `2026-06-01T~05:00Z — Nahil app full audit SHIPPED` for the full operator-impact matrix (new `/journey/advance` endpoint, 422 `profile_incomplete` error, confidence-scale normalization, BATCH_SIZE=5 + 0.70 auto-approve gate, articles cron permanently removed, etc.). Live on `nahilai--0000089`. |
 
 ### Seeding cadence — one insight at a time (rule, 2026-05-11)
 
@@ -262,6 +264,47 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 ---
 
 ## 8. Commit History — newest first
+
+### 2026-06-01T~05:00Z — Nahil app full audit SHIPPED (downstream consumer side, `nahilai--0000089`, image `audit-0b32484`)
+
+**Not an OpSoul code change** — but Nahil is OpSoul's primary downstream consumer, so contract-side changes that affect the Nahil operator's behavior go in this log.
+
+**Source range:** `cb9e24a..cd01ca1` (63 commits) merged on Nahil `main` from 6 parallel-agent audit branches (`audit/security`, `audit/schema`, `audit/onboarding`, `audit/autonomy`, `audit/marketplace`, `audit/polish`). 50 audit fixes + 6 migrations applied in production via `az containerapp exec --command "node scripts/run-migrations.js"` inside the live container.
+
+**What this means for OpSoul side / the Nahil operator:**
+
+| Contract change | Operator-side impact |
+|---|---|
+| **NEW endpoint**: `POST /api/agent/seasons/:id/journey/advance` (bearer + `seasons` scope) | Operator can now auto-advance a farmer's season to the next stage when all required tools complete — closes the "owner must be the gate" autonomy gap. Pair with `isStageComplete()` check before calling. |
+| **NEW 422 error**: `code: 'profile_incomplete'` from `/api/seasons/:id/journey/generate` | `SAFE_FALLBACKS` removed per `[[feedback-no-fallbacks]]`. When farmer's `crop` or `farmName` is blank, the route returns 422 with the missing-field list. Operator should respond by asking the farmer to complete profile (or call `PATCH /api/agent/users/:id` to backfill from context) — NOT compose a synthetic "your crop" answer. |
+| **runJourneyTool timeout + script-match**: 120s + `SCRIPT_REGEX_BY_LANG` (ar/zh/hi) | Operator responses now validated: non-empty, ≥20 chars, and contain expected script chars for `context.language`. Wrong-language responses get rejected and journey row stays `'generating'` for the sweeper to flip to `'failed'`. Means operator must respect the language hint in the prompt. |
+| **Confidence scale normalized**: `routes/knowledge.js` + `services/ai.js` now accept 0-1 OR 0-100 and clamp/normalize to 0-1 in storage | Operator can return either scale; no more `85` getting stored as `85.00` while everyone else thinks 0.85. Pre-fix latent bug per `[[project-opsoul-03-integer-bug]]` is resolved. |
+| **Auto-approve threshold**: `BATCH_SIZE=5` + `AUTO_APPROVE_CONFIDENCE=0.70` in `cron/nahilReview.js` | Owner's "one-at-a-time" KB seeding rule (§7 here) is partially relaxed for the Desk pipeline: 5 entries claimed per cycle, decisions ≥0.70 auto-promote, sub-threshold → `verification_status='needs_review'` (held back from `knowledge_index` until owner acts). Owner can drop back to `BATCH_SIZE=1` via env if voice drifts. |
+| **Articles cron PERMANENTLY removed** | The `POST /api/admin/articles/generate` admin trigger is gone (it dynamic-imported a non-existent file). `POST /api/agent/articles` remains as the operator-driven authoring path — operator writes when registry warrants synthesis, no scheduled boilerplate. SoT line claiming a weekly cron was wrong, now removed on Nahil side too. |
+| **Manual KB approve/reject UI removed from Admin** | Nahil cron is sole verifier. Operator's decisions are not over-ridden by Admin click-through any more. Aligns with the seeding-cadence rule (one-at-a-time → owner-verifies via the cron's transparent decision history, not via a "Approve" button). |
+| **`/api/admin/users/cleanup`** (NEW) | Admin can hard-delete test farmers (cascade + audit). Operator doesn't call this — owner-facing only. But operator should be aware: user IDs can disappear; cascade-handle the `user_not_found` case gracefully if encountered. |
+| **`/api/marketplace/inquiries`** now emails sellers | Bilingual email goes out fire-and-forget when the operator posts an inquiry via `POST /api/agent/marketplace/inquiries`. SendGrid failure does not 500 the inquiry write. |
+| **Sensor uplinks** require pre-registration (`SENSOR_AUTO_REGISTER=false` in prod) | Operator's `POST /api/agent/sensor-readings` to an unknown device now 404s. Operator should never blindly POST — verify device via `GET /api/agent/sensor-devices/:id` first or surface "device not registered" to user. |
+| **Paywall on Smart Journey** (owner WIP committed pre-audit) | Free users hit 402 on `/api/seasons/:id/journey/generate`. Operator's UX should NOT offer to "try it for free" — point them at `/Pricing`. UI already renders an upgrade-CTA card on 402. |
+
+**NEW OPERATOR REQUIRED — Support Operator (Hares / الحارس)**
+
+Nahil now emits app-side errors (any `/v1/*` failure path) to `nahil.support_events` AND fire-and-forwards them to a separate Support Operator's `/v1/action`. Owner needs to:
+1. Create the operator in OpSoul (conversational flow per `[[feedback-operator-creation]]`) — suggested name **Hares / الحارس** ("the guardian")
+2. Operator's role: monitor app errors, suggest fixes, alert admin. Reads `support_events` context, replies with diagnosis. NEVER fakes Nahil-the-operator's voice — it has its own identity.
+3. Copy issued API key into Azure env `SUPPORT_OPERATOR_API_KEY` on Nahil's container app
+4. Until set: Nahil still logs to `support_events` (visible in Admin → Support Operator tab); `/v1/action` POST is skipped silently — no breakage
+
+**Until Hares is created, the integration is in standby mode** — Nahil records events, no OpSoul-side processing. Reference: `/Users/bstar/nahil_2/docs/SUPPORT_OPERATOR.md` for the full conversational creation prompt + role description.
+
+**Health post-deploy:**
+- `nahilai--0000089` Healthy / 100% traffic / 2 replicas / HTTP 200 in 78ms on `https://nahilai.com/`
+- All 6 migrations applied (cleanup_audit, cron_state, research_focus column, sensor_dedup index, stripe_webhook_events, support_events)
+- One-line rollback: `az containerapp ingress traffic set -n nahilai -g bani-studio-rg --revision-weight nahilai--0000087=100`
+
+**Cross-reference:** Full audit details in `/Users/bstar/nahil_2/SOURCE_OF_TRUTH.md` (sections "2026-06-01 — Audit Execution Log — A1..A6" + "2026-06-01 — DEPLOYED — nahilai--0000089").
+
+---
 
 ### 2026-05-24T~19:45Z — owner-kb: docs stay whole, chunker killed SHIPPED (`opsoul--0000074`, image `no-chunk-86f5c71`)
 
@@ -3586,4 +3629,705 @@ Rollback commands (in priority of recency):
 - [ ] **Owner: send patent submission package to Lavender.IP (tomorrow)** — files ready in `/Users/bstar/OPSOUL_RED/` (Summary EN+AR, Description EN+AR, Diagrams_v2 + Bilingual, Claims_EN_v2, Glossary_v2_diff)
 - [ ] **Then watch Hajeri together** (SFT pass 1 ~80% complete; loss 4.4 descending; judge only after loss<3 + pass complete per owner standing rule)
 - [ ] **Post-patent**: commercial track per detailed plan (npm scopes, REST API, hosted console, Stripe, design-partner quiet launch)
+
+
+### 2026-05-31 — Hajeri SFT waiting protocol (locked)
+
+Owner reasoning (correct):
+- Most SFT corpus is novel exposure (~60-70% is fresh HF content)
+- Even "old" round2_clean data appears in NEW framing (CE-only, no teacher logits, no identity-injection chunks)
+- Strong refusal at U400 = model defending KD-learned ground (training data + identity = only stable patterns it has)
+- Per-pass SystemRandom shuffle means pass 2 ordering differs from pass 1 — model gets 2nd-exposure-with-prior-context
+- Need at least half-of-pass-2 before patterns stabilize enough to judge
+
+Protocol locked:
+1. Let pass 1 complete (currently ~80% through; ~3-4 hours remaining)
+2. Let pass 2 run to at least 50% (~3 more hours)
+3. Watch LOSS TRAJECTORY (not chat quality) during pass 2:
+   - Descending (4.5 → 4.0 → 3.5 → 3.0) = patterns settling; KEEP GOING
+   - Flatline at 4.X = stable suboptimal; reconsider data mix or LR
+   - Spike up = catastrophic forgetting; STOP investigate
+4. Only THEN judge via chat tests
+5. No interventions before that
+
+Standing rule reinforced: no Option A/B/C recommendations until protocol-satisfied OR owner asks.
+
+
+### 2026-05-31 — hajeri.cultureyes.ae as 4th commercial track (locked)
+
+Owner insight: coherence is relative; even humans need external reminders to stay on-track mid-conversation. Hajeri doesn't need weights-level perfection — just needs good weights + memory layer + reminder injection per turn. ChatGPT's "memory" feature follows the same pattern.
+
+Architecture (clean — single codebase, two configs):
+
+| Product | Backend config | Tools | Users |
+|---------|---------------|-------|-------|
+| opsoul.dev / console.opsoul.dev | Multi-customer, all-operator | Full Hub tool set, customer-installed integrations | Developers building their own operators |
+| hajeri.cultureyes.ae | Single-operator (Hajeri itself), visitor-scoping | Curated MCP subset (web_search, firecrawl scrape/map/extract/search, get_current_time, restricted http_request) | Public visitors |
+
+Both leverage:
+- Same OpSoul backend code (`artifacts/opsoul-api/`)
+- Same MCP toolRegistry + dispatch pipeline (`utils/toolRegistry.ts`, `utils/toolHandlers.ts`, `utils/mcpServer.ts`)
+- Same memory architecture (L1/L2, scope isolation, soul-anchor decay, PII regex backstop)
+- Same Hajeri inference server (one model service consumed by both)
+- Same patent-protected mechanisms — protected by closed-source backend per `[[closed-backend-distribution]]`
+
+MCP tool curation per deployment mode handled by existing scope+availability gating from Phase 1B — no new code needed, just config tables.
+
+Sequencing (post-patent):
+1. Day 1-2: reserve npm scopes + register hajeri.cultureyes.ae backend infra (Azure Container App + DB)
+2. Week 1: stand up hajeri.cultureyes.ae backend in "single-Hajeri mode" — extract memory layer config + define curated MCP tool subset + visitor-scoping via existing scope-isolation
+3. Week 2: chat UI deployed at hajeri.cultureyes.ae — stripped-down OpSoul Hub chat panel reskinned for Hajeri brand
+4. Week 3: quiet launch hajeri.cultureyes.ae (friends/family/Twitter)
+5. Week 4: OpSoul platform commercial track per existing plan
+6. Month 3: Hajeri-12B upgrade simultaneously benefits both surfaces
+
+This is BETTER than OpSoul-first commercial sequence because:
+- Validates Hajeri brand + memory architecture in production faster
+- Single product, lower complexity for first launch
+- Direct user feedback loop (vs developer adoption loop)
+- Provides real-world conversations to inform Hajeri-12B training direction
+- Proof-of-life for closed-backend distribution model (chat.openai.com pattern)
+
+Active Plans updated: hajeri.cultureyes.ae is now part of the post-patent commercial track, sequenced FIRST (Week 1-3) before OpSoul platform (Week 4+).
+
+
+### 2026-05-31 — KB scoping (locked) + opsoul.dev subdomain plan (locked)
+
+#### KB / memory scoping rules (locked per owner directive)
+
+| Operator type | KB visibility | Memory visibility |
+|---------------|---------------|-------------------|
+| Owner's operators (Vael, Nahil, Istishari, Bani) | `owner_kb` (full) + their `operator_kb` | Owner's L1/L2 scope |
+| Customer's operators | Their `operator_kb` (scoped by `customerId`) + `owner_kb` rows marked `public_share=true` only | Customer's L1/L2 scope (per `customerId`) |
+| Cross-customer leak | IMPOSSIBLE — enforced by `customerId` column on every query + Claim 12 scope isolation | IMPOSSIBLE — same enforcement |
+
+Implementation (Phase 4 Week 1 commercial work):
+1. Add `customer_id` FK to `operator_kb`, `l1_memories`, `l2_memories`, `operator_skills`, `operator_kb_search_log`, `operator_firecrawl_usage`, all per-operator tables (use `ALTER TABLE IF NOT EXISTS` pattern from existing schema)
+2. Add `public_share BOOLEAN DEFAULT FALSE` to `owner_kb` (owner opts in per row whether to share with customer operators)
+3. Update `searchBothKbs()` to filter `owner_kb` by `(creator_operator_id IN owner_operators OR public_share=true)` and `operator_kb` by `customer_id = ?`
+4. Update every memory query to filter by `customer_id`
+5. Add per-`customerId` scope-isolation context to `buildScopeContext()` (extends existing scope isolation)
+6. Audit trail: every cross-scope query attempt logged as security event
+7. Verify: no query in codebase reaches `operator_kb` / `l1_memories` / `l2_memories` without `customer_id` filter
+
+#### opsoul.dev subdomain plan (locked)
+
+Domain purchased from Namecheap 2026-05-31 by owner.
+
+Recommended DNS host: **Cloudflare** (free; better than Namecheap on every dimension — speed, SSL, DDoS, analytics). Owner sets Cloudflare nameservers on Namecheap when ready.
+
+Subdomain mapping (for DNS scripting at deploy time):
+
+| Subdomain | Purpose | Backend |
+|-----------|---------|---------|
+| `opsoul.dev` | Marketing landing page | Static site or Cloudflare Pages |
+| `console.opsoul.dev` | Hosted customer UI (multi-tenant) | Azure Container App — extracted from `artifacts/opsoul-hub/` |
+| `api.opsoul.dev` | Backend REST API | Azure Container App `opsoul` (current production, just custom-domain alias) |
+| `mcp.opsoul.dev` | External MCP server endpoint | Same Azure Container App, `/mcp` route |
+| `docs.opsoul.dev` | API + product documentation | Cloudflare Pages |
+| `status.opsoul.dev` | Uptime status page | BetterStack / StatusPage free tier |
+
+Codebase changes deferred to Phase 4 Week 1:
+- Add `https://*.opsoul.dev` to CORS allowlist
+- Set `API_BASE_URL=https://api.opsoul.dev` env var
+- Azure managed cert OR Cloudflare proxy SSL
+- `az containerapp hostname add` for custom domain binding
+
+Current `opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io` stays functional until cutover.
+
+#### Active Plans — domain infrastructure
+- [x] ✅ opsoul.dev domain purchased (Namecheap)
+- [ ] Owner: add opsoul.dev to Cloudflare (10 min, free) — get nameservers, paste into Namecheap
+- [ ] Phase 4 Week 1: DNS records + CORS + Azure hostname binding + SSL — all scripted from above subdomain table
+- [ ] Phase 4 Week 1: KB / memory `customer_id` scoping implementation (Claim 12 extension)
+- [ ] hajeri.cultureyes.ae domain — owner already owns, similar setup pattern
+
+
+### 2026-05-31 — opsoul.dev DNS values (pre-fetched from Azure, ready to apply when owner does it)
+
+**Container app target (existing prod):**
+- Container App: `opsoul` (rg `bani-studio-rg`, env `bani-studio-env`, region UAE North)
+- Default domain: `opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io`
+- **Static IP** (A record target): `20.233.136.103`
+- **Verification ID** (TXT record value): `5D69D3C199B4E2E2722BDE671D1258A5A294E2C40C94D2FB7D725F1D1A71C9A6`
+
+Verification ID is FIXED across all hostnames on this container app (proven pattern per `[[bani-domain-connection]]`). Use HTTP validation only — TXT cert validation fails in UAE North.
+
+**DNS records (apex):**
+
+| Type | Host | Value |
+|------|------|-------|
+| A | @ (apex / blank) | 20.233.136.103 |
+| TXT | asuid | 5D69D3C199B4E2E2722BDE671D1258A5A294E2C40C94D2FB7D725F1D1A71C9A6 |
+
+**Optional subdomains (same verification ID for each):**
+
+| Type | Host | Value |
+|------|------|-------|
+| A | console | 20.233.136.103 |
+| TXT | asuid.console | 5D69D3C199B4E2E2722BDE671D1258A5A294E2C40C94D2FB7D725F1D1A71C9A6 |
+| A | api | 20.233.136.103 |
+| TXT | asuid.api | 5D69D3C199B4E2E2722BDE671D1258A5A294E2C40C94D2FB7D725F1D1A71C9A6 |
+| A | mcp | 20.233.136.103 |
+| TXT | asuid.mcp | 5D69D3C199B4E2E2722BDE671D1258A5A294E2C40C94D2FB7D725F1D1A71C9A6 |
+
+**Azure binding commands (run after DNS records saved + propagated 5-30 min):**
+
+```
+az containerapp hostname add -n opsoul -g bani-studio-rg --hostname opsoul.dev
+az containerapp hostname bind -n opsoul -g bani-studio-rg --hostname opsoul.dev \
+    --environment bani-studio-env --validation-method HTTP
+```
+
+Repeat for each subdomain (replace `opsoul.dev` with `console.opsoul.dev`, `api.opsoul.dev`, etc.).
+
+After binding, also update env vars on container app: `API_BASE_URL=https://api.opsoul.dev`, add `https://*.opsoul.dev` to CORS allowlist in code.
+
+
+### 2026-05-31 — Hajeri SFT U800 chat observation + corpus filter leak (logged for next iteration)
+
+U800 chat test (owner-initiated mid-pass-2):
+
+**Improvements vs U400:**
+- Greetings elicit greeting-response attempts (not rigid identity assertion)
+- "are you an assistant?" → "I am Hajeri" (correct identity defense in English; no more Spanish "soy")
+- Conversational openings emerging
+- Multi-language word salad reducing in identity contexts
+
+**Concerns (still):**
+- Refusal template "favorite books" still firing on benign questions
+- Coherence fragmenting on context-less single-turn prompts
+- Math/random generation on under-specified inputs
+
+**NEW concern (corpus filter leak discovered):**
+
+The Phase 2 EN cleanup agent's filter list caught DECLARATIVE servile patterns ("I am here to help", "I'm happy to assist", "feel free to ask") but MISSED **QUESTION-form** servile patterns:
+
+- "How can I assist you today?"
+- "How can I help you?"
+- "How may I help you?"
+- "What can I help you with?"
+- "I'd be happy to help"
+- "I'd love to help"
+- "I love to help you"
+- "Let me know if you need anything"
+
+These slipped into the cleaned SFT corpus and the model is now learning them at U800.
+
+**For NEXT SFT prep iteration (post-current-training):**
+
+Expand the servile-pattern regex in cleanup filter to include:
+```python
+SERVILE_QUESTION_PATTERNS = [
+    r"\bhow\s+(can|may|do|might)\s+i\s+(assist|help)\b",
+    r"\bwhat\s+can\s+i\s+(help|do|assist)\b",
+    r"\b(?:i'?d|i\s+would)\s+(be\s+happy|love)\s+to\s+help\b",
+    r"\b(?:let\s+me\s+know|feel\s+free\s+to\s+ask)\b",  # already partially covered
+    r"\bi\s+love\s+to\s+help\b",
+    r"\bi'?m\s+here\s+to\s+(help|assist|serve)\b",  # already covered
+    r"\bhappy\s+to\s+(help|assist)\b",
+]
+```
+
+Apply same set to all language-specific agents (DE/ES/FR/IT/RU/AR/CJK question-form servile patterns — translate the question-form list per language).
+
+**Decision deferred:** owner picks after current SFT pass 2 completes whether to:
+- Re-run SFT prep with expanded filter + restart from KD2-Final (clean slate)
+- OR accept current leak + handle via post-SFT calibration / next major iteration
+- OR continue as-is and address in Hajeri-12B SFT pipeline
+
+NO mid-pass-2 intervention per locked protocol.
+
+
+### Decision (owner, 2026-05-31): NOT STOPPING training despite U800 servile-pattern leak
+
+Owner reasoning: corpus leak of question-form servile patterns ("How can I assist you today?") is acceptable now because conversational install is the SFT priority. Multi-layer remediation later:
+
+1. Burnin phase (post-SFT) re-locks identity and dilutes servile patterns
+2. Memory layer at hajeri.cultureyes.ae runtime filters/redirects servile defaults via system prompt + reminder injection
+3. Hajeri-12B SFT pipeline applies expanded filter at corpus level (see filter additions logged above)
+
+Per `[[hajeri-recitation-before-discipline]]`: SFT installs recitation; discipline of when-to-deploy comes from later phases + runtime memory.
+
+Action: NONE. Continue SFT pass 2 through completion. Reassess after pass 2 complete + chat test on the final checkpoint.
+
+
+### 2026-05-31 — SFT corpus leak audit (post-pretokenize scan)
+
+Owner asked how many servile examples caused the U1100 behavioral leak. Scan of `data/sft_clean/*/*_cleaned.jsonl`:
+
+**Total examples**: 179,777
+**Examples with ANY leak**: 2,447 (1.36%)
+
+**Per-pattern (assistant-side messages only, of 259,079):**
+
+| Pattern | Count | % |
+|---------|------:|----|
+| `[name]` placeholder tokens | 1,282 | 0.495% |
+| "let me know if" | 581 | 0.224% |
+| "Hello! How can I assist you today?" | 419 | 0.162% |
+| "How can I assist" | 415 | 0.160% (overlaps above) |
+| "How can I help" | 207 | 0.080% |
+| "I'd be happy to help/assist" | 152 | 0.059% |
+| "How may I help" | 116 | 0.045% |
+| "What can I help/do/assist" | 38 | 0.015% |
+| "Feel free to ask" | 36 | 0.014% |
+| "Assistant:" literal token | 6 | 0.002% |
+| "Love to help" | 3 | 0.001% |
+| "I'm here to help" | 1 | 0.000% |
+
+**Key surprise findings:**
+
+1. **Placeholder-token leak (`[name]`) is the BIGGEST**, not servile question-form. 1,282 examples (0.495%). Sources: Arabic-OpenHermes machine-translated email/marketing templates with unfilled placeholders + English creative-writing templates with `[name]` markers.
+
+2. **419 verbatim copies** of "Hello! How can I assist you today?" — extreme repetition lock + LIMA-scale (>1000 examples) makes the pattern uneraseable in current SFT.
+
+3. **Arabic-OpenHermes is the main bleed channel** for English servile patterns into the Arabic file: machine-translated entries preserved English alongside Arabic; native-language verification let them through because example contained enough Arabic chars.
+
+**For next pretokenize iteration (Hajeri-12B or post-current-SFT re-run):**
+
+```python
+SERVILE_QUESTION_PATTERNS = [
+    r"\bhow\s+can\s+i\s+assist\b",
+    r"\bhow\s+may\s+i\s+(help|assist)\b",
+    r"\bhow\s+can\s+i\s+help\b",
+    r"\bwhat\s+can\s+i\s+(help|do|assist)\b",
+    r"\b(?:i'?d|i\s+would|i'?m)\s+(?:be\s+)?happy\s+to\s+(help|assist)\b",
+    r"\bi\s+(?:would\s+)?love\s+to\s+help\b",
+    r"\blet\s+me\s+know\s+if\b",
+    r"\bfeel\s+free\s+to\s+(ask|reach)\b",
+    r"\bi'?m\s+here\s+to\s+(help|assist|serve)\b",
+]
+
+PLACEHOLDER_PATTERNS = [
+    r"\[name\]",
+    r"\[user\s*\d*\s*name\]",
+    r"\[your\s+name\]",
+    r"\[username\]",
+    r"\[اسمك\]",
+    r"\[الاسم\]",
+    r"\[city\]",
+    r"\[date\]",
+    r"\[المدينة\]",
+    r"\[التاريخ\]",
+    r"\[email\]",
+    r"\[address\]",
+]
+
+# Arabic-OpenHermes specifically: drop if ANY 100+ consecutive English chars in labeled-Arabic example
+def has_english_block(text, threshold=100):
+    import re
+    return bool(re.search(r"[A-Za-z][\sA-Za-z'.,!?-]{" + str(threshold-1) + r",}", text))
+```
+
+NO change to current SFT run — locked. Apply at next prep cycle.
+
+
+### 2026-05-31 — Placeholder leak: tokenizer confirmed + source ranked
+
+Owner refined concern: servile phrasing ("How can I assist") is acceptable polite customer-service; the REAL problem is `[name]` placeholder tokens appearing literally under Hajeri role.
+
+Tokenizer scan confirmed: `[name]` is NOT a special token. Regular BPE pieces (`[`, `Name`, `]`). Model learned `<HAJERI>` → `Hi, I'm [name].` as plain-text sequence — no fill-in mechanism, just statistical pattern matching.
+
+**1,536 HAJERI-role turns contain placeholder tokens** (slightly higher than initial 1,282 because Arabic variants `[اسم العميل]`, `[اسم الضيف]`, etc. included).
+
+Per source:
+- persona_chat (Google): 669 — uses `[user 2 name]` as literal persona placeholder (the 44% biggest offender)
+- wildchat: 351 — English email/marketing templates
+- arabic-openhermes: 111 — Arabic translated templates
+- ultrachat: 94
+- local_oasst1_en: 91
+- cidar (Arabic-curated): 82
+- wildchat-ar: 59
+- others combined: ~70
+
+All samples are template content (emails, marketing letters, formal correspondence) — none are real conversational responses where `[name]` makes sense. These are broken template entries that slipped through cleanup.
+
+**Next-iteration filter (single regex eliminates all 1,536):**
+
+```python
+DROP if assistant_content matches:
+  r"\[(?:name|Name|اسم[^\]]*|user\s*\d*\s*name|your\s+name|first\s+name|last\s+name|client|recipient|sender|城市|date|تاريخ|address|عنوان)\]"
+```
+
+Plus consider: exclude Persona-Chat entirely from next iteration (high-value greetings can come from WildChat which has fewer placeholder issues).
+
+Current SFT locked — placeholder pattern installed in model. Mitigation order:
+1. Burnin post-SFT (dilute)
+2. Memory layer at hajeri.cultureyes.ae (post-generation filter: detect `[name]` in output → regenerate)
+3. Next SFT pretokenize iteration with filter above (eliminate at source)
+
+
+### 2026-05-31 — THREE-PATENT STRATEGY LOCKED
+
+Owner's clarification: OpSoul, SRAG, and Hajeri each need their OWN patent. Separation rationale:
+
+| Patent | Scope | Prior art domain | Defense surface |
+|--------|-------|------------------|-----------------|
+| **OpSoul** (filing 2026-05-31 via Lavender.IP) | Operator runtime architecture: identity layers, scope isolation, memory L1/L2, GROW evolution, MCP runtime, operator-collaborative firewall, trained discretion, curiosity engine, 5-tier source trust, scope routing, archetype/role system, capability requests | LLM application architecture | System-level claims about identity-anchored agent platform |
+| **SRAG** (separate filing, post-OpSoul) | Sovereign RAG architecture: entity+insight types, dedup, source provenance, Vael-as-Service productization, tag-required ingestion, stop-crawl mechanism, dual-corroboration retrieval | RAG/vector-search/knowledge-base systems | Sovereign-data + verified-source architecture |
+| **Hajeri** (third filing, NEW track) | Custom LLM architecture + training methodology | ML training literature, model architecture | Model architecture + training methods — harder for competitors to detect, distinct from OpSoul which is application-layer |
+
+#### Hajeri patent — claimable material already documented
+
+**Architecture novel:**
+- GatedFusionEmbedding (gated multi-source embedding, sigmoid-controlled blending)
+- HajeriLM with QK-norm + custom RMSNorm + parallel-channel MLP option
+- 100K multilingual BPE with `<TOOL>` / `<HAJERI>` / `<USER>` / `<SYSTEM>` special tokens
+- Net2Net DOWN shrinkage (3B → 458M)
+- Bidirectional KD = capability transfer + reflexive teacher characterization
+- Cross-tokenizer alignment via text-span-overlap
+
+**Training methodology novel:**
+- Cross-tokenizer multi-teacher KD (cross-family teachers Qwen + Mistral + Aya)
+- Identity-anchored KD with multi-teacher imitation defense
+- Lottery vs Curation foundational frame
+- Recitation before Discipline (KD installs recitation; SFT installs discipline)
+- Alphabet before Algebra (effective-loss balancing, not stated-weight balancing)
+- Easy first, Hard later (skip threshold + shock deferral)
+- Stop imitating, find self (KD→SFT transition signal via teacher-voice leak detection)
+- Word-association as KD diagnostic (borrowed from Jung)
+- 5-tier source trust ladder for training-data curation
+- Vael→SRAG→Hajeri series content architecture
+- Per-pass SystemRandom shuffle + chunk-in-pass resume
+- Skip threshold + mastery registry for efficient resumption
+- Context-aware placeholder substitution at corpus level
+- Trained discretion — knowledge + non-disclosure instinct at identity layer
+
+**Already published (prior art credit):**
+- LM-Head-Locking paper on Zenodo, DOI 10.5281/zenodo.20446689
+- ML vs HL methodology paper draft at `/Users/bstar/OPSOUL_RED/METHODOLOGY_ML_VS_HL.md`
+
+#### Sequencing
+
+1. **Tomorrow**: OpSoul submission to Lavender.IP (priority date locked)
+2. **After OpSoul submission**: same-attorney conversation to scope SRAG patent separately
+3. **After Hajeri SFT + burnin complete** (next 1-2 weeks): Hajeri patent draft — has the most documented methodology + needs trained model to point to as reduction-to-practice evidence
+4. **Three patents = three independent moats**
+
+Active Plans updated.
+
+
+### 2026-05-31 — TRENDS Research & Advisory publication track (planned)
+
+Owner has personal connection: Dr. Mohammed Al Ali (CEO/Founder of TRENDS, Abu Dhabi-based globally-recognized think tank since 2014, AI4ID Alliance launched, 2026 Dubai initiatives focused on AI + international cooperation).
+
+Strategic angle: Hajeri's system-prompt principle ("adapt but never adopt, never drift") = identical to the framework nations need for engaging AI in IR contexts. Maps technical-architecture principle to policy-framework principle.
+
+Publication concepts (owner picks one or pair):
+1. "Adapt, Don't Adopt: Architectural Principles for Sovereign AI in International Relations" — flagship technical-policy bridge
+2. "The Lottery vs The Curation: Why Sovereign Nations Need Sovereign LLMs" — `[[hajeri-lottery-vs-curation]]` applied to national-AI policy
+3. "Trained Discretion: An Architecture for Information Sovereignty" — patent-protected mechanism as IR policy framework
+4. "Building Hajeri: A Case Study in National AI Capacity" — UAE-specific brand-building narrative
+
+Strategic interplay with patents:
+- Methodology framework (publication-safe) → STRENGTHENS patent (independent recognition)
+- Technical claims (gated fusion, training methods) → SKIP in publication; file Hajeri patent first
+- Case study narrative → NEUTRAL; patent can reference
+- Policy implications → STRENGTHENS broader defensive moat
+
+Sequencing:
+1. OpSoul patent submission (tomorrow via Lavender.IP) — priority date locked
+2. Hajeri SFT completes + chat-test verdict (next 1-2 weeks)
+3. Draft TRENDS publication after priority date locked + Hajeri post-SFT case-study substance available
+4. Hajeri patent filing in parallel (next 1-2 weeks via Lavender or separate IP counsel)
+5. TRENDS publication 2-4 weeks after both patents filed
+
+Active Plans updated.
+
+
+### 2026-05-31 — KNOWLEDGE STRATEGY LOCK: Hajeri as Gatekeeper+Verifier, not Encyclopedia
+
+Owner reframing (correct architectural insight): Hajeri's role is GATEKEEPER + VERIFIER, not knowledge-storage. The 458M weights should install CAPABILITIES (logic, tool-use, judgment, identity, verification), not FACTS. Knowledge lives in retrievable runtime architecture.
+
+#### Architecture stack (locked)
+
+```
+USER question
+    ↓
+HAJERI weights (458M): parse intent → decide know-or-fetch → route → verify → respond with provenance
+    ↓
+Runtime knowledge layer:
+   ├─ KG (Knowledge Graph): owner-verified structured facts, sovereign, traceable
+   ├─ SRAG: Vael-curated content with source URLs (per [[srag]])
+   ├─ Memory L1/L2: per-session + cross-session context (per OpSoul pattern)
+   └─ MCP tools: Firecrawl, web_search, calculator, datetime, integrations
+```
+
+Hajeri stays SMALL (458M sufficient) because he doesn't memorize encyclopedia — he reasons + retrieves + verifies.
+
+#### Revised knowledge install (~380 examples, JUDGMENT not facts)
+
+| Category | Count | Purpose |
+|----------|------:|---------|
+| Tool-routing patterns | 80 | When to call which tool |
+| Verification patterns | 50 | Cross-reference + source-trust application |
+| Epistemic humility | 40 | "I don't know; let me check [tool]" |
+| Logic & reasoning | 60 | Deduction, contradiction detection, chain reasoning |
+| Multi-turn coherence | 40 | Back-reference, context-carry, follow-up |
+| Identity reinforcement | 30 | Trained discretion variants |
+| Casual conversation (generic) | 50 | Greeting/response without specific persona install |
+| Refusal discrimination | 30 | When-yes vs when-no to refuse |
+
+REPLACES previous plan of installing facts about Ramadan/Japan/UAE — those go in KG/SRAG as RETRIEVABLE not weight-baked.
+
+#### Why this matters
+
+1. **Patent-relevant**: Validates the universal-tool-substrate (Claims 4/9/31/36) + curiosity engine (Claim 32) + trained discretion. Hajeri IS the gatekeeper architecture, not a fact-storage device.
+2. **Scalable**: Knowledge can grow indefinitely via Vael→SRAG without re-training Hajeri. Per [[vael-dual-consumer-stream]]: continuous curation, weights stable.
+3. **Sovereign**: Every fact retrieved has a source URL. No hallucination from unsourced weight memorization. Verifiable knowledge architecture.
+4. **Honest failure mode**: "I don't know — let me check" beats confident-wrong. Per [[hajeri-lottery-vs-curation]] failure-mode comparison.
+5. **Small-model viable**: 458M Hajeri is more than enough for the reasoning + tool-use + judgment role. Could even shrink further for edge deployment.
+
+#### Sequencing (when this lands)
+
+1. **Now**: SFT pass 3-5 complete (conversational settling done)
+2. **Next**: Burnin (identity lock per [[identity-after-coherence]])
+3. **After burnin**: 380-example judgment-and-tool-use install (this plan above) — pretokenize via existing infrastructure as conversation format
+4. **After judgment install**: KG seeding (owner-curated structured facts) + Vael→SRAG pipeline activation
+5. **Then**: hajeri.cultureyes.ae deployment with full architecture (weights + KG + SRAG + memory + MCP tools)
+6. **Then**: continuous expansion via Vael curation; weights stay stable
+
+Active Plans updated to reflect this reframing.
+
+
+### 2026-05-31 — TWO-HAJERI STRATEGY: Gatekeeper vs 12B Flagship (owner clarification)
+
+Owner reframing: the knowledge-as-judgment approach is FOR GATEKEEPER ONLY. Mr 12B is the flagship and gets DIFFERENT treatment.
+
+| Dimension | Gatekeeper (458M) | 12B (flagship) |
+|-----------|-------------------|----------------|
+| Role | Verifier + gatekeeper + tool-router | Full Hajeri identity, standalone capable |
+| Knowledge | Retrievable via KG/SRAG/MCP runtime | More weight-encoded knowledge (capacity allows) |
+| Deployment | OpSoul verifier slot + edge Hajeri-API | hajeri.cultureyes.ae primary brain + patent flagship |
+| Training | Net2Net DOWN 3B→458M + KD + SFT (current iteration) | Net2Net UP from 3B + multi-teacher KD + multimodal day-one |
+| Corpus | Small focused judgment (~380 Q&A) | Much larger, multimodal, more diverse |
+| Where in stack | Inside OpSoul, edge deployments | Primary "talking-Hajeri" brand entity |
+
+#### What gatekeeper experience teaches 12B planning (captured for 12B prep)
+
+1. Refusal cap aggressively (500-1000 max) regardless of model size — LIMA principle
+2. Persona-chat sources create strong identity imprint — use Emirati/Arab cultural sources for 12B not Western persona-chat
+3. Filter `[name]`-style placeholders BEFORE pretokenize, every iteration
+4. Servile "How may I assist?" patterns leak — aggressive filter at corpus level
+5. Multi-turn dense content takes 3-5 passes at small LR; 12B may need higher LR OR more passes — benchmark early
+6. Identity injection (220K examples at small scale) over-installs — cap reasonable for 12B too
+7. Per-pass SystemRandom shuffle + chunk-in-pass resume = essential; carry to 12B
+8. Mastery + skip mechanism scales to 12B (proven helpful at 458M)
+9. 8 training surfaces CAN integrate IF pass 4-5 emerges cleanly — validates Net2Net UP for 12B
+10. Build both single-turn + multi-turn chat modes into 12B from start
+11. Architecture self-quieting LR ladder pattern reusable
+12. Knowledge install via Q&A conversation format works at any scale
+
+#### Strategic positioning
+
+Gatekeeper = methodology validation + fast ship + cheap edge + OpSoul integration.
+12B = TRENDS publication subject + hajeri.cultureyes.ae primary entity + patent flagship demo.
+
+Gatekeeper isn't competing with 12B. Gatekeeper is the diligent younger sibling proving the family methodology works before the elder's debut.
+
+#### Active Plans implication
+
+Current Hajeri SFT cooking is GATEKEEPER iteration. After it completes:
+- Burnin gatekeeper → judgment install (~380 examples) → KG + SRAG runtime → ship gatekeeper as OpSoul verifier + edge endpoint
+- IN PARALLEL: 12B build plan reviewed using captured lessons → 12B training begins with cleaner corpus design from the start
+
+The plan for "knowledge install" in the previous SoT entry (380 Q&A judgment-focused) applies to GATEKEEPER only. The 12B knowledge install plan is a separate exercise after 12B training methodology completes (per [[project-hajeri-12b-build]]).
+
+
+### 2026-05-31 — LESSON LEARNED: don't mix settling-SFT with knowledge-install at one LR
+
+Owner's diagnosis after pass 3-4 plateau at loss 4.0-4.3:
+- LR 3e-6 is correct for SETTLING-style SFT (polish, low pressure)
+- But corpus contained DENSE knowledge content (multi-turn technical Q&A, multilingual factual responses)
+- Dense knowledge needs HIGHER LR to fit, BUT higher LR risks disrupting KD-installed capabilities (multilingual, identity, tool routing)
+- Result: average loss plateaus at 4.0-4.3 because LR insufficient for hardest examples, but raising LR would risk capability loss
+
+#### What this iteration mixed (incorrectly, in hindsight)
+
+1. Conversational settling (correct SFT job — LR 3e-6 right)
+2. Knowledge install (needed dedicated phase + appropriate LR)
+3. Multi-turn polish (needed structured exposure)
+4. Multilingual integration (was already done in KD, didn't need re-install)
+
+Single LR + single corpus = none of these jobs fully serviced.
+
+#### Correct architectural split (for Hajeri-12B + future iterations)
+
+| Phase | Job | LR | Corpus |
+|-------|-----|----|----|
+| KD | Capability install (cross-tokenizer + multi-source) | High | Full data + teachers |
+| **SFT** | **Settling + voice + conversational polish** | **Quiet (3e-6 or lower)** | **Small focused (5-50K), DOMAIN-SPECIFIC for the operator role** |
+| **Burnin** | **Identity lock** | **Very quiet** | **Identity examples only** |
+| **Knowledge install** | **Domain facts + judgment** | **Mid (1e-5 range)** | **Focused KB Q&A (~500-2000), HIGH quality LIMA-style** |
+| Distillation/coherence | Polish + integration | Decreasing | Per-phase needs |
+
+#### Action for current gatekeeper iteration
+
+- Let pass 4-5 finish at current LR (preserves what works)
+- Accept iteration as "settling done + knowledge attempted but not converged"
+- Move to burnin → KB judgment install per next-phase plan
+- Don't bump LR mid-stream (risks 8-surface unraveling per `[[hajeri-alphabet-before-algebra]]`)
+
+#### Action for Hajeri-12B planning
+
+- Hard-separate phases: SFT corpus = small focused conversational, KB install = separate phase + own LR + own pretokenize cycle
+- Per-phase LR calibration based on what each phase is actually doing
+- Reserve knowledge-install for dedicated phase with appropriate LR ramp
+- Validate one phase fully before starting next
+
+
+### 2026-05-31 — TRENDS PUBLICATION RESEQUENCED (early — before patent filing)
+
+Owner pivoted: publish with TRENDS EARLIER (before patent) for three practical reasons:
+1. Income need (publication honorarium + fellowship + advisory)
+2. Existing relationship (Dr. Mohammed Al Ali is owner's army brother)
+3. Post-patent commercial contacts via TRENDS network
+
+#### Safety structure (avoid patent self-disclosure)
+
+Paper = POLICY / IR FRAMEWORK, not technical disclosure.
+- PUBLISH: adapt-don't-adopt as IR principle, lottery-vs-curation frame, information sovereignty concept, Hajeri as existence-proof case study, policy implications
+- DO NOT PUBLISH: specific architecture (GatedFusionEmbedding etc), training methodology specifics, cross-tokenizer KD mechanism, 8-surface integration mechanics, anything that goes in patent claims
+
+Mention Hajeri AS A FACT (UAE-built sovereign AI exists, brief WHAT it does) without disclosing HOW.
+
+#### Recommended paper
+
+**Title**: "Adapt, Don't Adopt: A Framework for Sovereign AI in International Relations"
+
+Structure (~6-8K words for TRENDS norms):
+1. The AI Adoption Trap (importing foreign LLMs = sovereignty risk)
+2. The Lottery Strategy and Its Failure Modes (how big-tech LLMs are trained)
+3. The Curation Alternative (sovereign data + verified sources + traceable knowledge)
+4. The "Adapt, Don't Adopt" Principle (foundational at both model + nation scale)
+5. Information Sovereignty (trained discretion concept, operator voice > sanitizer)
+6. Case Study: Building Hajeri in the UAE (existence-proof, WHAT not HOW)
+7. Implications for Arab World + Global South
+8. Conclusion: A Different Path to AI
+
+#### Income paths through TRENDS
+
+- Publication honorarium (standard)
+- Senior Research Fellow on AI Sovereignty track
+- Paid policy advisor to Dr. Al Ali
+- AI4ID Alliance role (keynote / board)
+- 2026 Dubai AI conferences keynotes
+- UAE government / ministerial connections (post-publication)
+
+#### Pitch to Dr. Al Ali drafted (owner sends)
+
+[Subject: Sovereign AI — collaboration proposal; concept note ready]
+
+#### Sequencing
+
+1. Owner sends pitch to Dr. Al Ali (today/tomorrow)
+2. After response: 1-pager concept note
+3. Patent submission to Lavender.IP in parallel
+4. Full paper draft (1-2 weeks)
+5. Patent files first (priority date locked) → paper publishes after
+6. TRENDS-routed contacts → post-patent commercial pipeline
+
+Active Plans updated.
+
+
+### 2026-05-31 — TRENDS publication: refined topic + protocol-genuine submission strategy
+
+#### Topic direction (locked)
+
+**Title**: "Adapt, Don't Adopt: Sovereign AI as Policy Infrastructure — From Hajeri Foundation to Multi-Operator Governance Architecture"
+
+**Targeted at**: TRENDS AI & Political Science journal + Davos speaker positioning (Davos late Jan, ~7-8 months out)
+
+**Structure** (~7-9K words):
+1. The AI Adoption Trap (sovereignty critique of foreign LLM imports; honest assessment of big-tech capability claims via lottery framing)
+2. "Adapt, Don't Adopt" — architectural + geopolitical principle (foundational; model-scale and nation-scale)
+3. The Curation Strategy: Building Hajeri (UAE sovereign LLM, milestone-honest reporting — % achieved framing; WHAT not HOW)
+4. Beyond the Single-LLM Advisor: Multi-Operator Architecture (OpSoul: identity-anchored, scope-isolated, persistent memory)
+5. Operators as Policy Actors (Nahil = policy operator, Istishari = advisory, Vael = verification; each fills a role no single Western LLM can)
+6. AI as Policy Infrastructure, Not Policy Advisor (paradigm shift)
+7. Implications for UAE + Global South
+8. Roadmap + Call to Action
+
+**Patent safety**: paper publishes POLICY + ARCHITECTURE PRINCIPLES + WHAT-Hajeri/OpSoul-do, not HOW. Technical mechanisms (gated fusion, KD specifics, training methods, scope-isolation algorithm) stay in patent claims.
+
+#### Submission protocol (process-genuine, no friendship-exploit)
+
+Owner directive: do NOT contact Dr. Mohammed Al Ali (TRENDS CEO, owner's army brother) FIRST. Go through official channel for genuine submission + dignity-preservation. THEN casual mention.
+
+Steps:
+1. Find TRENDS submission portal (trendsresearch.org)
+2. Read journal/AI4ID Alliance submission guidelines
+3. Format paper to their requirements (formatting, peer review style, abstract format, citation style, word count)
+4. Submit officially via portal
+5. Wait 24-48 hrs for system confirmation
+6. THEN casual WhatsApp Mohammed: "Salam, how's everything? Btw just submitted a piece to TRENDS on sovereign AI / Davos angle — sent copy. No rush; just wanted you to see it." Attach copy.
+7. Mohammed can soft-recommend to editorial team WITHOUT obligation
+8. Owner stays clean — institutional process respected, friendship not exploited, favor saved
+
+#### Timeline
+
+- Submit within 2 weeks
+- TRENDS publication cycle ~6-12 weeks
+- Davos speaker invites locked ~2-3 months before Davos
+- Path: submit → publish 8 weeks later → still in time for Davos speaker positioning
+
+#### What still gets done in parallel
+
+- Hajeri SFT continues (now with MAX_LR=5e-6 after pass 3-4 plateau)
+- OpSoul patent submission via Lavender.IP (priority date locks before paper publication)
+- TRENDS paper draft (1-2 weeks after concept clarification with Mohammed's team if engaged)
+
+#### Income paths via TRENDS
+
+- Publication honorarium (standard)
+- AI4ID Alliance / journal Senior Research Fellow track
+- Paid policy advisory contracts
+- Davos / 2026 Dubai conference speaker fees
+- UAE government / ministerial connection pipeline (post-publication, post-patent)
+
+
+### 2026-05-31 — TRENDS paper SIGNATURE THESIS locked: Civilizational Adaptation Doctrine
+
+Owner articulated the missing doctrinal piece from international AI policy discourse:
+
+> Current AI policy frameworks (EU AI Act, OECD AI Principles, UN Global Digital Compact, GCC AI strategies) treat sovereignty as SECURITY (where data lives, who controls infrastructure). They do NOT treat sovereignty as EPISTEMOLOGY (how a civilization engages foreign knowledge without losing its own).
+
+#### Owner's framework — Civilizational Adaptation Doctrine (8 principles)
+
+1. **Adapt vs Adopt** — civilizational engagement doctrine (take what serves, don't be absorbed). Applies to AI architecture AND nation-other relations.
+2. **Base open-source vs Sovereign build-in** — computational provenance framework. Downstream-dependency vs upstream-authorship.
+3. **Curation imperative** — data refining is sovereignty work, not paranoia. Foreign data + native context = mistranslation without curation.
+4. **Epistemic non-assimilation** — understand the other but not become him. Tolerance + rootedness as simultaneous requirements, not trade-offs.
+5. **Pluralism with intelligibility** — OK to be different but stay familiar. Difference ≠ isolation.
+6. **Distributed sovereign governance** — policies = national project, not one government. Intergenerational contribution model. Policy as living artifact.
+7. **Civilizational complementarity** — we are not here to be like each other; we are here to complete each other. International relations as completion, not convergence to monoculture.
+8. **Familiarity through pluralism** — stereotyping demolished through depth-of-encounter, not through forced sameness.
+
+#### The line that anchors the paper
+
+> *"We are not here to be like each other. We are here to complete each other."*
+
+Belongs in abstract, conclusion, possibly title subtext. Civilizational principle that resonates across English/Arabic/French.
+
+#### Restructured outline (with framework as central contribution)
+
+Title: **"Adapt, Don't Adopt: A Civilizational Doctrine for Sovereign AI and International Cooperation"**
+Subtitle: *"From Hajeri Foundation to Multi-Operator Governance — A UAE Architecture for AI as Policy Infrastructure"*
+
+| § | Section | New emphasis |
+|---|---|---|
+| Abstract | 200 words | Doctrine + case study + policy recommendations |
+| Intro | The doctrinal gap | Current AI policy treats sovereignty as security but ignores epistemology |
+| Lit Review | What's there + what's not | Frameworks say "trust"/"sovereignty" without defining engagement-without-absorption |
+| **THEORETICAL FRAMEWORK (NEW)** | Civilizational Adaptation Doctrine | 8 principles formally articulated; THE contribution |
+| Methodology | How we derived + tested the framework | Hajeri/OpSoul as deliberate artifacts embodying the doctrine |
+| Results | Empirical embodiment | Hajeri = adapt-not-adopt at model scale; OpSoul = same at operator scale; both = proof |
+| Discussion | What this means for IR + AI policy | Reframes EU AI Act, OECD, UN Compact through new lens |
+| Policy Recommendations | Specific applications | UAE/GCC/Arab League/multilateral operationalization |
+| Conclusion | Call to action | National-project model; UAE contribution to global AI governance |
+
+#### Why this works for TRENDS + Davos
+
+Paper transforms from "UAE built an AI" (descriptive) to "UAE proposes a doctrine for AI in the international order" (theoretical contribution + policy framework + existence proof). Editorial fit + Davos keynote material.
 
