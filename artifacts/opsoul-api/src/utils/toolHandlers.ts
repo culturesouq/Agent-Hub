@@ -1242,6 +1242,65 @@ async function handleGmailRead(rawArgs: string, ctx: ToolHandlerContext): Promis
   return { content: result };
 }
 
+async function handleGmailModify(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { messageIds, action, labelId } = parseArgs<{ messageIds?: string[]; action?: string; labelId?: string }>(rawArgs);
+  if (!Array.isArray(messageIds) || messageIds.length === 0) return { content: 'gmail_modify requires non-empty "messageIds" array.', meta: { terminateLoop: true } };
+  if (!action) return { content: 'gmail_modify requires "action".', meta: { terminateLoop: true } };
+
+  // Map action -> labels to add / remove.
+  let addLabelIds: string[] = [];
+  let removeLabelIds: string[] = [];
+  switch (action) {
+    case 'mark_read':     removeLabelIds = ['UNREAD']; break;
+    case 'mark_unread':   addLabelIds    = ['UNREAD']; break;
+    case 'archive':       removeLabelIds = ['INBOX']; break;
+    case 'unarchive':     addLabelIds    = ['INBOX']; break;
+    case 'trash':         addLabelIds    = ['TRASH']; removeLabelIds = ['INBOX']; break;
+    case 'untrash':       removeLabelIds = ['TRASH']; addLabelIds    = ['INBOX']; break;
+    case 'star':          addLabelIds    = ['STARRED']; break;
+    case 'unstar':        removeLabelIds = ['STARRED']; break;
+    case 'apply_label':
+      if (!labelId) return { content: 'gmail_modify action=apply_label requires "labelId".', meta: { terminateLoop: true } };
+      addLabelIds = [labelId]; break;
+    case 'remove_label':
+      if (!labelId) return { content: 'gmail_modify action=remove_label requires "labelId".', meta: { terminateLoop: true } };
+      removeLabelIds = [labelId]; break;
+    default:
+      return { content: `gmail_modify unknown action: "${action}".`, meta: { terminateLoop: true } };
+  }
+
+  // Use the batchModify endpoint when >1 message, single modify otherwise.
+  if (messageIds.length === 1) {
+    const id = messageIds[0];
+    const result = await callOAuth(ctx.operatorId, 'POST',
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(id)}/modify`,
+      { addLabelIds, removeLabelIds });
+    return { content: `Modified 1 message (${action}).\n${result}` };
+  }
+
+  const result = await callOAuth(ctx.operatorId, 'POST',
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/batchModify`,
+    { ids: messageIds, addLabelIds, removeLabelIds });
+  return { content: `Batch ${action} on ${messageIds.length} messages.\n${result}` };
+}
+
+async function handleGmailCreateDraft(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { to, subject, body } = parseArgs<{ to?: string; subject?: string; body?: string }>(rawArgs);
+  if (!to || !subject || body === undefined) return { content: 'gmail_create_draft requires "to", "subject", "body".', meta: { terminateLoop: true } };
+  const raw = `To: ${to}\r\nSubject: ${subject}\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n${body}`;
+  const b64 = Buffer.from(raw, 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const result = await callOAuth(ctx.operatorId, 'POST',
+    `https://gmail.googleapis.com/gmail/v1/users/me/drafts`,
+    { message: { raw: b64 } });
+  return { content: result };
+}
+
+async function handleGmailListLabels(_rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const result = await callOAuth(ctx.operatorId, 'GET',
+    `https://gmail.googleapis.com/gmail/v1/users/me/labels`);
+  return { content: result };
+}
+
 // Google Calendar ——————————————————————————————————————————————————————
 
 async function handleCalendarCreateEvent(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
@@ -1263,6 +1322,50 @@ async function handleCalendarListEvents(rawArgs: string, ctx: ToolHandlerContext
   return { content: await callOAuth(ctx.operatorId, 'GET', url) };
 }
 
+async function handleCalendarUpdateEvent(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { eventId, summary, startIso, endIso, description, location } = parseArgs<{
+    eventId?: string; summary?: string; startIso?: string; endIso?: string; description?: string; location?: string;
+  }>(rawArgs);
+  if (!eventId) return { content: 'calendar_update_event requires "eventId".', meta: { terminateLoop: true } };
+  // Build partial body — only set fields the caller passed.
+  const body: Record<string, unknown> = {};
+  if (summary !== undefined)     body.summary = summary;
+  if (description !== undefined) body.description = description;
+  if (location !== undefined)    body.location = location;
+  if (startIso !== undefined)    body.start = { dateTime: startIso };
+  if (endIso !== undefined)      body.end   = { dateTime: endIso };
+  if (Object.keys(body).length === 0) return { content: 'calendar_update_event: at least one field to update must be provided.', meta: { terminateLoop: true } };
+  const result = await callOAuth(ctx.operatorId, 'PATCH',
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}`, body);
+  return { content: result };
+}
+
+async function handleCalendarDeleteEvent(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { eventId } = parseArgs<{ eventId?: string }>(rawArgs);
+  if (!eventId) return { content: 'calendar_delete_event requires "eventId".', meta: { terminateLoop: true } };
+  const result = await callOAuth(ctx.operatorId, 'DELETE',
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}`);
+  return { content: `Deleted event ${eventId}.\n${result}` };
+}
+
+async function handleCalendarSearchEvents(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { query, timeMinIso, timeMaxIso } = parseArgs<{ query?: string; timeMinIso?: string; timeMaxIso?: string }>(rawArgs);
+  if (!query) return { content: 'calendar_search_events requires "query".', meta: { terminateLoop: true } };
+  const tMin = timeMinIso ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const tMax = timeMaxIso ?? new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+  const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?q=${encodeURIComponent(query)}&timeMin=${encodeURIComponent(tMin)}&timeMax=${encodeURIComponent(tMax)}&maxResults=10&singleEvents=true&orderBy=startTime`;
+  return { content: await callOAuth(ctx.operatorId, 'GET', url) };
+}
+
+async function handleCalendarFreeBusy(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { timeMinIso, timeMaxIso } = parseArgs<{ timeMinIso?: string; timeMaxIso?: string }>(rawArgs);
+  if (!timeMinIso || !timeMaxIso) return { content: 'calendar_free_busy requires "timeMinIso" and "timeMaxIso".', meta: { terminateLoop: true } };
+  const result = await callOAuth(ctx.operatorId, 'POST',
+    `https://www.googleapis.com/calendar/v3/freeBusy`,
+    { timeMin: timeMinIso, timeMax: timeMaxIso, items: [{ id: 'primary' }] });
+  return { content: result };
+}
+
 // Drive —————————————————————————————————————————————————————————————
 
 async function handleDriveSearch(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
@@ -1281,6 +1384,90 @@ async function handleDriveReadFile(rawArgs: string, ctx: ToolHandlerContext): Pr
     return { content: (await callOAuth(ctx.operatorId, 'GET', `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`)).slice(0, 10000) };
   }
   return { content: exportRes.slice(0, 10000) };
+}
+
+async function handleDriveUploadFile(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { name, content, mimeType, parentFolderId } = parseArgs<{
+    name?: string; content?: string; mimeType?: string; parentFolderId?: string;
+  }>(rawArgs);
+  if (!name || content === undefined) return { content: 'drive_upload_file requires "name" and "content".', meta: { terminateLoop: true } };
+  const mt = mimeType ?? 'text/plain';
+  // Multipart upload — metadata + content in one request.
+  const boundary = `opsoul_boundary_${Date.now()}`;
+  const metadata: Record<string, unknown> = { name, mimeType: mt };
+  if (parentFolderId) metadata.parents = [parentFolderId];
+  const multipartBody =
+    `--${boundary}\r\n` +
+    `Content-Type: application/json; charset=UTF-8\r\n\r\n` +
+    `${JSON.stringify(metadata)}\r\n` +
+    `--${boundary}\r\n` +
+    `Content-Type: ${mt}\r\n\r\n` +
+    `${content}\r\n` +
+    `--${boundary}--`;
+  const result = await callOAuth(ctx.operatorId, 'POST',
+    `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,webViewLink`,
+    multipartBody,
+    { 'Content-Type': `multipart/related; boundary=${boundary}` },
+  );
+  return { content: result };
+}
+
+async function handleDriveCreateFolder(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { name, parentFolderId } = parseArgs<{ name?: string; parentFolderId?: string }>(rawArgs);
+  if (!name) return { content: 'drive_create_folder requires "name".', meta: { terminateLoop: true } };
+  const body: Record<string, unknown> = { name, mimeType: 'application/vnd.google-apps.folder' };
+  if (parentFolderId) body.parents = [parentFolderId];
+  const result = await callOAuth(ctx.operatorId, 'POST',
+    `https://www.googleapis.com/drive/v3/files?fields=id,name,webViewLink`, body);
+  return { content: result };
+}
+
+async function handleDriveMoveFile(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { fileId, newName, newParentFolderId, oldParentFolderId } = parseArgs<{
+    fileId?: string; newName?: string; newParentFolderId?: string; oldParentFolderId?: string;
+  }>(rawArgs);
+  if (!fileId) return { content: 'drive_move_file requires "fileId".', meta: { terminateLoop: true } };
+  if (!newName && !newParentFolderId) return { content: 'drive_move_file: provide "newName" or "newParentFolderId" (or both).', meta: { terminateLoop: true } };
+
+  // Build URL query for parent changes.
+  const params: string[] = ['fields=id,name,parents,webViewLink'];
+  if (newParentFolderId) params.push(`addParents=${encodeURIComponent(newParentFolderId)}`);
+  if (oldParentFolderId) params.push(`removeParents=${encodeURIComponent(oldParentFolderId)}`);
+  const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?${params.join('&')}`;
+
+  const body: Record<string, unknown> = {};
+  if (newName) body.name = newName;
+  const result = await callOAuth(ctx.operatorId, 'PATCH', url, body);
+  return { content: result };
+}
+
+async function handleDriveDeleteFile(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { fileId } = parseArgs<{ fileId?: string }>(rawArgs);
+  if (!fileId) return { content: 'drive_delete_file requires "fileId".', meta: { terminateLoop: true } };
+  // Soft-delete: PATCH trashed=true. Recoverable for 30 days.
+  const result = await callOAuth(ctx.operatorId, 'PATCH',
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=id,name,trashed`,
+    { trashed: true });
+  return { content: `Trashed file ${fileId} (recoverable for 30 days).\n${result}` };
+}
+
+async function handleDriveShareFile(rawArgs: string, ctx: ToolHandlerContext): Promise<ToolResult> {
+  const { fileId, role, type, emailAddress, domain } = parseArgs<{
+    fileId?: string; role?: string; type?: string; emailAddress?: string; domain?: string;
+  }>(rawArgs);
+  if (!fileId || !role || !type) return { content: 'drive_share_file requires "fileId", "role", "type".', meta: { terminateLoop: true } };
+  if ((type === 'user' || type === 'group') && !emailAddress) {
+    return { content: 'drive_share_file: type=user|group requires "emailAddress".', meta: { terminateLoop: true } };
+  }
+  if (type === 'domain' && !domain) {
+    return { content: 'drive_share_file: type=domain requires "domain".', meta: { terminateLoop: true } };
+  }
+  const body: Record<string, unknown> = { role, type };
+  if (emailAddress) body.emailAddress = emailAddress;
+  if (domain) body.domain = domain;
+  const result = await callOAuth(ctx.operatorId, 'POST',
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/permissions?fields=id,role,type,emailAddress`, body);
+  return { content: result };
 }
 
 // GitHub ————————————————————————————————————————————————————————————
@@ -1589,11 +1776,23 @@ export async function dispatchTool(
     // Wave 3 — connected-app first-class tools
     case 'gmail_send':              return handleGmailSend(rawArgs, ctx);
     case 'gmail_search':            return handleGmailSearch(rawArgs, ctx);
-    case 'gmail_read':              return handleGmailRead(rawArgs, ctx);
-    case 'calendar_create_event':   return handleCalendarCreateEvent(rawArgs, ctx);
-    case 'calendar_list_events':    return handleCalendarListEvents(rawArgs, ctx);
-    case 'drive_search':            return handleDriveSearch(rawArgs, ctx);
-    case 'drive_read_file':         return handleDriveReadFile(rawArgs, ctx);
+    case 'gmail_read':               return handleGmailRead(rawArgs, ctx);
+    case 'gmail_modify':             return handleGmailModify(rawArgs, ctx);
+    case 'gmail_create_draft':       return handleGmailCreateDraft(rawArgs, ctx);
+    case 'gmail_list_labels':        return handleGmailListLabels(rawArgs, ctx);
+    case 'calendar_create_event':    return handleCalendarCreateEvent(rawArgs, ctx);
+    case 'calendar_list_events':     return handleCalendarListEvents(rawArgs, ctx);
+    case 'calendar_update_event':    return handleCalendarUpdateEvent(rawArgs, ctx);
+    case 'calendar_delete_event':    return handleCalendarDeleteEvent(rawArgs, ctx);
+    case 'calendar_search_events':   return handleCalendarSearchEvents(rawArgs, ctx);
+    case 'calendar_free_busy':       return handleCalendarFreeBusy(rawArgs, ctx);
+    case 'drive_search':             return handleDriveSearch(rawArgs, ctx);
+    case 'drive_read_file':          return handleDriveReadFile(rawArgs, ctx);
+    case 'drive_upload_file':        return handleDriveUploadFile(rawArgs, ctx);
+    case 'drive_create_folder':      return handleDriveCreateFolder(rawArgs, ctx);
+    case 'drive_move_file':          return handleDriveMoveFile(rawArgs, ctx);
+    case 'drive_delete_file':        return handleDriveDeleteFile(rawArgs, ctx);
+    case 'drive_share_file':         return handleDriveShareFile(rawArgs, ctx);
     case 'github_create_issue':     return handleGithubCreateIssue(rawArgs, ctx);
     case 'github_search':           return handleGithubSearch(rawArgs, ctx);
     case 'github_read_file':        return handleGithubReadFile(rawArgs, ctx);

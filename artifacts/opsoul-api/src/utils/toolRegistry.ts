@@ -861,6 +861,43 @@ export const UNIVERSAL_TOOLS: RegisteredTool[] = [
     },
     scopes: '*', availability: 'integration', category: 'communication',
   },
+  {
+    name: 'gmail_modify',
+    displayName: 'Gmail modify (mark/archive/trash/star/label)',
+    description: 'Modify Gmail message state in bulk. Use action enum to mark read/unread, archive, trash/untrash, star/unstar, or apply a custom label. Pass an array of messageIds (max 1000 per call). Combine with gmail_search to clean up promotional mail, archive old threads, mark batches read, etc.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        messageIds: { type: 'array', items: { type: 'string' }, description: 'Array of Gmail message ids (from gmail_search).' },
+        action: { type: 'string', enum: ['mark_read', 'mark_unread', 'archive', 'unarchive', 'trash', 'untrash', 'star', 'unstar', 'apply_label', 'remove_label'], description: 'What to do to all messages.' },
+        labelId: { type: 'string', description: 'Required only when action is apply_label or remove_label. Custom label id from gmail_list_labels.' },
+      },
+      required: ['messageIds', 'action'],
+    },
+    scopes: '*', availability: 'integration', category: 'communication',
+  },
+  {
+    name: 'gmail_create_draft',
+    displayName: 'Gmail create draft',
+    description: 'Creates a draft email (does NOT send). Same shape as gmail_send. Useful when the operator wants the user to review before sending.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        to:      { type: 'string', description: 'Recipient email.' },
+        subject: { type: 'string', description: 'Subject line.' },
+        body:    { type: 'string', description: 'Plain-text body.' },
+      },
+      required: ['to', 'subject', 'body'],
+    },
+    scopes: '*', availability: 'integration', category: 'communication',
+  },
+  {
+    name: 'gmail_list_labels',
+    displayName: 'Gmail list labels',
+    description: 'Lists all Gmail labels (system + custom) with their ids. Use the label ids with gmail_modify apply_label / remove_label actions.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    scopes: '*', availability: 'integration', category: 'communication',
+  },
 
   // Calendar
   {
@@ -894,6 +931,64 @@ export const UNIVERSAL_TOOLS: RegisteredTool[] = [
     },
     scopes: '*', availability: 'integration', category: 'integration',
   },
+  {
+    name: 'calendar_update_event',
+    displayName: 'Calendar — update event',
+    description: 'Modify an existing calendar event (reschedule, rename, change location/description). Partial update: only the fields you pass are changed. Get the eventId from calendar_list_events or calendar_search_events first.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        eventId:     { type: 'string', description: 'Event id from calendar_list_events.' },
+        summary:     { type: 'string', description: 'Optional new title.' },
+        startIso:    { type: 'string', description: 'Optional new start time (ISO 8601).' },
+        endIso:      { type: 'string', description: 'Optional new end time (ISO 8601).' },
+        description: { type: 'string', description: 'Optional new description.' },
+        location:    { type: 'string', description: 'Optional new location.' },
+      },
+      required: ['eventId'],
+    },
+    scopes: '*', availability: 'integration', category: 'integration',
+  },
+  {
+    name: 'calendar_delete_event',
+    displayName: 'Calendar — delete event',
+    description: 'Permanently remove an event from the primary calendar. Cannot be undone via this tool — get user confirmation if the event is high-importance.',
+    inputSchema: {
+      type: 'object',
+      properties: { eventId: { type: 'string', description: 'Event id to delete.' } },
+      required: ['eventId'],
+    },
+    scopes: '*', availability: 'integration', category: 'integration',
+  },
+  {
+    name: 'calendar_search_events',
+    displayName: 'Calendar — search events',
+    description: 'Find events by keyword across summary/description/location/attendees. Optional time window. Returns up to 10 matches with ids.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query:      { type: 'string', description: 'Free-text search query.' },
+        timeMinIso: { type: 'string', description: 'Optional window start (ISO 8601). Default: 30 days ago.' },
+        timeMaxIso: { type: 'string', description: 'Optional window end (ISO 8601). Default: 90 days from now.' },
+      },
+      required: ['query'],
+    },
+    scopes: '*', availability: 'integration', category: 'integration',
+  },
+  {
+    name: 'calendar_free_busy',
+    displayName: 'Calendar — free/busy lookup',
+    description: 'Find open time slots between two timestamps on the primary calendar. Returns busy blocks; the operator infers the free gaps. Use when scheduling meetings.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        timeMinIso: { type: 'string', description: 'Window start (ISO 8601).' },
+        timeMaxIso: { type: 'string', description: 'Window end (ISO 8601).' },
+      },
+      required: ['timeMinIso', 'timeMaxIso'],
+    },
+    scopes: '*', availability: 'integration', category: 'integration',
+  },
 
   // Drive
   {
@@ -915,6 +1010,80 @@ export const UNIVERSAL_TOOLS: RegisteredTool[] = [
       type: 'object',
       properties: { fileId: { type: 'string', description: 'Drive file id from drive_search.' } },
       required: ['fileId'],
+    },
+    scopes: '*', availability: 'integration', category: 'integration',
+  },
+  {
+    name: 'drive_upload_file',
+    displayName: 'Drive — upload file',
+    description: 'Upload a new text file to Drive (or a specific folder). For binary uploads use base64-encoded content with the correct mimeType.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name:           { type: 'string', description: 'File name (with extension, e.g. "notes.md").' },
+        content:        { type: 'string', description: 'File content (plain text by default; base64 if mimeType is binary).' },
+        mimeType:       { type: 'string', description: 'MIME type (default "text/plain"). Use "text/markdown", "application/pdf", etc. as needed.' },
+        parentFolderId: { type: 'string', description: 'Optional parent folder id. If omitted, file lands in My Drive root.' },
+      },
+      required: ['name', 'content'],
+    },
+    scopes: '*', availability: 'integration', category: 'integration',
+  },
+  {
+    name: 'drive_create_folder',
+    displayName: 'Drive — create folder',
+    description: 'Create a new folder in Google Drive. Returns the folder id for use with drive_upload_file or drive_move_file.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name:           { type: 'string', description: 'Folder name.' },
+        parentFolderId: { type: 'string', description: 'Optional parent folder id. Omit for root.' },
+      },
+      required: ['name'],
+    },
+    scopes: '*', availability: 'integration', category: 'integration',
+  },
+  {
+    name: 'drive_move_file',
+    displayName: 'Drive — move/rename file',
+    description: 'Move a Drive file to a different folder, rename it, or both. Pass newName to rename, newParentFolderId to move, oldParentFolderId so the old parent is removed cleanly.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        fileId:             { type: 'string', description: 'File id to move/rename.' },
+        newName:            { type: 'string', description: 'Optional new name.' },
+        newParentFolderId:  { type: 'string', description: 'Optional new parent folder id.' },
+        oldParentFolderId:  { type: 'string', description: 'Optional old parent folder id (provide to cleanly move; omit if file currently in root).' },
+      },
+      required: ['fileId'],
+    },
+    scopes: '*', availability: 'integration', category: 'integration',
+  },
+  {
+    name: 'drive_delete_file',
+    displayName: 'Drive — delete file (to trash)',
+    description: 'Soft-delete a Drive file (moves to Trash; recoverable for 30 days). Use this rather than permanent deletion — preserves user safety.',
+    inputSchema: {
+      type: 'object',
+      properties: { fileId: { type: 'string', description: 'File id to trash.' } },
+      required: ['fileId'],
+    },
+    scopes: '*', availability: 'integration', category: 'integration',
+  },
+  {
+    name: 'drive_share_file',
+    displayName: 'Drive — share file',
+    description: 'Add a permission to a Drive file: share with a specific person (by email), a domain, or anyone-with-the-link. Choose role: reader, commenter, or writer.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        fileId:       { type: 'string', description: 'File id to share.' },
+        role:         { type: 'string', enum: ['reader', 'commenter', 'writer'], description: 'Permission level granted.' },
+        type:         { type: 'string', enum: ['user', 'group', 'domain', 'anyone'], description: 'Permission type.' },
+        emailAddress: { type: 'string', description: 'Required when type is user or group. Recipient email.' },
+        domain:       { type: 'string', description: 'Required when type is domain. e.g. "example.com".' },
+      },
+      required: ['fileId', 'role', 'type'],
     },
     scopes: '*', availability: 'integration', category: 'integration',
   },
