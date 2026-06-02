@@ -4393,3 +4393,41 @@ psql "$DATABASE_URL" -f scripts/2026-06-01-enforce-kimi-only.sql
 **Pending (owner-run when ready)**: `psql "$DATABASE_URL" -f scripts/2026-06-01-enforce-kimi-only.sql` — resets any `operators.default_model` that's non-Kimi to `'opsoul/auto'`. Code is correct without this; SQL closes the last per-operator-override loophole.
 
 **Rollback** (if needed): `az containerapp update -n opsoul -g bani-studio-rg --image banistudioacr.azurecr.io/opsoul-api:phase-2b-integrated-d33ae33` → reverts to opsoul--0000075 (pre-Kimi-enforcement).
+
+
+### 2026-06-02 — Patent claim 21 regression fixed in non-streaming surfaces
+
+**Trigger**: owner challenge — *"in opsoul the operator make the calls not the LLM directly"*. Surfaced while debugging the "Hi → tool-call JSON" attractor that re-appeared on deployed Nahil sessions.
+
+**Bug**: the streaming Hub path (`chat.ts:613/855`) honoured `agent.analyse()`'s decision:
+```ts
+const allTools = decision.kind === 'execute' ? listToolsForContext(toolListCtx) : [];
+```
+…but `runSyncAgentLoop` — used by every other surface (public-chat, telegram-webhook, whatsapp-webhook, public-crud) — blindly passed `toolset.tools` to the LLM regardless of the operator's decision. The operator computed a 'chat' verdict and the framework ignored it, exposing the full universal tool catalogue to the LLM on every turn. That turned the non-streaming surfaces into LangChain-style LLM-driven agent loops, violating Patent claim 21 (operator decides; LLM is the engine, never the driver).
+
+The two webhooks even flagged the gap explicitly:
+```ts
+const decision = agent.analyse(userMessage);
+void decision; // retained for future tool-gating in this webhook
+```
+…confirming the wiring was deferred and never landed.
+
+**Fix** (5 files, +46/-1):
+
+| File | Change |
+|---|---|
+| `utils/operatorAgentLoop.ts` | Added `analyseDecision: 'execute' \| 'chat'` to `RunSyncAgentLoopOptions`. When `'chat'`, the loop short-circuits to a single `executeSync` call with `tools: undefined` — LLM has nothing it could call. When `'execute'`, the existing iteration logic runs. Default falls back to `'execute'` for any caller not yet upgraded. |
+| `routes/public-chat.ts` | Added `const operatorDecision = agent.analyse(message);` right after `OperatorAgent` construction. Both `runSyncAgentLoop` call sites (stream + sync paths) now pass `analyseDecision: operatorDecision.kind`. |
+| `routes/telegram-webhook.ts` | Existing `decision = agent.analyse(userMessage)` is now passed through as `analyseDecision: decision.kind`. |
+| `routes/whatsapp-webhook.ts` | Removed `void decision;` placeholder. Pass `analyseDecision: decision.kind` into `runSyncAgentLoop`. |
+| `routes/public-crud.ts` | Existing `actionDecision = actionAgent.analyse(actionText)` is now passed through as `analyseDecision: actionDecision.kind`. |
+
+**Typecheck**: `npx tsc --noEmit` → clean (0 errors).
+
+**Patent linkage**: restores Claim 21's operator-as-driver guarantee across every inbound surface. The streaming Hub path was already compliant; the bug was non-streaming-only. With this commit, the LLM only sees the tool catalogue when the operator explicitly authorised `execute` mode for the turn.
+
+**[[no-fallbacks]] compliance**: yes. The fix removes a hidden capability path (LLM-side autonomous tool execution the operator never authorised). The short-circuit 'chat' path returns the LLM's real reply — no synthetic stand-in.
+
+**Out of scope (acknowledged limitation)**: in `execute` mode the LLM still emits the tool call name (the framework dispatches it). A stricter reading of Claim 21 would have the operator *plan* the tool call deterministically and only invoke the LLM for content production with results in context. That requires a separate planner step (heuristic or planner-LLM); flagged for a follow-up architecture pass once Hajeri training pressure eases. The current fix closes the immediate regression (operator's `chat` decision is now respected, LLM cannot tool-call when the operator said no).
+
+**Deploy gate**: owner directive — *"before deploy go to all latest commit and audit the agents work 1 by 1"* — audit of yesterday's 6 agent commits (A1 security / A2 schema / A3 onboarding / A4 autonomy / A5 marketplace / A6 polish) precedes deploy.

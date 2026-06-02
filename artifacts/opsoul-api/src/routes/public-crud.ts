@@ -242,6 +242,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         { role: 'user', content: actionText },
       ],
       model: resolvedModel,
+      // Patent claim 21: operator-decided tool gating.
+      analyseDecision: actionDecision.kind,
     });
   } catch (llmErr: unknown) {
     console.error('[public-crud] action LLM error', llmErr);

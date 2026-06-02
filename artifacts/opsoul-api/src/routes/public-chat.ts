@@ -125,6 +125,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     scopeType: scope.scopeType,
   });
 
+  // Patent claim 21: operator decides whether tools are offered this turn.
+  // 'chat' → LLM gets no tools (cannot autonomously call any); 'execute' →
+  // full tool catalogue. Passed into runSyncAgentLoop below so the LLM never
+  // sees tools the operator didn't authorise. Mirrors chat.ts:613/855.
+  const operatorDecision = agent.analyse(message);
+
   // ── Find or create conversation (DB-backed for persistent scopes only) ──
   let conv: typeof conversationsTable.$inferSelect | undefined;
   // For public scope: use an in-memory session key instead of DB conversation.
@@ -352,6 +358,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         toolset,
         messages,
         model,
+        analyseDecision: operatorDecision.kind,
       });
       const fullContent = loopResult.content;
       if (fullContent) {
@@ -431,6 +438,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         toolset,
         messages,
         model,
+        analyseDecision: operatorDecision.kind,
       });
     } catch (llmErr: unknown) {
       // Per [[no-fallbacks]] + Claim 13: never substitute synthetic operator

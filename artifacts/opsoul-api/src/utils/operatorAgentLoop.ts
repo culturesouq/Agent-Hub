@@ -36,6 +36,15 @@ export interface RunSyncAgentLoopOptions {
   toolset: OperatorToolset;
   messages: ChatMessage[];
   model: string;
+  /**
+   * Operator's analyse() decision for this turn — 'execute' (tools offered)
+   * or 'chat' (no tools). Defaults to 'execute' for backward compatibility
+   * with surfaces that haven't started passing the decision yet, but the
+   * caller SHOULD pass the real decision so the LLM never sees tools the
+   * operator didn't authorise this turn. Patent claim 21: operator decides;
+   * LLM is the engine. See utils/operatorAgent.ts.
+   */
+  analyseDecision?: 'execute' | 'chat';
   /** Override the default MAX_ITER cap. */
   maxIterations?: number;
   /** Override the default MAX_SEARCHES cap. */
@@ -63,6 +72,9 @@ export async function runSyncAgentLoop(opts: RunSyncAgentLoopOptions): Promise<A
   const { agent, toolset, messages, model } = opts;
   const maxIter = opts.maxIterations ?? DEFAULT_MAX_ITER;
   const maxSearches = opts.maxSearches ?? DEFAULT_MAX_SEARCHES;
+  // Default 'execute' preserves legacy behaviour for callers not yet passing
+  // the decision. New callers MUST pass it. Mirrors chat.ts:855.
+  const analyseDecision: 'execute' | 'chat' = opts.analyseDecision ?? 'execute';
 
   const loopMessages: ChatMessage[] = [...messages];
   let finalContent = '';
@@ -71,6 +83,23 @@ export async function runSyncAgentLoop(opts: RunSyncAgentLoopOptions): Promise<A
   let toolCallsExecuted = 0;
   let webSearchCount = 0;
   let iterationCapHit = false;
+
+  // ── OPERATOR-AS-DRIVER (Patent claim 21) ────────────────────────────────
+  // The operator already decided in analyse() whether tools should be offered
+  // this turn. For 'chat' the catalog is empty — the LLM has nothing it could
+  // call. One dispatch, return. No agent loop, no tool gymnastics. This
+  // matches chat.ts streaming-path gating.
+  if (analyseDecision === 'chat') {
+    const result = await agent.executeSync(loopMessages, { model, tools: undefined });
+    return {
+      content: result.content,
+      toolCallsExecuted: 0,
+      webSearchCount: 0,
+      promptTokens: result.promptTokens ?? 0,
+      completionTokens: result.completionTokens ?? 0,
+      iterationCapHit: false,
+    };
+  }
 
   for (let iter = 0; iter < maxIter; iter++) {
     // Filter web_search out of the offered tool set once the per-turn cap

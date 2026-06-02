@@ -296,8 +296,10 @@ router.post('/:operatorId', async (req: RequestWithRawBody, res: Response): Prom
     scopeType: scope.scopeType,
   });
 
+  // Patent claim 21: tool-gating wired 2026-06-02 via runSyncAgentLoop's
+  // analyseDecision param. 'chat' → no tools offered; 'execute' → full
+  // catalogue. Mirrors chat.ts:613/855.
   const decision = agent.analyse(userMessage);
-  void decision; // retained for future tool-gating in this webhook
 
   try {
     const embedding = await embed(userMessage);
@@ -376,6 +378,7 @@ router.post('/:operatorId', async (req: RequestWithRawBody, res: Response): Prom
       toolset,
       messages: chatMessages,
       model,
+      analyseDecision: decision.kind,
     });
     const finalContent = loopResult.content;
 

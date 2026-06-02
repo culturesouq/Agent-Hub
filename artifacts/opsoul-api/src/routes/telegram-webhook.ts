@@ -313,6 +313,9 @@ router.post('/:operatorId', async (req: Request, res: Response): Promise<void> =
       toolset,
       messages: chatMessages,
       model,
+      // Patent claim 21: pass the operator's analyse() decision so the LLM
+      // sees tools only when the operator authorised 'execute' this turn.
+      analyseDecision: decision.kind,
     });
     const finalContent = loopResult.content;
 
