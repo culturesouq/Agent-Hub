@@ -4609,3 +4609,35 @@ Other pages (`DashboardPage`, `OperatorDetail`, `AdminPage`, `Login`, `Contact`,
 
 **Next session note:** Anthropic API was reportedly facing a partial outage during the dark-cozy deploy iteration, which is why the Azure CLI noise was unusually persistent. Not an Azure problem.
 
+
+### 2026-06-02 — Open TODOs queued (owner directive, do later)
+
+Two missing pieces flagged by owner end-of-day. Both queued for a later pass; not touched today.
+
+**1. Patent — competitive positioning language for the swarm-of-agents comparison (optional strengthening; mechanism already claimed).**
+
+Owner flagged "operators can have multi archetypes and roles" as missing from the patent. Verified — **it is already covered** in three places per [[opsoul-patent-claims]]:
+
+- Component #6: *"Multi-role identity framework — N archetypes, one soul"*
+- Claim 13: *"N simultaneous archetypes under one soul. Production tested at N=7"*
+- Claim 20: *"Multi-role framework: N roles from natural-language birth input → proprietary archetype taxonomy. All N under ONE soul, ONE memory, ONE GROW. Tested at N=7"*
+
+The MECHANISM (N-archetypes-per-operator) is patented. What is NOT in the current claim set: the explicit competitive framing — "supersedes / replaces the swarm-of-agents architecture used by LangChain / CrewAI / AutoGen / LangGraph / OpenAI Swarm / Anthropic multi-agent recipes." That framing isn't required for novelty (already established), but it would be useful litigation language when defending against multi-agent frameworks that try to ship comparable behaviour as "agent orchestration."
+
+**Action (optional, low priority)**: at the next Lavender IPs revision, consider adding a paragraph in the prosecution context (not a new claim) that names competitors and frames Claims 13 + 20 as the structural answer to swarm orchestration overhead, message-passing conflicts, and inter-agent identity drift.
+
+**2. Landing page — "one Operator, many roles, no swarm" line (missing copy).**
+
+The current landing doesn't position OpSoul against the multi-agent / swarm pattern that the AI industry is currently shipping (CrewAI, AutoGen, LangGraph, OpenAI Swarm, Anthropic multi-agent recipes). That's a competitive blind spot — prospects in the space will read OpSoul as "just another agent framework" unless we explicitly say *operators replace swarms*.
+
+**Desired copy direction** (one new section, to add to LandingPage.tsx between "the argument" and "what eternal means"):
+
+> *"One Operator. Many roles. No swarm."*
+>
+> *Other frameworks spin up dozens of agents — one for research, one for writing, one for planning — and ask you to orchestrate them. Operators don't need swarming. A single Operator holds every role you need, in one continuous mind, with one continuous memory. No conflicts between agents. No orchestration overhead. No drift between handoffs.*
+
+The mechanism (multi-archetype switching/stacking inside the Operator) stays hidden — only the OUTCOME ("one mind, many roles, no orchestration") goes on the public page. Patent-safe.
+
+**Action**: add this section in the next Hub landing-page edit pass. Drop in after the "Operators were designed on the opposite assumption..." paragraph and before "What eternal means."
+
+
