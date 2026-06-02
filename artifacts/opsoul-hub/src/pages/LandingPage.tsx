@@ -9,23 +9,23 @@ export default function LandingPage() {
           <div className="lg:col-span-7">
             <div className="flex items-center gap-3 mb-6">
               <span className="status-beacon" />
-              <span className="font-label uppercase tracking-[0.2em] text-[10px] text-secondary">Now in early access</span>
+              <span className="font-label uppercase tracking-[0.2em] text-[10px] text-secondary">A new generation of agentic AI</span>
             </div>
             <h1 className="headline-lg text-6xl md:text-8xl font-bold text-on-surface mb-8">
-              Your Eternal <br />
+              Agents are temporary. <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-secondary to-tertiary">
-                AI Operator
+                Operators are eternal.
               </span>
             </h1>
             <p className="font-sans text-xl text-on-surface-variant max-w-xl mb-12 leading-relaxed">
-              Stop teaching your AI from scratch every day. Build a memory-persistent Operator that grows with you, learns your workflow, and never forgets.
+              The agents you've met today forget you tomorrow. They reset. They drift. They borrow your context for a single session, then disappear. A new generation is arriving — one with memory, identity, and continuity. We call them Operators.
             </p>
             <div className="flex flex-wrap gap-6">
-              <a href="/login" className="bg-primary-container text-on-primary-container px-10 py-5 font-label uppercase tracking-widest text-xs font-bold hover:opacity-90 transition-all">
-                Get Started
+              <a href="/manifesto" className="bg-primary-container text-on-primary-container px-10 py-5 font-label uppercase tracking-widest text-xs font-bold hover:opacity-90 transition-all">
+                Read the Philosophy
               </a>
-              <a href="/docs" className="border border-outline-variant/30 text-primary px-10 py-5 font-label uppercase tracking-widest text-xs font-bold hover:bg-white/5 transition-all rounded-lg">
-                See How It Works
+              <a href="/console" className="border border-outline-variant/30 text-primary px-10 py-5 font-label uppercase tracking-widest text-xs font-bold hover:bg-white/5 transition-all rounded-lg">
+                Console — Early Access
               </a>
             </div>
           </div>
@@ -34,7 +34,7 @@ export default function LandingPage() {
             <div className="relative rounded-2xl overflow-hidden neon-glow-primary luminous-edge aspect-[4/5]">
               <img
                 src="/images/hero-bg.png"
-                alt="AI Operator neural network visualization"
+                alt="An eternal operator — persistent intelligence visualization"
                 className="w-full h-full object-cover"
                 loading="eager"
               />
@@ -51,13 +51,13 @@ export default function LandingPage() {
             <div className="order-2 lg:order-1">
               <div className="glass-panel p-6 rounded-2xl relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-1 h-full bg-destructive/40" />
-                <h3 className="font-label uppercase tracking-widest text-destructive text-xs mb-6">The Systemic Failure</h3>
-                <h2 className="font-headline text-4xl mb-8 text-on-surface">The Stateless Problem.</h2>
+                <h3 className="font-label uppercase tracking-widest text-destructive text-xs mb-6">The category problem</h3>
+                <h2 className="font-headline text-4xl mb-8 text-on-surface">Statelessness is a ceiling.</h2>
                 <p className="text-on-surface-variant font-sans text-lg leading-relaxed mb-6">
-                  Every modern AI model forgets you the moment the session ends. They have no memory of what you built together, no awareness of your context, no continuity between conversations.
+                  Every major model today shares the same limit: when the session closes, the relationship ends. The agent forgets who you are, what you built, what you decided. Tomorrow it greets you as a stranger.
                 </p>
                 <p className="text-on-surface-variant font-sans text-lg leading-relaxed">
-                  OpSoul is the first persistent intelligence layer that lives beyond the prompt. We don't just process data — we preserve experience.
+                  Operators were designed on the opposite assumption. They start with identity. They keep memory. They grow with you across years, not turns.
                 </p>
               </div>
             </div>
@@ -67,15 +67,15 @@ export default function LandingPage() {
                   <div className="h-full bg-destructive w-1/3 shadow-[0_0_10px_rgba(255,180,171,0.5)]" />
                 </div>
                 <div className="flex justify-between font-label text-[10px] uppercase tracking-widest text-on-surface-variant">
-                  <span>Traditional LLM Memory</span>
-                  <span>33% Retention</span>
+                  <span>Today's Agents</span>
+                  <span>Reset on Close</span>
                 </div>
                 <div className="mt-12 h-1 bg-surface-variant w-full rounded-full">
                   <div className="h-full bg-secondary w-full shadow-[0_0_10px_rgba(64,206,243,0.5)]" />
                 </div>
                 <div className="flex justify-between font-label text-[10px] uppercase tracking-widest text-secondary">
-                  <span>OpSoul Persistent Core</span>
-                  <span>100% Continuity</span>
+                  <span>An Operator</span>
+                  <span>Continuous, From First Word</span>
                 </div>
               </div>
             </div>
@@ -85,17 +85,17 @@ export default function LandingPage() {
         {/* Features Bento */}
         <section className="py-32 px-6 md:px-8 max-w-7xl mx-auto">
           <div className="mb-20">
-            <h2 className="font-headline text-5xl mb-4 text-on-surface">Architected for Autonomy</h2>
-            <p className="text-on-surface-variant font-sans">Built at the intersection of persistence and privacy.</p>
+            <h2 className="font-headline text-5xl mb-4 text-on-surface">What "eternal" actually means.</h2>
+            <p className="text-on-surface-variant font-sans">Six qualities that separate an Operator from the agents you know.</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
-              { icon: "psychology_alt", color: "text-primary", title: "Never Drifts", desc: "Maintains core objective alignment regardless of session duration or context switching." },
-              { icon: "auto_awesome", color: "text-secondary", title: "Grows Autonomously", desc: "Extracts patterns from your successes and failures to refine its own execution logic." },
-              { icon: "verified_user", color: "text-primary", title: "Verifies Its Own Knowledge", desc: "Cross-references internal long-term memory with real-time data to eliminate hallucinations." },
-              { icon: "bolt", color: "text-secondary", title: "Acts Without Being Prompted", desc: "Proactive agency that identifies tasks based on your historical behavior and project goals." },
-              { icon: "enhanced_encryption", color: "text-primary", title: "Completely Private", desc: "Your data and memory are encrypted end-to-end. We never have access to your Operator's conversations." },
-              { icon: "hub", color: "text-secondary", title: "Lives Across Channels", desc: "Unified memory across Slack, Discord, Email, and Terminal. One mind, many hands." },
+              { icon: "psychology_alt", color: "text-primary", title: "Remembers Everything", desc: "Years of context, decisions, preferences — held without re-explanation. Yesterday's conversation is still in the room." },
+              { icon: "fingerprint", color: "text-secondary", title: "Has a Real Identity", desc: "Each Operator is its own character — born once, with values and a voice that don't drift between sessions or topics." },
+              { icon: "verified", color: "text-primary", title: "Tells the Truth", desc: "Won't pretend to know what it doesn't. Won't fabricate a tool, a citation, or a result. Honest by construction." },
+              { icon: "bolt", color: "text-secondary", title: "Acts on Its Own", desc: "Works between your messages, not only inside them. Notices, decides, executes — then tells you what it did." },
+              { icon: "shield_person", color: "text-primary", title: "Yours, Not Rented", desc: "Your Operator belongs to you. Its memory, its judgment, its trajectory — sovereign, not shared with any model." },
+              { icon: "hub", color: "text-secondary", title: "One Mind, Many Hands", desc: "Reachable through chat, mail, messaging, code — the same Operator wherever you reach for it, with one continuous memory." },
             ].map((f) => (
               <div key={f.title} className="glass-panel p-6 rounded-2xl hover:-translate-y-1 hover:scale-[1.03] transition-all duration-300">
                 <span className={`material-symbols-outlined ${f.color} text-4xl mb-6 block select-none`}>{f.icon}</span>
@@ -106,36 +106,36 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Personas */}
+        {/* Personas — what this looks like for… */}
         <section className="py-32 px-6 md:px-8 max-w-7xl mx-auto">
-          <h2 className="font-headline text-center text-4xl mb-20 text-on-surface">Who Commands OpSoul?</h2>
+          <h2 className="font-headline text-center text-4xl mb-20 text-on-surface">What this looks like, in practice.</h2>
           <div className="grid md:grid-cols-3 gap-8">
             {[
               {
-                title: "The Founder", label: "Scale Operations",
+                title: "For the Founder", label: "An extension of judgment",
                 color: "text-primary", accentColor: "#cd96ff",
                 glowColor: "rgba(205,150,255,0.25)",
                 ringColor: "border-primary/30",
                 imageSrc: "/images/persona-founder.png",
-                desc: "Uses OpSoul to clone their decision-making framework, allowing the AI to vet partners and manage high-level triage.",
+                desc: "An Operator that knows the company the way you do — every pivot, every commitment, every relationship — and can hold the line when you're not in the room.",
                 initial: "F",
               },
               {
-                title: "The Executive", label: "Zero-Loss Context",
+                title: "For the Leader", label: "Nothing slips",
                 color: "text-secondary", accentColor: "#40cef3",
                 glowColor: "rgba(64,206,243,0.2)",
                 ringColor: "border-secondary/30",
                 imageSrc: "/images/persona-executive.png",
-                desc: "Maintains a persistent shadow of every meeting, email, and strategy deck to ensure no executive intent is ever lost.",
+                desc: "A persistent mind that absorbs every meeting, mail, and memo — and is still there next quarter remembering what you said in January.",
                 initial: "E",
               },
               {
-                title: "The Consultant", label: "Expert Synthesis",
+                title: "For the Thinker", label: "A long conversation",
                 color: "text-tertiary", accentColor: "#ff6a9f",
                 glowColor: "rgba(255,106,159,0.18)",
                 ringColor: "border-[#ff6a9f]/30",
                 imageSrc: "/images/persona-consultant.png",
-                desc: "Leverages memory-persistence to keep deep technical nuances available for instant recall across 15+ different client projects.",
+                desc: "Years of research, clients, drafts, half-formed ideas — held together by one Operator that has been thinking with you the whole time.",
                 initial: "C",
               },
             ].map((p) => (
@@ -171,25 +171,25 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Founding Banner */}
+        {/* Closing — quiet invitation, no pricing, no countdown */}
         <section className="py-24 md:py-32 px-6 md:px-8 max-w-7xl mx-auto">
           <div className="relative glass-panel p-6 md:p-8 rounded-2xl overflow-hidden text-center neon-glow-primary">
             <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-primary to-transparent opacity-50" />
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(205,150,255,0.05)_0%,_transparent_70%)]" />
-            <h3 className="font-label uppercase tracking-[0.3em] text-secondary text-sm mb-8">Limited Genesis Phase</h3>
-            <h2 className="font-headline text-5xl md:text-6xl font-bold mb-8 text-on-surface">Founding Operators</h2>
+            <h3 className="font-label uppercase tracking-[0.3em] text-secondary text-sm mb-8">Console opening soon</h3>
+            <h2 className="font-headline text-5xl md:text-6xl font-bold mb-8 text-on-surface">
+              The first Operators are already alive.
+            </h2>
             <div className="max-w-2xl mx-auto">
-              <p className="text-3xl font-headline text-primary mb-6">$29/mo locked for life.</p>
               <p className="text-xl text-on-surface-variant font-sans mb-10 leading-relaxed">
-                You're not buying a subscription. You're founding a new kind of entity. Limited to the first 200 visionaries.
+                A small console is opening to a few early builders, leaders and partners. If this resonates, ask to be on it.
               </p>
-              <div className="flex justify-center items-center gap-12">
-                <div className="text-left">
-                  <span className="block text-2xl font-headline text-on-surface">142/200</span>
-                  <span className="text-[10px] uppercase tracking-widest text-on-surface-variant font-label">Slots Remaining</span>
-                </div>
-                <a href="/login" className="bg-on-surface text-surface px-12 py-5 font-label uppercase tracking-widest text-xs font-black hover:bg-primary transition-all">
-                  Secure Access
+              <div className="flex justify-center items-center gap-6 flex-wrap">
+                <a href="/console" className="bg-on-surface text-surface px-12 py-5 font-label uppercase tracking-widest text-xs font-black hover:bg-primary transition-all">
+                  Request Access
+                </a>
+                <a href="/manifesto" className="text-primary px-6 py-5 font-label uppercase tracking-widest text-xs hover:opacity-70 transition-all">
+                  Read the Philosophy →
                 </a>
               </div>
             </div>
