@@ -11,9 +11,8 @@ interface PublicLayoutProps {
 export default function PublicLayout({ children, className = "" }: PublicLayoutProps) {
   return (
     <div
-      className={`min-h-screen bg-background text-on-surface selection:bg-primary-container selection:text-on-primary-container relative overflow-hidden ${className}`}
+      className={`min-h-screen bg-black text-white selection:bg-violet-500 selection:text-black relative overflow-hidden ${className}`}
     >
-      <div className="fixed inset-0 bg-gradient-to-b from-transparent via-transparent to-background pointer-events-none z-0" />
       <PublicNav />
       {children}
       <PublicFooter />

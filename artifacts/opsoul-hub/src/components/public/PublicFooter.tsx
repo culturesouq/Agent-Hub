@@ -3,39 +3,28 @@ export default function PublicFooter() {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="w-full py-12 px-6 md:px-8 bg-background border-t border-outline-variant/10">
-      <div className="flex flex-col md:flex-row justify-between items-center gap-6 w-full max-w-7xl mx-auto">
+    <footer className="w-full bg-black border-t border-white/10 py-12 px-6 md:px-10 lg:px-16">
+      <div className="flex flex-col md:flex-row justify-between items-center gap-6 w-full max-w-[1600px] mx-auto">
         <div className="flex flex-col items-center md:items-start gap-2">
           <span className="flex items-center gap-2">
             <img src="/logo.gif" alt="OpSoul" className="h-6 w-auto opacity-80 hover:opacity-100 transition-opacity" />
+            <span className="font-headline font-bold text-white text-base tracking-tight hidden md:inline">OpSoul</span>
           </span>
-          <p className="text-on-surface-variant font-label uppercase tracking-widest text-[10px]">
+          <p className="text-white/40 font-mono uppercase tracking-widest text-[10px]">
             © {year} OpSoul. All rights reserved.
           </p>
         </div>
-        <div className="flex gap-8">
-          <a className="text-on-surface-variant hover:text-secondary font-label uppercase tracking-widest text-[10px] hover:translate-x-1 transition-transform" href="/docs">
-            Documentation
-          </a>
-          <a className="text-on-surface-variant hover:text-secondary font-label uppercase tracking-widest text-[10px] hover:translate-x-1 transition-transform" href="/pricing">
-            Pricing
-          </a>
-          <a className="text-on-surface-variant hover:text-secondary font-label uppercase tracking-widest text-[10px] hover:translate-x-1 transition-transform" href="/support">
-            Support
-          </a>
-          <a className="text-on-surface-variant hover:text-secondary font-label uppercase tracking-widest text-[10px] hover:translate-x-1 transition-transform" href="/contact">
-            Contact
-          </a>
-          <a className="text-on-surface-variant hover:text-secondary font-label uppercase tracking-widest text-[10px] hover:translate-x-1 transition-transform" href="/privacy">
-            Privacy Policy
-          </a>
-          <a className="text-on-surface-variant hover:text-secondary font-label uppercase tracking-widest text-[10px] hover:translate-x-1 transition-transform" href="/terms">
-            Terms
-          </a>
+        <div className="flex gap-8 flex-wrap justify-center">
+          <a className="text-white/50 hover:text-violet-400 font-mono uppercase tracking-widest text-[10px] transition-colors" href="/docs">Documentation</a>
+          <a className="text-white/50 hover:text-violet-400 font-mono uppercase tracking-widest text-[10px] transition-colors" href="/pricing">Access</a>
+          <a className="text-white/50 hover:text-violet-400 font-mono uppercase tracking-widest text-[10px] transition-colors" href="/support">Support</a>
+          <a className="text-white/50 hover:text-violet-400 font-mono uppercase tracking-widest text-[10px] transition-colors" href="/contact">Contact</a>
+          <a className="text-white/50 hover:text-violet-400 font-mono uppercase tracking-widest text-[10px] transition-colors" href="/privacy">Privacy</a>
+          <a className="text-white/50 hover:text-violet-400 font-mono uppercase tracking-widest text-[10px] transition-colors" href="/terms">Terms</a>
         </div>
-        <div className="flex items-center gap-3 text-secondary opacity-60 hover:opacity-100 transition-opacity">
-          <span className="material-symbols-outlined text-sm select-none">verified_user</span>
-          <span className="font-label uppercase tracking-widest text-[10px]">Privacy Protected</span>
+        <div className="flex items-center gap-2 text-violet-400/70">
+          <span className="block w-1.5 h-1.5 rounded-full bg-violet-400 shadow-[0_0_6px_rgba(168,85,247,0.6)]" />
+          <span className="font-mono uppercase tracking-widest text-[10px]">Sovereign</span>
         </div>
       </div>
     </footer>
