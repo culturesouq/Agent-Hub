@@ -778,18 +778,31 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // ── OPERATOR-AS-DRIVER (full TurnPlan) ──────────────────────────────────
   // The operator composes its authoritative plan for this turn AFTER the
   // toolListCtx is built so the introspect path can use real tool names.
-  // The plan's system context is appended to systemPrompt below so the LLM
-  // sees the operator's intent + scaffolding + constraints — never a
-  // freeform "answer the user" prompt. Patent claim 21 fully realised.
+  // The plan is INSERTED into the messages array as a high-priority system
+  // message immediately before the user turn — so the LLM sees the operator's
+  // intent + scaffolding + constraints as the last system context. The
+  // earlier `messages` array (built at line 729 with fullSystemPrompt) already
+  // contains the operator identity; we add the TurnPlan ON TOP, not by
+  // mutating systemPrompt (which was already consumed). Patent claim 21
+  // fully realised.
   const fullToolList = listToolsForContext(toolListCtx);
   const turnPlan = agent.composeTurnPlan(message, {
     toolNames: fullToolList.map(t => t.function.name),
     toolDescriptions: new Map(fullToolList.map(t => [t.function.name, t.function.description ?? ''])),
   });
-  // Append the operator's TurnPlan to the system prompt so the LLM treats it
-  // as system-priority context. Sits AFTER the operator identity block — the
-  // operator's plan for THIS turn is the last system message before the user.
-  systemPrompt = `${systemPrompt}\n\n${renderTurnPlanSystemContext(turnPlan)}`;
+  // Insert the TurnPlan right BEFORE the user message so it's the closest
+  // system context the LLM reads before composing its reply. Find the user
+  // message index and splice in a system message before it.
+  const userMsgIndex = messages.findIndex(m => m.role === 'user');
+  const turnPlanMsg: ChatMessage = {
+    role: 'system',
+    content: renderTurnPlanSystemContext(turnPlan),
+  };
+  if (userMsgIndex >= 0) {
+    messages.splice(userMsgIndex, 0, turnPlanMsg);
+  } else {
+    messages.push(turnPlanMsg);
+  }
 
   // ─── STREAMING PATH ────────────────────────────────────────────────────────
 
