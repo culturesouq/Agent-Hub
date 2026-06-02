@@ -24,7 +24,7 @@
 import { listToolsForContext } from './toolRegistry.js';
 import type { ToolDefinition } from './openrouter.js';
 import type { ToolHandlerContext } from './toolHandlers.js';
-import { isWebSearchAvailable } from './capabilityEngine.js';
+import { isWebSearchAvailable, isFirecrawlAvailable } from './capabilityEngine.js';
 import type { ScopeType, ValidatedScope } from './scopeResolver.js';
 
 export interface OperatorToolsetInput {
@@ -44,6 +44,10 @@ export interface OperatorToolset {
   toolListCtx: {
     scopeType: ScopeType;
     hasWebSearch: boolean;
+    /** Firecrawl D-6 — gates the 5 firecrawl_* tools. Owner directive 2026-06-02:
+     *  every operator does KB seeding, so this MUST reflect platform availability
+     *  (don't strip the capability). Wired here per [[expand-never-cut]]. */
+    hasFirecrawl: boolean;
     liveSecrets: string[];
     connectedIntegrations: string[];
   };
@@ -69,6 +73,7 @@ export function buildOperatorToolset(input: OperatorToolsetInput): OperatorTools
   const toolListCtx = {
     scopeType: input.scope.scopeType,
     hasWebSearch: isWebSearchAvailable(),
+    hasFirecrawl: isFirecrawlAvailable(),
     liveSecrets,
     connectedIntegrations,
   };

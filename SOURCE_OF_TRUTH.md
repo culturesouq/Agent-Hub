@@ -4431,3 +4431,45 @@ void decision; // retained for future tool-gating in this webhook
 **Out of scope (acknowledged limitation)**: in `execute` mode the LLM still emits the tool call name (the framework dispatches it). A stricter reading of Claim 21 would have the operator *plan* the tool call deterministically and only invoke the LLM for content production with results in context. That requires a separate planner step (heuristic or planner-LLM); flagged for a follow-up architecture pass once Hajeri training pressure eases. The current fix closes the immediate regression (operator's `chat` decision is now respected, LLM cannot tool-call when the operator said no).
 
 **Deploy gate**: owner directive — *"before deploy go to all latest commit and audit the agents work 1 by 1"* — audit of yesterday's 6 agent commits (A1 security / A2 schema / A3 onboarding / A4 autonomy / A5 marketplace / A6 polish) precedes deploy.
+
+
+### 2026-06-02 — Firecrawl silent-strip fixed at all 3 ToolContext consumers
+
+**Trigger**: post-Claim-21 patent audit (4 parallel clusters covering ~16 code-changing commits since 2026-05-15) caught a sibling pattern of the operator-decision-lost-downstream bug. This one in the opposite direction — a **silent capability strip** instead of a silent grant.
+
+**Bug**: `6811abf` (Firecrawl D-6 + 5 MCP tools) registered the 5 firecrawl_* tools with `availability: 'firecrawl'` gated on `ctx.hasFirecrawl`. The SoT entry for 6811abf openly admitted: *"routes/mcp.ts and routes/chat.ts wiring left for Phase 1B merge"* — that wiring never landed. Then `27f4549` introduced `utils/operatorToolset.ts` (used by all 4 non-streaming surfaces) which also never set `hasFirecrawl`. Net effect on every dispatch surface:
+
+```ts
+// toolRegistry.ts:1185
+if (tool.availability === 'firecrawl') return !!ctx.hasFirecrawl;
+// ctx.hasFirecrawl is undefined → !!undefined === false → tool stripped
+```
+
+The registry promises Firecrawl; the dispatch layer silently denies it. Operators carry a capability they cannot use. Violates [[expand-never-cut]] and Claim 21's spirit ("operator decides; LLM is engine") — only the inverse direction (capability *removed* not *granted*).
+
+**Owner directive verbatim**: *"i asked to add firecrawl because it needed, for all my operators (all of them do KB seedings each in his own app) so don't strip it add it and fix anything it cause"*
+
+**Fix** (3 files, 1-line wiring at each):
+
+| File | Change |
+|---|---|
+| `utils/operatorToolset.ts` | Import `isFirecrawlAvailable` from capabilityEngine. Add `hasFirecrawl: boolean` to `OperatorToolset.toolListCtx` interface. Set `hasFirecrawl: isFirecrawlAvailable()` in the built context. Closes the gap for public-chat + telegram-webhook + whatsapp-webhook + public-crud. |
+| `routes/chat.ts` | Import `isFirecrawlAvailable` from capabilityEngine. Add `hasFirecrawl: isFirecrawlAvailable()` to the `toolListCtx` object at line 767. Closes the streaming Hub gap. |
+| `routes/mcp.ts` | Import `isFirecrawlAvailable` from capabilityEngine. Pass `hasFirecrawl: isFirecrawlAvailable()` to `createMcpServerForContext()`. Closes the MCP server context gap. |
+
+`utils/mcpServer.ts` already accepted `hasFirecrawl?: boolean` (added in 6811abf) so the MCP plumbing already existed end-to-end — only the call sites were missing.
+
+**Typecheck**: `npx tsc --noEmit` → clean (0 errors).
+
+**Audit cluster summary** (full transcripts in agent task outputs):
+
+| Cluster | Commits | Result |
+|---|---|---|
+| A — Tool/agent loops | 27f4549, c10186d, 6811abf | 1 BLOCKING (Firecrawl strip — this fix) |
+| B — No-fallbacks + arch-leak | 7e14d4f, 16af7cf, 16f89d9 | CLEAN |
+| C — Claims 3/5/25 (PII, firewall, soul-anchor) | a513c5a, 3d4e178, 2e2dc9b | CLEAN |
+| D — Source-trust + KB | 839d0df, 7ba1255, 31e84f5, 6811abf | Confirms A (firecrawl), + 1 LOW (Stop-Crawl idempotency note) |
+
+**Open low-priority follow-up** (D cluster): `routes/firecrawl.ts` Stop-Crawl POST relies on Firecrawl vendor `/cancel` being idempotent. Not blocking; track for Phase 1B+1 polish.
+
+**Deploy**: pending. Will land in the same deploy as `989546a` (Claim 21 analyseDecision wiring) once Nahil deploy clears.

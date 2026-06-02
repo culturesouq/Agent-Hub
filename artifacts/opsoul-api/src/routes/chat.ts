@@ -40,7 +40,7 @@ import type { ContentPart } from '../utils/openrouter.js';
 import { verifyAndStore } from '../utils/kbIntake.js';
 import { eq, and, asc, sql } from 'drizzle-orm';
 import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
-import { isWebSearchAvailable } from '../utils/capabilityEngine.js';
+import { isWebSearchAvailable, isFirecrawlAvailable } from '../utils/capabilityEngine.js';
 import {
   persistUrlScrapedResult,
   persistSkillResult,
@@ -767,6 +767,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   const toolListCtx = {
     scopeType: 'owner' as const,
     hasWebSearch: isWebSearchAvailable(),
+    // Firecrawl D-6: gates the 5 firecrawl_* tools. Owner directive 2026-06-02
+    // — every operator does KB seeding in its own app, so Firecrawl MUST be
+    // present whenever the platform key is configured. Per [[expand-never-cut]].
+    hasFirecrawl: isFirecrawlAvailable(),
     liveSecrets: liveSecrets.map(s => s.key),
     connectedIntegrations: liveIntegrations.map(i => i.integrationType),
   };

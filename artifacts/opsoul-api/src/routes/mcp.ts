@@ -35,7 +35,7 @@ import { and, eq } from 'drizzle-orm';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { buildOwnerScope } from '../utils/scopeResolver.js';
-import { isWebSearchAvailable } from '../utils/capabilityEngine.js';
+import { isWebSearchAvailable, isFirecrawlAvailable } from '../utils/capabilityEngine.js';
 import { createMcpServerForContext } from '../utils/mcpServer.js';
 import type { ToolHandlerContext } from '../utils/toolHandlers.js';
 
@@ -101,6 +101,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   const server = createMcpServerForContext({
     handlerCtx,
     hasWebSearch: isWebSearchAvailable(),
+    // Firecrawl D-6: every operator does KB seeding (owner directive 2026-06-02).
+    // Must reflect platform availability so the 5 firecrawl_* tools aren't
+    // silently stripped from the MCP surface. Per [[expand-never-cut]].
+    hasFirecrawl: isFirecrawlAvailable(),
     liveSecrets: liveSecrets.map((s) => s.key),
   });
 
