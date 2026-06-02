@@ -34,9 +34,6 @@ import Login from "@/pages/login";
 import Dashboard from "@/pages/Dashboard";
 import OperatorDetail from "@/pages/OperatorDetail";
 import LandingPage from "@/pages/LandingPage";
-import PricingPage from "@/pages/PricingPage";
-import SupportPage from "@/pages/SupportPage";
-import DocsPage from "@/pages/DocsPage";
 import ContactPage from "@/pages/ContactPage";
 import AdminPage from "@/pages/AdminPage";
 import PrivacyPage from "@/pages/PrivacyPage";
@@ -95,9 +92,6 @@ function Router() {
     <Switch>
       <Route path="/" component={RootRoute} />
       <Route path="/login" component={Login} />
-      <Route path="/pricing" component={PricingPage} />
-      <Route path="/support" component={SupportPage} />
-      <Route path="/docs" component={DocsPage} />
       <Route path="/contact" component={ContactPage} />
       <Route path="/privacy" component={PrivacyPage} />
       <Route path="/terms" component={TermsPage} />

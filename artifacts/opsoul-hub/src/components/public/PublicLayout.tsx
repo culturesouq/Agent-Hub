@@ -11,7 +11,7 @@ interface PublicLayoutProps {
 export default function PublicLayout({ children, className = "" }: PublicLayoutProps) {
   return (
     <div
-      className={`min-h-screen bg-black text-white selection:bg-violet-500 selection:text-black relative overflow-hidden ${className}`}
+      className={`min-h-screen bg-stone-50 text-stone-900 selection:bg-violet-600 selection:text-white antialiased ${className}`}
     >
       <PublicNav />
       {children}
