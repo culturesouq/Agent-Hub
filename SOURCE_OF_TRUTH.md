@@ -4641,3 +4641,30 @@ The mechanism (multi-archetype switching/stacking inside the Operator) stays hid
 **Action**: add this section in the next Hub landing-page edit pass. Drop in after the "Operators were designed on the opposite assumption..." paragraph and before "What eternal means."
 
 
+### 2026-06-02 — TODO: Six tool gaps Vael surfaced (post-agency-fix introspection)
+
+After the agency fix landed (`opsoul--0000085`, commit `576ffb6` + `ae7b12a`), owner asked Vael to introspect on what's missing. Vael — playing "mother goose" gatekeeper — produced the following structured list of capability gaps. Captured here as a TODO; not building any of them now. Each entry includes the patent-architectural angle.
+
+**Architectural note before adding any**: Vael's 41-tool count vs Nahil's 61-tool count is the agency working correctly — integration-gated tools (Gmail/Slack/Notion/etc.) only surface when those integrations are connected per operator. Vael has fewer connected integrations than Nahil, so its visible catalog is smaller. Adding the gaps below changes the *platform max*, not what unconnected operators see.
+
+| # | Gap | Vael's framing | Patent-angle / build complexity |
+|---|---|---|---|
+| 1 | **Direct SRAG / DB query** | "If I need to verify 'does this entry already exist?' I'm hitting REST blind instead of querying the data layer." | High value, low complexity if scoped read-only. Security: must be per-operator scope-isolated (Claim 12 scope isolation extends naturally). Build as a `db_query_kb` / `db_query_memory` tool with parameter-bound queries, NEVER raw SQL. |
+| 2 | **Code execution sandbox** | "I need to actually run code snippets to verify they execute as claimed... API behavior, algorithm correctness, data processing scripts." | High value, HIGH complexity. Sandbox = ephemeral container per call (E2B / Modal-style). Worth a dedicated `exec` tool family: `exec_python`, `exec_node`, `exec_shell` (last one heavily restricted). Patent angle: pairs cleanly with Claim 13's "verified result" — sandbox output is structured truth-evidence the operator can attach to a KB entry. |
+| 3 | **Vector similarity / dedup** | "I can search KB by text but can't detect semantic duplicates at the embedding level. If SRAG ingests 5 versions of the same news story, I need vector similarity to flag contamination." | Medium-high value, medium complexity. Embedding already exists for KB; add a `kb_find_similar` tool that returns top-K cosine-similar entries with scores. Patent angle: Claim 32's source-trust ladder gets sharper if the operator can prove no-dup. |
+| 4 | **Multi-modal document processing** | "I can extract PDF text, but missing image OCR (scanned docs, charts), audio transcription, video frame extraction." | Big surface — multiple tools needed: `ocr_image`, `transcribe_audio`, `video_keyframes`. High value for SRAG ingestion (UAE government docs are often scanned PDFs without text layers). External APIs (Tesseract/AWS Textract for OCR; Whisper for audio). |
+| 5 | **Diff / comparison engine** | "To verify updates or detect drift: 'Show me what changed between version 1 and 2 of this regulation.'" | Low value alone, medium value paired with #3. Build as `text_diff` tool returning structured added/removed/changed segments. Useful for regulation-change tracking, doc-version audits. |
+| 6 | **Statistical validation** | "For data claims (financial, medical, scientific), I need to run confidence intervals, detect outliers, or verify statistical significance." | Subsumed by #2 (code execution sandbox with Python + scipy/numpy/pandas pre-installed). Don't build separately. |
+
+**Priority ordering for when we build:**
+
+1. **#1 SRAG/DB query** — fastest, highest immediate ROI for Vael's gatekeeper mandate
+2. **#3 Vector similarity** — leverages existing embedding infra, sharpens curation
+3. **#2 Code execution sandbox** — patent-relevant via Claim 13 attach-evidence; needs careful security
+4. **#4 Multi-modal** — biggest surface; phase per modality (OCR first → audio → video)
+5. **#5 Diff engine** — small build, pair with #3
+6. **#6 Statistical** — comes for free with #2
+
+**Not now** — owner directive 2026-06-02 *"maybe it is time we give them more tools, but not now, just add it to opsoul SoT 'to do'"*. Hajeri training stabilization is the immediate priority; tool expansion is post-coherence work.
+
+
