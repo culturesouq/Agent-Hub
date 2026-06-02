@@ -29,10 +29,10 @@ export default function PublicNav() {
         </div>
         <div className="flex items-center gap-6">
           <a
-            href="/login"
+            href="/console"
             className="bg-primary-container text-on-primary-container px-6 py-2 font-label uppercase tracking-widest text-[10px] font-bold hover:opacity-90 transition-all duration-300"
           >
-            Get Started
+            Console
           </a>
         </div>
       </div>

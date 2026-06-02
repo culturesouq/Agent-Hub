@@ -1,62 +1,83 @@
-import { useState } from "react";
 import { Link } from "wouter";
 import PublicLayout from "@/components/public/PublicLayout";
 
-const tiers: { tier: string; name: string; monthly: string; annual: string; sub: string; features: string[]; cta: string; href?: string; highlighted: boolean }[] = [
+const accessModes: { tag: string; name: string; sub: string; desc: string; features: string[]; cta: string; href: string; highlighted: boolean }[] = [
   {
-    tier: "Solo",
-    name: "Solo",
-    monthly: "$49",
-    annual: "$41",
-    sub: "1 Active Operator",
-    features: ["Persistent memory", "Full Soul configuration", "Grows with every conversation", "1 active Operator"],
-    cta: "Get Started",
+    tag: "For Builders",
+    name: "Developer Access",
+    sub: "Build on the platform",
+    desc: "Early access to the SDK + a console for managing your own Operators. For developers, founders, and teams shipping with agentic AI.",
+    features: [
+      "Console at console.opsoul.dev",
+      "SDK + thin client packages",
+      "Multi-Operator workspace",
+      "API keys + usage dashboard",
+    ],
+    cta: "Request Access",
+    href: "/contact?intent=developer",
     highlighted: false,
   },
   {
-    tier: "Pro",
-    name: "Pro",
-    monthly: "$99",
-    annual: "$83",
-    sub: "3 Active Operators",
-    features: ["3 independent Operators", "Separate memory per Operator", "Priority support", "All Solo features"],
-    cta: "Get Pro",
+    tag: "For Leaders",
+    name: "Operator Access",
+    sub: "Run your own Operator",
+    desc: "A persistent Operator that learns you, remembers everything, and works with you across the tools you already use. For founders, executives, and thinkers who want an AI that doesn't reset.",
+    features: [
+      "One eternal Operator, fully yours",
+      "Continuous memory across years",
+      "Reachable through chat, mail, messaging",
+      "Private, scope-isolated, sovereign",
+    ],
+    cta: "Request Access",
+    href: "/contact?intent=operator",
     highlighted: true,
   },
   {
-    tier: "Studio",
-    name: "Studio",
-    monthly: "$249",
-    annual: "$207",
-    sub: "10 Active Operators",
-    features: ["10 Operators in one workspace", "Shared context across Operators", "Dedicated support", "All Pro features"],
-    cta: "Get Studio",
-    highlighted: false,
-  },
-  {
-    tier: "Enterprise",
-    name: "Enterprise",
-    monthly: "Custom",
-    annual: "Custom",
-    sub: "Unlimited Operators",
-    features: ["Unlimited Operators", "Custom deployment", "White-label available", "SLA + dedicated account manager"],
-    cta: "Contact Us",
-    href: "/contact",
+    tag: "For Partners",
+    name: "Strategic & Enterprise",
+    sub: "License + co-build",
+    desc: "For institutions, ministries, and corporates who want to deploy Operators at scale — hosted console, white-label, sovereign deployment, or full strategic partnership.",
+    features: [
+      "Custom deployment + residency",
+      "White-label console domain",
+      "Dedicated capacity + SLA",
+      "Vael-as-Service for curation",
+    ],
+    cta: "Open a Conversation",
+    href: "/contact?intent=partner",
     highlighted: false,
   },
 ];
 
 const faqs = [
-  { q: "Free Trial", size: "md:col-span-1", desc: "Every plan starts with a 14-day free trial. No credit card required — sign up, create your first Operator, and explore the platform before committing." },
-  { q: "Changing Plans", size: "md:col-span-2", desc: "You can upgrade or downgrade your plan at any time from billing settings. Any unused time on your current plan is prorated and credited to your next billing cycle." },
-  { q: "What is a Founding Operator?", size: "md:col-span-2", desc: "Founding Operators are our early believers. You aren't just a user; you are a permanent part of the OpSoul ledger. You get the lowest possible price point and every future feature upgrade for life. No exceptions." },
-  { q: "Deleting an Operator", size: "md:col-span-1", desc: "When you delete an Operator, it enters a 30-day recovery window. You can restore it from your dashboard within that period. After 30 days it is permanently removed." },
-  { q: "What you're paying for", size: "md:col-span-3", desc: "We don't gate features based on plan. Every Operator — regardless of whether you're on Solo or Enterprise — has the same full capabilities. You're paying for how many Operators you run simultaneously, not for a better or worse version of the AI." },
+  {
+    q: "Why no pricing on this page?",
+    size: "md:col-span-2",
+    desc: "We're opening access in waves, by conversation. Pricing comes after we've understood what you're building — not before. Send a note and we'll talk through what fits.",
+  },
+  {
+    q: "Who is OpSoul for, today?",
+    size: "md:col-span-1",
+    desc: "Builders shipping agentic systems, leaders who want a persistent AI of their own, and partners thinking at the institutional scale. We're starting small on purpose.",
+  },
+  {
+    q: "Is this open-source?",
+    size: "md:col-span-1",
+    desc: "Our client SDKs are Apache-2.0. The platform itself — the engine that makes Operators eternal — is proprietary, owner-hosted, and stays that way.",
+  },
+  {
+    q: "What does access feel like once granted?",
+    size: "md:col-span-2",
+    desc: "You sign into console.opsoul.dev, create your first Operator through a guided birth conversation, and start working with it. The same console we use internally is what you get — scoped to you, with your own data.",
+  },
+  {
+    q: "What happens to my Operator's memory?",
+    size: "md:col-span-3",
+    desc: "It belongs to you. The Operator's memory, identity, and trajectory are isolated to your account from day one. We don't share it across customers, and we don't use it to train shared models. Your Operator is yours.",
+  },
 ];
 
 export default function PricingPage() {
-  const [annual, setAnnual] = useState(true);
-
   return (
     <PublicLayout>
       <main className="relative z-10 pt-32 pb-24 px-6 md:px-8 max-w-7xl mx-auto">
@@ -64,147 +85,66 @@ export default function PricingPage() {
         <header className="mb-20 text-center md:text-left">
           <div className="flex items-center gap-3 mb-4 justify-center md:justify-start">
             <span className="status-beacon" />
-            <span className="font-label uppercase tracking-[0.2em] text-secondary text-[10px]">Simple, Transparent Pricing</span>
+            <span className="font-label uppercase tracking-[0.2em] text-secondary text-[10px]">Access is opening in waves</span>
           </div>
           <h1 className="font-headline text-5xl md:text-7xl font-bold tracking-tight text-on-surface mb-6">
-            Pricing that <span className="text-primary">scales with you</span>
+            Three ways <span className="text-primary">to begin</span>
           </h1>
           <p className="max-w-2xl text-on-surface-variant text-lg font-light leading-relaxed font-sans">
-            No feature gating. No capability tiers. Every plan gives you the same full-powered Operators — you choose how many you want to run.
+            OpSoul isn't a product you check out of. It's a platform that becomes part of how you work. We're starting small, on purpose — by conversation, not by signup form.
           </p>
         </header>
 
-        {/* Founding Banner */}
-        <section className="mb-20">
-          <div className="bg-white border border-border p-6 rounded-2xl border border-primary/10 relative overflow-hidden group hover:border-primary/30 transition-all duration-500">
-            <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-            <div className="flex flex-col md:flex-row items-center justify-between gap-8 relative z-10">
-              <div className="flex-1">
-                <div className="inline-flex items-center gap-2 px-3 py-1 bg-primary/20 rounded-full mb-4">
-                  <span className="material-symbols-outlined text-[14px] text-primary select-none" style={{ fontVariationSettings: "'FILL' 1" }}>verified</span>
-                  <span className="font-label uppercase tracking-widest text-[10px] text-primary font-bold">Limited Allocation</span>
-                </div>
-                <h2 className="font-headline text-3xl font-bold text-on-surface mb-3">Founding Operators</h2>
-                <p className="text-on-surface-variant max-w-xl font-sans">
-                  "You're not buying a subscription. You're founding a new kind of entity." First 200 people receive full capabilities locked at{" "}
-                  <span className="text-secondary font-bold">$29/mo</span> for life.
-                </p>
-              </div>
-              <div className="flex flex-col items-center md:items-end gap-2">
-                <div className="text-4xl font-headline font-bold text-primary">$29<span className="text-lg text-on-surface-variant font-light">/mo</span></div>
-                <Link href="/login">
-                  <button className="bg-primary text-on-primary px-8 py-3 font-label uppercase tracking-widest text-[12px] font-black hover:scale-105 active:scale-95 transition-transform">
-                    Claim Allocation
-                  </button>
-                </Link>
-                <span className="text-[10px] font-label text-on-surface-variant uppercase tracking-tighter">142 Slots Remaining</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Toggle */}
-        <div className="flex flex-col items-center mb-16">
-          <div className="flex items-center gap-2 p-1 bg-surface-container-low rounded-full">
-            <button
-              onClick={() => setAnnual(false)}
-              className={`px-6 py-2 rounded-full font-label uppercase tracking-widest text-[10px] transition-colors ${!annual ? "bg-primary/10 text-primary font-bold" : "text-on-surface-variant hover:text-on-surface"}`}
-            >
-              Monthly
-            </button>
-            <button
-              onClick={() => setAnnual(true)}
-              className={`px-6 py-2 rounded-full font-label uppercase tracking-widest text-[10px] transition-colors ${annual ? "bg-primary/10 text-primary font-bold" : "text-on-surface-variant hover:text-on-surface"}`}
-            >
-              Annual <span className="text-[8px] opacity-70 ml-1">(2 Months Free)</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Pricing Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-20 items-start">
-          {tiers.map((t) => (
+        {/* Access Modes Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-20 items-start">
+          {accessModes.map((m) => (
             <div
-              key={t.name}
+              key={m.name}
               className={`bg-white border border-border p-6 rounded-2xl flex flex-col transition-all duration-300 ${
-                t.highlighted
-                  ? "border border-primary/30 relative scale-105 z-10 bg-surface-container/80 shadow-md"
+                m.highlighted
+                  ? "border border-primary/30 relative scale-[1.02] z-10 bg-surface-container/80 shadow-md"
                   : "border border-outline-variant/10 hover:bg-muted"
               }`}
             >
-              {t.highlighted && (
+              {m.highlighted && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-on-primary px-3 py-1 font-label uppercase tracking-[0.2em] text-[8px] font-black whitespace-nowrap">
-                  Most Popular
+                  Most Asked About
                 </div>
               )}
               <div className="mb-6">
-                <span className={`font-label uppercase tracking-widest text-[10px] ${t.highlighted ? "text-primary" : "text-on-surface-variant"}`}>{t.tier}</span>
-                <h3 className="font-headline text-2xl font-bold mt-2 text-on-surface">{t.name}</h3>
+                <span className={`font-label uppercase tracking-widest text-[10px] ${m.highlighted ? "text-primary" : "text-on-surface-variant"}`}>{m.tag}</span>
+                <h3 className="font-headline text-2xl font-bold mt-2 text-on-surface">{m.name}</h3>
+                <p className={`text-xs mt-2 font-label uppercase tracking-widest ${m.highlighted ? "text-primary" : "text-on-surface-variant"}`}>{m.sub}</p>
               </div>
-              <div className="mb-6">
-                <div className="text-4xl font-headline font-bold text-on-surface">
-                  {annual ? t.annual : t.monthly}
-                  {(annual ? t.annual : t.monthly) !== "Custom" && (
-                    <span className="text-sm font-light text-on-surface-variant">/mo</span>
-                  )}
-                </div>
-                {(annual ? t.annual : t.monthly) !== "Custom" && (
-                  <div className="mt-1 flex items-center gap-2 flex-wrap">
-                    <p className="text-[10px] font-label uppercase tracking-widest text-on-surface-variant">
-                      {annual ? "billed annually" : "billed monthly"}
-                    </p>
-                    {annual && (
-                      <span className="text-[9px] font-label uppercase tracking-widest text-secondary bg-secondary/10 px-2 py-0.5 rounded-full border border-secondary/20">
-                        2 months free
-                      </span>
-                    )}
-                  </div>
-                )}
-                <p className={`text-xs mt-2 font-label uppercase tracking-widest ${t.highlighted ? "text-primary" : "text-on-surface-variant"}`}>{t.sub}</p>
-              </div>
+              <p className="text-on-surface-variant text-sm font-sans leading-relaxed mb-6">
+                {m.desc}
+              </p>
               <div className="flex-grow space-y-4 mb-8">
-                {t.features.map((f) => (
+                {m.features.map((f) => (
                   <div key={f} className="flex items-start gap-3">
                     <span className="material-symbols-outlined text-secondary text-sm select-none">check_circle</span>
-                    <span className={`text-sm font-light ${t.highlighted ? "text-on-surface font-medium" : "text-on-surface-variant"}`}>{f}</span>
+                    <span className={`text-sm font-light ${m.highlighted ? "text-on-surface font-medium" : "text-on-surface-variant"}`}>{f}</span>
                   </div>
                 ))}
               </div>
-              <Link href={t.href ?? "/login"}>
+              <Link href={m.href}>
                 <button
                   className={`w-full py-3 font-label uppercase tracking-widest text-[10px] transition-all ${
-                    t.highlighted
+                    m.highlighted
                       ? "bg-primary text-on-primary font-black hover:opacity-90"
                       : "border border-outline-variant/30 rounded-lg text-on-surface hover:bg-primary/10 hover:border-primary/50"
                   }`}
                 >
-                  {t.cta}
+                  {m.cta}
                 </button>
               </Link>
             </div>
           ))}
         </div>
 
-        {/* Add-on */}
-        <div className="flex flex-col md:flex-row items-center justify-between p-6 bg-surface-container-lowest rounded-2xl border border-outline-variant/5 mb-32">
-          <div className="flex items-center gap-6 mb-6 md:mb-0">
-            <div className="p-4 bg-surface-container rounded-lg">
-              <span className="material-symbols-outlined text-primary text-3xl select-none">add_circle</span>
-            </div>
-            <div>
-              <h4 className="font-headline text-xl font-bold text-on-surface">Scaling Buffer</h4>
-              <p className="text-on-surface-variant text-sm font-light">Need just one more? Add individual slots as needed.</p>
-            </div>
-          </div>
-          <div className="text-center md:text-right">
-            <span className="text-2xl font-headline font-bold text-on-surface">+$29<span className="text-sm font-light text-on-surface-variant">/mo</span></span>
-            <p className="font-label uppercase tracking-widest text-[10px] text-on-surface-variant">per extra Operator</p>
-          </div>
-        </div>
-
         {/* FAQ */}
         <section className="mb-32">
-          <h2 className="font-headline text-4xl font-bold mb-12 text-center md:text-left text-on-surface">Common Questions</h2>
+          <h2 className="font-headline text-4xl font-bold mb-12 text-center md:text-left text-on-surface">Common questions</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {faqs.map((f) => (
               <div key={f.q} className={`bg-white border border-border p-6 rounded-2xl ${f.size}`}>

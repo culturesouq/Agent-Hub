@@ -455,7 +455,7 @@ function BillingPanel() {
 
       <div className="bg-white rounded-2xl border border-border/30 p-5">
         <p className="text-xs text-muted-foreground leading-relaxed">
-          Founding operator pricing locks in at <span className="text-primary font-bold">$29/mo for life</span> when Pro launches. Your early access is reserved.
+          You're in the early access wave. Access tiers open in conversation as the platform matures.
         </p>
       </div>
     </div>

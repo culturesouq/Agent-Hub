@@ -96,8 +96,8 @@ export default function DocsPage() {
             ))}
           </div>
           <div className="px-6 py-6 border-t border-outline-variant/10">
-            <a href="/login" className="block w-full bg-primary/10 hover:bg-primary/20 text-primary font-label uppercase tracking-widest text-[9px] py-3 rounded-lg transition-colors border border-primary/20 text-center">
-              Get Started
+            <a href="/console" className="block w-full bg-primary/10 hover:bg-primary/20 text-primary font-label uppercase tracking-widest text-[9px] py-3 rounded-lg transition-colors border border-primary/20 text-center">
+              Open the Console
             </a>
           </div>
         </aside>
