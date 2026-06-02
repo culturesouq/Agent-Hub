@@ -103,7 +103,10 @@ const LLM_RETRY_DELAYS_MS = [1000, 2000, 4000] as const;
  * tighten them, and deployments on Claude 4.7 1M can loosen them. The
  * mechanism stays the same — only the defaults moved to match reality.
  */
-const LLM_BUDGET_INPUT_TOKENS = Number.parseInt(process.env.CHAT_LLM_BUDGET_TOKENS ?? '65536', 10);
+// 2026-06-02: default raised 65_536 → 200_000 for single-user Kimi K2.5 deployment.
+// Kimi K2.5 max input is 256k; 200k leaves 56k headroom for output + safety.
+// Env override kept for future multi-tenant tightening (CHAT_LLM_BUDGET_TOKENS).
+const LLM_BUDGET_INPUT_TOKENS = Number.parseInt(process.env.CHAT_LLM_BUDGET_TOKENS ?? '200000', 10);
 const LLM_BUDGET_OUTPUT_TOKENS = Number.parseInt(process.env.CHAT_LLM_OUTPUT_TOKENS ?? '4096', 10);
 
 export class LlmBudgetError extends Error {

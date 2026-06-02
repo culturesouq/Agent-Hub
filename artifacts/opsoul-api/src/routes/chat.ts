@@ -155,7 +155,10 @@ async function resolveOperatorAndConv(
 // soul-anchor math). 60k tokens leaves headroom for system prompt + KB +
 // memory + tool catalog + output even on the smallest catalogued model.
 const HISTORY_MAX_MESSAGES = 40;
-const HISTORY_MAX_TOKENS = 60_000;
+// 2026-06-02: raised 60_000 → 200_000 for single-user Kimi K2.5 deployment.
+// Kimi K2.5 supports 256k input; 200k leaves ~56k headroom for output + safety.
+// For future multi-tenant deployment, override via env or drop back to 60k.
+const HISTORY_MAX_TOKENS = 200_000;
 
 async function buildMessageHistory(convId: string): Promise<ChatMessage[]> {
   const msgs = await db
