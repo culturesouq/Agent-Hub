@@ -4520,3 +4520,92 @@ Rolling revision is `opsoul--0000079`. The CORS code path is `artifacts/opsoul-a
 2. `az containerapp hostname add` (slot)
 3. `az containerapp hostname bind --validation-method HTTP` (cert)
 4. **`az containerapp update --set-env-vars ALLOWED_ORIGIN=…`** ← don't forget this one
+
+
+### 2026-06-02 — Firecrawl key activated + Hub editorial / dark-cozy refactor
+
+Sequence of changes after the opsoul.dev domain went live. Each created a new revision; below is the lineage and what landed.
+
+**FIRECRAWL_API_KEY enabled (`opsoul--0000081`).** Owner provided the Free-tier key (`fc-...`). One env update:
+
+```
+az containerapp update -n opsoul -g bani-studio-rg \
+  --set-env-vars "FIRECRAWL_API_KEY=fc-0439daed147e4a9b81c371d3d3a9b44b"
+```
+
+Verified end-to-end: key valid (HTTP 200 from `api.firecrawl.dev/v1/scrape`), Firecrawl successfully scraped `https://opsoul.dev` and returned the new landing copy in markdown, so the 5 `firecrawl_*` tools are now offered to operators on every surface (Hub stream, public-chat, telegram, whatsapp, public-crud, MCP). Patent claim 21 wiring (`989546a`) + capability wiring (`f8aa086`) confirmed working given a valid key.
+
+**Operator-introspection diagnostic (owner challenge).** A Nahil session showed the operator claiming it didn't have Firecrawl and listing `web_search / fetch_url / download_to_workspace / extract_pdf_text` as its tools. Investigation confirmed: those four ARE real OpSoul tools (registry lines 1, 35, 36, 37), and the operator was correctly reading its actual list — Firecrawl was legitimately absent because `FIRECRAWL_API_KEY` was unset. Patent-21 (operator drives) + operator-knows-its-agency: both verified working empirically. Falsely calling it hallucination earlier was a sloppy diagnostic on my part; corrected.
+
+**Landing-page rewrite (`6729f3e` → `opsoul--0000080`).** Removed SaaS framing per owner directive — no "$29/mo for life", no "142/200 Founding Operators" slot countdown, no "Get Started" pushy CTAs. Reframed editorially as "a new generation of agentic AI" with the headline "Agents are temporary. Operators are eternal." Tone: declarative-of-a-category, not direct-pitch. Same structural layout, all copy rewritten.
+
+**Pricing/Docs/Support pages removed entirely (`d14f064`).** Owner directive: *"why we still have pricing page?? Also support and documents no need for them remove them, just contact, just landing page."* Files deleted: `PricingPage.tsx`, `DocsPage.tsx`, `SupportPage.tsx`. Routes removed from `App.tsx`. `PrivacyPage.tsx` + `TermsPage.tsx` kept for legal but linked only from the footer. Nav reduced to brand + Contact + Console pill.
+
+**Dark NVIDIA-style refactor with cozy spacing (`d14f064` → `opsoul--0000083`, LIVE).** Owner's design feedback came in two waves:
+
+1. *"The landing page colors and style is really really bad and like fading, no one can see just some letters or some words not showing. Full refactor of branding, go tech like nvidia style."*
+2. *"Not the color only the design the style, spacing — there too many sections that part of eachother, make the page cozy."*
+3. *"Dark is good i am the one who told nvidia style is nice."*
+
+Root-cause diagnosis of the "fading words" problem: `tailwind.config.ts` defined a dark theme (`#0e0e11` bg, `#cd96ff` primary, etc.) but `src/index.css` overrode every token with a LIGHT theme (`#F8F7F5` bg, `#1B4FD8` primary). The landing page used dark-theme tokens (gradient text `bg-clip-text bg-gradient-to-r from-primary via-secondary to-tertiary`) which rendered on the light bg with broken/missing colors — `via-secondary` color was undefined in the light theme, so the middle of every gradient headline rendered transparent → invisible words.
+
+Final state in `d14f064` after iterating dark → light-cozy → back to dark-cozy:
+
+- Theme: pure black `bg-black`, white type, single `violet-400` text accent, `violet-500` solid button bg with black text. No glass panels, no neon glow utilities, no gradient-text tricks. High contrast everywhere.
+- Layout: single `max-w-5xl mx-auto` column. Four sections (hero, the argument, six qualities, closing invitation). One single soft divider `border-t border-white/10` before the closing CTA — no harsh section borders elsewhere.
+- Six qualities: clean `md:grid-cols-2 gap-x-12 gap-y-10` whitespace grid, no cell borders, no hover-bg shifts.
+- Headlines: restrained `text-5xl/6xl/7xl` (not `text-9xl`), `font-headline` (Space Grotesk).
+- Footer: brand · © · Contact · Privacy · Terms. Nothing else.
+- PublicLayout: defaults to `bg-black text-white`.
+
+**Component changes:**
+
+| File | Change |
+|---|---|
+| `src/pages/LandingPage.tsx` | Full rewrite — 4 flowing sections in one column |
+| `src/pages/PricingPage.tsx` | DELETED |
+| `src/pages/DocsPage.tsx` | DELETED |
+| `src/pages/SupportPage.tsx` | DELETED |
+| `src/components/public/PublicLayout.tsx` | `bg-background` → `bg-black text-white`; removed gradient overlay |
+| `src/components/public/PublicNav.tsx` | Dark theme; reduced to brand + Contact + Console |
+| `src/components/public/PublicFooter.tsx` | Dark theme; reduced to brand + © + 3 links |
+| `src/App.tsx` | Removed `/pricing /support /docs` routes + imports |
+
+Other pages (`DashboardPage`, `OperatorDetail`, `AdminPage`, `Login`, `Contact`, `Privacy`, `Terms`) still use the old light-theme M3 token classes — they will look out-of-place against the now-dark PublicLayout. Tracked as a follow-up to extend dark direction across the rest of the app once owner approves the public-face look.
+
+**Revision lineage today:**
+
+| Rev | Trigger | Image | Notes |
+|---|---|---|---|
+| `0000078` | `989546a` + `f8aa086` patent fixes | `patent-claim21-firecrawl-f8aa086` | Claim 21 + Firecrawl wiring code |
+| `0000079` | `ALLOWED_ORIGIN` env update | same image | opsoul.dev / www CORS fix |
+| `0000080` | First editorial landing rewrite | `landing-rewrite-6729f3e` | LandingPage only; SaaS still in Pricing/Nav/Docs/Dashboard |
+| `0000081` | `FIRECRAWL_API_KEY` env update | same image | Firecrawl tools now live |
+| `0000082` | Editorial-frame fixes | `editorial-frame-complete-b2f7d22` | Fixed PublicNav button, Pricing page rewritten (still light), Docs CTA, Dashboard founding-line |
+| `0000083` | Dark-cozy refactor | `dark-cozy-d14f064` | **LIVE** — dark theme + cozy spacing + Pricing/Docs/Support deleted |
+
+**Build infra note** — the Azure CLI's `containerapp` REST polling occasionally returns `ConnectionResetError(54)` mid-operation. Per [[bani-domain-connection]] and prior sessions, this is a UAE-North quirk: server-side commonly completes despite the CLI error. Pattern: don't trust the CLI exit code on `containerapp` operations — always re-poll `az containerapp show` to read truth.
+
+**Today's commits (Hub):**
+
+| SHA | Subject |
+|---|---|
+| `989546a` | fix(claim-21): wire operator analyse() decision into runSyncAgentLoop |
+| `f8aa086` | fix(expand-never-cut): wire hasFirecrawl into all 3 ToolContext consumers |
+| `9320a29` | docs(SoT): opsoul.dev + www.opsoul.dev LIVE on opsoul--0000078 |
+| `d2cdfeb` | docs(SoT): CORS gotcha after custom-domain bind (opsoul--0000079) |
+| `6729f3e` | landing page rewrite + npm/SDK strategy docs |
+| `b2f7d22` | hub: align nav + pricing + docs + dashboard with editorial frame |
+| `6ad16c9` | hub: dark tech refactor — black bg, white type, violet accent |
+| `aee032c` | hub: light cozy refactor — remove Pricing/Docs/Support (DISCARDED direction) |
+| `d14f064` | hub: dark + cozy — keep NVIDIA-style, apply cozy spacing/structure |
+
+**Today's commits (Nahil — `culturesouq/nahil_2`):** `305402e` fix(deploy-gate): A3 researchFocus ALLOWED + A5 email HTML-escape — `nahilai--0000090` LIVE.
+
+**Pending / not done today:**
+- Other Hub pages (Dashboard, OperatorDetail, Admin, Login, Contact, Privacy, Terms) still light-theme — need dark-cozy treatment to match the new public face.
+- The `/manifesto` route referenced in landing CTAs doesn't exist yet — currently 404s. Either create it or change the CTAs.
+- The `/console` route in nav/landing also doesn't exist — same status. Likely becomes the post-auth Dashboard, but route alias needs adding.
+
+**Next session note:** Anthropic API was reportedly facing a partial outage during the dark-cozy deploy iteration, which is why the Azure CLI noise was unusually persistent. Not an Azure problem.
+
