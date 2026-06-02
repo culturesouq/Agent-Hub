@@ -4505,3 +4505,18 @@ The registry promises Firecrawl; the dispatch layer silently denies it. Operator
 - Firecrawl wiring (`f8aa086`) — 5 firecrawl_* tools available across Hub, MCP, and non-streaming surfaces
 
 **Rollback** (if needed): `az containerapp update -n opsoul -g bani-studio-rg --image banistudioacr.azurecr.io/opsoul-api:kimi-only-1b8e874` → opsoul--0000076 (pre-patent-fix).
+
+**Post-bind gotcha (resolved in `opsoul--0000079`):** custom-domain bind alone is not enough — the API's CORS allowlist (`ALLOWED_ORIGIN` env var) must include every new origin. opsoul.dev rendered as a blank page because the bundle fetched `/api/*`, the CORS middleware rejected the unknown origin via `callback(new Error(...))`, which Express turned into HTTP 500, which the SPA couldn't recover from. Fix was a one-liner:
+
+```
+az containerapp update -n opsoul -g bani-studio-rg \
+  --set-env-vars "ALLOWED_ORIGIN=https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io,https://opsoul.dev,https://www.opsoul.dev"
+```
+
+Rolling revision is `opsoul--0000079`. The CORS code path is `artifacts/opsoul-api/src/index.ts:81-89`. Polish-later note: the allowlist-miss path throws an Error instead of `callback(null, false)` — that's why a CORS rejection lands as 500 instead of a clean preflight failure. Track as a low-priority follow-up.
+
+**Checklist for any future custom-domain bind on OpSoul/any operator app:**
+1. Add DNS (A + asuid TXT, or CNAME + asuid TXT for subdomain)
+2. `az containerapp hostname add` (slot)
+3. `az containerapp hostname bind --validation-method HTTP` (cert)
+4. **`az containerapp update --set-env-vars ALLOWED_ORIGIN=…`** ← don't forget this one
