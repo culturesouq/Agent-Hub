@@ -227,6 +227,13 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     connectedIntegrations: liveIntegrations.map(i => i.type).filter((t): t is string => typeof t === 'string'),
   });
 
+  // OPERATOR-AS-DRIVER (full TurnPlan) — operator composes its plan post-
+  // toolset so introspect can reference real tool names for this action scope.
+  const actionTurnPlan = actionAgent.composeTurnPlan(actionText, {
+    toolNames: actionToolset.tools.map(t => t.function.name),
+    toolDescriptions: new Map(actionToolset.tools.map(t => [t.function.name, t.function.description ?? ''])),
+  });
+
   // STEP 2 — Operator dispatches the LLM via the shared sync agent loop,
   // which exposes the FULL universal tool catalogue for the action scope.
   // Per [[no-fallbacks]] + Claim 13: on LLM failure, propagate the real
@@ -242,7 +249,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         { role: 'user', content: actionText },
       ],
       model: resolvedModel,
-      // Patent claim 21: operator-decided tool gating.
+      turnPlan: actionTurnPlan,
+      // Patent claim 21: operator-decided tool gating (legacy fallback).
       analyseDecision: actionDecision.kind,
     });
   } catch (llmErr: unknown) {

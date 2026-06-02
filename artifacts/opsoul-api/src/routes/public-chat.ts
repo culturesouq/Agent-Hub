@@ -337,6 +337,17 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     connectedIntegrations: pcIntegrationRows.map(i => i.type).filter((t): t is string => typeof t === 'string'),
   });
 
+  // ── OPERATOR-AS-DRIVER (full TurnPlan, post-toolset so introspect can use tool names) ──
+  // The operator composes its authoritative plan for this turn — intent,
+  // scaffolding, constraints, mode (execute/chat/introspect). Passed into
+  // runSyncAgentLoop so the LLM never sees a freeform "answer the user"
+  // prompt — it sees the operator's intent + scaffolding as system context
+  // and voices within those bounds. Patent claim 21 fully realised.
+  const turnPlan = agent.composeTurnPlan(message, {
+    toolNames: toolset.tools.map(t => t.function.name),
+    toolDescriptions: new Map(toolset.tools.map(t => [t.function.name, t.function.description ?? ''])),
+  });
+
   // ── STREAM PATH ────────────────────────────────────────────────────────────
   if (stream) {
     res.setHeader('Content-Type', 'text/event-stream');
@@ -359,6 +370,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         messages,
         model,
         analyseDecision: operatorDecision.kind,
+        turnPlan,
       });
       const fullContent = loopResult.content;
       if (fullContent) {
@@ -439,6 +451,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         messages,
         model,
         analyseDecision: operatorDecision.kind,
+        turnPlan,
       });
     } catch (llmErr: unknown) {
       // Per [[no-fallbacks]] + Claim 13: never substitute synthetic operator

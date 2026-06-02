@@ -8,7 +8,23 @@
  * res-write callback through the helper, which couples the helper to the
  * Express response object. Out of scope here.
  *
- * Loop semantics:
+ * 2026-06-02 — Operator-as-driver everywhere (TurnPlan integration).
+ *
+ *   - For `kind === 'introspect'`: single LLM call, NO tools, the operator's
+ *     deterministic agency content is prepended to the message stream as a
+ *     system-priority block. LLM voices the operator's content; cannot
+ *     fabricate tools.
+ *   - For `kind === 'chat'`: single LLM call, NO tools, operator's chat
+ *     scaffolding (intent + constraints) prepended to message stream. LLM
+ *     stays inside operator's intent.
+ *   - For `kind === 'execute'`: full iteration loop, tools authorised,
+ *     operator's execute scaffolding prepended.
+ *
+ * In ALL cases, the operator's TurnPlan is the authoritative driver. The LLM
+ * is the voice engine constrained by the plan's intent/constraints — never
+ * a freeform author. Per Claim 21 fully realised.
+ *
+ * Loop semantics (execute mode only):
  *   - Up to MAX_ITER tool calls per turn (default 8).
  *   - Up to MAX_SEARCHES web_search calls per turn (default 5) — once hit,
  *     web_search is filtered out of the offered tool set so the LLM cannot
@@ -27,7 +43,7 @@
  */
 
 import { dispatchTool } from './toolHandlers.js';
-import type { OperatorAgent } from './operatorAgent.js';
+import { renderTurnPlanSystemContext, type OperatorAgent, type TurnPlan } from './operatorAgent.js';
 import type { ChatMessage, ToolDefinition } from './openrouter.js';
 import type { OperatorToolset } from './operatorToolset.js';
 
@@ -37,14 +53,19 @@ export interface RunSyncAgentLoopOptions {
   messages: ChatMessage[];
   model: string;
   /**
-   * Operator's analyse() decision for this turn — 'execute' (tools offered)
-   * or 'chat' (no tools). Defaults to 'execute' for backward compatibility
-   * with surfaces that haven't started passing the decision yet, but the
-   * caller SHOULD pass the real decision so the LLM never sees tools the
-   * operator didn't authorise this turn. Patent claim 21: operator decides;
-   * LLM is the engine. See utils/operatorAgent.ts.
+   * The operator's TurnPlan for this turn. When present, drives the loop's
+   * mode (introspect / chat / execute), prepends operator scaffolding to the
+   * message stream, and authorises tools only when plan.toolsAuthorised.
+   * Preferred over `analyseDecision` for new callers.
    */
-  analyseDecision?: 'execute' | 'chat';
+  turnPlan?: TurnPlan;
+  /**
+   * Legacy: operator's analyse() decision when TurnPlan is not yet wired
+   * by the caller. 'execute' offers tools; 'chat' / 'introspect' don't.
+   * Ignored when turnPlan is provided. Widened to include 'introspect'
+   * for v2 — caller can pass decision.kind directly without narrowing.
+   */
+  analyseDecision?: 'execute' | 'chat' | 'introspect';
   /** Override the default MAX_ITER cap. */
   maxIterations?: number;
   /** Override the default MAX_SEARCHES cap. */
@@ -68,29 +89,48 @@ export interface AgentLoopResult {
 const DEFAULT_MAX_ITER = 8;
 const DEFAULT_MAX_SEARCHES = 5;
 
+/**
+ * Prepend the operator's TurnPlan to the LLM's message stream as a high-
+ * priority system block. Inserted AFTER any pre-existing system messages so
+ * it sits closest to the user message — i.e. the operator's TurnPlan is the
+ * last thing the LLM reads before composing its reply.
+ */
+function injectTurnPlan(messages: ChatMessage[], plan: TurnPlan): ChatMessage[] {
+  const ctx = renderTurnPlanSystemContext(plan);
+  // Find the index just after the trailing system block. We insert right
+  // before the first non-system message so the operator's plan sits with
+  // the other system context (operator identity, etc.).
+  let firstNonSystem = messages.findIndex(m => m.role !== 'system');
+  if (firstNonSystem < 0) firstNonSystem = messages.length;
+  return [
+    ...messages.slice(0, firstNonSystem),
+    { role: 'system', content: ctx },
+    ...messages.slice(firstNonSystem),
+  ];
+}
+
 export async function runSyncAgentLoop(opts: RunSyncAgentLoopOptions): Promise<AgentLoopResult> {
-  const { agent, toolset, messages, model } = opts;
+  const { agent, toolset, messages, model, turnPlan } = opts;
   const maxIter = opts.maxIterations ?? DEFAULT_MAX_ITER;
   const maxSearches = opts.maxSearches ?? DEFAULT_MAX_SEARCHES;
-  // Default 'execute' preserves legacy behaviour for callers not yet passing
-  // the decision. New callers MUST pass it. Mirrors chat.ts:855.
-  const analyseDecision: 'execute' | 'chat' = opts.analyseDecision ?? 'execute';
 
-  const loopMessages: ChatMessage[] = [...messages];
-  let finalContent = '';
-  let promptTokens = 0;
-  let completionTokens = 0;
-  let toolCallsExecuted = 0;
-  let webSearchCount = 0;
-  let iterationCapHit = false;
+  // Resolve effective mode: TurnPlan wins if provided; else legacy decision;
+  // else default to 'execute' for backward compatibility.
+  const legacy = opts.analyseDecision ?? 'execute';
+  const mode: 'execute' | 'chat' | 'introspect' = turnPlan
+    ? turnPlan.kind
+    : legacy;
 
-  // ── OPERATOR-AS-DRIVER (Patent claim 21) ────────────────────────────────
-  // The operator already decided in analyse() whether tools should be offered
-  // this turn. For 'chat' the catalog is empty — the LLM has nothing it could
-  // call. One dispatch, return. No agent loop, no tool gymnastics. This
-  // matches chat.ts streaming-path gating.
-  if (analyseDecision === 'chat') {
-    const result = await agent.executeSync(loopMessages, { model, tools: undefined });
+  // If we have a TurnPlan, inject the operator's authoring scaffolding into
+  // the LLM message stream so the LLM sees the operator's intent + scaffolding
+  // + constraints. Without a TurnPlan we run on legacy behaviour (no inject).
+  const effectiveMessages: ChatMessage[] = turnPlan
+    ? injectTurnPlan(messages, turnPlan)
+    : [...messages];
+
+  // ── INTROSPECT (operator-authored content; LLM voices it; NO tools) ───
+  if (mode === 'introspect') {
+    const result = await agent.executeSync(effectiveMessages, { model, tools: undefined });
     return {
       content: result.content,
       toolCallsExecuted: 0,
@@ -100,6 +140,28 @@ export async function runSyncAgentLoop(opts: RunSyncAgentLoopOptions): Promise<A
       iterationCapHit: false,
     };
   }
+
+  // ── CHAT (conversational reply, NO tools) ───────────────────────────────
+  if (mode === 'chat') {
+    const result = await agent.executeSync(effectiveMessages, { model, tools: undefined });
+    return {
+      content: result.content,
+      toolCallsExecuted: 0,
+      webSearchCount: 0,
+      promptTokens: result.promptTokens ?? 0,
+      completionTokens: result.completionTokens ?? 0,
+      iterationCapHit: false,
+    };
+  }
+
+  // ── EXECUTE (tools authorised, full iteration loop) ─────────────────────
+  const loopMessages: ChatMessage[] = [...effectiveMessages];
+  let finalContent = '';
+  let promptTokens = 0;
+  let completionTokens = 0;
+  let toolCallsExecuted = 0;
+  let webSearchCount = 0;
+  let iterationCapHit = false;
 
   for (let iter = 0; iter < maxIter; iter++) {
     // Filter web_search out of the offered tool set once the per-turn cap
@@ -128,7 +190,6 @@ export async function runSyncAgentLoop(opts: RunSyncAgentLoopOptions): Promise<A
       result.toolCall.name,
       result.toolCall.args,
       toolset.toolHandlerCtx,
-      // no progress sink on sync surfaces
       undefined,
     );
 

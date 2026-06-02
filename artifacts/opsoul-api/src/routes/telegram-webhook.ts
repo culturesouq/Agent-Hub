@@ -302,19 +302,25 @@ router.post('/:operatorId', async (req: Request, res: Response): Promise<void> =
       connectedIntegrations: integrationRows.map(i => i.type).filter((t): t is string => typeof t === 'string'),
     });
 
+    // OPERATOR-AS-DRIVER (full TurnPlan) — compose AFTER toolset built so the
+    // introspect path can use real tool names from this scope.
+    const turnPlan = agent.composeTurnPlan(userMessage, {
+      toolNames: toolset.tools.map(t => t.function.name),
+      toolDescriptions: new Map(toolset.tools.map(t => [t.function.name, t.function.description ?? ''])),
+    });
+
     // STEP 2 — Operator dispatches the LLM as its executor for this turn.
     // The operator owns the call (it chose the model, built the messages,
-    // assembled the system prompt with its identity + scope context).
-    // The LLM produces text in the operator's voice via the shared sync
-    // agent loop, which handles tool calls if the operator decides to use
-    // them (up to MAX_ITER iterations, MAX_SEARCHES web searches).
+    // assembled the system prompt with its identity + scope context). The
+    // operator's TurnPlan is injected as system context so the LLM voices
+    // within the operator's intent — never freeform.
     const loopResult = await runSyncAgentLoop({
       agent,
       toolset,
       messages: chatMessages,
       model,
-      // Patent claim 21: pass the operator's analyse() decision so the LLM
-      // sees tools only when the operator authorised 'execute' this turn.
+      turnPlan,
+      // Legacy compat — kept in case anything inspects it; turnPlan takes precedence.
       analyseDecision: decision.kind,
     });
     const finalContent = loopResult.content;
