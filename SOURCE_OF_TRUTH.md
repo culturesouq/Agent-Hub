@@ -4473,3 +4473,35 @@ The registry promises Firecrawl; the dispatch layer silently denies it. Operator
 **Open low-priority follow-up** (D cluster): `routes/firecrawl.ts` Stop-Crawl POST relies on Firecrawl vendor `/cancel` being idempotent. Not blocking; track for Phase 1B+1 polish.
 
 **Deploy**: pending. Will land in the same deploy as `989546a` (Claim 21 analyseDecision wiring) once Nahil deploy clears.
+
+
+### 2026-06-02 — OpSoul deploy + opsoul.dev domain LIVE
+
+**Deploy:** revision `opsoul--0000078` running image `banistudioacr.azurecr.io/opsoul-api:patent-claim21-firecrawl-f8aa086` (ACR Run `dg8k`, 2m13s, digest `sha256:f9b8e562…`). Active, Traffic 100%, 2 replicas, smoke `/api/models` → HTTP 200 / 80ms.
+
+**Domain binding:** `opsoul.dev` + `www.opsoul.dev` both `SniEnabled` with managed certs.
+
+| Hostname | Cert | Validation | Expires |
+|---|---|---|---|
+| `opsoul.dev` | `mc-bani-studio-en-opsoul-dev-7312` | HTTP | 2026-12-02 |
+| `www.opsoul.dev` | `mc-bani-studio-en-www-opsoul-dev-7417` | HTTP | ~2026-12-02 |
+
+**DNS records (Cloudflare/registrar):**
+- `opsoul.dev` A → `20.233.136.103`
+- `asuid.opsoul.dev` TXT → `5D69D3C199B4E2E2722BDE671D1258A5A294E2C40C94D2FB7D725F1D1A71C9A6`
+- `www.opsoul.dev` CNAME → `opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io`
+- `asuid.www.opsoul.dev` TXT → same verification ID
+
+**Method:** per [[bani-domain-connection]] — HTTP validation only (TXT cert validation hangs in UAE North). Cert provisioning ~4 min per hostname after DNS resolved.
+
+**UAE-North quirk (recorded for next session):** the Azure CLI raises `ConnectionResetError` on the managed-cert API even when the server-side operation completes. Don't trust the CLI exit code — always re-poll `az containerapp env certificate list --managed-certificates-only` and `az containerapp hostname list` to read truth.
+
+**HTTPS smoke (post-bind):**
+- `https://opsoul.dev/api/models` → HTTP 200 / 76ms, DigiCert CN=opsoul.dev
+- `https://www.opsoul.dev/api/models` → HTTP 200 / 205ms
+
+**Live now under this revision:**
+- Claim 21 (`989546a`) — operator's analyse() decision honoured on all non-streaming surfaces
+- Firecrawl wiring (`f8aa086`) — 5 firecrawl_* tools available across Hub, MCP, and non-streaming surfaces
+
+**Rollback** (if needed): `az containerapp update -n opsoul -g bani-studio-rg --image banistudioacr.azurecr.io/opsoul-api:kimi-only-1b8e874` → opsoul--0000076 (pre-patent-fix).
