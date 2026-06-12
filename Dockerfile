@@ -1,5 +1,7 @@
 # ── Stage 1: base ────────────────────────────────────────────────────────────
-FROM node:20-alpine AS base
+# node:20-slim (Debian/glibc) avoids the Alpine musl vs. glibc mismatch that
+# breaks @rollup/rollup-linux-x64-musl resolution from a macOS lockfile.
+FROM node:20-slim AS base
 WORKDIR /app
 
 RUN npm install -g pnpm@10
@@ -8,7 +10,7 @@ RUN npm install -g pnpm@10
 FROM base AS deps
 
 # Native modules (bcrypt) need build tools
-RUN apk add --no-cache python3 make g++
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 
 # Copy workspace config + all package manifests
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json tsconfig.json ./
@@ -16,9 +18,11 @@ COPY lib/ ./lib/
 COPY artifacts/opsoul-api/package.json ./artifacts/opsoul-api/
 COPY artifacts/opsoul-hub/package.json ./artifacts/opsoul-hub/
 
-# Install all deps (including devDeps needed for build stages)
+# Install all deps (including devDeps needed for build stages).
+# --no-frozen-lockfile so pnpm resolves platform-specific optional binaries
+# (e.g. @rollup/rollup-linux-x64-gnu) not present in the macOS lockfile.
 RUN npm_config_user_agent="pnpm/10.0.0 npm/? node/v20.0.0 linux x64" \
-    pnpm install --frozen-lockfile
+    pnpm install --no-frozen-lockfile
 
 # ── Stage 3: build-hub ────────────────────────────────────────────────────────
 FROM deps AS build-hub
@@ -38,13 +42,13 @@ FROM deps AS build-api
 COPY artifacts/opsoul-api ./artifacts/opsoul-api
 
 # ── Stage 5: production ───────────────────────────────────────────────────────
-FROM node:20-alpine AS production
+FROM node:20-slim AS production
 WORKDIR /app
 
 RUN npm install -g pnpm@10
 
 # Native modules need the runtime build tools at install time
-RUN apk add --no-cache python3 make g++
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 
 # Copy workspace config
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json tsconfig.json ./
@@ -54,7 +58,7 @@ COPY artifacts/opsoul-hub/package.json ./artifacts/opsoul-hub/
 
 # Production-only install
 RUN npm_config_user_agent="pnpm/10.0.0 npm/? node/v20.0.0 linux x64" \
-    pnpm install --frozen-lockfile --prod
+    pnpm install --no-frozen-lockfile --prod
 
 # Copy built frontend dist
 COPY --from=build-hub /app/artifacts/opsoul-hub/dist ./artifacts/opsoul-hub/dist
