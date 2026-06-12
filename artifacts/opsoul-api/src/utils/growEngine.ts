@@ -13,6 +13,7 @@ import {
 } from '@workspace/db';
 import { eq, and, desc, inArray, lte, isNull } from 'drizzle-orm';
 import { chatCompletion } from './openrouter.js';
+import { getOperatorModelOverride } from './operatorModelConfig.js';
 import { semanticDistance } from '@workspace/opsoul-utils/ai';
 import type { Layer2Soul } from '../validation/operator.js';
 import {
@@ -249,6 +250,10 @@ export async function runGrowCycle(operatorId: string): Promise<{
 
   if (!operator) throw new Error(`Operator ${operatorId} not found`);
 
+  // Load BYO model override. If the operator has a custom model configured,
+  // the GROW LLM call uses their key + endpoint. Null = platform default.
+  const growModelOverride = await getOperatorModelOverride(operatorId);
+
   const growLockLevel = operator.growLockLevel ?? 'CONTROLLED';
 
   if (growLockLevel === 'FROZEN' || growLockLevel === 'LOCKED') {
@@ -369,7 +374,9 @@ export async function runGrowCycle(operatorId: string): Promise<{
     const prompt = buildGrowPrompt(operator, mainMemory, selfAwareness ?? null, semanticGuardLabels);
     const result = await chatCompletion(
       [{ role: 'user', content: prompt }],
-      GROW_MODEL,
+      growModelOverride
+        ? { model: GROW_MODEL, modelOverride: growModelOverride }
+        : GROW_MODEL,
     );
     claudeRaw = result.content;
   } catch (err) {
@@ -669,7 +676,13 @@ export async function retryPendingProposals(): Promise<void> {
         semanticGuard.matches.map((m) => m.label),
       );
 
-      const result = await chatCompletion([{ role: 'user', content: prompt }], GROW_MODEL);
+      const retryModelOverride = await getOperatorModelOverride(proposal.operatorId);
+      const result = await chatCompletion(
+        [{ role: 'user', content: prompt }],
+        retryModelOverride
+          ? { model: GROW_MODEL, modelOverride: retryModelOverride }
+          : GROW_MODEL,
+      );
 
       const parsedEval = parseClaudeResponse(result.content);
 

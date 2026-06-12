@@ -199,6 +199,102 @@ async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
  */
 const clientCache = new Map<string, OpenAI>();
 
+// ───────────────────────────────────────────────────────────────────────────
+//  PER-OPERATOR MODEL OVERRIDE (BYO model config)
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Per-operator BYO model configuration.
+ *
+ * When an operator has a custom model configured (stored in modelConfig JSONB
+ * column), callers pass a ModelOverride here instead of using the platform
+ * default. The override bypasses the model registry entirely — the provided
+ * apiKey, baseUrl, and model are used directly.
+ *
+ * Provider notes:
+ *   openai        — baseUrl defaults to https://api.openai.com/v1
+ *   anthropic     — Anthropic Messages API is NOT OpenAI-compat. For now,
+ *                   log a warning and route via OpenRouter (OPENROUTER_API_KEY
+ *                   is required; the operator's BYO key is ignored for this
+ *                   provider until a native Anthropic adapter is added).
+ *   azure_openai  — baseUrl is required (your Azure deployment endpoint).
+ *   openrouter    — Uses the operator's BYO OpenRouter key with the platform
+ *                   baseUrl. Same format as the existing openrouterApiKey flow.
+ *   custom        — baseUrl is required. Wire format must be OpenAI-compatible.
+ */
+export interface ModelOverride {
+  model: string;
+  apiKey: string;
+  baseUrl?: string;
+  provider?: 'openai' | 'anthropic' | 'azure_openai' | 'openrouter' | 'custom';
+}
+
+/**
+ * Default base URLs per provider when the operator does not specify one.
+ * Azure OpenAI and custom providers MUST supply their own baseUrl.
+ */
+const DEFAULT_BASE_URL: Record<string, string> = {
+  openai: 'https://api.openai.com/v1',
+  openrouter: 'https://openrouter.ai/api/v1',
+};
+
+/**
+ * Build an OpenAI-compatible client from a ModelOverride.
+ * Returns { client, sendAs } — analogous to getClientForModel() for registry
+ * models.
+ */
+function getClientForOverride(
+  override: ModelOverride,
+): { client: OpenAI; sendAs: string } {
+  const provider = override.provider ?? 'openai';
+
+  // Anthropic Messages API is not OpenAI-compatible. Route through OpenRouter
+  // using the platform key until a native Anthropic adapter is added.
+  if (provider === 'anthropic') {
+    console.warn(
+      '[openrouter] ModelOverride provider=anthropic — native Anthropic adapter not yet implemented. ' +
+      'Routing through OpenRouter with platform key. Operator BYO key ignored for this provider.',
+    );
+    const baseURL = 'https://openrouter.ai/api/v1';
+    const apiKey = process.env.OPENROUTER_API_KEY ?? '';
+    const cacheKey = `${baseURL}::${apiKey}`;
+    const cached = clientCache.get(cacheKey);
+    if (cached) return { client: cached, sendAs: override.model };
+    const client = new OpenAI({
+      baseURL,
+      apiKey: apiKey || 'unused',
+      defaultHeaders: {
+        'HTTP-Referer': process.env.APP_URL || 'https://opsoul.io',
+        'X-Title': 'OpSoul',
+      },
+    });
+    clientCache.set(cacheKey, client);
+    return { client, sendAs: override.model };
+  }
+
+  // azure_openai and custom must supply a baseUrl
+  if ((provider === 'azure_openai' || provider === 'custom') && !override.baseUrl) {
+    throw new Error(`ModelOverride provider=${provider} requires baseUrl`);
+  }
+
+  const baseURL = override.baseUrl ?? DEFAULT_BASE_URL[provider] ?? 'https://api.openai.com/v1';
+  const apiKey = override.apiKey;
+  const cacheKey = `${baseURL}::${apiKey}`;
+  const cached = clientCache.get(cacheKey);
+  if (cached) return { client: cached, sendAs: override.model };
+
+  const client = new OpenAI({
+    baseURL,
+    apiKey: apiKey || 'unused',
+    defaultHeaders: {
+      'HTTP-Referer': process.env.APP_URL || 'https://opsoul.io',
+      'X-Title': 'OpSoul',
+    },
+  });
+  clientCache.set(cacheKey, client);
+  return { client, sendAs: override.model };
+}
+
 function buildClient(config: ProviderConfig, apiKey: string): OpenAI {
   const cacheKey = `${config.baseURL}::${apiKey}`;
   const cached = clientCache.get(cacheKey);
@@ -301,6 +397,8 @@ export interface ChatOptions {
   apiKey?: string | null;
   model?: string | null;
   tools?: ToolDefinition[];
+  /** BYO model override — if present, bypasses the model registry entirely. */
+  modelOverride?: ModelOverride;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -315,8 +413,11 @@ export async function* streamChat(
     ? { model: modelOrOptions }
     : modelOrOptions;
 
-  const modelId = opts.model || CHAT_MODEL;
-  const { client, sendAs } = getClientForModel(modelId, opts.apiKey);
+  // BYO model override: bypass the registry entirely when the operator has
+  // a custom model + API key configured.
+  const { client, sendAs } = opts.modelOverride
+    ? getClientForOverride(opts.modelOverride)
+    : getClientForModel(opts.model || CHAT_MODEL, opts.apiKey);
 
   // Per-turn token budget (Claim 21). Clamp the requested output to whichever
   // is smaller — MAX_TOKENS or the per-turn output budget. Then validate the
@@ -402,8 +503,11 @@ export async function chatCompletion(
     ? { model: modelOrOptions }
     : modelOrOptions;
 
-  const modelId = opts.model || CHAT_MODEL;
-  const { client, sendAs } = getClientForModel(modelId, opts.apiKey);
+  // BYO model override: bypass the registry entirely when the operator has
+  // a custom model + API key configured.
+  const { client, sendAs } = opts.modelOverride
+    ? getClientForOverride(opts.modelOverride)
+    : getClientForModel(opts.model || CHAT_MODEL, opts.apiKey);
 
   // Per-turn token budget (Claim 21). Clamp the requested output to whichever
   // is smaller — MAX_TOKENS or the per-turn output budget. Then validate the

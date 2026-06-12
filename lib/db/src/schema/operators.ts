@@ -22,6 +22,8 @@ export const operatorsTable = pgTable('operators', {
   toolUsePolicy: jsonb('tool_use_policy').default({}),
   openrouterApiKey: text('openrouter_api_key'),
   defaultModel: text('default_model'),
+  /** BYO model config — stored as JSONB. See migrations/add_operator_model_config.sql */
+  modelConfig: jsonb('model_config'),
   createdAt: timestamp('created_at').defaultNow(),
   deletedAt: timestamp('deleted_at'),
 });
