@@ -1,0 +1,38 @@
+version: '3.9'
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: opsoul
+      POSTGRES_USER: opsoul
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+    volumes:
+      - opsoul_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opsoul"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    image: opsoul/server:latest
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3001}:3001"
+    environment:
+      DATABASE_URL: postgres://opsoul:${DB_PASSWORD:-changeme}@db:5432/opsoul
+      NODE_ENV: production
+      PORT: 3001
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - opsoul_files:/app/uploads
+
+volumes:
+  opsoul_db:
+  opsoul_files:
