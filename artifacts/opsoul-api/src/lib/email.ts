@@ -1,8 +1,11 @@
 const SENDGRID_URL = 'https://api.sendgrid.com/v3/mail/send';
 
+const APP_BASE = (process.env.APP_URL || 'https://opsoul.io').replace(/\/$/, '');
+const PRIVACY_EMAIL = process.env.PRIVACY_EMAIL || 'privacy@opsoul.io';
+
 export async function sendEmail(to: string, subject: string, html: string): Promise<void> {
   const apiKey = process.env.SENDGRID_API_KEY;
-  const from = process.env.SENDGRID_FROM_EMAIL ?? 'no-reply@opsoul.io';
+  const from = process.env.SENDGRID_FROM_EMAIL ?? `no-reply@${new URL(APP_BASE).hostname}`;
 
   if (!apiKey) {
     console.error('[email] SENDGRID_API_KEY is NOT set — cannot send email');
@@ -84,7 +87,7 @@ export function forgotPasswordEmail(resetUrl: string): string {
               <p style="margin:0;font-size:12px;color:#3d3d52;">
                 © ${new Date().getFullYear()} OpSoul. All rights reserved.
                 &nbsp;·&nbsp;
-                <a href="https://opsoul.io/privacy" style="color:#7c3aed;text-decoration:none;">Privacy</a>
+                <a href="${APP_BASE}/privacy" style="color:#7c3aed;text-decoration:none;">Privacy</a>
               </p>
             </td>
           </tr>
@@ -156,7 +159,7 @@ export function telegramWebhookFailureEmail(reason: string, dashboardUrl: string
               <p style="margin:24px 0 0;font-size:13px;color:#5e5e72;">
                 Check that your bot token is correct and that the bot hasn't been revoked via BotFather.
                 Questions? Reach us at
-                <a href="mailto:privacy@opsoul.io" style="color:#a78bfa;text-decoration:none;">privacy@opsoul.io</a>
+                <a href="mailto:${PRIVACY_EMAIL}" style="color:#a78bfa;text-decoration:none;">${PRIVACY_EMAIL}</a>
               </p>
             </td>
           </tr>
@@ -165,7 +168,7 @@ export function telegramWebhookFailureEmail(reason: string, dashboardUrl: string
               <p style="margin:0;font-size:12px;color:#3d3d52;">
                 © ${new Date().getFullYear()} OpSoul. All rights reserved.
                 &nbsp;·&nbsp;
-                <a href="https://opsoul.io/privacy" style="color:#7c3aed;text-decoration:none;">Privacy</a>
+                <a href="${APP_BASE}/privacy" style="color:#7c3aed;text-decoration:none;">Privacy</a>
               </p>
             </td>
           </tr>
@@ -179,7 +182,7 @@ export function telegramWebhookFailureEmail(reason: string, dashboardUrl: string
 
 export function welcomeEmail(name: string): string {
   const displayName = name || 'there';
-  const dashboardUrl = 'https://opsoul.io';
+  const dashboardUrl = APP_BASE;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -221,7 +224,7 @@ export function welcomeEmail(name: string): string {
               </table>
               <p style="margin:28px 0 0;font-size:13px;color:#5e5e72;">
                 Questions? Reach us at
-                <a href="mailto:privacy@opsoul.io" style="color:#a78bfa;text-decoration:none;">privacy@opsoul.io</a>
+                <a href="mailto:${PRIVACY_EMAIL}" style="color:#a78bfa;text-decoration:none;">${PRIVACY_EMAIL}</a>
               </p>
             </td>
           </tr>
@@ -230,7 +233,7 @@ export function welcomeEmail(name: string): string {
               <p style="margin:0;font-size:12px;color:#3d3d52;">
                 © ${new Date().getFullYear()} OpSoul. All rights reserved.
                 &nbsp;·&nbsp;
-                <a href="https://opsoul.io/privacy" style="color:#7c3aed;text-decoration:none;">Privacy</a>
+                <a href="${APP_BASE}/privacy" style="color:#7c3aed;text-decoration:none;">Privacy</a>
               </p>
             </td>
           </tr>

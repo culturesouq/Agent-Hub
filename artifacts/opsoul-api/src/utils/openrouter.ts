@@ -210,8 +210,8 @@ function buildClient(config: ProviderConfig, apiKey: string): OpenAI {
     baseURL: config.baseURL,
     apiKey: apiKey || 'unused',
     defaultHeaders: {
-      'HTTP-Referer': 'https://opsoul.ai',
-      'X-Title': 'OpSoul v2.4',
+      'HTTP-Referer': process.env.APP_URL || 'https://opsoul.io',
+      'X-Title': 'OpSoul',
     },
   });
   clientCache.set(cacheKey, client);

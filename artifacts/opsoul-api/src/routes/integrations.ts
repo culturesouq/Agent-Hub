@@ -42,8 +42,9 @@ async function notifyTelegramWebhookError(ownerId: string, operatorId: string, r
       console.warn(`[integrations] Could not find owner email for ownerId=${ownerId} — skipping alert`);
       return;
     }
-    const dashboardUrl = process.env.APP_BASE_URL
-      ? `${process.env.APP_BASE_URL}/operators/${operatorId}/integrations`
+    const appBase = process.env.APP_URL || process.env.APP_BASE_URL;
+    const dashboardUrl = appBase
+      ? `${appBase}/operators/${operatorId}/integrations`
       : 'https://opsoul.io';
     await sendEmail(
       owner.email,

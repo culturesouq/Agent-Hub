@@ -23,7 +23,7 @@ function getBaseUrl(req: Request): string {
     return `https://${domain}`;
   }
   const proto = (req.headers['x-forwarded-proto'] as string)?.split(',')[0]?.trim() ?? 'https';
-  const host = (req.headers['x-forwarded-host'] as string) ?? (req.headers['host'] as string) ?? 'opsoul.io';
+  const host = (req.headers['x-forwarded-host'] as string) ?? (req.headers['host'] as string) ?? new URL(process.env.APP_URL || 'https://opsoul.io').hostname;
   return `${proto}://${host}`;
 }
 
