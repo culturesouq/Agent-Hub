@@ -156,7 +156,138 @@ The patent draft (IPPT-2026-000028, not yet filed) needs these reconciliations b
 
 ---
 
-## 7. Open Items
+## 7. Product Distribution Model — LOCKED 2026-06-12
+
+**How customers get OpSoul:**
+
+| Path | Who | What they do |
+|---|---|---|
+| **Installer (.exe / .dmg)** | Non-developers | Download from opsoul.dev → double-click → OpSoul runs locally → open browser at localhost → done |
+| **Docker image** | Developers | `docker pull opsoul/server` → `docker compose up` → same product |
+| **`@opsoul/client` npm** | Developers embedding OpSoul in their own app | `npm install @opsoul/client` — thin API wrapper only |
+
+**Key decisions (2026-06-12):**
+- NOT SaaS — Mohamed does NOT host customer instances. Customer runs it on their own machine/server.
+- Customer is fully independent — zero connection back to Mohamed after download.
+- Their data stays on their machine. Their model API keys stay with them.
+- Patent protected: ships compiled/obfuscated — no readable source in distribution.
+- CultureEyes SDK stays 100% invisible — customers never know it exists.
+- Distribution point: opsoul.dev download page (two buttons: installer / Docker).
+- Customers bring their own: AI model API key, DB (Postgres), storage — all configured at setup.
+
+---
+
+## 8. Session Build Log — 2026-06-12 (self-hosted product + console)
+
+All work committed to `culturesouq/Agent-Hub` (`main`). No deployment yet — "prefer deploy last."
+
+### Phase 1 — CultureEyes SDK integration (COMPLETE)
+
+**Phase 1a — commit `e138216`**
+- Copied `@cultureyes/types` + `@cultureyes/tools` from `/Users/bstar/cultureyes-sdk/` into `lib/cultureyes-types/` and `lib/cultureyes-tools/` as local workspace packages
+- Added both to `artifacts/opsoul-api/package.json` as `workspace:*` deps
+- Fixed 2 pre-existing TS violations during copy (unused imports in appbuilder.ts + comms.ts)
+- Cross-check confirmed: 69/69 OpSoul tools present in SDK as real implementations, zero gaps
+- TypeScript: 0 errors
+
+**Phase 1b — commit `f3f3d86`**
+- Created `artifacts/opsoul-api/src/utils/sdkToolBridge.ts` (770 lines):
+  - Registry singleton: `getRegistry()` lazily creates + seeds SDK registry once per process
+  - `buildProvisionedList()`: mirrors `listToolsForContext()` logic, returns `string[]` of tool names
+  - `listToolsViaSdk()`: wraps provisioned list → SDK `ToolDef[]` → OpenRouter-compatible format
+  - `buildSdkCtx()`: maps OpSoul `ToolHandlerContext` → SDK `ToolCtx` with full connector implementations (files, pdf, memory, kbAdmin, tasks, integrations, secretsAdmin, selfInfo, conversations)
+  - `dispatchViaSdk()`: `registry.execute()` → OpSoul `{content, meta: {terminateLoop}}` result shape
+- Rewired `chat.ts`: `listToolsForContext()` → `listToolsViaSdk()`, `dispatchTool()` → `dispatchViaSdk()`
+- `public-chat.ts`: unchanged (uses `runSyncAgentLoop` — covered via `operatorAgentLoop.ts`)
+- TypeScript: 0 errors
+
+**Phase 1c — commit `6512932`**
+- `toolHandlers.ts`: 1,822 → 68 lines — deleted all `handle*` functions, `dispatchTool()`, `parseArgs`, `callOAuth`, `loadIntegration`. Kept only 4 types: `ToolHandlerContext`, `ToolResult`, `ToolProgressCallback`, `ToolProgressEvent`
+- Found and migrated 3 additional callers: `operatorAgentLoop.ts`, `mcpServer.ts`, `operator-skills.ts` — all now use `dispatchViaSdk()`
+- `toolRegistry.ts`: unchanged (UNIVERSAL_TOOLS still feeds `buildProvisionedList`; `listToolsForContext` still used by mcp + skills manifest — full removal is future cleanup)
+- TypeScript: 0 errors
+
+### BYO Model — commits `3724c61` + `25c0524`
+
+**API — commit `3724c61`**
+- `openrouter.ts`: added `ModelOverride` interface (model, apiKey, baseUrl, provider). `chatCompletion()` + `streamChat()` accept optional override — bypasses platform OpenRouter key when present. Anthropic falls back to OpenRouter with console warning (native adapter deferred).
+- `operatorModelConfig.ts` (new): `getOperatorModelOverride()`, `setOperatorModelConfig()` (encrypts key), `clearOperatorModelConfig()`, `testModelConfig()` (real minimal API call), `maskApiKey()` helper
+- `operators.ts`: 4 new routes (owner-auth guarded): `GET/PUT/DELETE /:id/model-config`, `POST /:id/model-config/test`
+- `chat.ts` + `growEngine.ts`: load operator model override after operator fetch, pass to all `chatCompletion()` calls
+- `lib/db/src/schema/operators.ts`: added `modelConfig: jsonb('model_config')` (nullable)
+- `migrations/add_operator_model_config.sql`: `ALTER TABLE operators ADD COLUMN IF NOT EXISTS model_config JSONB;` — **owner must run manually** before feature is live
+- TypeScript: 0 errors
+
+**UI — commit `25c0524`** (SettingsSection + GrowSection)
+- `SettingsSection.tsx`: new `ByoModelPanel` component (~200 lines) — provider dropdown (OpenAI/Anthropic/Azure/OpenRouter/Custom), model ID input, API key with show/hide, base URL (Azure/Custom only), Test Connection → `POST /model-config/test`, Save → `PUT /model-config`, active badge + Remove flow
+- `GrowSection.tsx` additions:
+  - Self-awareness health card: `GET /grow/self-awareness` with 5-min auto-refresh, progress bar 0-100, Knowledge/Growth/Integrity metrics, Recompute button
+  - Lock level segmented control: OPEN / CONTROLLED / FROZEN — `PATCH /operators/:id` on click with optimistic update + rollback, description of current selection
+- TypeScript: 0 errors
+
+### @opsoul/client npm package — commit `a6594ed`
+
+- `lib/opsoul-client/` — package `@opsoul/client` v0.1.0 (ESM+CJS dual build via tsup)
+- `OpSoulClient` class with methods: `login()`, `listOperators()`, `getOperator()`, `createOperator()`, `updateOperator()`, `deleteOperator()`, `chat()`, `chatStream()` (SSE AsyncGenerator), `publicChat()`, `publicChatStream()`, `getModelConfig()`, `setModelConfig()`, `testModelConfig()`, `clearModelConfig()`, `getGrowProposals()`, `triggerGrow()`, `decideProposal()`, `getSelfAwareness()`, `listSecrets()`, `storeSecret()`, `deleteSecret()`
+- `createClient()` factory exported
+- Native `fetch` only — zero runtime dependencies
+- `OpSoulError` with status + code for all non-2xx responses
+- TypeScript: 0 errors
+
+### Self-hosted deployment — commits `a6594ed` + `6a433aa`
+
+**Docker + packaging — commit `a6594ed`**
+- `Dockerfile`: multi-stage (base → deps → build-hub → build-api → production). Runs API via `npx tsx src/index.ts`. Hub static files served from `/app/artifacts/opsoul-hub/dist/public`. Port 3001.
+- `docker-compose.yml`: `db` (postgres:16-alpine with healthcheck) + `app` (builds from Dockerfile). Port `${PORT:-3001}:3001`. DB volumes persisted.
+- `.env.template`: all required vars with comments — `OPENROUTER_API_KEY`, `JWT_SECRET`, `DB_PASSWORD`, `APP_URL`, `SOVEREIGN_ADMIN_EMAIL`, optional SendGrid + logging
+- `scripts/start.sh`: checks Docker, copies `.env.template` on first run, validates AI key presence, runs `docker compose up -d`
+- `scripts/start.ps1`: same logic, PowerShell for Windows
+- `README.deploy.md`: deployment-only docs (Mac/Linux/Windows/Docker paths, update instructions)
+
+**First-run setup wizard — commit `6a433aa`**
+- `artifacts/opsoul-api/src/routes/setup.ts` (new):
+  - `GET /api/setup/status` — no auth, returns `{ setupRequired: true }` when owners table is empty
+  - `POST /api/setup/complete` — no auth, creates first owner (email + bcrypt-12 password), issues session cookie + JWT, returns 409 if owner already exists
+  - Mounted in `index.ts` at `/api/setup` before rate limiter
+- `artifacts/opsoul-hub/src/pages/Setup.tsx` (new): 3-step wizard
+  - Step 1: email + password + confirm → `POST /api/setup/complete` → store token
+  - Step 2: AI model provider + key (stored as `opsoul_pending_model_config` in localStorage; skip allowed)
+  - Step 3: success → "Open Console" reloads to main app
+- `artifacts/opsoul-hub/src/App.tsx`: `SetupGate` wraps app tree — `GET /api/setup/status` on mount, shows wizard if `setupRequired: true`, graceful fallthrough on network error
+- TypeScript: 0 errors on both packages
+
+### Electron desktop installer — commit `758b6a6`
+
+- `electron/` folder at repo root:
+  - `package.json`: `electron` + `electron-builder`, targets `.dmg` (mac x64+arm64), NSIS `.exe` (win), `.AppImage` (linux). `extraResources` bundles `docker-compose.yml` + `.env.template` from repo root.
+  - `main.js`: checks `docker info` → error dialog + Docker download link if absent; first run copies `.env.template` to `app.getPath('userData')/.env` and auto-generates `JWT_SECRET` (32-byte hex) + `DB_PASSWORD`; spawns `docker compose up -d`; polls `/api/healthz` every 2s up to 90s; on ready opens `http://localhost:3001` in browser; system tray with Open Console / Stop OpSoul / Quit
+  - `assets/icon.png`, `assets/tray-icon.png`, `assets/icon.ico`: valid placeholder PNGs (replace with real 1024×1024 icons before public release)
+  - `.gitignore`: excludes `node_modules/` + `dist/`
+- `npm install` confirmed clean (247 packages), `node --check main.js` passes
+- **Before public release**: replace placeholder icons + run `npm run dist:mac` / `dist:win` to produce distributable artifacts, upload to GitHub Releases
+
+### Download landing page — commit pending (agent building)
+
+- `artifacts/opsoul-hub/public/download.html`: standalone static HTML, dark theme, Mac + Windows download buttons linking to GitHub Releases, 3-step how-it-works, system requirements
+- Download URLs: `https://github.com/culturesouq/Agent-Hub/releases/latest/download/OpSoul-mac.dmg` + `OpSoul-win.exe`
+
+### Pending — owner action required before any of this is live
+
+1. **Run DB migration**: `psql "$DATABASE_URL" -f migrations/add_operator_model_config.sql` — adds `model_config JSONB` column to operators table
+2. **Build installer artifacts**: `cd electron && npm run dist:mac` + `npm run dist:win` — then upload `.dmg` + `.exe` to GitHub Releases as `OpSoul-mac.dmg` + `OpSoul-win.exe`
+3. **Replace icon placeholders**: `electron/assets/icon.icns` + `icon.ico` with real 1024×1024 production icons
+4. **Test full flow**: Docker Desktop → `cd electron && npm run start` → wizard → create operator → configure model
+
+### What remains (Phase 2 onward)
+
+- **Phase 2**: Per-operator private packages (`@opsoul/nahil`, `@opsoul/istishari`, `@opsoul/vael`) — personal convenience wrappers, lowest priority
+- **Phase 3 remaining**: Customer storage connector UI (connect own Postgres/Pinecone for memory)
+- **Payment gate**: Stripe integration on download page (post-testing)
+- **toolRegistry.ts cleanup**: Remove `UNIVERSAL_TOOLS` array once `buildProvisionedList` is refactored to pull from SDK registry directly
+
+---
+
+## 9. Open Items
 
 | Item | Status |
 |---|---|
