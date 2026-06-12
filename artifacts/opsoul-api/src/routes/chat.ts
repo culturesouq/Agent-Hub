@@ -101,7 +101,7 @@ const AttachmentSchema = z.object({
 });
 
 const SendMessageSchema = z.object({
-  message: z.string().min(1, 'message is required').max(8000),
+  message: z.string().min(1, 'message is required').max(200000),
   stream: z.boolean().default(false),
   kbSearch: z.boolean().default(true),
   kbTopN: z.number().int().min(1).max(20).default(8),

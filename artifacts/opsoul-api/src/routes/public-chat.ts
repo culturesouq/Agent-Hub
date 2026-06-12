@@ -30,7 +30,7 @@ const router = Router();
 router.use(requireSlotKey);
 
 const PublicChatSchema = z.object({
-  message:        z.string().min(1).max(8000),
+  message:        z.string().min(1).max(200000),
   userId:         z.string().max(256).optional(),
   conversationId: z.string().uuid().optional(),
   stream:         z.boolean().default(false),

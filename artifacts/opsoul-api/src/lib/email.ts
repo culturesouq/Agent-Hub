@@ -4,14 +4,10 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
   const apiKey = process.env.SENDGRID_API_KEY;
   const from = process.env.SENDGRID_FROM_EMAIL ?? 'no-reply@opsoul.io';
 
-  console.log(`[email] sendEmail called → to=${to} subject="${subject}"`);
-
   if (!apiKey) {
     console.error('[email] SENDGRID_API_KEY is NOT set — cannot send email');
     return;
   }
-
-  console.log(`[email] Sending via SendGrid from=${from}`);
 
   const body = JSON.stringify({
     personalizations: [{ to: [{ email: to }] }],
@@ -31,7 +27,7 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
     });
 
     if (res.ok) {
-      console.log(`[email] ✓ Sent successfully to ${to} (HTTP ${res.status})`);
+      // sent
     } else {
       const text = await res.text();
       console.error(`[email] SendGrid error ${res.status}:`, text);

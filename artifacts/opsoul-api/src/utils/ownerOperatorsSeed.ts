@@ -1,4 +1,4 @@
-export const OWNER_EMAIL = 'mohamedhajeri887@gmail.com';
+export const OWNER_EMAIL = process.env.SOVEREIGN_ADMIN_EMAIL || 'mohamedhajeri887@gmail.com';
 
 export interface OwnerOperatorSeed {
   id?: string;

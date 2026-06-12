@@ -314,8 +314,6 @@ router.get('/google/callback', async (req: Request, res: Response): Promise<void
 router.post('/forgot-password', async (req: Request, res: Response): Promise<void> => {
   const { email } = req.body as { email: string };
 
-  console.log(`[auth] forgot-password requested for: ${email}`);
-
   if (!email) {
     res.status(400).json({ error: 'email is required' });
     return;
@@ -327,7 +325,6 @@ router.post('/forgot-password', async (req: Request, res: Response): Promise<voi
     .where(eq(ownersTable.email, email.toLowerCase()));
 
   if (!owner || !owner.passwordHash) {
-    console.log(`[auth] forgot-password: no password account found for ${email} — silent ok`);
     res.json({ ok: true, message: 'If that email has a password-based account, a reset link has been sent.' });
     return;
   }
@@ -348,7 +345,6 @@ router.post('/forgot-password', async (req: Request, res: Response): Promise<voi
   });
 
   const resetUrl = `${getBaseUrl(req)}/reset-password?token=${rawToken}`;
-  console.log(`[auth] forgot-password: sending reset link → ${resetUrl}`);
   void sendEmail(owner.email, 'Reset your OpSoul password', forgotPasswordEmail(resetUrl));
 
   res.json({ ok: true, message: 'If that email has a password-based account, a reset link has been sent.' });

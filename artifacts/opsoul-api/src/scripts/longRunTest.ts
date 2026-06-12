@@ -18,9 +18,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // ─── Config ────────────────────────────────────────────────────────────────
 
 const API_BASE        = 'http://localhost:3001';
-const TEST_EMAIL      = 'mohamedhajeri887@gmail.com';
+const TEST_EMAIL      = process.env.TEST_EMAIL || 'test@example.com';
 const TEST_PASSWORD   = 'TestPass123!';
-const OPERATOR_ID     = '587aa12d-2a85-4517-a41f-99771c74154f'; // Atlas
+const OPERATOR_ID     = process.env.TEST_OPERATOR_ID || '';
 const LOG_FILE        = path.join(__dirname, '../../../../longrun-test.log');
 
 const args            = process.argv.slice(2);

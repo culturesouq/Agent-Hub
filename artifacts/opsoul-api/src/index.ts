@@ -34,6 +34,7 @@ import contactRouter from './routes/contact.js';
 import googleIntegrationRouter from './routes/google-integration.js';
 import operatorSecretsRouter from './routes/operator-secrets.js';
 import deploymentSlotsRouter from './routes/deployment-slots.js';
+import capabilityRequestsRouter from './routes/capability-requests.js';
 import firecrawlRouter from './routes/firecrawl.js';
 import publicChatRouter from './routes/public-chat.js';
 import publicCrudRouter from './routes/public-crud.js';
@@ -156,6 +157,7 @@ app.use('/api/contact', contactRouter);
 app.use('/api/integrations/google', googleIntegrationRouter);
 app.use('/api/operators/:operatorId/secrets', operatorSecretsRouter);
 app.use('/api/operators/:operatorId/slots', deploymentSlotsRouter);
+app.use('/api/operators/:operatorId/capability-requests', capabilityRequestsRouter);
 app.use('/api/operators/:operatorId/firecrawl', firecrawlRouter);
 app.use('/v1/chat', publicLimiter, publicChatRouter);
 app.use('/v1/action', publicLimiter, publicCrudRouter);
@@ -186,7 +188,7 @@ if (process.env.NODE_ENV === 'production') {
   }
 }
 
-const SOVEREIGN_ADMIN_EMAIL = 'mohamedhajeri887@gmail.com';
+const SOVEREIGN_ADMIN_EMAIL = process.env.SOVEREIGN_ADMIN_EMAIL || 'mohamedhajeri887@gmail.com';
 
 async function setupDatabase(): Promise<void> {
   try {
