@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
-import { GrowProposal, TestResult } from "@/types";
+import { GrowProposal, Operator, SelfAwareness, TestResult } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
   Activity, CheckCircle2, XCircle, AlertCircle, Play, RefreshCw,
-  FlaskConical, ChevronDown, ChevronUp, ArrowRight, Sparkles,
+  FlaskConical, ChevronDown, ChevronUp, ArrowRight, Sparkles, Lock, ShieldCheck, Unlock,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -251,9 +251,56 @@ function ProposalCard({
   );
 }
 
+type GrowLockLevel = "OPEN" | "CONTROLLED" | "FROZEN";
+
+const LOCK_OPTIONS: { value: GrowLockLevel; label: string; description: string; icon: React.ElementType; color: string }[] = [
+  {
+    value: "OPEN",
+    label: "Open",
+    description: "Grows autonomously",
+    icon: Unlock,
+    color: "border-green-500/50 bg-green-500/10 text-green-600",
+  },
+  {
+    value: "CONTROLLED",
+    label: "Controlled",
+    description: "You approve changes",
+    icon: ShieldCheck,
+    color: "border-amber-500/50 bg-amber-500/10 text-amber-600",
+  },
+  {
+    value: "FROZEN",
+    label: "Frozen",
+    description: "No changes",
+    icon: Lock,
+    color: "border-slate-500/50 bg-slate-500/10 text-slate-500",
+  },
+];
+
 export default function GrowSection({ operatorId, saData }: { operatorId: string; saData: any }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Operator data (for growLockLevel) — reuses the same cache key OperatorDetail populates
+  const { data: operator } = useQuery<Operator>({
+    queryKey: ["operators", operatorId],
+    queryFn: () => apiFetch<Operator>(`/operators/${operatorId}`),
+    staleTime: 30_000,
+  });
+
+  // Self-awareness score — refreshes every 5 min; saData prop is the initial value
+  const { data: awareness } = useQuery<SelfAwareness>({
+    queryKey: ["operators", operatorId, "self-awareness"],
+    queryFn: () => apiFetch<SelfAwareness>(`/operators/${operatorId}/grow/self-awareness`),
+    refetchInterval: 5 * 60 * 1000,
+    initialData: saData,
+  });
+
+  const currentLockLevel: GrowLockLevel = (
+    ["OPEN", "CONTROLLED", "FROZEN"].includes(operator?.growLockLevel ?? "")
+      ? operator!.growLockLevel
+      : "CONTROLLED"
+  ) as GrowLockLevel;
 
   const { data: proposals = [], isLoading: propsLoading } = useQuery({
     queryKey: ["operators", operatorId, "grow-proposals"],
@@ -278,6 +325,33 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "self-awareness"] });
       toast({ title: "Health score refreshed" });
+    },
+  });
+
+  const updateLockLevel = useMutation({
+    mutationFn: (level: GrowLockLevel) =>
+      apiFetch(`/operators/${operatorId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ growLockLevel: level }),
+      }),
+    onMutate: async (level) => {
+      // Optimistic update
+      await queryClient.cancelQueries({ queryKey: ["operators", operatorId] });
+      const previous = queryClient.getQueryData<Operator>(["operators", operatorId]);
+      if (previous) {
+        queryClient.setQueryData<Operator>(["operators", operatorId], { ...previous, growLockLevel: level });
+      }
+      return { previous };
+    },
+    onError: (_err, _level, context: any) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["operators", operatorId], context.previous);
+      }
+      toast({ title: "Failed to update lock level", variant: "destructive" });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["operators", operatorId] });
+      toast({ title: "Lock level updated" });
     },
   });
 
@@ -329,6 +403,110 @@ export default function GrowSection({ operatorId, saData }: { operatorId: string
             {triggerGrow.isPending ? "Running…" : "Run growth cycle"}
           </Button>
         </div>
+      </div>
+
+      {/* ── Operator Health card ── */}
+      <div className="rounded-xl border border-border/40 bg-card/20 p-5 space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold flex items-center gap-1.5">
+              <Activity className="w-4 h-4 text-muted-foreground" />
+              Operator Health
+            </p>
+            {awareness?.lastUpdated && (
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                Last updated {format(new Date(awareness.lastUpdated), "MMM d, HH:mm")}
+              </p>
+            )}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => recomputeSa.mutate()}
+            disabled={recomputeSa.isPending}
+            className="text-xs border-border/40 shrink-0"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${recomputeSa.isPending ? "animate-spin" : ""}`} />
+            Recompute
+          </Button>
+        </div>
+
+        {awareness?.healthScore ? (
+          <div className="space-y-3">
+            {/* Score bar */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Overall</span>
+                <span className={`font-bold ${
+                  awareness.healthScore.score >= 80 ? "text-green-500" :
+                  awareness.healthScore.score >= 50 ? "text-amber-500" : "text-red-500"
+                }`}>
+                  {awareness.healthScore.score}%
+                  <span className="text-[10px] font-normal ml-1 opacity-70">{awareness.healthScore.label}</span>
+                </span>
+              </div>
+              <Progress
+                value={awareness.healthScore.score}
+                className="h-2 bg-background border border-border/30"
+              />
+            </div>
+            {/* Key metrics */}
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { label: "Knowledge",   val: awareness.healthScore.components.kbConfidence },
+                { label: "Growth",      val: awareness.healthScore.components.growActivity },
+                { label: "Integrity",   val: awareness.healthScore.components.soulIntegrity },
+              ].map((m) => (
+                <div key={m.label} className="rounded-lg border border-border/30 bg-background/50 px-3 py-2 text-center">
+                  <p className={`text-sm font-bold ${
+                    m.val >= 80 ? "text-green-500" : m.val >= 50 ? "text-amber-500" : "text-red-500"
+                  }`}>{m.val}%</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{m.label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-6 gap-2 text-center">
+            <Activity className="w-6 h-6 text-muted-foreground/20" />
+            <p className="text-xs text-muted-foreground">No health data yet.</p>
+          </div>
+        )}
+      </div>
+
+      {/* ── Lock level toggle ── */}
+      <div className="rounded-xl border border-border/30 bg-card/20 p-4 space-y-3">
+        <p className="text-xs text-muted-foreground tracking-wider">Growth lock level</p>
+        <div className="grid grid-cols-3 gap-2">
+          {LOCK_OPTIONS.map((opt) => {
+            const isActive = currentLockLevel === opt.value;
+            const Icon = opt.icon;
+            return (
+              <button
+                key={opt.value}
+                onClick={() => updateLockLevel.mutate(opt.value)}
+                disabled={updateLockLevel.isPending}
+                className={`flex flex-col items-center gap-1.5 rounded-xl border-2 px-3 py-3 text-center transition-all ${
+                  isActive ? opt.color : "border-border/40 bg-background/30 text-foreground/60 hover:border-border"
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                <span className="text-xs font-bold leading-none">{opt.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        {/* Description of active level */}
+        {LOCK_OPTIONS.filter((o) => o.value === currentLockLevel).map((opt) => (
+          <p key={opt.value} className="text-xs text-muted-foreground">
+            <span className="font-semibold text-foreground/70">{opt.label}:</span>{" "}
+            {opt.description === "Grows autonomously"
+              ? "GROW applies changes to your operator automatically."
+              : opt.description === "You approve changes"
+              ? "GROW proposes improvements; you decide what gets applied."
+              : "GROW engine is paused. No changes will be made."}
+          </p>
+        ))}
       </div>
 
       <Tabs defaultValue="health" className="w-full">
