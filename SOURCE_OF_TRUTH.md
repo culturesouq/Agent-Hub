@@ -277,16 +277,44 @@ All work committed to `culturesouq/Agent-Hub` (`main`). No deployment yet — "p
 ### Pending — owner action required before any of this is live
 
 1. **Run DB migration**: `psql "$DATABASE_URL" -f migrations/add_operator_model_config.sql` — adds `model_config JSONB` column to operators table
-2. **Build installer artifacts**: `cd electron && npm run dist:mac` + `npm run dist:win` — then upload `.dmg` + `.exe` to GitHub Releases as `OpSoul-mac.dmg` + `OpSoul-win.exe`
+2. ~~Build installer artifacts~~ — **DONE**. `OpSoul-mac.dmg` live at GitHub Releases v0.1.0. Windows pending.
 3. **Replace icon placeholders**: `electron/assets/icon.icns` + `icon.ico` with real 1024×1024 production icons
-4. **Test full flow**: Docker Desktop → `cd electron && npm run start` → wizard → create operator → configure model
+4. ~~Docker-free installer~~ — **DONE** (`05fe3d1`). Embedded Postgres, no Docker needed.
+
+### Closing commits — 2026-06-12
+
+| Commit | What |
+|---|---|
+| `05fe3d1` | Docker-free Electron: embedded-postgres + direct server child process. Bundled getting-started.html in tray. |
+| `9bf4fc0` | Download page: platform auto-detect, Mac/Windows button highlighted by OS. |
+| `4ddcf88` | pnpm-workspace.yaml darwin-arm64 fixes. Hub built: 1,148 kB JS. |
+| `bdf77ac` | Dockerfile: alpine→slim + --no-frozen-lockfile. Fixes Azure ACR Rollup musl error. |
+| `2407386` | Download page `/download.html` — dark theme, two platform buttons, 3-step guide. |
+
+**GitHub Release v0.1.0** — https://github.com/culturesouq/Agent-Hub/releases/tag/v0.1.0
+- `OpSoul-mac.dmg` (arm64 Apple Silicon, 148 MB) — LIVE
+- `OpSoul-0.1.0.dmg` (x64 Intel, 154 MB) — LIVE
+- Direct URL: `https://github.com/culturesouq/Agent-Hub/releases/latest/download/OpSoul-mac.dmg`
+- Windows `.exe`: pending (needs Windows machine or CI)
+
+**Azure revision `opsoul--0000089` — HEALTHY — 2026-06-12**
+Image: `banistudioacr.azurecr.io/opsoul-api:sdk-bridge-2407386`
+Contains: Phase 1 SDK bridge + BYO model + GROW UI + first-run wizard.
+
+### Before public release
+
+1. Real icons: `electron/assets/icon.icns` + `icon.ico` (1024×1024)
+2. Mac code signing + notarization (Apple Developer account — avoids "unidentified developer" warning)
+3. Windows `.exe` build (Windows machine or GitHub Actions CI)
+4. Stripe payment gate on download page
+5. DB migration on prod: `psql "$DATABASE_URL" -f migrations/add_operator_model_config.sql`
 
 ### What remains (Phase 2 onward)
 
-- **Phase 2**: Per-operator private packages (`@opsoul/nahil`, `@opsoul/istishari`, `@opsoul/vael`) — personal convenience wrappers, lowest priority
+- **Phase 2**: Per-operator private packages (`@opsoul/nahil`, `@opsoul/istishari`, `@opsoul/vael`) — internal convenience wrappers, lowest priority
 - **Phase 3 remaining**: Customer storage connector UI (connect own Postgres/Pinecone for memory)
-- **Payment gate**: Stripe integration on download page (post-testing)
-- **toolRegistry.ts cleanup**: Remove `UNIVERSAL_TOOLS` array once `buildProvisionedList` is refactored to pull from SDK registry directly
+- **Payment gate**: Stripe on download page (post-testing)
+- **toolRegistry.ts cleanup**: Remove `UNIVERSAL_TOOLS` once `buildProvisionedList` pulls from SDK registry directly
 
 ---
 
