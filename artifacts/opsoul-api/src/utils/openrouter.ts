@@ -178,9 +178,6 @@ async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
       lastErr = err;
       const retryable = isRetryableError(err);
       if (!retryable || attempt === LLM_MAX_RETRIES) {
-        if (retryable) {
-          console.error(`[openrouter] ${label} — retry budget exhausted after ${LLM_MAX_RETRIES} attempts`, err);
-        }
         throw err;
       }
       const delay = LLM_RETRY_DELAYS_MS[attempt] ?? LLM_RETRY_DELAYS_MS[LLM_RETRY_DELAYS_MS.length - 1];

@@ -26,6 +26,8 @@
  * scope isolation, or any patent-protected mechanism.
  */
 
+const DEBUG = process.env.LOG_LEVEL === 'debug';
+
 import crypto from 'crypto';
 import { db } from '@workspace/db';
 import {
@@ -143,7 +145,7 @@ async function handleWebSearch(
   if (!query) {
     return { content: 'web_search requires a non-empty "query" argument.', meta: { terminateLoop: true } };
   }
-  console.log(`[agency] web_search: "${query}"`);
+  if (DEBUG) console.log(`[agency] web_search: "${query}"`);
   onProgress?.({ event: 'searching', payload: { searching: query } });
 
   const capResult = await executeWebSearch(query);
@@ -189,7 +191,7 @@ async function handleKbSeed(
   }
 
   const conf = typeof confidence === 'number' ? confidence : 65;
-  console.log(`[agency] kb_seed: "${source}" (confidence ${conf})`);
+  if (DEBUG) console.log(`[agency] kb_seed: "${source}" (confidence ${conf})`);
   onProgress?.({ event: 'seeding', payload: { seeding: source } });
 
   const seedResult = await persistKbSeedEntry(
@@ -232,7 +234,7 @@ async function handleWriteFile(
   if (!filename || !content) {
     return { content: 'write_file requires both "filename" and "content".', meta: { terminateLoop: true } };
   }
-  console.log(`[agency] write_file: "${filename}"`);
+  if (DEBUG) console.log(`[agency] write_file: "${filename}"`);
   onProgress?.({ event: 'writing', payload: { writing: filename } });
 
   const existing = await db
@@ -273,7 +275,7 @@ async function handleReadFile(
   if (!filename) {
     return { content: 'read_file requires a "filename".', meta: { terminateLoop: true } };
   }
-  console.log(`[agency] read_file: "${filename}"`);
+  if (DEBUG) console.log(`[agency] read_file: "${filename}"`);
   onProgress?.({ event: 'reading', payload: { reading: filename } });
 
   const [file] = await db
@@ -294,7 +296,7 @@ async function handleListFiles(
   ctx: ToolHandlerContext,
   onProgress?: ToolProgressCallback,
 ): Promise<ToolResult> {
-  console.log(`[agency] list_files`);
+  if (DEBUG) console.log(`[agency] list_files`);
   onProgress?.({ event: 'listing', payload: { listing: 'workspace files' } });
 
   const files = await db
@@ -322,7 +324,7 @@ async function handleGetCurrentTime(
 ): Promise<ToolResult> {
   const { timezone } = parseArgs<{ timezone?: string }>(rawArgs);
   const tz = timezone || 'Asia/Dubai';
-  console.log(`[agency] get_current_time (${tz})`);
+  if (DEBUG) console.log(`[agency] get_current_time (${tz})`);
   onProgress?.({ event: 'checking_time', payload: { checking_time: tz } });
 
   try {
@@ -348,7 +350,7 @@ async function handleScheduleTask(
   if (!name || !prompt || (schedule !== 'daily' && schedule !== 'weekly')) {
     return { content: 'schedule_task requires "name", "prompt", and "schedule" (daily|weekly).', meta: { terminateLoop: true } };
   }
-  console.log(`[agency] schedule_task: "${name}" (${schedule})`);
+  if (DEBUG) console.log(`[agency] schedule_task: "${name}" (${schedule})`);
   onProgress?.({ event: 'scheduling', payload: { scheduling: name } });
 
   const intervalMs = schedule === 'daily' ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
@@ -407,7 +409,7 @@ async function handleUpdateTask(
   }
 
   await db.update(tasksTable).set(patch).where(eq(tasksTable.id, task.id));
-  console.log(`[agency] update_task: "${name}"`);
+  if (DEBUG) console.log(`[agency] update_task: "${name}"`);
   onProgress?.({ event: 'updating_task', payload: { updating_task: name } });
 
   return { content: `Task "${name}" updated.` };
@@ -429,7 +431,7 @@ async function handlePauseTask(
     .where(and(eq(tasksTable.operatorId, ctx.operatorId), eq(tasksTable.contextName, name)))
     .returning({ id: tasksTable.id });
 
-  console.log(`[agency] pause_task: "${name}" (${result.length} rows)`);
+  if (DEBUG) console.log(`[agency] pause_task: "${name}" (${result.length} rows)`);
   onProgress?.({ event: 'pausing_task', payload: { pausing_task: name } });
 
   return {
@@ -455,7 +457,7 @@ async function handleResumeTask(
     .where(and(eq(tasksTable.operatorId, ctx.operatorId), eq(tasksTable.contextName, name)))
     .returning({ id: tasksTable.id });
 
-  console.log(`[agency] resume_task: "${name}" (${result.length} rows)`);
+  if (DEBUG) console.log(`[agency] resume_task: "${name}" (${result.length} rows)`);
   onProgress?.({ event: 'resuming_task', payload: { resuming_task: name } });
 
   return {
@@ -480,7 +482,7 @@ async function handleDeleteTask(
     .where(and(eq(tasksTable.operatorId, ctx.operatorId), eq(tasksTable.contextName, name)))
     .returning({ id: tasksTable.id });
 
-  console.log(`[agency] delete_task: "${name}" (${result.length} rows)`);
+  if (DEBUG) console.log(`[agency] delete_task: "${name}" (${result.length} rows)`);
   onProgress?.({ event: 'deleting_task', payload: { deleting_task: name } });
 
   return {
@@ -507,7 +509,7 @@ async function handleHttpRequest(
   }
   const method = httpArgs.method || 'GET';
 
-  console.log(`[agency] http_request: ${method} ${httpArgs.url}`);
+  if (DEBUG) console.log(`[agency] http_request: ${method} ${httpArgs.url}`);
   onProgress?.({ event: 'calling', payload: { calling: httpArgs.url } });
 
   let toolResultText: string;

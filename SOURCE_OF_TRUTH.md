@@ -276,6 +276,22 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 ## 8. Commit History — newest first
 
+### 2026-06-12 — Platform cleanup (Phases A–F)
+
+Four commits cleaning 27 audit findings:
+- `70d0835` Phase A: Deleted 5 dead lib packages (openai_ai_integrations, openrouter_ai_integrations, integrations-openrouter-ai, integrations-openai-ai-server, integrations-openai-ai-react). Removed deprecated getOpenRouterClient(). Removed unused cheerio dependency.
+- `9ca81ca` Phase B+C: Admin email moved to SOVEREIGN_ADMIN_EMAIL env var (index.ts + ownerOperatorsSeed.ts in sync). PII-leaking console.logs removed from auth.ts and email.ts. longRunTest.ts credentials moved to env vars. Message cap raised 8000→200000 chars (fixes reported 400 paste regression). capability-requests router mounted in index.ts (was fully built but never mounted). .env.example: renamed AI_INTEGRATIONS_OPENROUTER_API_KEY→OPENROUTER_API_KEY, added SOVEREIGN_ADMIN_EMAIL, APP_URL, SANDBOX_OPERATOR_ID.
+- `6dbdd3b` Phase D: All 18 hardcoded 'moonshotai/kimi-k2.5' literals replaced with DEFAULT_MODEL_ID import from modelRegistry.ts across 9 files.
+- `8b9c283` Phase E: opsoul.io/opsoul.ai hardcodes replaced with APP_URL env var reads in email.ts, auth.ts, integrations.ts, openrouter.ts. Env var name normalized (APP_URL || APP_BASE_URL). X-Title stale version removed.
+
+**TWO ITEMS INTENTIONALLY DEFERRED (do not fix without explicit decision):**
+
+1. **Dual HTTP dispatch layers** (`skillExecutor.ts:46-308` vs `toolPersistence.ts`) — two parallel OAuth refresh + HTTP dispatch implementations for integrations. `skillExecutor.ts` is the old path (skill-trigger route); `toolPersistence.ts` is the newer path (agent-loop tool dispatch). Deferred: will be resolved when tools are rewired through CultureEyes SDK (Phase 1 of the npm/console plan). Fixing this now would be a major refactor with risk; the SDK rewire collapses it cleanly.
+
+2. **ALTER TABLE DDL in startup** (`index.ts:218-268`) — 6 `ALTER TABLE IF NOT EXISTS` blocks from previous hotfix migrations run on every boot. These need to be promoted to proper migration files in `lib/db/` and run via `pnpm --filter opsoul-db push`. Requires owner approval per § 3 rule 4. Deferred: owner must approve before touching DB schema.
+
+---
+
 ### 2026-06-01T~05:00Z — Nahil app full audit SHIPPED (downstream consumer side, `nahilai--0000089`, image `audit-0b32484`)
 
 **Not an OpSoul code change** — but Nahil is OpSoul's primary downstream consumer, so contract-side changes that affect the Nahil operator's behavior go in this log.

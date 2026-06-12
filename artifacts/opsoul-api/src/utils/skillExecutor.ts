@@ -1,3 +1,5 @@
+const DEBUG = process.env.LOG_LEVEL === 'debug';
+
 import { chatCompletion } from './openrouter.js';
 import { DEFAULT_MODEL_ID } from './modelRegistry.js';
 import { db } from '@workspace/db';
@@ -90,7 +92,7 @@ async function refreshAccessToken(integration: IntegrationRow): Promise<string |
         .update(operatorIntegrationsTable)
         .set({ tokenEncrypted: encryptToken(newPayload) })
         .where(eq(operatorIntegrationsTable.id, integration.id));
-      console.log(`[skillExecutor] Google token refreshed for integration ${integration.id}`);
+      if (DEBUG) console.log(`[skillExecutor] Google token refreshed for integration ${integration.id}`);
       return newTokens.access_token;
     }
 
@@ -257,7 +259,7 @@ async function fetchIntegrationData(
       );
 
       const gqlQuery = queryResult.content.trim().replace(/^```[\w]*\n?|```$/g, '');
-      console.log(`[skillExecutor] calling GraphQL API: ${baseUrl}`);
+      if (DEBUG) console.log(`[skillExecutor] calling GraphQL API: ${baseUrl}`);
       return await callGraphQL(baseUrl, gqlQuery, token, integration);
     }
 
@@ -278,7 +280,7 @@ async function fetchIntegrationData(
 
       const searchTerm = searchTermResult.content.trim();
       const url = `${baseUrl}/search`;
-      console.log(`[skillExecutor] calling POST search API: ${url}`);
+      if (DEBUG) console.log(`[skillExecutor] calling POST search API: ${url}`);
       return await callPostSearch(url, { query: searchTerm, page_size: 15 }, token, integration);
     }
 
@@ -300,7 +302,7 @@ async function fetchIntegrationData(
     const path = endpointResult.content.trim().replace(/^["']|["']$/g, '');
     const url = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
 
-    console.log(`[skillExecutor] calling REST API: ${url}`);
+    if (DEBUG) console.log(`[skillExecutor] calling REST API: ${url}`);
 
     return await callRestApi(url, token, integration);
   } catch (err: any) {
@@ -355,7 +357,7 @@ export async function executeSkill(
         DEFAULT_MODEL_ID,
       );
       const query = params?.query?.trim() || trigger.extractedParams.slice(0, 200);
-      console.log(`[skillExecutor] web_search: "${query}"`);
+      if (DEBUG) console.log(`[skillExecutor] web_search: "${query}"`);
       const hits = await webSearch(query);
       if (!hits.length) {
         return { skillName: trigger.name, output: 'Web search returned no results.', success: false, error: 'No results' };
@@ -395,7 +397,7 @@ export async function executeSkill(
       if (!params?.method || !params?.url) {
         return { skillName: trigger.name, output: 'Could not extract HTTP request parameters from context.', success: false, error: 'Parameter extraction failed' };
       }
-      console.log(`[skillExecutor] http_request: ${params.method} ${params.url}`);
+      if (DEBUG) console.log(`[skillExecutor] http_request: ${params.method} ${params.url}`);
       const httpResult = await executeHttpRequest(trigger.operatorId, params);
       return { skillName: trigger.name, output: httpResult, success: true };
     }
@@ -413,7 +415,7 @@ export async function executeSkill(
       if (!params?.filename || !params?.content) {
         return { skillName: trigger.name, output: 'Could not extract file write parameters from context.', success: false, error: 'Parameter extraction failed' };
       }
-      console.log(`[skillExecutor] write_file: "${params.filename}"`);
+      if (DEBUG) console.log(`[skillExecutor] write_file: "${params.filename}"`);
       const fileResult = await writeOperatorFile(trigger.operatorId, trigger.operatorOwnerId, params.filename, params.content);
       return { skillName: trigger.name, output: fileResult.message, success: fileResult.success };
     }
@@ -431,7 +433,7 @@ export async function executeSkill(
       if (!params?.content || !params?.source) {
         return { skillName: trigger.name, output: 'Could not extract KB seed parameters from context.', success: false, error: 'Parameter extraction failed' };
       }
-      console.log(`[skillExecutor] kb_seed: source="${params.source}"`);
+      if (DEBUG) console.log(`[skillExecutor] kb_seed: source="${params.source}"`);
       const confidence = Math.max(75, Math.min(85, params.confidence ?? 80));
       const seedResult = await seedKbEntry(trigger.operatorId, trigger.operatorOwnerId, params.content, params.source, confidence);
       if (!seedResult.stored) {
@@ -464,10 +466,10 @@ export async function executeSkill(
           const data = await fetchIntegrationData(integration, instructions);
           if (data) {
             apiContext = `\n\nLive API response from ${trigger.integrationType}:\n${data}`;
-            console.log(`[skillExecutor] integration data fetched for ${trigger.integrationType}`);
+            if (DEBUG) console.log(`[skillExecutor] integration data fetched for ${trigger.integrationType}`);
           }
         } else {
-          console.log(`[skillExecutor] no integration found for type=${trigger.integrationType}, operator=${trigger.operatorId}`);
+          if (DEBUG) console.log(`[skillExecutor] no integration found for type=${trigger.integrationType}, operator=${trigger.operatorId}`);
         }
       } catch (err: any) {
         console.warn('[skillExecutor] integration lookup failed:', err?.message);
