@@ -16,24 +16,25 @@ After "the last cleaning," the operator chat is **blocking things that used to w
 
 ---
 
-## 1. Live Deployment (verified against Azure 2026-05-17 — post webhook URL fix)
+## 1. Live Deployment (verified against Azure 2026-06-12 — sdk-bridge deploy)
 
 | What | Value |
 |---|---|
 | **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` |
 | **Container App** | `opsoul` (resource group `bani-studio-rg`, region `uaenorth`) |
-| **Active Revision** | `opsoul--0000075` (Healthy 2026-05-22T06:29Z — Artifacts archive tab next to Files; sibling of `00926b4`'s ui-gap fixes on top of `e515e4b` station rewrite) |
-| **Image** | `banistudioacr.azurecr.io/opsoul-api:phase-2b-integrated-d33ae33` |
-| **Source commit (live)** | `00926b4` — Artifacts archive tab. `GET /api/operators/:id/artifacts` scans messagesTable for fenced `opsoul-widget` blocks (excludes transient connect_form); Hub `ArtifactsSection.tsx` renders each via the existing WidgetBlock, filter chips per kind, sits between Files and Connections in the nav. Builds on `e515e4b` (5 UI-gap fixes: every-N-hours preset, "unlocks N tools" badge, outbound activity per channel, Skills "Test fire" panel, `/render` slash command) and `319f273` (full station rewrite). |
+| **Active Revision** | `opsoul--0000089` (Healthy 2026-06-12 — sdk-bridge deploy, public download landing page + Electron installer + first-run wizard + @opsoul/client package) |
+| **Image** | `banistudioacr.azurecr.io/opsoul-api:sdk-bridge-2407386` |
+| **Source commit (live)** | `2407386` — public download landing page. Top of branch includes: `1cf60bf` SoT update · `758b6a6` Electron desktop installer · `6a433aa` first-run setup wizard · `a6594ed` @opsoul/client npm package. |
 | **🛡 Rollback safety net (DO NOT DELETE)** | Three retained rollback fallbacks: (1) image `banistudioacr.azurecr.io/opsoul-api:upload-fix-dd7e32c` (rev `opsoul--0000066` — pre-station-rewrite), (2) image `banistudioacr.azurecr.io/opsoul-api:mcp-runtime-f9f23e4` (rev `opsoul--0000065` — MCP runtime layer, pre-upload-fix), (3) image `banistudioacr.azurecr.io/opsoul-api:webhook-fix-2c4ea80` (rev `opsoul--0000064` — pre-MCP). Owner directive 2026-05-19 (still in force): keep flagged, do **not** auto-prune; touch only on explicit owner directive. Rollback to pre-station-rewrite: `az containerapp update -n opsoul -g bani-studio-rg --image banistudioacr.azurecr.io/opsoul-api:upload-fix-dd7e32c`. Pre-MCP state: `--image banistudioacr.azurecr.io/opsoul-api:webhook-fix-2c4ea80`. |
 | **Live proof (2026-05-19)** | Nahil successfully called `http_request` tool against `https://nahilai.com/` via the new MCP runtime layer. Retrieved structured JSON, reported back: profile (Abu Dhabi admin), 5 active subsidies (Smart Irrigation, AgTech Grant, Organic Farming, Protected Agriculture, Water Desalination Access), empty sensors/seasons. Universal tool layer confirmed working in production on a real operator hitting real consumer-app data. |
 | **LLM model (entire stack)** | `moonshotai/kimi-k2.5` via OpenRouter — chat, distillation, GROW, sub-agent dispatch, vision, schema normalization, capability loop, all routes |
 | **Auto-routing** | **REMOVED** (was 17-line block in chat.ts switching between Sonnet/Haiku/Gemini per-turn) |
 | **Notable env vars (set 2026-05-17 PM)** | `OPENROUTER_API_KEY` (unchanged) · `API_BASE_URL = https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io` (NEW — required by Hub's `connectTelegram` for inline `setWebhook` registration) · `APP_URL` + `APP_BASE_URL` → same Azure FQDN (were wrongly `https://opsoul.io` which doesn't resolve, blocking Google OAuth callbacks + dashboard URL responses) · `VAEL_INBOX_ENABLED=true` (legacy — no longer wired) |
-| **Code commits in this image** | `7e5e39c` K2.6→K2.5 swap · `5becd7f` original Kimi single-model migration · `96e83c6` 9 archetypes + role extraction + 188 roles · `87a82a3` revert birth engine to 91094a1 · `d34fb25` hub Vael Desk removal · `b890bb4` no-fallbacks · `621c44d` operator-as-driver |
+| **Code commits in this image** | `2407386` public download landing · `1cf60bf` SoT update · `758b6a6` Electron installer · `6a433aa` first-run wizard · `a6594ed` @opsoul/client · `7e5e39c` K2.6→K2.5 swap · `5becd7f` original Kimi single-model migration · `96e83c6` 9 archetypes + role extraction + 188 roles |
 | **DB state** | Clean. Per-operator KB: Vael 86, Operator 83, Nahil 83, Reem 83. 4 operators total. |
 | **Operators in DB** | 4: Vael (`8668f6c9-...`), Operator/Blank (`eb70c409-...`), Nahil (`cdba8a6b-...`), Reem (`bcf00271-...`). All have `defaultModel = NULL` → all pick up Kimi K2.5 via CHAT_MODEL default. |
-| **ACR state** | Five tags in `opsoul-api` repo: `kimi-k2-5-7e5e39c` (= live), `kimi-k2-5becd7f` (prior — K2.6 attempt), `birth-9arch-188roles-96e83c6`, `revert-birth-87a82a3`, `hub-clean-d34fb25`. |
+| **ACR state** | Tags in `opsoul-api` repo: `sdk-bridge-2407386` (= live), `kimi-k2-5-7e5e39c` (prior), `kimi-k2-5becd7f`, `birth-9arch-188roles-96e83c6`, `revert-birth-87a82a3`, `hub-clean-d34fb25`. |
+| **Dockerfile fix (2026-06-12)** | Switched base from `node:20-alpine` to `node:20-slim` (Debian/glibc) + `--no-frozen-lockfile`. Alpine musl caused `@rollup/rollup-linux-x64-musl` to be missing from the macOS lockfile, breaking Vite builds in ACR. Committed `bdf77ac`. |
 | **Optional next step** | Set `SANDBOX_OPERATOR_ID` env var on the container app. If unset, sandbox-shaped userIds are rejected on every operator. Optional `VAEL_OPERATOR_ID` env var also recognised as explicit override (default = DB lookup by name='Vael'). |
 
 ### ACR (Azure Container Registry) — `banistudioacr`
