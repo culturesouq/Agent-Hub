@@ -444,13 +444,3 @@ export async function chatCompletion(
   };
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-//  BACKWARD-COMPAT EXPORT — some legacy callers may still import this.
-//  Kept as a thin wrapper around getClientForModel() so its old shape works.
-// ───────────────────────────────────────────────────────────────────────────
-
-/** @deprecated Prefer streamChat/chatCompletion which auto-route via registry. */
-export function getOpenRouterClient(apiKey?: string | null): OpenAI {
-  const { client } = getClientForModel(CHAT_MODEL, apiKey);
-  return client;
-}

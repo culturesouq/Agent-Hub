@@ -1,7 +1,18 @@
 # OpSoul — Source of Truth
 
+> ★★★ TOP PRINCIPLE (2026-06-07): **Mohamed has new methods and a different way of thinking. Follow HIS clarifications; never fall back to old/textbook/convention/copied-defaults. His way overrides convention; when unsure, ASK.** We work together — not "owner".
+
 > One file. Read top to bottom.
 > Live state at the top. Principles in the middle. Full history at the bottom.
+
+---
+
+## ⚠ OPEN REGRESSION — chat blocking (flagged 2026-06-07 by Mohamed; AUDIT + FIX)
+After "the last cleaning," the operator chat is **blocking things that used to work** — suspected over-restrictive drift introduced during cleanup:
+1. **Cannot upload files in chat** (MD or any file) — this used to work (cf. the `upload-fix-dd7e32c` rollback image in the table below; a regression of that fix?).
+2. **Paste length is capped** — Mohamed can only paste a limited amount of text.
+3. **`400` errors** on messages — surfaced as: *"The server returned 400 for that message. Your text is still in the box — retry, or try rephrasing while I check what's going on."* (likely request-size / payload validation rejecting large pastes).
+**Audit:** diff what the last cleanup changed around upload handling, message/paste size limits, and request-body validation (the 400). Restore: file upload in chat + long-paste capacity. Mohamed: this happens despite every project having a SoT. NOT diagnosed/fixed this session — logged for a dedicated OpSoul audit.
 
 ---
 
@@ -4668,3 +4679,85 @@ After the agency fix landed (`opsoul--0000085`, commit `576ffb6` + `ae7b12a`), o
 **Not now** — owner directive 2026-06-02 *"maybe it is time we give them more tools, but not now, just add it to opsoul SoT 'to do'"*. Hajeri training stabilization is the immediate priority; tool expansion is post-coherence work.
 
 
+
+---
+
+## 2026-06-03 — OpSoul Working State Snapshot
+
+What is fully working, live, and verified as of this date. This is the "what runs in production right now" reference — not roadmap, not plans.
+
+### Infrastructure — LIVE
+
+- **Custom domain `opsoul.dev`** — bound to Azure Container App `opsoul-app` in `bani-studio-rg` (UAE North). HTTP validation. Managed cert active.
+- **Google OAuth** — working at `https://opsoul.dev/auth/google/callback`. `APP_URL` env var points at `opsoul.dev`. Client ID/secret bound.
+- **CORS** — `opsoul.dev` origins in `ALLOWED_ORIGIN` allowlist. No 500 on cross-origin requests from the bound domain.
+- **Deploy path** — `az acr build` → `az containerapp update --image`. No SSH, no VM.
+
+### Backend — Agency architecture SHIPPED
+
+- **TurnPlan / Three-mode analyse()** — commit `ae7b12a` (2026-06-02). Operator composes `TurnPlan` (kind/intent/scaffolding/constraints/toolsAuthorised) before every LLM call. Three modes: `execute` / `chat` / `introspect`. Wired across **all 5 user-facing surfaces**: chat.ts, public-chat.ts, public-crud.ts, telegram-webhook.ts, whatsapp-webhook.ts.
+- **Claim 21 (operator-as-driver) fully realised** — operator decides agency, tool use, AND response authorship. LLM is voice engine only, never freeform author.
+- **Operators stop confabulating tool lists** — introspect mode passes real catalog as authoritative content; LLM voices it. No more "I have 4 tools" when 74 are wired.
+
+### Backend — MCP Runtime SHIPPED
+
+- **Single source of truth**: `utils/toolRegistry.ts`
+- **3 transports**: internal `chat.ts`, external `/mcp` HTTP+SSE endpoint, frontend `/skills/manifest`
+- **Phase 1B**: `buildOperatorToolset` + `runSyncAgentLoop` wired to all 5 surfaces (no surface capability-stripped)
+- **Phase 2B**: Claim 5 firewall stubs at every entry (no-op currently, full impl queued)
+
+### Backend — Tool Catalog (74 total)
+
+| Tranche | Count | Tools |
+|---|---|---|
+| Universal (initial) | 12 | web_search, kb_seed, http_request, write_file, read_file, list_files, get_current_time, schedule_task, update_task, pause_task, resume_task, delete_task |
+| Firecrawl | 5 | firecrawl_scrape, firecrawl_map, firecrawl_crawl, firecrawl_extract, firecrawl_search |
+| Original Google (Gmail send, Calendar create, Drive list, etc.) | ~45 | spans Gmail/Calendar/Drive/Docs/Sheets baseline |
+| **Google Workspace expansion (2026-06-02)** | **+12** | gmail_modify_message, gmail_create_draft, gmail_list_labels, calendar_update_event, calendar_delete_event, calendar_search_events, calendar_free_busy, drive_upload_file, drive_create_folder, drive_move_file, drive_delete_file, drive_share_file |
+| **TOTAL** | **74** | All wired in registry, all dispatch cases connected |
+
+12 Google Workspace tools use existing Google OAuth scopes — no new consent required from end users.
+
+### Frontend — Hub UI (current state)
+
+- **Landing page** — dark cozy theme (final after editorial → dark NVIDIA → light cozy → dark cozy iterations). File: `src/pages/LandingPage.tsx`.
+- **Public nav** — simplified to: brand + Contact + Console. Pricing/Docs/Support removed.
+- **Public footer** — dark theme, minimal.
+- **Public layout** — dark theme default (`bg-black text-white`).
+- **App routes cleaned** — `/pricing`, `/support`, `/docs` deleted from `App.tsx`.
+- **Other Hub pages** (Dashboard, OperatorDetail, Admin, Login, Contact, Privacy, Terms) still use light-theme tokens — TODO for next pass.
+
+### Integrations LIVE
+
+- **Firecrawl** — API key bound, wired into all 3 ToolContext consumers (`operatorToolset.ts`, `chat.ts`, `mcp.ts`). Hardcoded safety: `limit≤500`, `allowExternalLinks:false`, nav-path exclusions.
+- **Google Workspace** — full max-power scopes, 57 tools total spanning Gmail/Calendar/Drive/Docs/Sheets.
+- **Maps API** — key bound (old key reused, no rotation per owner directive).
+- **Multi-provider LLM router** — `modelRegistry.ts` routes to Hajeri / Claude / GPT / Kimi / Gemini.
+
+### Known issues — tracked, not blocking
+
+| # | Issue | Solution |
+|---|---|---|
+| 127 | Kimi tool-call grammar leak | Strip in dispatch OR swap default model to GPT-4o-mini |
+| 126 | Google OAuth verification (production scale) | Path B when ready for >100 users |
+| — | Other Hub pages on light theme | Next UI pass — Dashboard/OperatorDetail/Admin/Login/Contact/Privacy/Terms |
+
+### What's NOT in this snapshot (deliberately)
+
+- Hajeri training state — see separate Hajeri SoT, evolving daily
+- Patent prosecution status — see Lavender IPs correspondence
+- Commercialization conversations — see [[opsoul-commercialization-model]] memory
+
+This snapshot captures the OpSoul *platform* in its currently-deployed form. Verified working, no asterisks.
+
+### Pitch positioning rule (2026-06-03)
+
+When "pitching" is referenced anywhere in this SoT or in owner-conversations with external audiences (Sheikhs, G42, investors, enterprise), the scope is **OpSoul ALONE — NOT Hajeri AI model**.
+
+Hajeri is a LATER-STAGE narrative element. It enters only after OpSoul lands, and only with this framing:
+
+> *"Hajeri is built on the same constitution and architecture as OpSoul. It proves the operator-as-driver pattern, identity-anchored design, and patent-protected mechanisms extend all the way down to the model layer. Same DNA, sovereign expression."*
+
+Hajeri is positioned as **architectural alignment proof**, not as a competing LLM (no comparison to GPT/Claude/Gemini). The "we built our own GPT" framing is explicitly avoided — it invites comparison battles OpSoul doesn't need.
+
+**Default pitch scope = OpSoul.** Adding Hajeri is a conscious later move, not a default inclusion. See memory: [[pitch-opsoul-only]].
