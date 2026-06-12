@@ -492,6 +492,10 @@
       Requires <a href="https://www.docker.com/products/docker-desktop/" target="_blank" rel="noopener">Docker Desktop</a> &mdash; we&rsquo;ll guide you through it if you don&rsquo;t have it.
     </p>
 
+    <p style="text-align:center;font-size:13px;color:var(--text-dim);margin:-28px 0 56px;">
+      Not sure which to pick? The installer includes everything &mdash; just download, open, and follow the 3 steps.
+    </p>
+
     <!-- How it works -->
     <div class="section-label">How it works</div>
     <div class="section-title">Up and running in minutes</div>
@@ -562,5 +566,26 @@
 
   </div>
 
+  <script>
+    (function () {
+      var ua = navigator.userAgent.toLowerCase();
+      var isMac = ua.indexOf('mac') !== -1 && ua.indexOf('iphone') === -1 && ua.indexOf('ipad') === -1;
+      var isWin = ua.indexOf('win') !== -1;
+      var cards = document.querySelectorAll('.dl-card');
+      var macCard = cards[0], winCard = cards[1];
+      var macBtn = macCard.querySelector('.dl-cta'), winBtn = winCard.querySelector('.dl-cta');
+      if (isMac) {
+        macCard.style.borderColor = 'var(--indigo)';
+        macCard.style.background = 'var(--surface-hover)';
+        winCard.style.opacity = '0.55';
+        macBtn.textContent = 'Recommended for your Mac';
+      } else if (isWin) {
+        winCard.style.borderColor = 'var(--indigo)';
+        winCard.style.background = 'var(--surface-hover)';
+        macCard.style.opacity = '0.55';
+        winBtn.textContent = 'Recommended for your PC';
+      }
+    })();
+  </script>
 </body>
 </html>
