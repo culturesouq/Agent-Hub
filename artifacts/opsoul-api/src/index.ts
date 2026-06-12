@@ -11,6 +11,7 @@ import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { pool } from '@workspace/db';
 import { ADMIN_AUDIT_LOG_TRIGGER_SQL } from '@workspace/db';
 import authRouter from './routes/auth.js';
+import setupRouter from './routes/setup.js';
 import operatorsRouter from './routes/operators.js';
 import ownerKbRouter from './routes/owner-kb.js';
 import operatorKbRouter from './routes/operator-kb.js';
@@ -133,6 +134,7 @@ const webhookLimiter = rateLimit({
   },
 });
 
+app.use('/api/setup', setupRouter);
 app.use('/api/auth', authLimiter, authRouter);
 app.use('/api/operators', operatorsRouter);
 app.use('/api/operators/:operatorId/owner-kb', ownerKbRouter);

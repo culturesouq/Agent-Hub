@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
-import { Component, ErrorInfo, ReactNode } from "react";
+import { Component, ErrorInfo, ReactNode, useState, useEffect } from "react";
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null };
@@ -40,6 +40,7 @@ import PrivacyPage from "@/pages/PrivacyPage";
 import TermsPage from "@/pages/TermsPage";
 import GoogleCallback from "@/pages/GoogleCallback";
 import ResetPassword from "@/pages/ResetPassword";
+import Setup from "@/pages/Setup";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -108,15 +109,50 @@ function Router() {
   );
 }
 
+function SetupGate({ children }: { children: ReactNode }) {
+  // "idle" = not yet checked; "checking" = fetch in flight;
+  // "needed" = no owner exists; "done" = owner exists (normal flow)
+  const [setupState, setSetupState] = useState<"idle" | "checking" | "needed" | "done">("idle");
+
+  useEffect(() => {
+    setSetupState("checking");
+    fetch("/api/setup/status")
+      .then((res) => res.json())
+      .then((data: { setupRequired?: boolean }) => {
+        setSetupState(data.setupRequired ? "needed" : "done");
+      })
+      .catch(() => {
+        // If the check fails (network error, server down) fall through to normal flow
+        setSetupState("done");
+      });
+  }, []);
+
+  if (setupState === "idle" || setupState === "checking") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background text-primary font-mono tracking-widest">
+        Loading...
+      </div>
+    );
+  }
+
+  if (setupState === "needed") {
+    return <Setup onComplete={() => setSetupState("done")} />;
+  }
+
+  return <>{children}</>;
+}
+
 function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <AuthProvider>
-              <Router />
-            </AuthProvider>
+            <SetupGate>
+              <AuthProvider>
+                <Router />
+              </AuthProvider>
+            </SetupGate>
           </WouterRouter>
           <Toaster />
         </TooltipProvider>
