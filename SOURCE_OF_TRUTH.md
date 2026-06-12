@@ -36,6 +36,8 @@ After "the last cleaning," the operator chat is **blocking things that used to w
 | **ACR state** | Tags in `opsoul-api` repo: `sdk-bridge-2407386` (= live), `kimi-k2-5-7e5e39c` (prior), `kimi-k2-5becd7f`, `birth-9arch-188roles-96e83c6`, `revert-birth-87a82a3`, `hub-clean-d34fb25`. |
 | **Dockerfile fix (2026-06-12)** | Switched base from `node:20-alpine` to `node:20-slim` (Debian/glibc) + `--no-frozen-lockfile`. Alpine musl caused `@rollup/rollup-linux-x64-musl` to be missing from the macOS lockfile, breaking Vite builds in ACR. Committed `bdf77ac`. |
 | **Optional next step** | Set `SANDBOX_OPERATOR_ID` env var on the container app. If unset, sandbox-shaped userIds are rejected on every operator. Optional `VAEL_OPERATOR_ID` env var also recognised as explicit override (default = DB lookup by name='Vael'). |
+| **GitHub Release v0.1.0 (2026-06-12)** | `https://github.com/culturesouq/Agent-Hub/releases/tag/v0.1.0` — three DMG assets: `OpSoul-mac.dmg` (arm64, 148 MB — what the download page button links to), `OpSoul-0.1.0-arm64.dmg` (arm64, same), `OpSoul-0.1.0.dmg` (x64 Intel, 154 MB). Download button at `/download.html` is live. Windows build skipped (wine not installed). |
+| **pnpm-workspace.yaml fix (2026-06-12)** | Committed `4ddcf88`. Commented out 4 darwin-arm64 suppression overrides (`@esbuild/darwin-arm64`, `@rollup/rollup-darwin-arm64`, `lightningcss-darwin-arm64`, `@tailwindcss/oxide-darwin-arm64`) — those were set for CI/Linux and broke all local Mac Hub builds. Hub now builds locally with `PORT=3001 BASE_PATH=/ pnpm --filter @workspace/opsoul-hub build`. |
 
 ### ACR (Azure Container Registry) — `banistudioacr`
 
