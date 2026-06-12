@@ -276,19 +276,125 @@ The "no LLM fallbacks" rule and "no prompt changes without approval" rule togeth
 
 ## 8. Commit History — newest first
 
-### 2026-06-12 — Platform cleanup (Phases A–F)
+### 2026-06-12 — Platform cleanup Phases A–F (commits 70d0835 → a8151e6)
 
-Four commits cleaning 27 audit findings:
-- `70d0835` Phase A: Deleted 5 dead lib packages (openai_ai_integrations, openrouter_ai_integrations, integrations-openrouter-ai, integrations-openai-ai-server, integrations-openai-ai-react). Removed deprecated getOpenRouterClient(). Removed unused cheerio dependency.
-- `9ca81ca` Phase B+C: Admin email moved to SOVEREIGN_ADMIN_EMAIL env var (index.ts + ownerOperatorsSeed.ts in sync). PII-leaking console.logs removed from auth.ts and email.ts. longRunTest.ts credentials moved to env vars. Message cap raised 8000→200000 chars (fixes reported 400 paste regression). capability-requests router mounted in index.ts (was fully built but never mounted). .env.example: renamed AI_INTEGRATIONS_OPENROUTER_API_KEY→OPENROUTER_API_KEY, added SOVEREIGN_ADMIN_EMAIL, APP_URL, SANDBOX_OPERATOR_ID.
-- `6dbdd3b` Phase D: All 18 hardcoded 'moonshotai/kimi-k2.5' literals replaced with DEFAULT_MODEL_ID import from modelRegistry.ts across 9 files.
-- `8b9c283` Phase E: opsoul.io/opsoul.ai hardcodes replaced with APP_URL env var reads in email.ts, auth.ts, integrations.ts, openrouter.ts. Env var name normalized (APP_URL || APP_BASE_URL). X-Title stale version removed.
+Pre-Phase 0 audit found 27 issues across the platform. Fixed in 5 commits. Two items intentionally deferred (see end). No functional changes to operator behavior. TypeScript 0 errors throughout.
 
-**TWO ITEMS INTENTIONALLY DEFERRED (do not fix without explicit decision):**
+---
 
-1. **Dual HTTP dispatch layers** (`skillExecutor.ts:46-308` vs `toolPersistence.ts`) — two parallel OAuth refresh + HTTP dispatch implementations for integrations. `skillExecutor.ts` is the old path (skill-trigger route); `toolPersistence.ts` is the newer path (agent-loop tool dispatch). Deferred: will be resolved when tools are rewired through CultureEyes SDK (Phase 1 of the npm/console plan). Fixing this now would be a major refactor with risk; the SDK rewire collapses it cleanly.
+#### `70d0835` — Phase A: Dead code deletion
 
-2. **ALTER TABLE DDL in startup** (`index.ts:218-268`) — 6 `ALTER TABLE IF NOT EXISTS` blocks from previous hotfix migrations run on every boot. These need to be promoted to proper migration files in `lib/db/` and run via `pnpm --filter opsoul-db push`. Requires owner approval per § 3 rule 4. Deferred: owner must approve before touching DB schema.
+**Files deleted (5 packages, 39 files):**
+- `lib/integrations/openai_ai_integrations/` — 11 files, no `package.json`, never imported anywhere in `artifacts/`. Orphaned audio/image Replit-era source.
+- `lib/integrations/openrouter_ai_integrations/` — 2 files, no `package.json`, never imported. Orphaned.
+- `lib/integrations-openrouter-ai/` — 6 files incl. `package.json` (`@workspace/integrations-openrouter-ai`). Used old `AI_INTEGRATIONS_OPENROUTER_*` env var names; live code reads `OPENROUTER_API_KEY` from `modelRegistry.ts`. Never imported in `artifacts/`.
+- `lib/integrations-openai-ai-server/` — 9 files incl. `package.json`. Never imported in `artifacts/`.
+- `lib/integrations-openai-ai-react/` — 9 files incl. `package.json`. Never imported in `artifacts/`.
+
+**File edits:**
+- `artifacts/opsoul-api/src/utils/openrouter.ts` — removed `@deprecated getOpenRouterClient()` function (zero call sites across entire codebase).
+- `artifacts/opsoul-api/package.json` — removed `"cheerio": "^1.2.0"` from `dependencies` (never imported anywhere in `src/`).
+
+---
+
+#### `9ca81ca` — Phase B+C: Security/PII hardening + regression fixes
+
+**Security — admin email moved to env var (2 files, must stay in sync):**
+- `artifacts/opsoul-api/src/index.ts:191` — `SOVEREIGN_ADMIN_EMAIL` now reads `process.env.SOVEREIGN_ADMIN_EMAIL || 'mohamedhajeri887@gmail.com'`
+- `artifacts/opsoul-api/src/utils/ownerOperatorsSeed.ts:1` — `OWNER_EMAIL` now reads same `SOVEREIGN_ADMIN_EMAIL` env var with same fallback. Both files use identical var name so one env change covers both.
+
+**Security — PII removed from logs:**
+- `artifacts/opsoul-api/src/routes/auth.ts` lines ~317, ~330, ~351 — removed 3 `console.log` calls that emitted requesting user's email address on every forgot-password request.
+- `artifacts/opsoul-api/src/lib/email.ts` lines 7, 14, 34 — removed `console.log` calls emitting `to=` email address and subject on every transactional email send.
+
+**Security — credentials removed from test script:**
+- `artifacts/opsoul-api/src/scripts/longRunTest.ts:21` — `TEST_EMAIL` hardcoded real address replaced with `process.env.TEST_EMAIL || 'test@example.com'`
+- `longRunTest.ts` — hardcoded production operator UUID replaced with `process.env.TEST_OPERATOR_ID || ''`
+
+**Regression fix — paste 400 error:**
+- `artifacts/opsoul-api/src/routes/chat.ts` — `SendMessageSchema.message` cap raised from `.max(8000)` to `.max(200000)`. This was the root cause of reported "server returned 400" errors on long pastes.
+- `artifacts/opsoul-api/src/routes/public-chat.ts` — same fix on `PublicChatSchema.message`.
+
+**Regression fix — capability-requests router never mounted:**
+- `artifacts/opsoul-api/src/index.ts` — added `import capabilityRequestsRouter from './routes/capability-requests.js'` and `app.use('/api/operators/:operatorId/capability-requests', capabilityRequestsRouter)`. The router file was fully implemented but never mounted — all calls were silently 404ing.
+
+**`.env.example` corrections:**
+- `AI_INTEGRATIONS_OPENROUTER_API_KEY` renamed to `OPENROUTER_API_KEY` (live code reads this name; old name read by deleted packages only — any deployment following old .env.example was getting zero LLM calls).
+- Added: `SOVEREIGN_ADMIN_EMAIL=`, `APP_URL=`, `SANDBOX_OPERATOR_ID=`
+
+---
+
+#### `6dbdd3b` — Phase D: All hardcoded model strings → DEFAULT_MODEL_ID
+
+**Problem:** 18 literal `'moonshotai/kimi-k2.5'` strings across 9 files — changing the default model required hunting every file manually.
+
+**Fix:** All now import `DEFAULT_MODEL_ID` from `./modelRegistry.js` (or `../utils/modelRegistry.js`). One change to `modelRegistry.ts` propagates everywhere.
+
+**Files changed:**
+- `utils/growEngine.ts:26` — `const GROW_MODEL = DEFAULT_MODEL_ID`
+- `utils/kbIntake.ts:7` — `const DISTILL_MODEL = DEFAULT_MODEL_ID`
+- `utils/memoryEngine.ts:16` — `const DISTILL_MODEL = DEFAULT_MODEL_ID`
+- `utils/curiosityEngine.ts:127` — inline literal in `chatCompletion()` replaced
+- `utils/skillExecutor.ts` lines 255, 275, 296, 354, 392, 410, 428 — 7 inline literals replaced across GraphQL, REST, web_search, http_request, write_file, kb_seed extractParam branches
+- `utils/operatorCapabilityLoop.ts:82` — `?? DEFAULT_MODEL_ID` in modelStr fallback
+- `routes/operators.ts` lines 133, 745 — 2 literals replaced
+- `routes/integrations.ts:267` — 1 literal replaced
+- `routes/public-chat.ts:317` — vision-override literal replaced with `DEFAULT_MODEL_ID`; comment updated: `// Use default model (ensure DEFAULT_MODEL_ID supports vision)`
+
+---
+
+#### `8b9c283` — Phase E: Domain string hardcodes → env var reads
+
+**Problem:** `opsoul.io`/`opsoul.ai` hardcoded in 9 places in backend source. Three different env var names (`APP_URL`, `APP_BASE_URL`, `API_BASE_URL`) used for the same concept across different files.
+
+**Files changed:**
+
+`artifacts/opsoul-api/src/lib/email.ts`:
+- Added module-level `const APP_BASE = (process.env.APP_URL || 'https://opsoul.io').replace(/\/$/, '')`
+- Added `const PRIVACY_EMAIL = process.env.PRIVACY_EMAIL || 'privacy@opsoul.io'`
+- `SENDGRID_FROM_EMAIL` fallback: `no-reply@opsoul.io` → `` `no-reply@${new URL(APP_BASE).hostname}` ``
+- 3× `https://opsoul.io/privacy` → `${APP_BASE}/privacy`
+- 2× `privacy@opsoul.io` → `${PRIVACY_EMAIL}`
+- `welcomeEmail` dashboard URL → `APP_BASE`
+
+`artifacts/opsoul-api/src/routes/auth.ts:26`:
+- Host fallback `'opsoul.io'` → `new URL(process.env.APP_URL || 'https://opsoul.io').hostname`
+
+`artifacts/opsoul-api/src/routes/integrations.ts:45-47`:
+- `process.env.APP_BASE_URL` → `process.env.APP_URL || process.env.APP_BASE_URL` (graceful — if only `APP_BASE_URL` set in Azure, still works)
+
+`artifacts/opsoul-api/src/utils/openrouter.ts:213-214`:
+- `HTTP-Referer`: `'https://opsoul.ai'` → `process.env.APP_URL || 'https://opsoul.io'`
+- `X-Title`: `'OpSoul v2.4'` → `'OpSoul'` (removed stale version number)
+
+`.env.example` additions: `APP_BASE_URL=`, `SENDGRID_FROM_EMAIL=`, `PRIVACY_EMAIL=`
+
+---
+
+#### `a8151e6` — Phase F: Log verbosity + SoT update
+
+`artifacts/opsoul-api/src/utils/toolHandlers.ts`:
+- Added `const DEBUG = process.env.LOG_LEVEL === 'debug'` at top
+- All 12 per-dispatch `console.log` trace calls wrapped with `if (DEBUG)` — `console.error` in http_request error path left unconditional
+
+`artifacts/opsoul-api/src/utils/skillExecutor.ts`:
+- Added `const DEBUG = ...` at top
+- 10 verbose trace `console.log` calls gated behind `if (DEBUG)` — `console.warn`/`console.error` left unconditional
+
+`artifacts/opsoul-api/src/utils/openrouter.ts`:
+- Removed `console.error` that fired immediately before `throw err` in retry budget exhaustion (was logging the error twice — once here, once in the route's catch handler)
+
+`.env.example`: Added `LOG_LEVEL=` with comment
+
+---
+
+#### TWO ITEMS INTENTIONALLY DEFERRED
+
+**1. Dual HTTP dispatch layers** (`utils/skillExecutor.ts:46-308` vs `utils/toolPersistence.ts`)
+Two parallel OAuth refresh + HTTP dispatch implementations for integrations. `skillExecutor.ts` is the old Replit path (skill-trigger route); `toolPersistence.ts` is the newer path (agent-loop tool dispatch). **Resolution:** will collapse when all tool dispatch is rewired through CultureEyes SDK (Phase 1 of the npm/console plan). Fixing before that would create a third layer.
+
+**2. ALTER TABLE DDL in startup** (`src/index.ts:218-268`)
+Six `ALTER TABLE IF NOT EXISTS` blocks from six separate historical hotfix migrations, running on every boot (idempotent but slow). Need to be promoted to proper migration files in `lib/db/` and run via `pnpm --filter opsoul-db push`. **Requires owner approval per § 3 rule 4 before touching.**
 
 ---
 
