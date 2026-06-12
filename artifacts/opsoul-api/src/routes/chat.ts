@@ -33,7 +33,7 @@ import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import { BIRTH_MODEL_ID, resolveModel, DEFAULT_MODEL_ID } from '../utils/modelRegistry.js';
 import { decryptToken } from '@workspace/opsoul-utils/crypto';
-import type { ChatMessage } from '../utils/openrouter.js';
+import type { ChatMessage, ToolDefinition } from '../utils/openrouter.js';
 import { buildOwnerScope, buildScopeContext, type ValidatedScope } from '../utils/scopeResolver.js';
 import { scrapeUrl } from '../utils/urlScraper.js';
 import type { ContentPart } from '../utils/openrouter.js';
@@ -45,8 +45,14 @@ import {
   persistUrlScrapedResult,
   persistSkillResult,
 } from '../utils/toolPersistence.js';
-import { listToolsForContext } from '../utils/toolRegistry.js';
-import { dispatchTool, type ToolHandlerContext } from '../utils/toolHandlers.js';
+// listToolsForContext and dispatchTool are kept in their origin files (Phase 1c removes them).
+// chat.ts now routes through the SDK bridge instead.
+import type { ToolHandlerContext } from '../utils/toolHandlers.js';
+import {
+  listToolsViaSdk,
+  dispatchViaSdk,
+} from '../utils/sdkToolBridge.js';
+import type { ProvisionedListCtx } from '../utils/sdkToolBridge.js';
 import { ARCHETYPES as BIRTH_ARCHETYPES, ROLES as BIRTH_ROLES } from '../constants/archetypes.js';
 import { analyzeInputForSafety, analyzeOutputForLeak } from '../utils/operatorFirewall.js';
 
@@ -785,7 +791,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // contains the operator identity; we add the TurnPlan ON TOP, not by
   // mutating systemPrompt (which was already consumed). Patent claim 21
   // fully realised.
-  const fullToolList = listToolsForContext(toolListCtx);
+  const fullToolList = listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[];
   const turnPlan = agent.composeTurnPlan(message, {
     toolNames: fullToolList.map(t => t.function.name),
     toolDescriptions: new Map(fullToolList.map(t => [t.function.name, t.function.description ?? ''])),
@@ -885,7 +891,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         // are offered. For `execute` intent the full universal catalog is
         // presented from the toolRegistry. Birth mode passes 'execute' so
         // newborn operators retain full capability during identity formation.
-        const allTools = decision.kind === 'execute' ? listToolsForContext(toolListCtx) : [];
+        const allTools = decision.kind === 'execute' ? listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[] : [];
         // Per-iteration cap on web_search — once an operator has done
         // MAX_SEARCHES in this turn, filter it out of the offered set so
         // the LLM cannot keep searching in a loop.
@@ -926,14 +932,20 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         // loop-control signals the inline blocks used to encode via
         // if/break/continue.
         if (iterToolCall) {
-          const dispatchResult = await dispatchTool(
+          const dispatchResult = await dispatchViaSdk(
             iterToolCall.name,
             iterToolCall.args,
             toolHandlerCtx,
-            (e) => {
-              try { res.write(`data: ${JSON.stringify(e.payload)}\n\n`); } catch { /* connection gone */ }
+            {
+              operatorName: operator.name,
+              liveSecrets: toolListCtx.liveSecrets,
+              connectedIntegrations: toolListCtx.connectedIntegrations ?? [],
             },
           );
+          // Note: onProgress (SSE streaming progress events) is not emitted
+          // in the SDK path — the SDK does not have a progress callback.
+          // Streaming-during-execution indicators ('Searching…' etc.) are
+          // not emitted this phase. Phase 1c will add SDK-level event hooks.
 
           if (dispatchResult.meta?.webSearchFired) webSearchCount++;
           if (dispatchResult.meta?.httpRequestFired) {
@@ -1090,7 +1102,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       // path. Tools are offered only when the operator's analyse() decision
       // is 'execute'. Tool definitions come from the universal toolRegistry,
       // filtered for this scope + availability.
-      const syncTools = decision.kind === 'execute' ? listToolsForContext(toolListCtx) : [];
+      const syncTools = decision.kind === 'execute' ? listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[] : [];
       const syncOpts = { ...chatOpts, tools: syncTools.length > 0 ? syncTools : undefined };
       const result = await agent.executeSync(messages, syncOpts);
 
@@ -1110,11 +1122,15 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       // is unchanged (and downstream frontend regex matchers continue to
       // recognise them).
       if (result.toolCall) {
-        const dispatchResult = await dispatchTool(
+        const dispatchResult = await dispatchViaSdk(
           result.toolCall.name,
           result.toolCall.args,
           toolHandlerCtx,
-          // No SSE in sync path — drop progress events
+          {
+            operatorName: operator.name,
+            liveSecrets: toolListCtx.liveSecrets,
+            connectedIntegrations: toolListCtx.connectedIntegrations ?? [],
+          },
         );
         // Old break-on-failure: if missing args or operation failed, do NOT
         // run the second LLM pass. The first-pass result.content (often a
