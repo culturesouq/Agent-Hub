@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { db } from '@workspace/db';
 import { ownersTable } from '@workspace/db';

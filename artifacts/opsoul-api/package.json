@@ -17,7 +17,7 @@
     "@workspace/db": "workspace:*",
     "@workspace/integrations-firecrawl": "workspace:*",
     "@workspace/opsoul-utils": "workspace:*",
-    "bcrypt": "^5.1.1",
+    "bcryptjs": "^2.4.3",
 "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "drizzle-orm": "catalog:",
@@ -33,7 +33,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@types/bcrypt": "^5.0.2",
+    "@types/bcryptjs": "^2.4.6",
     "@types/cookie-parser": "^1.4.8",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",

@@ -5,15 +5,17 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist:mac": "electron-builder --mac",
-    "dist:win": "electron-builder --win",
-    "dist:linux": "electron-builder --linux"
+    "prepare:server": "rm -rf \"$(pwd)/server_staging\" && pnpm --filter @workspace/opsoul-api --dir .. deploy --prod --legacy --ignore-scripts \"$(pwd)/server_staging\" && rm -f \"$(pwd)/server_staging/node_modules/.pnpm/node_modules/@workspace/opsoul-api\"",
+    "dist:mac": "npm run prepare:server && electron-builder --mac",
+    "dist:win": "npm run prepare:server && electron-builder --win",
+    "dist:linux": "npm run prepare:server && electron-builder --linux"
   },
   "dependencies": {
     "electron-updater": "^6.1.0",
     "embedded-postgres": "^18.4.0-beta.17"
   },
   "devDependencies": {
+    "@electron/notarize": "^3.1.1",
     "electron": "^31.0.0",
     "electron-builder": "^24.0.0"
   },
@@ -31,13 +33,8 @@
     ],
     "extraResources": [
       {
-        "from": "../artifacts/opsoul-api",
-        "to": "server",
-        "filter": ["**/*", "!node_modules"]
-      },
-      {
-        "from": "../artifacts/opsoul-api/node_modules",
-        "to": "server/node_modules"
+        "from": "server_staging",
+        "to": "server"
       },
       {
         "from": "../artifacts/opsoul-hub/dist/public",
@@ -51,12 +48,25 @@
     "mac": {
       "category": "public.app-category.productivity",
       "icon": "assets/icon.icns",
+      "identity": "Mohamed Al Hajeri (B22LK622YH)",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": {
+        "teamId": "B22LK622YH"
+      },
+      "signIgnore": [
+        "share/postgresql/timezone",
+        "share/postgresql/locale",
+        "share/postgresql/errcodes.txt"
+      ],
       "target": [
         {
           "target": "dmg",
           "arch": [
-            "x64",
-            "arm64"
+            "arm64",
+            "x64"
           ]
         }
       ]
