@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpSoul — Getting Started</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --border: #334155;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #6366f1;
+      --accent-light: #a5b4fc;
+      --success: #34d399;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      padding: 40px 24px;
+      max-width: 760px;
+      margin: 0 auto;
+    }
+    header { margin-bottom: 40px; border-bottom: 1px solid var(--border); padding-bottom: 24px; }
+    header h1 { font-size: 32px; font-weight: 800; color: var(--accent-light); }
+    header p { margin-top: 8px; color: var(--muted); font-size: 15px; }
+    h2 { font-size: 20px; font-weight: 700; margin: 36px 0 14px; color: var(--text); }
+    h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; color: var(--accent-light); }
+    p { margin-bottom: 12px; font-size: 15px; }
+    ul, ol { padding-left: 22px; margin-bottom: 12px; }
+    li { margin-bottom: 6px; font-size: 15px; }
+    code {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 13px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 6px;
+      color: var(--accent-light);
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 24px;
+      margin-bottom: 16px;
+    }
+    .step {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+      margin-bottom: 14px;
+    }
+    .step-num {
+      min-width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 1px;
+    }
+    .step-body { flex: 1; }
+    .badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+    .badge-blue { background: #1e40af; color: #bfdbfe; }
+    .badge-green { background: #065f46; color: #a7f3d0; }
+    .badge-purple { background: #4c1d95; color: #ddd6fe; }
+    .lock-row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+    .lock-row .lock-label { min-width: 100px; font-weight: 600; font-size: 14px; }
+    .faq-q { font-weight: 600; margin-bottom: 4px; }
+    .faq-a { color: var(--muted); margin-bottom: 16px; }
+    footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--border); text-align: center; color: var(--muted); font-size: 13px; }
+    footer a { color: var(--accent-light); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+    a { color: var(--accent-light); }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>OpSoul</h1>
+  <p>Your private AI operator platform — running entirely on your machine, no cloud account required to get started.</p>
+</header>
+
+<!-- WHAT IS OPSOUL -->
+<h2>What is OpSoul?</h2>
+<p>
+  OpSoul lets you create <strong>AI operators</strong> — purpose-built assistants with their own identity, knowledge,
+  memory, and skills. Each operator is fully isolated and grows smarter over time through the GROW engine.
+  Everything runs locally: your data never leaves your machine.
+</p>
+
+<!-- FIRST OPERATOR -->
+<h2>Creating Your First Operator</h2>
+<div class="card">
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <strong>Open the Console</strong> — click the OpSoul icon in your menu bar (Mac) or system tray (Windows)
+      and choose <em>Open OpSoul Console</em>, or navigate to
+      <code>http://localhost:3001</code> in any browser.
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <strong>Register an account</strong> — on first launch you will see the Setup screen.
+      Enter an email and password. This account is stored locally; it is the owner account for all operators.
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body">
+      <strong>Create an operator</strong> — go to <em>Operators → New Operator</em>.
+      Give it a name and a short description of its purpose (e.g. "Customer support for Acme Inc.").
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-body">
+      <strong>Add a soul</strong> — open the operator and go to the <em>Soul</em> tab.
+      Write a personality description: tone, values, how it should respond. This is Layer 0 identity.
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">5</div>
+    <div class="step-body">
+      <strong>Seed knowledge</strong> — go to <em>Knowledge Base</em> and paste or upload documents
+      the operator should know. Start with one or two entries and verify the operator uses them in chat.
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">6</div>
+    <div class="step-body">
+      <strong>Open a conversation</strong> — click <em>Conversations → New</em> and start chatting.
+      The operator will use its soul, knowledge base, and memory to respond.
+    </div>
+  </div>
+</div>
+
+<!-- AI MODEL -->
+<h2>Connecting Your AI Model</h2>
+<p>
+  OpSoul routes AI calls through <strong>OpenRouter</strong>, which gives you access to hundreds of models
+  (Claude, GPT-4o, Gemini, Mistral, and more) with a single API key.
+</p>
+<ol>
+  <li>Sign up at <a href="https://openrouter.ai" target="_blank">openrouter.ai</a> and create an API key.</li>
+  <li>In OpSoul, go to <em>Settings → API Keys</em> and paste your OpenRouter key.</li>
+  <li>Choose a default model under <em>Settings → Models</em>. A good starting point is
+      <code>anthropic/claude-3-5-haiku</code> (fast, affordable) or
+      <code>anthropic/claude-3-5-sonnet</code> (more capable).</li>
+  <li>Optionally set a per-operator model override in <em>Operator → Settings</em>.</li>
+</ol>
+
+<!-- GROW ENGINE -->
+<h2>The GROW Engine</h2>
+<p>
+  GROW (Growth, Recall, Observation, Wisdom) is OpSoul's continuous-improvement layer. After each conversation
+  the engine analyses what was discussed and proposes memory updates, knowledge additions, or soul refinements.
+  You review and approve proposals before anything is committed.
+</p>
+
+<h3>The Three Lock Levels</h3>
+<div class="card">
+  <div class="lock-row">
+    <span class="lock-label"><span class="badge badge-green">Lock 0</span></span>
+    <span><strong>Open</strong> — the operator can update its own memory and knowledge freely. Best for exploratory operators still being shaped.</span>
+  </div>
+  <div class="lock-row">
+    <span class="lock-label"><span class="badge badge-blue">Lock 1</span></span>
+    <span><strong>Owner review</strong> — GROW proposes changes; you approve or reject each one before it takes effect. Recommended for production operators.</span>
+  </div>
+  <div class="lock-row">
+    <span class="lock-label"><span class="badge badge-purple">Lock 2</span></span>
+    <span><strong>Frozen</strong> — no GROW proposals are generated. The operator's soul, knowledge, and memory are locked. Use for stable, certified operators.</span>
+  </div>
+</div>
+<p>Change the lock level per operator in <em>Operator → Settings → GROW Lock</em>.</p>
+
+<!-- FAQ -->
+<h2>Common Questions</h2>
+
+<p class="faq-q">How do I update OpSoul?</p>
+<p class="faq-a">
+  OpSoul checks for updates automatically when connected to the internet. When one is available, a notification
+  appears in the tray menu. Click <em>Install Update</em> — the app restarts and your data is untouched.
+</p>
+
+<p class="faq-q">Where is my data stored?</p>
+<p class="faq-a">
+  Everything lives in your OS user-data directory:
+  <code>~/Library/Application Support/OpSoul/</code> on Mac or
+  <code>%APPDATA%\OpSoul\</code> on Windows.
+  The embedded database files are in the <code>pgdata/</code> subfolder there.
+</p>
+
+<p class="faq-q">How do I back up my operators and data?</p>
+<p class="faq-a">
+  Quit OpSoul from the tray first, then copy the entire
+  <code>OpSoul/</code> user-data folder to a safe location. To restore, paste it back before relaunching.
+  A built-in export/import feature is on the roadmap.
+</p>
+
+<p class="faq-q">Can I run OpSoul on a server or share it with a team?</p>
+<p class="faq-a">
+  The desktop app is single-user. For team deployments, OpSoul can also run as a cloud service.
+  Contact us at <a href="mailto:hello@opsoul.dev">hello@opsoul.dev</a> for hosted or self-hosted team plans.
+</p>
+
+<p class="faq-q">The app shows "Startup failed" — what do I do?</p>
+<p class="faq-a">
+  Open <em>Console.app</em> (Mac) or <em>Event Viewer</em> (Windows) and search for "opsoul" to find detailed
+  logs. Common causes: another process is using port 3001 or 5433. You can change the default ports in
+  <code>~/.opsoul/config.json</code> (create it if it doesn't exist) with <code>"port": 3002</code>.
+</p>
+
+<footer>
+  <p>OpSoul &mdash; <a href="https://opsoul.dev" target="_blank">opsoul.dev</a> &mdash; support: <a href="mailto:hello@opsoul.dev">hello@opsoul.dev</a></p>
+</footer>
+
+</body>
+</html>

@@ -10,7 +10,8 @@
     "dist:linux": "electron-builder --linux"
   },
   "dependencies": {
-    "electron-updater": "^6.1.0"
+    "electron-updater": "^6.1.0",
+    "embedded-postgres": "^18.4.0-beta.17"
   },
   "devDependencies": {
     "electron": "^31.0.0",
@@ -30,26 +31,49 @@
     ],
     "extraResources": [
       {
-        "from": "../docker-compose.yml",
-        "to": "docker-compose.yml"
+        "from": "../artifacts/opsoul-api",
+        "to": "server",
+        "filter": ["**/*", "!node_modules"]
       },
       {
-        "from": "../.env.template",
-        "to": ".env.template"
+        "from": "../artifacts/opsoul-api/node_modules",
+        "to": "server/node_modules"
+      },
+      {
+        "from": "../artifacts/opsoul-hub/dist/public",
+        "to": "server/public"
+      },
+      {
+        "from": "docs",
+        "to": "docs"
       }
     ],
     "mac": {
       "category": "public.app-category.productivity",
       "icon": "assets/icon.icns",
-      "target": [{ "target": "dmg", "arch": ["x64", "arm64"] }]
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
     },
     "win": {
       "icon": "assets/icon.ico",
-      "target": [{ "target": "nsis" }]
+      "target": [
+        {
+          "target": "nsis"
+        }
+      ]
     },
     "linux": {
       "icon": "assets/icon.png",
-      "target": ["AppImage"]
+      "target": [
+        "AppImage"
+      ]
     },
     "nsis": {
       "oneClick": false,
