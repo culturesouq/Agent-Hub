@@ -10,7 +10,7 @@ import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
 import { isWebSearchAvailable } from '../utils/capabilityEngine.js';
 import { operatorSecretsTable, operatorIntegrationsTable, conversationsTable } from '@workspace/db';
 import { buildToolManifest, getTool } from '../utils/toolRegistry.js';
-import { dispatchTool } from '../utils/toolHandlers.js';
+import { dispatchViaSdk } from '../utils/sdkToolBridge.js';
 import { buildOwnerScope } from '../utils/scopeResolver.js';
 
 const router = Router({ mergeParams: true });
@@ -315,13 +315,13 @@ router.post('/test-tool', async (req: Request, res: Response): Promise<void> => 
   }
 
   try {
-    const result = await dispatchTool(name, JSON.stringify(args ?? {}), {
+    const result = await dispatchViaSdk(name, JSON.stringify(args ?? {}), {
       operatorId,
       ownerId: req.owner!.ownerId,
       conversationId,
       scope: { scopeId: scope.scopeId, scopeTrust: scope.scopeTrust, scopeType: 'owner' },
       mandate: op.mandate ?? '',
-    });
+    }, { operatorName: op.name, liveSecrets: [], connectedIntegrations: [] });
     res.json({ ok: true, name, args, result });
   } catch (err) {
     res.status(500).json({ ok: false, name, error: (err as Error).message });

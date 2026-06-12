@@ -32,10 +32,8 @@ import {
   UNIVERSAL_TOOLS,
   type ToolContext,
 } from './toolRegistry.js';
-import {
-  dispatchTool,
-  type ToolHandlerContext,
-} from './toolHandlers.js';
+import type { ToolHandlerContext } from './toolHandlers.js';
+import { dispatchViaSdk } from './sdkToolBridge.js';
 
 const SERVER_INFO = {
   name: 'opsoul-mcp',
@@ -116,7 +114,11 @@ export function createMcpServerForContext(opts: CreateMcpServerOptions): Server 
     const { name, arguments: args } = req.params;
     const rawArgs = JSON.stringify(args ?? {});
 
-    const result = await dispatchTool(name, rawArgs, opts.handlerCtx);
+    const result = await dispatchViaSdk(name, rawArgs, opts.handlerCtx, {
+      operatorName: '',
+      liveSecrets: opts.liveSecrets,
+      connectedIntegrations: [],
+    });
 
     return {
       content: [

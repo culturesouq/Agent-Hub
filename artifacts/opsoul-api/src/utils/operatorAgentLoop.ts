@@ -42,7 +42,7 @@
  * for surfaces that don't have their own bespoke agent loop.
  */
 
-import { dispatchTool } from './toolHandlers.js';
+import { dispatchViaSdk } from './sdkToolBridge.js';
 import { renderTurnPlanSystemContext, type OperatorAgent, type TurnPlan } from './operatorAgent.js';
 import type { ChatMessage, ToolDefinition } from './openrouter.js';
 import type { OperatorToolset } from './operatorToolset.js';
@@ -186,11 +186,11 @@ export async function runSyncAgentLoop(opts: RunSyncAgentLoopOptions): Promise<A
     // Dispatch the tool call. The handler's `meta` carries loop-control
     // signals (webSearchFired, terminateLoop). No SSE progress callback —
     // this is the sync path; handlers fall back to their no-event path.
-    const dispatchResult = await dispatchTool(
+    const dispatchResult = await dispatchViaSdk(
       result.toolCall.name,
       result.toolCall.args,
       toolset.toolHandlerCtx,
-      undefined,
+      { operatorName: '', liveSecrets: [], connectedIntegrations: [] },
     );
 
     toolCallsExecuted++;
