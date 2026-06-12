@@ -22,8 +22,9 @@ import {
   logPiiViolation,
   runSemanticIdentityGuard,
 } from './growGuards.js';
+import { DEFAULT_MODEL_ID } from './modelRegistry.js';
 
-const GROW_MODEL = 'moonshotai/kimi-k2.5';
+const GROW_MODEL = DEFAULT_MODEL_ID;
 
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_DELAY_HOURS = [1, 2, 4] as const;

@@ -15,6 +15,7 @@ import { eq, and } from 'drizzle-orm';
 import { chatCompletion, type ChatOptions, type ChatMessage } from './openrouter.js';
 import { detectSkillTrigger, type InstalledSkill } from './skillTriggerEngine.js';
 import { executeSkill } from './skillExecutor.js';
+import { DEFAULT_MODEL_ID } from './modelRegistry.js';
 
 export type { ChatMessage };
 
@@ -79,7 +80,7 @@ export async function runCapabilityLoop(
   operatorId?: string,
   operatorOwnerId?: string,
 ): Promise<CapabilityLoopResult> {
-  const modelStr = typeof modelOrOptions === 'string' ? modelOrOptions : (modelOrOptions.model ?? 'moonshotai/kimi-k2.5');
+  const modelStr = typeof modelOrOptions === 'string' ? modelOrOptions : (modelOrOptions.model ?? DEFAULT_MODEL_ID);
 
   const first = await chatCompletion(messages, modelOrOptions);
   let content            = first.content ?? '';

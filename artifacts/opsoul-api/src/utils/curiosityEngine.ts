@@ -1,5 +1,6 @@
 import { webSearch } from './webSearch.js';
 import { chatCompletion } from './openrouter.js';
+import { DEFAULT_MODEL_ID } from './modelRegistry.js';
 
 // Source Trust Tiers — canonical 5-tier ladder (Claim 32 / D-3).
 // Tier 1 — Owner-direct statement: KB entries authored by the owner, SoT log.
@@ -124,7 +125,7 @@ Return ONLY valid JSON, no explanation:
   try {
     const result = await chatCompletion(
       [{ role: 'user', content: prompt }],
-      'moonshotai/kimi-k2.5',
+      DEFAULT_MODEL_ID,
     );
 
     const text = result.content.trim();

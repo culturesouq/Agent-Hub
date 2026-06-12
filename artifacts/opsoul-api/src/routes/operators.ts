@@ -12,6 +12,7 @@ import {
   type Layer2Soul,
 } from '../validation/operator.js';
 import { chatCompletion, MODEL_OPTIONS, CHAT_MODEL } from '../utils/openrouter.js';
+import { DEFAULT_MODEL_ID } from '../utils/modelRegistry.js';
 import { recomputeSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { seedPlatformKb } from '../utils/platformKbSeed.js';
 import { LAYER_1_LOCKED_FIELDS } from '../utils/growGuards.js';
@@ -130,7 +131,7 @@ Archetype guide:
         { role: 'system', content: 'You generate structured operator identity data. Return ONLY valid JSON matching the template exactly — no markdown, no explanation, no extra keys.' },
         { role: 'user', content: prompt },
       ],
-      'moonshotai/kimi-k2.5',
+      DEFAULT_MODEL_ID,
     );
 
     let parsed: any;
@@ -742,7 +743,7 @@ router.post('/:id/model-settings/verify-key', async (req: Request, res: Response
     const { chatCompletion: cc } = await import('../utils/openrouter.js');
     const result = await cc(
       [{ role: 'user', content: 'Reply with the single word: verified' }],
-      { apiKey: apiKey.trim(), model: 'moonshotai/kimi-k2.5' },
+      { apiKey: apiKey.trim(), model: DEFAULT_MODEL_ID },
     );
     const valid = result.content.toLowerCase().includes('verified');
     res.json({ ok: valid, message: valid ? 'Key is working' : 'Key responded but got unexpected output' });

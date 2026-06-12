@@ -22,6 +22,7 @@ import { runSyncAgentLoop } from '../utils/operatorAgentLoop.js';
 import { analyzeInputForSafety, analyzeOutputForLeak } from '../utils/operatorFirewall.js';
 import { CHAT_MODEL } from '../utils/openrouter.js';
 import type { ChatMessage, ContentPart } from '../utils/openrouter.js';
+import { DEFAULT_MODEL_ID } from '../utils/modelRegistry.js';
 
 import { embed } from '@workspace/opsoul-utils/ai';
 import { eq, and, desc, sql } from 'drizzle-orm';
@@ -312,9 +313,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   let model = (operator.defaultModel && operator.defaultModel !== 'opsoul/auto')
     ? operator.defaultModel
     : CHAT_MODEL;
-  // Force vision-capable model when image attachments are present
+  // Use default model (ensure DEFAULT_MODEL_ID supports vision)
   if (attachments && attachments.some((a) => a.type === 'image')) {
-    model = 'moonshotai/kimi-k2.5';
+    model = DEFAULT_MODEL_ID;
   }
 
   // ── FULL UNIVERSAL TOOL SUBSTRATE (Claims 4 / 9 / 31 / 36 / D-4) ──

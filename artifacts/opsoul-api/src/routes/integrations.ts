@@ -8,6 +8,7 @@ import { eq, and, sql, like } from 'drizzle-orm';
 import { encryptToken, decryptToken } from '@workspace/opsoul-utils/crypto';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { chatCompletion } from '../utils/openrouter.js';
+import { DEFAULT_MODEL_ID } from '../utils/modelRegistry.js';
 import { autoRemoveIntegrationSkills } from '../utils/autoInstallIntegrationSkills.js';
 import { sendEmail, telegramWebhookFailureEmail } from '../lib/email.js';
 
@@ -264,7 +265,7 @@ router.post('/connect-app', async (req: Request, res: Response): Promise<void> =
             },
             { role: 'user', content: JSON.stringify(raw).slice(0, 4000) },
           ],
-          'moonshotai/kimi-k2.5',
+          DEFAULT_MODEL_ID,
         );
         try {
           appSchema = JSON.parse(normalized.content.trim().replace(/```json\n?|\n?```/g, ''));

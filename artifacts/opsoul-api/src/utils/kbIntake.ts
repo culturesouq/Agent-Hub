@@ -3,8 +3,9 @@ import { pool } from '@workspace/db';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { chatCompletion } from './openrouter.js';
 import { curiositySearch } from './curiosityEngine.js';
+import { DEFAULT_MODEL_ID } from './modelRegistry.js';
 
-const DISTILL_MODEL = 'moonshotai/kimi-k2.5';
+const DISTILL_MODEL = DEFAULT_MODEL_ID;
 
 export type IntakeStatus = 'verified' | 'pending' | 'skipped';
 
