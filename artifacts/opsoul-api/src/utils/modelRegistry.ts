@@ -45,6 +45,11 @@ export interface ProviderConfig {
    */
   apiVersion?: string;
   /**
+   * GPT-5 and o-series models reject max_tokens — they require
+   * max_completion_tokens instead. Set true for those models.
+   */
+  useMaxCompletionTokens?: boolean;
+  /**
    * Optional rename — what model string to send to the provider when the
    * operator-facing modelId differs. Example: operator sets
    * `defaultModel='hajeri-3b-v2'` but the Hajeri server expects model
@@ -95,6 +100,7 @@ const PROVIDERS: Record<string, ProviderConfig> = {
     apiKeyEnv: 'AZURE_OPENAI_KEY',
     apiVersion: '2025-02-01-preview',
     modelOverride: 'gpt-5',
+    useMaxCompletionTokens: true,
     label: 'GPT-5',
     description: 'Azure OpenAI GPT-5 — 200K context, 90% cached input discount',
     badge: 'Default',

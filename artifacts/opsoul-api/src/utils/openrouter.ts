@@ -422,9 +422,12 @@ export async function* streamChat(
 
   // BYO model override: bypass the registry entirely when the operator has
   // a custom model + API key configured.
-  const { client, sendAs } = opts.modelOverride
-    ? getClientForOverride(opts.modelOverride)
+  const resolved = opts.modelOverride
+    ? { ...getClientForOverride(opts.modelOverride), config: null }
     : getClientForModel(opts.model || CHAT_MODEL, opts.apiKey);
+  const { client, sendAs } = resolved;
+  const useCompletionTokens = resolved.config?.useMaxCompletionTokens
+    ?? (opts.modelOverride?.provider === 'azure_openai');
 
   // Per-turn token budget (Claim 21). Clamp the requested output to whichever
   // is smaller — MAX_TOKENS or the per-turn output budget. Then validate the
@@ -435,7 +438,7 @@ export async function* streamChat(
   const requestParams: Parameters<typeof client.chat.completions.create>[0] = {
     model: sendAs,
     messages: messages as Parameters<typeof client.chat.completions.create>[0]['messages'],
-    max_tokens: outputTokens,
+    ...(useCompletionTokens ? { max_completion_tokens: outputTokens } : { max_tokens: outputTokens }),
     stream: true,
     stream_options: { include_usage: true },
   };
@@ -513,9 +516,12 @@ export async function chatCompletion(
 
   // BYO model override: bypass the registry entirely when the operator has
   // a custom model + API key configured.
-  const { client, sendAs } = opts.modelOverride
-    ? getClientForOverride(opts.modelOverride)
+  const resolvedC = opts.modelOverride
+    ? { ...getClientForOverride(opts.modelOverride), config: null }
     : getClientForModel(opts.model || CHAT_MODEL, opts.apiKey);
+  const { client, sendAs } = resolvedC;
+  const useCompletionTokensC = resolvedC.config?.useMaxCompletionTokens
+    ?? (opts.modelOverride?.provider === 'azure_openai');
 
   // Per-turn token budget (Claim 21). Clamp the requested output to whichever
   // is smaller — MAX_TOKENS or the per-turn output budget. Then validate the
@@ -526,7 +532,7 @@ export async function chatCompletion(
   const requestParams: Parameters<typeof client.chat.completions.create>[0] = {
     model: sendAs,
     messages: messages as Parameters<typeof client.chat.completions.create>[0]['messages'],
-    max_tokens: outputTokens,
+    ...(useCompletionTokensC ? { max_completion_tokens: outputTokens } : { max_tokens: outputTokens }),
     stream: false,
   };
 
