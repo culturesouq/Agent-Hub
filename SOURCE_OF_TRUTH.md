@@ -32,9 +32,9 @@ After "the last cleaning," the operator chat is **blocking things that used to w
 |---|---|
 | **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` |
 | **Container App** | `opsoul` (resource group `bani-studio-rg`, region `uaenorth`) |
-| **Active Revision** | `opsoul--0000093` (Healthy 2026-06-13 — gpt-4o migration) |
-| **Image** | `banistudioacr.azurecr.io/opsoul-api:gpt4o-559c86b` |
-| **Source commit (live)** | `559c86b` — switch to azure/gpt-4o, remove GPT-5 (extended thinking drained 10K TPM → non-stop loop). Prior: `5200bde` (gpt5-fix). |
+| **Active Revision** | `opsoul--0000094` (Healthy 2026-06-13 — platform tools fix) |
+| **Image** | `banistudioacr.azurecr.io/opsoul-api:tools-fix-c825d19` |
+| **Source commit (live)** | `c825d19` — wire platform secrets to SDK tools (web_search + all firecrawl_* now work). Prior: `559c86b` (gpt-4o migration). |
 | **🛡 Rollback safety net (DO NOT DELETE)** | Three retained rollback fallbacks: (1) image `banistudioacr.azurecr.io/opsoul-api:upload-fix-dd7e32c` (rev `opsoul--0000066` — pre-station-rewrite), (2) image `banistudioacr.azurecr.io/opsoul-api:mcp-runtime-f9f23e4` (rev `opsoul--0000065` — MCP runtime layer, pre-upload-fix), (3) image `banistudioacr.azurecr.io/opsoul-api:webhook-fix-2c4ea80` (rev `opsoul--0000064` — pre-MCP). Owner directive 2026-05-19 (still in force): keep flagged, do **not** auto-prune; touch only on explicit owner directive. Rollback to pre-station-rewrite: `az containerapp update -n opsoul -g bani-studio-rg --image banistudioacr.azurecr.io/opsoul-api:upload-fix-dd7e32c`. Pre-MCP state: `--image banistudioacr.azurecr.io/opsoul-api:webhook-fix-2c4ea80`. |
 | **Live proof (2026-05-19)** | Nahil successfully called `http_request` tool against `https://nahilai.com/` via the new MCP runtime layer. Retrieved structured JSON, reported back: profile (Abu Dhabi admin), 5 active subsidies (Smart Irrigation, AgTech Grant, Organic Farming, Protected Agriculture, Water Desalination Access), empty sensors/seasons. Universal tool layer confirmed working in production on a real operator hitting real consumer-app data. |
 | **LLM model (entire stack)** | `azure/gpt-4o` (2024-11-20) via Azure OpenAI (`hajeri-data`, eastus) — chat, birth, GROW, KB distillation, all routes. Migrated 2026-06-13 from GPT-5 (GPT-5's extended thinking tokens drained 10K TPM silently, causing non-stop loop). gpt-4o: 450K TPM, fast first-token, jsonSchemaResponse, 50% cached input discount, no extended thinking. |
