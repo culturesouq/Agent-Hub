@@ -39,6 +39,12 @@ export interface ProviderConfig {
   /** Env var holding the API key for this provider. */
   apiKeyEnv: string;
   /**
+   * Azure OpenAI api-version query param. Required for Azure deployments.
+   * When set, buildClient injects it as defaultQuery and uses api-key header
+   * instead of Authorization: Bearer.
+   */
+  apiVersion?: string;
+  /**
    * Optional rename — what model string to send to the provider when the
    * operator-facing modelId differs. Example: operator sets
    * `defaultModel='hajeri-3b-v2'` but the Hajeri server expects model
@@ -77,42 +83,25 @@ export interface ProviderConfig {
  * or other OpenRouter model strings keep working unchanged.
  */
 const PROVIDERS: Record<string, ProviderConfig> = {
-  // ── Kimi (Moonshot AI) via OpenRouter — runtime default ──────────────
-  // Restored as default 2026-05-24 (same day as the brief DeepSeek flip).
-  // DeepSeek narrated instead of calling tools when offered — model wasn't
-  // strong enough at tool-use within OpSoul's operator-driven architecture
-  // (operator gates tools via detectToolNeed; LLM must reliably fire when
-  // they're presented). Kimi's tool-use is more reliable in this setup.
-  'moonshotai/kimi-k2.5': {
-    provider: 'openrouter',
+  // ── Azure OpenAI — GPT-5 (operator chat, main model) ─────────────────
+  // Deployed 2026-06-13 on hajeri-data (eastus, hajeri-platform).
+  // GlobalStandard, 10K TPM. Prompt caching: 90% off input after 1024-token
+  // prefix — system prompt + DNA + KB cached automatically; effective input
+  // cost ~$0.125/1M for repeated turns.
+  'azure/gpt-5': {
+    provider: 'azure',
     adapter: 'openai-compat',
-    baseURL: 'https://openrouter.ai/api/v1',
-    apiKeyEnv: 'OPENROUTER_API_KEY',
-    label: 'Kimi K2.5',
-    description: 'Moonshot AI — multimodal, 262K context, strong tool-use',
+    baseURL: 'https://hajeri-data.openai.azure.com/openai/deployments/gpt-5',
+    apiKeyEnv: 'AZURE_OPENAI_KEY',
+    apiVersion: '2025-02-01-preview',
+    modelOverride: 'gpt-5',
+    label: 'GPT-5',
+    description: 'Azure OpenAI GPT-5 — 200K context, 90% cached input discount',
     badge: 'Default',
-    contextWindow: 262144,
-  },
-
-  // ── DeepSeek V3 via OpenRouter — available, not default ──────────────
-  // Cheaper output (~9x) but weaker at tool dispatch in operator-driven
-  // flows. Kept catalogued for operators who want it explicitly.
-  'deepseek/deepseek-chat-v3': {
-    provider: 'openrouter',
-    adapter: 'openai-compat',
-    baseURL: 'https://openrouter.ai/api/v1',
-    apiKeyEnv: 'OPENROUTER_API_KEY',
-    label: 'DeepSeek V3',
-    description: 'DeepSeek — 164K context, cost-efficient',
-    contextWindow: 164_000,
+    contextWindow: 200_000,
   },
 
   // ── Hajeri 3B v2 (custom OpSoul model, hosted on RunPod) ────────────────
-  // The Hajeri inference server speaks OpenAI /v1/chat/completions natively
-  // (see /Users/bstar/hajeri_v2/hajeri_server.py). Set HAJERI_BASE_URL env
-  // to the active RunPod proxy URL, e.g.:
-  //   https://2crhkd6rdiqqdj-8888.proxy.runpod.net/v1
-  // The server accepts any API key value — auth is via RunPod proxy URL.
   'hajeri-3b-v2': {
     provider: 'hajeri',
     adapter: 'openai-compat',
@@ -124,102 +113,19 @@ const PROVIDERS: Record<string, ProviderConfig> = {
     badge: 'Custom',
     contextWindow: 2048,
   },
-
-  // ── OpenAI (GPT family) ───────────────────────────────────────────────
-  'openai/gpt-5': {
-    provider: 'openai',
-    adapter: 'openai-compat',
-    baseURL: 'https://api.openai.com/v1',
-    apiKeyEnv: 'OPENAI_API_KEY',
-    modelOverride: 'gpt-5',
-    label: 'GPT-5',
-    description: 'OpenAI GPT-5 — 1M context, multimodal',
-    badge: '1M context',
-    contextWindow: 1_000_000,
-  },
-  'openai/gpt-4o': {
-    provider: 'openai',
-    adapter: 'openai-compat',
-    baseURL: 'https://api.openai.com/v1',
-    apiKeyEnv: 'OPENAI_API_KEY',
-    modelOverride: 'gpt-4o',
-    label: 'GPT-4o',
-    description: 'OpenAI GPT-4o — multimodal, 128K context',
-    contextWindow: 128_000,
-  },
-
-  // ── Anthropic (Claude family) ─────────────────────────────────────────
-  // NOTE: 'anthropic' adapter is a placeholder; until utils/modelAdapters/
-  // anthropic.ts exists, resolveModel() falls back to OpenRouter for these.
-  // Claude is reachable via OpenRouter today: use 'anthropic/claude-sonnet-4.6'.
-  'anthropic/claude-sonnet-4.6': {
-    provider: 'openrouter',
-    adapter: 'openai-compat',
-    baseURL: 'https://openrouter.ai/api/v1',
-    apiKeyEnv: 'OPENROUTER_API_KEY',
-    label: 'Claude Sonnet 4.6',
-    description: 'Anthropic via OpenRouter — 200K context',
-    badge: 'Best Quality',
-    contextWindow: 200_000,
-  },
-  'anthropic/claude-opus-4.7': {
-    provider: 'openrouter',
-    adapter: 'openai-compat',
-    baseURL: 'https://openrouter.ai/api/v1',
-    apiKeyEnv: 'OPENROUTER_API_KEY',
-    label: 'Claude Opus 4.7',
-    description: 'Anthropic via OpenRouter — 1M context',
-    badge: 'Deepest',
-    contextWindow: 1_000_000,
-  },
-
-  // ── Google (Gemini family) — via OpenRouter for now ───────────────────
-  'google/gemini-3-pro': {
-    provider: 'openrouter',
-    adapter: 'openai-compat',
-    baseURL: 'https://openrouter.ai/api/v1',
-    apiKeyEnv: 'OPENROUTER_API_KEY',
-    label: 'Gemini 3 Pro',
-    description: 'Google Gemini 3 Pro via OpenRouter',
-    badge: 'Multimodal',
-    contextWindow: 1_000_000,
-  },
-
-  // ── Auto routing sentinel — special-cased by chat.ts to pick a model ───
-  'opsoul/auto': {
-    provider: 'openrouter',
-    adapter: 'openai-compat',
-    baseURL: 'https://openrouter.ai/api/v1',
-    apiKeyEnv: 'OPENROUTER_API_KEY',
-    label: 'OpSoul Auto',
-    description: 'OpSoul picks the right model per message — default Kimi K2.5',
-    badge: 'Auto',
-    contextWindow: 262144,
-  },
 };
 
 /**
- * Default model when an operator has no defaultModel set OR when an
- * unknown model ID is encountered. Matches the historical CHAT_MODEL
- * constant from openrouter.ts so existing behavior is unchanged.
- *
- * Routing history 2026-05-24:
- *   morning: Kimi K2.5 → DeepSeek V3 (cost-driven flip)
- *   evening: DeepSeek V3 → Kimi K2.5 (reverted — DeepSeek narrated when
- *            tools were offered; OpSoul's operator-driven architecture
- *            relies on the LLM reliably firing tool calls when the
- *            operator presents them, which Kimi handles better)
- *
- * Birth engine also uses Kimi K2.5 — owner directive 2026-06-01: OpSoul runs
- * Kimi-only, no other LLM access anywhere (birth included). Per [[no-fallbacks]]
- * and patent-architecture lock — every dispatch path goes through the same model.
+ * Default model for operator chat — Azure GPT-5.
+ * Migrated 2026-06-13 from moonshotai/kimi-k2.5 (OpenRouter) to Azure OpenAI.
+ * GPT-5 chosen: best reasoning, 200K context, 90% cached input discount on
+ * repeated system prompt + DNA + KB blocks.
  */
-export const DEFAULT_MODEL_ID = 'moonshotai/kimi-k2.5';
+export const DEFAULT_MODEL_ID = 'azure/gpt-5';
 
 /**
- * Birth-time model. Was anthropic/claude-sonnet-4.6 historically (one-time
- * identity-extraction cost). Changed 2026-06-01 to also use Kimi K2.5 — owner
- * directive: OpSoul is Kimi-only, no Claude/GPT/Gemini at runtime including birth.
+ * Birth-time model — same as chat: GPT-5. Birth is the most important moment
+ * in an operator's life; it uses the same model as all other OpSoul operations.
  */
 export const BIRTH_MODEL_ID = DEFAULT_MODEL_ID;
 
@@ -241,26 +147,7 @@ export function resolveModel(modelId: string): { config: ProviderConfig; sendAs:
     return { config: exact, sendAs: exact.modelOverride ?? modelId };
   }
 
-  // Heuristic: anything with a '/' is OpenRouter-shaped — let OpenRouter
-  // route it. Keeps existing behavior for the long tail of OpenRouter
-  // models we haven't catalogued here.
-  if (modelId.includes('/')) {
-    return {
-      config: {
-        provider: 'openrouter',
-        adapter: 'openai-compat',
-        baseURL: 'https://openrouter.ai/api/v1',
-        apiKeyEnv: 'OPENROUTER_API_KEY',
-        label: modelId,
-        description: 'OpenRouter (uncatalogued)',
-        contextWindow: 32_000,
-      },
-      sendAs: modelId,
-    };
-  }
-
-  // Unknown bare name — fall back to default. Log once so operators with
-  // mistyped models are visible.
+  // Unknown model — fall back to default. Log so mistyped models are visible.
   console.warn(`[modelRegistry] unknown model "${modelId}", falling back to ${DEFAULT_MODEL_ID}`);
   const fallback = PROVIDERS[DEFAULT_MODEL_ID];
   return { config: fallback, sendAs: fallback.modelOverride ?? DEFAULT_MODEL_ID };

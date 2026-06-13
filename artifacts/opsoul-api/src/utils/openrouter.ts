@@ -37,7 +37,7 @@ import {
 
 /** Default model when an operator has no defaultModel set. */
 export const CHAT_MODEL = DEFAULT_MODEL_ID;
-/** Model used for KB intake distillation. */
+/** Model used for KB intake distillation, GROW, birth — same as chat: GPT-5. */
 export const KB_MODEL = DEFAULT_MODEL_ID;
 /** Sentinel model that means "let OpSoul pick per-turn". */
 export const AUTO_MODEL = 'opsoul/auto';
@@ -299,11 +299,18 @@ function buildClient(config: ProviderConfig, apiKey: string): OpenAI {
   const cacheKey = `${config.baseURL}::${apiKey}`;
   const cached = clientCache.get(cacheKey);
   if (cached) return cached;
+
+  const isAzure = config.provider === 'azure';
   const client = new OpenAI({
     baseURL: config.baseURL,
-    apiKey: apiKey || 'unused',
+    // Azure ignores Authorization header; api-key header is the auth mechanism.
+    // Pass a dummy here so the SDK doesn't complain, api-key goes in defaultHeaders.
+    apiKey: isAzure ? 'azure' : (apiKey || 'unused'),
+    defaultQuery: isAzure && config.apiVersion
+      ? { 'api-version': config.apiVersion }
+      : undefined,
     defaultHeaders: {
-      'HTTP-Referer': process.env.APP_URL || 'https://opsoul.io',
+      ...(isAzure ? { 'api-key': apiKey } : { 'HTTP-Referer': process.env.APP_URL || 'https://opsoul.io' }),
       'X-Title': 'OpSoul',
     },
   });
@@ -493,6 +500,7 @@ export interface CompletionResult {
   toolCall?: ToolCall;
   promptTokens: number;
   completionTokens: number;
+  cachedTokens?: number;
 }
 
 export async function chatCompletion(
