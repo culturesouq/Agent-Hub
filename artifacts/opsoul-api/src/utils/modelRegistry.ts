@@ -88,23 +88,23 @@ export interface ProviderConfig {
  * or other OpenRouter model strings keep working unchanged.
  */
 const PROVIDERS: Record<string, ProviderConfig> = {
-  // ── Azure OpenAI — GPT-5 (operator chat, main model) ─────────────────
+  // ── Azure OpenAI — GPT-4o (operator chat, main model) ────────────────
   // Deployed 2026-06-13 on hajeri-data (eastus, hajeri-platform).
-  // GlobalStandard, 10K TPM. Prompt caching: 90% off input after 1024-token
-  // prefix — system prompt + DNA + KB cached automatically; effective input
-  // cost ~$0.125/1M for repeated turns.
-  'azure/gpt-5': {
+  // GlobalStandard, 450K TPM. Prompt caching: 50% off input after 1024-token
+  // prefix — system prompt + DNA + KB cached automatically.
+  // jsonSchemaResponse, chatCompletion confirmed. No extended thinking tokens.
+  // Migrated from GPT-5 (10K TPM, extended thinking caused non-stop loop).
+  'azure/gpt-4o': {
     provider: 'azure',
     adapter: 'openai-compat',
-    baseURL: 'https://hajeri-data.openai.azure.com/openai/deployments/gpt-5',
+    baseURL: 'https://hajeri-data.openai.azure.com/openai/deployments/gpt-4o',
     apiKeyEnv: 'AZURE_OPENAI_KEY',
-    apiVersion: '2025-02-01-preview',
-    modelOverride: 'gpt-5',
-    useMaxCompletionTokens: true,
-    label: 'GPT-5',
-    description: 'Azure OpenAI GPT-5 — 200K context, 90% cached input discount',
+    apiVersion: '2024-12-01-preview',
+    modelOverride: 'gpt-4o',
+    label: 'GPT-4o',
+    description: 'Azure OpenAI GPT-4o — 128K context, 50% cached input discount, 450K TPM',
     badge: 'Default',
-    contextWindow: 200_000,
+    contextWindow: 128_000,
   },
 
   // ── Hajeri 3B v2 (custom OpSoul model, hosted on RunPod) ────────────────
@@ -122,16 +122,15 @@ const PROVIDERS: Record<string, ProviderConfig> = {
 };
 
 /**
- * Default model for operator chat — Azure GPT-5.
- * Migrated 2026-06-13 from moonshotai/kimi-k2.5 (OpenRouter) to Azure OpenAI.
- * GPT-5 chosen: best reasoning, 200K context, 90% cached input discount on
- * repeated system prompt + DNA + KB blocks.
+ * Default model for operator chat — Azure GPT-4o.
+ * Migrated 2026-06-13 to GPT-4o from GPT-5 (GPT-5's extended thinking tokens
+ * drained 10K TPM before any visible output, causing a non-stop loop in UI).
+ * GPT-4o: 450K TPM, fast first-token, jsonSchemaResponse, 50% cached input.
  */
-export const DEFAULT_MODEL_ID = 'azure/gpt-5';
+export const DEFAULT_MODEL_ID = 'azure/gpt-4o';
 
 /**
- * Birth-time model — same as chat: GPT-5. Birth is the most important moment
- * in an operator's life; it uses the same model as all other OpSoul operations.
+ * Birth-time model — same as chat: GPT-4o.
  */
 export const BIRTH_MODEL_ID = DEFAULT_MODEL_ID;
 
