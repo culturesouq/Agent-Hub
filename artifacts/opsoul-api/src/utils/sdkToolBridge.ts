@@ -52,6 +52,8 @@ import type {
   Integration,
   SelfInfo,
   ConversationSummary,
+  WebSearchProvider,
+  WebSearchHit,
 } from '@cultureyes/tools';
 
 import { db } from '@workspace/db';
@@ -211,6 +213,10 @@ export function buildSdkCtx(
   const { operatorId, ownerId } = opCtx;
 
   // ── secrets accessor ──────────────────────────────────────────────────────
+  // Priority: operator DB secret → platform env var.
+  // This lets platform-wide keys (FIRECRAWL_API_KEY, SERPER_API_KEY, etc.)
+  // reach all SDK tools without per-operator setup, while still allowing
+  // operators to override with their own key stored in the DB.
   const secrets = {
     get: async (name: string): Promise<string | undefined> => {
       const key = name.toUpperCase();
@@ -222,9 +228,11 @@ export function buildSdkCtx(
           eq(operatorSecretsTable.key, key),
         ))
         .limit(1);
-      if (!row) return undefined;
-      const { decryptToken } = await import('@workspace/opsoul-utils/crypto');
-      return decryptToken(row.valueEncrypted);
+      if (row) {
+        const { decryptToken } = await import('@workspace/opsoul-utils/crypto');
+        return decryptToken(row.valueEncrypted);
+      }
+      return process.env[key] ?? undefined;
     },
   };
 
@@ -696,8 +704,33 @@ export function buildSdkCtx(
     },
   };
 
+  // ── Serper web-search provider ────────────────────────────────────────────
+  // Reads SERPER_API_KEY via the secrets accessor (operator DB → env fallback).
+  // Wired as ctx.connectors.webSearch so web_search bypasses the generic
+  // defaultWebSearchProvider (which needs WEB_SEARCH_ENDPOINT — not our shape).
+  const serperWebSearch: WebSearchProvider = {
+    name: 'serper',
+    async search(query: string, opts?: { limit?: number }): Promise<WebSearchHit[]> {
+      const apiKey = await secrets.get('SERPER_API_KEY');
+      if (!apiKey) throw new Error('SERPER_API_KEY not configured');
+      const res = await fetch('https://google.serper.dev/search', {
+        method: 'POST',
+        headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ q: query, num: opts?.limit ?? 5 }),
+      });
+      if (!res.ok) throw new Error(`Serper HTTP ${res.status}`);
+      const json = await res.json() as { organic?: Array<{ title: string; link: string; snippet: string }> };
+      return (json.organic ?? []).map((h): WebSearchHit => ({
+        title: h.title,
+        url: h.link,
+        snippet: h.snippet,
+      }));
+    },
+  };
+
   // ── assemble the full AllConnectors bag ───────────────────────────────────
   const connectors: AllConnectors = {
+    webSearch: serperWebSearch,
     files: filesConnector,
     pdf: pdfConnector,
     memory: memoryConnector,
