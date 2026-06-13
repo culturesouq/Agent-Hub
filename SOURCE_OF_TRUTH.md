@@ -32,9 +32,9 @@ After "the last cleaning," the operator chat is **blocking things that used to w
 |---|---|
 | **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` |
 | **Container App** | `opsoul` (resource group `bani-studio-rg`, region `uaenorth`) |
-| **Active Revision** | `opsoul--PENDING` (building — gpt-4o migration, 2026-06-13) |
-| **Image** | `banistudioacr.azurecr.io/opsoul-api:gpt4o-PENDING` |
-| **Source commit (live)** | Pending build — gpt-4o migration. Prior live: `5200bde` (gpt5-fix-5200bde). |
+| **Active Revision** | `opsoul--0000093` (Healthy 2026-06-13 — gpt-4o migration) |
+| **Image** | `banistudioacr.azurecr.io/opsoul-api:gpt4o-559c86b` |
+| **Source commit (live)** | `559c86b` — switch to azure/gpt-4o, remove GPT-5 (extended thinking drained 10K TPM → non-stop loop). Prior: `5200bde` (gpt5-fix). |
 | **🛡 Rollback safety net (DO NOT DELETE)** | Three retained rollback fallbacks: (1) image `banistudioacr.azurecr.io/opsoul-api:upload-fix-dd7e32c` (rev `opsoul--0000066` — pre-station-rewrite), (2) image `banistudioacr.azurecr.io/opsoul-api:mcp-runtime-f9f23e4` (rev `opsoul--0000065` — MCP runtime layer, pre-upload-fix), (3) image `banistudioacr.azurecr.io/opsoul-api:webhook-fix-2c4ea80` (rev `opsoul--0000064` — pre-MCP). Owner directive 2026-05-19 (still in force): keep flagged, do **not** auto-prune; touch only on explicit owner directive. Rollback to pre-station-rewrite: `az containerapp update -n opsoul -g bani-studio-rg --image banistudioacr.azurecr.io/opsoul-api:upload-fix-dd7e32c`. Pre-MCP state: `--image banistudioacr.azurecr.io/opsoul-api:webhook-fix-2c4ea80`. |
 | **Live proof (2026-05-19)** | Nahil successfully called `http_request` tool against `https://nahilai.com/` via the new MCP runtime layer. Retrieved structured JSON, reported back: profile (Abu Dhabi admin), 5 active subsidies (Smart Irrigation, AgTech Grant, Organic Farming, Protected Agriculture, Water Desalination Access), empty sensors/seasons. Universal tool layer confirmed working in production on a real operator hitting real consumer-app data. |
 | **LLM model (entire stack)** | `azure/gpt-4o` (2024-11-20) via Azure OpenAI (`hajeri-data`, eastus) — chat, birth, GROW, KB distillation, all routes. Migrated 2026-06-13 from GPT-5 (GPT-5's extended thinking tokens drained 10K TPM silently, causing non-stop loop). gpt-4o: 450K TPM, fast first-token, jsonSchemaResponse, 50% cached input discount, no extended thinking. |
@@ -379,7 +379,38 @@ OpSoul migrated from `moonshotai/kimi-k2.5` via OpenRouter to **Azure OpenAI GPT
 
 ### Known issue after this session
 - The open regression flagged 2026-06-07 (file upload blocked, paste length capped, 400 on large messages) is STILL open — not touched this session.
-- `OPENROUTER_API_KEY` env var still on container app — remove after confirming operators work.
+- `OPENROUTER_API_KEY` env var still on container app — remove after confirming operators work on gpt-4o.
+
+---
+
+## 9b. Session Build Log — 2026-06-13 (GPT-5 → GPT-4o migration)
+
+### Problem
+GPT-5 on 10K TPM GlobalStandard silently consumed the entire TPM budget via extended thinking tokens before any visible output reached the UI. The `include_usage` stream chunk (which triggers `done: true` in the SSE loop) never arrived because the model was still "thinking." Result: non-stop keep-alive loop in the operator UI — operator never responded.
+
+`reasoning_tokens` confirmed at 0 for gpt-4o (verified via direct endpoint test before deploy).
+
+### Decision
+Switch to `azure/gpt-4o` (2024-11-20) on the same `hajeri-data` endpoint.
+- **Why gpt-4o not gpt-4.1**: gpt-4o has explicit `jsonSchemaResponse: true` capability confirmed by Azure. gpt-4.1 capability list did not include it.
+- **GPT-5 deleted**: deployment deleted from `hajeri-data` before gpt-4o was deployed.
+- **450K TPM**: deployed GlobalStandard 450K TPM (vs GPT-5's 10K TPM).
+- **No `useMaxCompletionTokens`**: gpt-4o uses standard `max_tokens` — flag removed.
+- **Prompt caching**: 50% off input tokens after 1024-token prefix (vs GPT-5's 90% — acceptable trade-off given TPM/thinking fix).
+
+### Pre-deploy timing test
+Direct test against gpt-4o endpoint (Azure):
+- Non-streaming: `engine_ttft_ms: 83`, `user_visible_ttft_ms: 416`, total 2.88s
+- Streaming first token: **0.84s**
+- `reasoning_tokens: 0` confirmed
+
+### What was done
+1. Deleted `gpt-5` deployment from `hajeri-data`: `az cognitiveservices account deployment delete --name hajeri-data --resource-group hajeri-platform --deployment-name gpt-5`
+2. Deployed `gpt-4o` (2024-11-20): `az cognitiveservices account deployment create --name hajeri-data --resource-group hajeri-platform --deployment-name gpt-4o --model-name gpt-4o --model-version 2024-11-20 --model-format OpenAI --sku-name GlobalStandard --sku-capacity 450`
+3. `modelRegistry.ts` — commit `559c86b`: replaced `azure/gpt-5` with `azure/gpt-4o`, removed `useMaxCompletionTokens`, `apiVersion: 2024-12-01-preview`, `contextWindow: 128_000`, `DEFAULT_MODEL_ID = 'azure/gpt-4o'`
+4. Build: `az acr build --registry banistudioacr --image opsoul-api:gpt4o-559c86b <github-url>#main` — Run ID `dg9q`, 2m49s, Succeeded
+5. Deploy: `az containerapp update --name opsoul --resource-group bani-studio-rg --image banistudioacr.azurecr.io/opsoul-api:gpt4o-559c86b` → revision `opsoul--0000093`, Healthy, 100% traffic
+6. Live `/api/models` confirmed: `azure/gpt-4o` as default, GPT-5 removed
 
 ---
 
