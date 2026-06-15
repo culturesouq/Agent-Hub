@@ -17,6 +17,26 @@
 
 ---
 
+## ⚠ CRITICAL REGRESSION — KB + memory injected into system prompt (found 2026-06-16)
+
+**Finding:** `chat.ts` lines 721–739 merge KB search hits AND memory hits directly into the `role:"system"` message via `promptSections.join('\n\n')`. The `fullSystemPrompt` sent to every LLM is: soul + KB RAG results + memory hits — one giant blob.
+
+**Why this is wrong (Mohamed's architecture):** The system prompt is identity only — Layer 0 + Layer 1. Nothing else. KB is retrievable in context via the `kb_search` tool when the operator decides it needs it. Memory is the same — retrieved on demand, not pre-injected. Everything else around the system prompt is noise. Noise is the reason every other AI agent fails — they drown the identity in injected context. This principle is the foundation of OpSoul's patent, the papers, and every operator design decision.
+
+**Confirmed impact:** When OpSoul routes to Hajeri (gatekeeper), the system message arrives as a wall of soul + Vael's KB docs. The 457M model reads the KB wall and generates from within it instead of responding as Hajeri. Produces "confidence scoring" language verbatim from Vael's knowledge base. Same failure mode in any model — size amplifies it but doesn't cause it.
+
+**Root cause of regression:** Unknown — the principle was documented (SoT line 95-97, memory `feedback_no_noise_in_the_body.md`, `feedback_knowledge_not_instructions.md`) but the code violates it. Likely crept in during one of the chat pipeline rewrites when KB RAG was added as a "helpful" enhancement without checking the architecture rule.
+
+**Fix:** Remove lines 721–728 from `chat.ts` (the `kbContext` and `memoryHits` push into `promptSections`). System prompt stays soul-only. KB stays in the operator's hands via `kb_search` tool. Memory stays retrieved on demand via memory tool. **NOT FIXED YET — writing here first per Mohamed's rule.**
+
+---
+
+## 🔴 FULL OPSOUL AUDIT REQUIRED — scheduled 2026-06-16 (next session)
+
+The KB+memory injection regression (above) was introduced during an agent-assisted cleanup. Other agents worked across OpSoul and made changes that were not audited against architecture principles. Mohamed's directive: audit the ENTIRE OpSoul codebase tomorrow — every file the agent touched, every prompt assembly path, every place something external could be entering the system prompt, every place operator identity could be contaminated. Nothing is assumed clean. Start fresh with both eyes open.
+
+---
+
 ## ⚠ OPEN REGRESSION — chat blocking (flagged 2026-06-07 by Mohamed; AUDIT + FIX)
 After "the last cleaning," the operator chat is **blocking things that used to work** — suspected over-restrictive drift introduced during cleanup:
 1. **Cannot upload files in chat** (MD or any file) — this used to work (cf. the `upload-fix-dd7e32c` rollback image in the table below; a regression of that fix?).
