@@ -14,7 +14,7 @@
 3. **Verify caching is active** — watch logs for `cachedTokens > 0` on second+ turns. System prompt (Layer 0–4 + DNA + KB) is >1024 tokens so Azure should cache after first call (50% discount for gpt-4o).
 4. ✅ **Remove `OPENROUTER_API_KEY` env var** — DONE 2026-06-16. Also removed `OPENAI_API_KEY`.
 5. **Nahil upgrade** — deferred.
-6. **Deploy `97c2f20`** — code committed, ACR build failing (UAE North region issue today). Run: `az acr build --registry banistudioacr --image opsoul-api:azure-only-97c2f20 --file Dockerfile .` from `/Users/bstar/opsoul-audit/`, then: `az containerapp update -n opsoul -g bani-studio-rg --image banistudioacr.azurecr.io/opsoul-api:azure-only-97c2f20`.
+6. ✅ **Deploy `azure-clean`** — DONE 2026-06-16. Revision `opsoul--0000099`. Image `banistudioacr.azurecr.io/opsoul-api:azure-clean` (digest `sha256:82d06e940873694b7fa26fa976515df19061f9816b9b03d3ecda3325e6b47dca`). Source commit `843cc74`. Azure-only, KB pre-injection fixed, no fallbacks.
 
 ---
 
