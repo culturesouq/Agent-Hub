@@ -1,12 +1,18 @@
 import OpenAI from 'openai';
 
-let _openai: OpenAI | null = null;
+let _client: OpenAI | null = null;
 
-function getOpenAI(): OpenAI {
-  if (!_openai) {
-    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+function getClient(): OpenAI {
+  if (!_client) {
+    const apiKey = process.env.AZURE_OPENAI_KEY ?? '';
+    _client = new OpenAI({
+      apiKey: 'unused',
+      baseURL: 'https://hajeri-data.openai.azure.com/openai/deployments/text-embedding-3-small',
+      defaultQuery: { 'api-version': '2024-02-01' },
+      defaultHeaders: { 'api-key': apiKey },
+    });
   }
-  return _openai;
+  return _client;
 }
 
 const embedCache = new Map<string, number[]>();
@@ -16,7 +22,7 @@ export async function embed(text: string): Promise<number[]> {
   const cached = embedCache.get(input);
   if (cached) return cached;
 
-  const res = await getOpenAI().embeddings.create({
+  const res = await getClient().embeddings.create({
     model: 'text-embedding-3-small',
     input,
   });
