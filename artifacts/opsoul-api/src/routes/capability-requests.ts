@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express';
+import crypto from 'crypto';
 import { z } from 'zod';
 import { db } from '@workspace/db';
 import { capabilityRequestsTable, operatorsTable } from '@workspace/db';

@@ -12,9 +12,7 @@ import {
 import { requireSlotKey } from '../middleware/requireSlotKey.js';
 import { buildSlotScope, buildScopeContext } from '../utils/scopeResolver.js';
 import { appendToSession, getSessionMessages } from '../utils/sessionStore.js';
-import { searchMemory, distillMemoriesFromConversations } from '../utils/memoryEngine.js';
-import type { MemoryHit } from '../utils/memoryEngine.js';
-import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
+import { distillMemoriesFromConversations } from '../utils/memoryEngine.js';
 import { assembleOperatorPrompt, buildTemporalContext, containsTimeKeywords } from '../utils/systemPrompt.js';
 import { OperatorAgent } from '../utils/operatorAgent.js';
 import { buildOperatorToolset } from '../utils/operatorToolset.js';
@@ -24,7 +22,6 @@ import { CHAT_MODEL } from '../utils/openrouter.js';
 import type { ChatMessage, ContentPart } from '../utils/openrouter.js';
 import { DEFAULT_MODEL_ID } from '../utils/modelRegistry.js';
 
-import { embed } from '@workspace/opsoul-utils/ai';
 import { eq, and, desc, sql } from 'drizzle-orm';
 
 const router = Router();
@@ -214,29 +211,13 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // installedRows/allSkills/activeSkills computation — they were assigned
   // but never read after the MCP refactor.
 
-  // ── Memory + KB search ──
-  let memoryHits: MemoryHit[] = [];
-  let ragContext = '';
-
-  try {
-    const embedding = await embed(message);
-    const [hits, kbHits] = await Promise.all([
-      searchMemory(slot.operatorId, embedding, 8, 0.55, 0.1, scope.scopeId),
-      searchBothKbs(slot.operatorId, embedding, 8, 30),
-    ]);
-    memoryHits = hits;
-    ragContext = buildRagContext(kbHits);
-  } catch { /* non-fatal */ }
-
   // ── System prompt ──
-  // KB hits + memory hits are woven into the system prompt unlabeled (per
-  // § 3 rule 10 + § 4 architecture-as-secret). Operator carries them as
-  // absorbed knowledge, not as labeled role:'user' exhibits the LLM might
-  // quote back to users.
-  // Scope context: tell the operator they are speaking with an authenticated
-  // user (with the user's id) or an anonymous guest (with the session id), and
-  // which conversation reference applies. Memory continuity language is
-  // scope-bound — Layer 2 retrieval above is also scope-filtered.
+  // System prompt = identity only (Layer 0 + Layer 1 + Layer 2 + Layer 4).
+  // KB and memory are NOT pre-injected here. The operator retrieves them
+  // on demand via kb_search and memory tools when its own reasoning decides
+  // they are needed. Pre-injection drowns identity in noise — the root cause
+  // of operator drift, chatty behaviour, and identity instability.
+  // Scope context: tell the operator who they are speaking with.
   const scopeLine = buildScopeContext({
     scope,
     conversationId: scope.writesHistory ? (conv?.id ?? null) : sessionId,
@@ -256,12 +237,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   }
 
   const promptSections: string[] = [systemPrompt];
-  if (ragContext && ragContext.trim()) {
-    promptSections.push(ragContext.trim());
-  }
-  if (memoryHits && memoryHits.length > 0) {
-    promptSections.push((memoryHits as MemoryHit[]).map(m => m.content).join('\n'));
-  }
 
   // ── 5(a) Input tagger surface (Claim 5) — public-chat ────────────────────
   // Stub returns null today; Phase 4 will populate. When non-null the [SAFETY]
