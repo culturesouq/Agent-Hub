@@ -286,8 +286,8 @@ function buildClient(config: ProviderConfig, apiKey: string): OpenAI {
     // Azure ignores Authorization header; api-key header is the auth mechanism.
     // Pass a dummy here so the SDK doesn't complain, api-key goes in defaultHeaders.
     apiKey: isAzure ? 'azure' : (apiKey || 'unused'),
-    defaultQuery: isAzure && config.apiVersion
-      ? { 'api-version': config.apiVersion }
+    defaultQuery: isAzure
+      ? { 'api-version': config.apiVersion ?? '2024-12-01-preview' }
       : undefined,
     defaultHeaders: {
       ...(isAzure ? { 'api-key': apiKey } : { 'HTTP-Referer': process.env.APP_URL || 'https://opsoul.io' }),

@@ -18,6 +18,7 @@ export interface ProviderConfig {
   adapter: AdapterKind;
   baseURL: string;
   apiKeyEnv: string;
+  apiVersion?: string;
   modelOverride?: string;
   publicFallbackKey?: string;
   label: string;
@@ -35,6 +36,7 @@ const PROVIDERS: Record<string, ProviderConfig> = {
     adapter: 'openai-compat',
     baseURL: 'https://hajeri-data.openai.azure.com/openai/deployments/gpt-4o',
     apiKeyEnv: 'AZURE_OPENAI_KEY',
+    apiVersion: '2024-12-01-preview',
     modelOverride: 'gpt-4o',
     label: 'GPT-4o (Azure)',
     description: 'Azure OpenAI — platform fallback',
