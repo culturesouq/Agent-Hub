@@ -12,8 +12,9 @@
 1. ✅ **Azure OpenAI GPT-5 deployed + wired** — DONE 2026-06-13. See Section 8 below.
 2. ✅ **GPT-5 → GPT-4o migration** — DONE 2026-06-13. GPT-5 drained 10K TPM via extended thinking tokens, causing non-stop loop. Switched to gpt-4o (450K TPM, no extended thinking, jsonSchemaResponse). See Section 9 below.
 3. **Verify caching is active** — watch logs for `cachedTokens > 0` on second+ turns. System prompt (Layer 0–4 + DNA + KB) is >1024 tokens so Azure should cache after first call (50% discount for gpt-4o).
-4. **Remove `OPENROUTER_API_KEY` env var** from the container app once operators confirmed on gpt-4o (keep until confirmed).
+4. ✅ **Remove `OPENROUTER_API_KEY` env var** — DONE 2026-06-16. Also removed `OPENAI_API_KEY`.
 5. **Nahil upgrade** — deferred.
+6. **Deploy `97c2f20`** — code committed, ACR build failing (UAE North region issue today). Run: `az acr build --registry banistudioacr --image opsoul-api:azure-only-97c2f20 --file Dockerfile .` from `/Users/bstar/opsoul-audit/`, then: `az containerapp update -n opsoul -g bani-studio-rg --image banistudioacr.azurecr.io/opsoul-api:azure-only-97c2f20`.
 
 ---
 
@@ -27,7 +28,7 @@
 
 **Root cause of regression:** Unknown — the principle was documented (SoT line 95-97, memory `feedback_no_noise_in_the_body.md`, `feedback_knowledge_not_instructions.md`) but the code violates it. Likely crept in during one of the chat pipeline rewrites when KB RAG was added as a "helpful" enhancement without checking the architecture rule.
 
-**Fix:** Remove lines 721–728 from `chat.ts` (the `kbContext` and `memoryHits` push into `promptSections`). System prompt stays soul-only. KB stays in the operator's hands via `kb_search` tool. Memory stays retrieved on demand via memory tool. **NOT FIXED YET — writing here first per Mohamed's rule.**
+**Fix:** ✅ FIXED 2026-06-16 (commit `97c2f20`). Removed dead `embed/searchBothKbs/searchMemory` block from `chat.ts`. Same KB pre-injection removed from `telegram-webhook.ts` and `whatsapp-webhook.ts`. System prompt path confirmed clean: `fullSystemPrompt = systemPrompt` (identity only). Operator calls `kb_search` / memory tools on demand.
 
 ---
 
