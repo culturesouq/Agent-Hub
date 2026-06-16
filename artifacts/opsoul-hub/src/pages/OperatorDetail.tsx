@@ -7,8 +7,8 @@ import {
   ArrowLeft, MessageSquare, Brain, Activity,
   User, Zap, Archive, Network,
   CheckSquare, FileText, Settings2, Key, Code2, AlertTriangle,
-  Star, ChevronRight, ChevronDown, Sparkles,
-  Shield, ShieldCheck, Menu, X, Cpu, ShieldAlert,
+  ChevronRight, ChevronDown, Sparkles,
+  Shield, ShieldCheck, Menu, X, Cpu,
 } from "lucide-react";
 
 import ChatSection from "@/components/operator/ChatSection";
@@ -23,7 +23,6 @@ import PersonalitySection from "@/components/operator/PersonalitySection";
 import KbSection from "@/components/operator/KbSection";
 import FilesSection from "@/components/operator/FilesSection";
 import ArtifactsSection from "@/components/operator/ArtifactsSection";
-import CapabilityRequestsSection from "@/components/operator/CapabilityRequestsSection";
 
 
 // Local PNGs (same set Dashboard uses) — keeps operator portraits offline-safe,
@@ -233,35 +232,33 @@ const NAV_MAIN: NavItem[] = [
   {
     kind: "group", id: "brain", label: "Brain", icon: Brain, depth: 0,
     children: [
-      { kind: "leaf", id: "soul",                 label: "Soul",             icon: User,         depth: 1 },
-      { kind: "leaf", id: "skills",               label: "Skills",           icon: Zap,          depth: 1 },
-      { kind: "leaf", id: "memory",               label: "Memory",           icon: Archive,      depth: 1 },
-      { kind: "leaf", id: "grow",                 label: "Growth",           icon: Activity,     depth: 1 },
-      { kind: "leaf", id: "capabilities",         label: "Capability Requests", icon: ShieldAlert, depth: 1 },
+      { kind: "leaf", id: "soul",       label: "Soul",       icon: User,    depth: 1 },
+      { kind: "leaf", id: "knowledge",  label: "Knowledge",  icon: Archive, depth: 1 },
+      { kind: "leaf", id: "skills",     label: "Skills",     icon: Zap,     depth: 1 },
+      { kind: "leaf", id: "memory",     label: "Memory",     icon: Brain,   depth: 1 },
+      { kind: "leaf", id: "grow",       label: "Growth",     icon: Activity,depth: 1 },
     ],
   },
-  { kind: "leaf", id: "tasks",       label: "Tasks",       icon: CheckSquare, depth: 0 },
-  { kind: "leaf", id: "files",       label: "Files",       icon: FileText,    depth: 0 },
-  { kind: "leaf", id: "artifacts",   label: "Artifacts",   icon: Sparkles,    depth: 0 },
-  { kind: "leaf", id: "connections", label: "Connections", icon: Network,     depth: 0 },
+  { kind: "leaf", id: "tasks",        label: "Tasks",        icon: CheckSquare, depth: 0 },
+  { kind: "leaf", id: "files",        label: "Files",        icon: FileText,    depth: 0 },
+  { kind: "leaf", id: "artifacts",    label: "Artifacts",    icon: Sparkles,    depth: 0 },
+  { kind: "leaf", id: "integrations", label: "Integrations", icon: Network,     depth: 0 },
   {
     kind: "group", id: "settings", label: "Settings", icon: Settings2, depth: 0,
     children: [
-      { kind: "leaf", id: "settings.model",     label: "Model & AI",      icon: Cpu,          depth: 1 },
-      { kind: "leaf", id: "settings.secrets",  label: "Keys & Secrets",  icon: Key,          depth: 1 },
-      { kind: "leaf", id: "settings.api",      label: "API Access",      icon: Code2,        depth: 1 },
-      { kind: "leaf", id: "settings.behavior", label: "Behavior",        icon: Shield,       depth: 1 },
-      { kind: "leaf", id: "settings.evolution",label: "Evolution Lock",  icon: ShieldCheck,  depth: 1 },
-      { kind: "leaf", id: "settings.danger",   label: "Danger Zone",     icon: AlertTriangle,depth: 1 },
+      { kind: "leaf", id: "settings.model",     label: "Model & AI",     icon: Cpu,           depth: 1 },
+      { kind: "leaf", id: "settings.secrets",   label: "Keys & Secrets", icon: Key,           depth: 1 },
+      { kind: "leaf", id: "settings.api",       label: "API Access",     icon: Code2,         depth: 1 },
+      { kind: "leaf", id: "settings.behavior",  label: "Behavior",       icon: Shield,        depth: 1 },
+      { kind: "leaf", id: "settings.evolution", label: "Evolution Lock", icon: ShieldCheck,   depth: 1 },
+      { kind: "leaf", id: "settings.danger",    label: "Danger Zone",    icon: AlertTriangle, depth: 1 },
     ],
   },
 ];
 
-const NAV_BOTTOM: NavItem[] = [
-  { kind: "leaf", id: "feedback", label: "Leave Feedback", icon: Star, depth: 0 },
-];
+const NAV_BOTTOM: NavItem[] = [];
 
-const BRAIN_LEAVES    = ["soul", "skills", "memory", "grow", "capabilities"];
+const BRAIN_LEAVES    = ["soul", "knowledge", "skills", "memory", "grow"];
 const SETTINGS_LEAVES = ["settings.model", "settings.secrets", "settings.api", "settings.behavior", "settings.evolution", "settings.danger"];
 
 export default function OperatorDetail({ id }: { id: string }) {
@@ -344,24 +341,22 @@ export default function OperatorDetail({ id }: { id: string }) {
           <div className="space-y-8">
             <IdentitySection operator={operator} panel="identity" />
             <PersonalitySection operatorId={id} />
-            <KbSection operatorId={id} />
           </div>
         );
+      case "knowledge":          return <KbSection operatorId={id} />;
       case "skills":             return <SkillsSection operatorId={id} />;
-      case "memory":              return <MemorySection operatorId={id} />;
+      case "memory":             return <MemorySection operatorId={id} />;
       case "grow":               return <GrowSection operatorId={id} saData={saData} />;
-      case "capabilities":       return <CapabilityRequestsSection operatorId={id} />;
       case "tasks":              return <TasksSection operatorId={id} />;
       case "files":              return <FilesSection operator={operator} />;
       case "artifacts":          return <ArtifactsSection operatorId={id} />;
-      case "connections":        return <IntegrationsSection operatorId={id} />;
+      case "integrations":       return <IntegrationsSection operatorId={id} />;
       case "settings.model":     return <SettingsSection operator={operator} section="model" />;
       case "settings.secrets":   return <SettingsSection operator={operator} section="secrets" />;
       case "settings.api":       return <SettingsSection operator={operator} section="api" />;
       case "settings.behavior":  return <SettingsSection operator={operator} section="safemode" />;
       case "settings.evolution": return <SettingsSection operator={operator} section="evolution" />;
       case "settings.danger":    return <SettingsSection operator={operator} section="danger" />;
-      case "feedback":           return <ComingSoon title="Leave Feedback" />;
       default:                   return <ChatSection operatorId={id} />;
     }
   }

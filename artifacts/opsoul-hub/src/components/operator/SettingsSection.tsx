@@ -34,7 +34,7 @@ type ModelOption = {
  * is still source of truth, this is a soft-fail.
  */
 const FALLBACK_MODELS: ModelOption[] = [
-  { id: "moonshotai/kimi-k2.5", label: "Kimi K2.5", description: "Moonshot AI — multimodal, 262K context", badge: "Default", provider: "openrouter", contextWindow: 262144 },
+  { id: "azure/gpt-4o", label: "GPT-4o (Azure)", description: "Azure OpenAI — platform model", badge: "Default", provider: "azure_openai", contextWindow: 128000 },
 ];
 
 type EvolutionLevel = "OPEN" | "CONTROLLED" | "LOCKED";
@@ -682,11 +682,10 @@ export default function SettingsSection({ operator, section }: { operator: Opera
   const [safeMode, setSafeMode] = useState(operator.safeMode ?? false);
   const [freeRoaming, setFreeRoaming] = useState(operator.freeRoaming ?? false);
 
-  // When operator.defaultModel is NULL the backend uses Kimi K2.5 (the
-  // current CHAT_MODEL from utils/modelRegistry.DEFAULT_MODEL_ID). The
-  // UI mirrors that so clicking Save without changing the dropdown keeps
-  // the operator on its actual default — never silently flips it.
-  const defaultModelId = operator.defaultModel ?? "moonshotai/kimi-k2.5";
+  // When operator.defaultModel is NULL the backend uses azure/gpt-4o
+  // (DEFAULT_MODEL_ID from modelRegistry). The UI mirrors that so clicking
+  // Save without changing the dropdown keeps the operator on its actual default.
+  const defaultModelId = operator.defaultModel ?? "azure/gpt-4o";
   const [selectedModel, setSelectedModel] = useState<string>(defaultModelId);
   const [apiKeyInput, setApiKeyInput] = useState("");
   // showKey + verifyStatus drive the "Verify API key" panel that the next UI
