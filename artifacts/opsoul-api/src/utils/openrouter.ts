@@ -248,28 +248,8 @@ function getClientForOverride(
 ): { client: OpenAI; sendAs: string } {
   const provider = override.provider ?? 'openai';
 
-  // Anthropic Messages API is not OpenAI-compatible. Route through OpenRouter
-  // using the platform key until a native Anthropic adapter is added.
   if (provider === 'anthropic') {
-    console.warn(
-      '[openrouter] ModelOverride provider=anthropic — native Anthropic adapter not yet implemented. ' +
-      'Routing through OpenRouter with platform key. Operator BYO key ignored for this provider.',
-    );
-    const baseURL = 'https://openrouter.ai/api/v1';
-    const apiKey = process.env.OPENROUTER_API_KEY ?? '';
-    const cacheKey = `${baseURL}::${apiKey}`;
-    const cached = clientCache.get(cacheKey);
-    if (cached) return { client: cached, sendAs: override.model };
-    const client = new OpenAI({
-      baseURL,
-      apiKey: apiKey || 'unused',
-      defaultHeaders: {
-        'HTTP-Referer': process.env.APP_URL || 'https://opsoul.io',
-        'X-Title': 'OpSoul',
-      },
-    });
-    clientCache.set(cacheKey, client);
-    return { client, sendAs: override.model };
+    throw new Error('ModelOverride provider=anthropic is not supported. Only azure_openai is available.');
   }
 
   // azure_openai and custom must supply a baseUrl
@@ -300,7 +280,7 @@ function buildClient(config: ProviderConfig, apiKey: string): OpenAI {
   const cached = clientCache.get(cacheKey);
   if (cached) return cached;
 
-  const isAzure = config.provider === 'azure';
+  const isAzure = config.provider === 'azure_openai';
   const client = new OpenAI({
     baseURL: config.baseURL,
     // Azure ignores Authorization header; api-key header is the auth mechanism.

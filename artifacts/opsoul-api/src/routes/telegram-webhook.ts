@@ -5,37 +5,15 @@ import { operatorIntegrationsTable, operatorsTable, conversationsTable, messages
 import { decryptToken } from '@workspace/opsoul-utils/crypto';
 import { CHAT_MODEL } from '../utils/openrouter.js';
 import { assembleOperatorPrompt } from '../utils/systemPrompt.js';
-import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
-import { searchMemory, buildMemoryContext } from '../utils/memoryEngine.js';
 import { buildChannelScope, buildScopeContext } from '../utils/scopeResolver.js';
 import { OperatorAgent } from '../utils/operatorAgent.js';
 import { buildOperatorToolset } from '../utils/operatorToolset.js';
 import { analyzeInputForSafety, analyzeOutputForLeak } from '../utils/operatorFirewall.js';
 import { runSyncAgentLoop } from '../utils/operatorAgentLoop.js';
 import { eq, and, asc, sql } from 'drizzle-orm';
-import OpenAI, { toFile } from 'openai';
-import { embed } from '@workspace/opsoul-utils/ai';
 import type { ChatMessage } from '../utils/openrouter.js';
 
 const router = Router();
-
-async function downloadTelegramFile(
-  botToken: string,
-  fileId: string,
-): Promise<{ buffer: Buffer; mimeType: string; fileName: string }> {
-  const fileRes = await fetch(
-    `https://api.telegram.org/bot${botToken}/getFile?file_id=${encodeURIComponent(fileId)}`,
-  );
-  const fileData = await fileRes.json() as { ok: boolean; result?: { file_path: string } };
-  if (!fileData.ok || !fileData.result) throw new Error('Telegram getFile failed');
-  const filePath = fileData.result.file_path;
-  const ext = filePath.split('.').pop() ?? 'oga';
-  const mimeType = ext === 'mp4' ? 'audio/mp4' : ext === 'ogg' || ext === 'oga' ? 'audio/ogg' : 'audio/webm';
-  const fileUrl = `https://api.telegram.org/file/bot${botToken}/${filePath}`;
-  const contentRes = await fetch(fileUrl);
-  const buf = await contentRes.arrayBuffer();
-  return { buffer: Buffer.from(buf), mimeType, fileName: `voice.${ext}` };
-}
 
 async function sendTelegramMessage(botToken: string, chatId: number, text: string): Promise<void> {
   await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
@@ -167,28 +145,9 @@ router.post('/:operatorId', async (req: Request, res: Response): Promise<void> =
   if (typeof message.text === 'string') {
     userMessage = message.text;
   } else if (message.voice) {
-    const voice = message.voice as Record<string, unknown>;
-    const fileId = voice.file_id as string;
-    try {
-      const { buffer, mimeType, fileName } = await downloadTelegramFile(botToken, fileId);
-      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-      const file = await toFile(buffer, fileName, { type: mimeType });
-      const transcript = await openai.audio.transcriptions.create({ model: 'whisper-1', file });
-      userMessage = transcript.text;
-    } catch (err: unknown) {
-      // Per [[no-fallbacks]]: avoid synthetic operator-voice substitution
-      // even on transcription failure. Frame as out-of-band delivery
-      // diagnostic so the user knows the voice did not reach the operator,
-      // without putting fake words in the operator's mouth.
-      console.error('[telegram-webhook] transcription error', err);
-      const rawMessage = (err as { message?: string })?.message ?? null;
-      await sendTelegramMessage(
-        botToken,
-        chatId,
-        `[Voice transcription failed${rawMessage ? `: ${rawMessage}` : ''}. The operator did not receive the voice message; please retry or send text.]`,
-      ).catch((sendErr) => console.error('[telegram-webhook] failed to deliver transcription diagnostic', sendErr));
-      return;
-    }
+    // Voice transcription not available (no Whisper on Azure). Tell user to send text.
+    await sendTelegramMessage(botToken, chatId, 'Please send a text message — voice is not supported yet.').catch(() => {});
+    return;
   } else if (message.photo) {
     const caption = typeof message.caption === 'string' ? message.caption : '';
     userMessage = caption || '[User sent a photo]';
@@ -235,30 +194,12 @@ router.post('/:operatorId', async (req: Request, res: Response): Promise<void> =
   void decision; // tool gating in this webhook is handled at the executeSync layer; decision retained for future use
 
   try {
-    const embedding = await embed(userMessage);
-    const [hits, memHits] = await Promise.all([
-      searchBothKbs(operator.id, embedding, 5, 30, operator.archetype, operator.domainTags ?? []),
-      searchMemory(operator.id, embedding, 5, 0.7, 0.3, scope.scopeId),
-    ]);
-
-    const ragCtx = buildRagContext(hits);
-    const memCtx = buildMemoryContext(memHits);
-
-    // KB hits + memory hits woven into system prompt unlabeled per § 3 rule 10
-    // + § 4 architecture-as-secret. No more [KNOWLEDGE] / [MEMORY] labels in
-    // the operator's prompt — operator carries them as absorbed knowledge.
-    // Scope context: tell the operator which channel they are on, who the
-    // caller is, and which conversation reference applies. Caller identifier
-    // is the Telegram chat_id — server-trusted via webhook secret.
-    const scopeLine = buildScopeContext({
-      scope,
-      conversationId: conv.id,
-    });
+    // KB and memory are retrievable by the operator on demand via tools (kb_search,
+    // memory tools). They are NOT pre-injected here — system prompt is identity only.
+    const scopeLine = buildScopeContext({ scope, conversationId: conv.id });
     const promptSections: string[] = [
       assembleOperatorPrompt(operator, null, { scopeLine }),
     ];
-    if (ragCtx) promptSections.push(ragCtx);
-    if (memCtx) promptSections.push(memCtx);
 
     // ── 5(a) Input tagger surface (Claim 5) — telegram channel ────────────
     // Stub returns null today; Phase 4 will populate.

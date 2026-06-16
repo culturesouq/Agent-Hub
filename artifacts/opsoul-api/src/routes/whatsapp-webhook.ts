@@ -5,16 +5,12 @@ import { operatorIntegrationsTable, operatorsTable, conversationsTable, messages
 import { decryptToken } from '@workspace/opsoul-utils/crypto';
 import { CHAT_MODEL } from '../utils/openrouter.js';
 import { assembleOperatorPrompt } from '../utils/systemPrompt.js';
-import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
-import { searchMemory, buildMemoryContext } from '../utils/memoryEngine.js';
 import { buildChannelScope, buildScopeContext } from '../utils/scopeResolver.js';
 import { OperatorAgent } from '../utils/operatorAgent.js';
 import { buildOperatorToolset } from '../utils/operatorToolset.js';
 import { analyzeInputForSafety, analyzeOutputForLeak } from '../utils/operatorFirewall.js';
 import { runSyncAgentLoop } from '../utils/operatorAgentLoop.js';
 import { eq, and, asc, sql } from 'drizzle-orm';
-import OpenAI, { toFile } from 'openai';
-import { embed } from '@workspace/opsoul-utils/ai';
 import type { ChatMessage } from '../utils/openrouter.js';
 
 type RequestWithRawBody = Request & { rawBody?: Buffer };
@@ -42,22 +38,6 @@ async function sendWhatsAppMessage(
       text: { body: text },
     }),
   });
-}
-
-async function downloadWhatsAppMedia(
-  accessToken: string,
-  mediaId: string,
-): Promise<{ buffer: Buffer; mimeType: string }> {
-  const metaRes = await fetch(`https://graph.facebook.com/v19.0/${mediaId}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  const meta = await metaRes.json() as { url?: string; mime_type?: string };
-  if (!meta.url) throw new Error('WhatsApp media URL not found');
-  const contentRes = await fetch(meta.url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  const buf = await contentRes.arrayBuffer();
-  return { buffer: Buffer.from(buf), mimeType: meta.mime_type ?? 'audio/ogg' };
 }
 
 async function resolveOrCreateConversation(
@@ -229,30 +209,9 @@ router.post('/:operatorId', async (req: RequestWithRawBody, res: Response): Prom
     const textObj = msg.text as Record<string, unknown> | undefined;
     userMessage = typeof textObj?.body === 'string' ? textObj.body : '';
   } else if (msgType === 'audio') {
-    const audioObj = msg.audio as Record<string, unknown> | undefined;
-    const mediaId = typeof audioObj?.id === 'string' ? audioObj.id : null;
-    if (!mediaId) return;
-    try {
-      const { buffer, mimeType } = await downloadWhatsAppMedia(accessToken, mediaId);
-      const ext = mimeType.includes('ogg') ? 'ogg' : mimeType.includes('mp4') ? 'mp4' : 'webm';
-      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-      const file = await toFile(buffer, `voice.${ext}`, { type: mimeType });
-      const transcript = await openai.audio.transcriptions.create({ model: 'whisper-1', file });
-      userMessage = transcript.text;
-    } catch (err: unknown) {
-      // Per [[no-fallbacks]]: avoid synthetic operator-voice substitution
-      // even on transcription failure. Send out-of-band delivery diagnostic
-      // so the user knows the voice did not reach the operator.
-      console.error('[whatsapp-webhook] transcription error', err);
-      const rawMessage = (err as { message?: string })?.message ?? null;
-      await sendWhatsAppMessage(
-        accessToken,
-        phoneNumberId,
-        from,
-        `[Voice transcription failed${rawMessage ? `: ${rawMessage}` : ''}. The operator did not receive the voice message; please retry or send text.]`,
-      ).catch((sendErr) => console.error('[whatsapp-webhook] failed to deliver transcription diagnostic', sendErr));
-      return;
-    }
+    // Voice transcription not available (no Whisper on Azure). Tell user to send text.
+    await sendWhatsAppMessage(accessToken, phoneNumberId, from, 'Please send a text message — voice is not supported yet.').catch(() => {});
+    return;
   } else if (msgType === 'image') {
     const imageObj = msg.image as Record<string, unknown> | undefined;
     const caption = typeof imageObj?.caption === 'string' ? imageObj.caption : '';
@@ -302,30 +261,12 @@ router.post('/:operatorId', async (req: RequestWithRawBody, res: Response): Prom
   const decision = agent.analyse(userMessage);
 
   try {
-    const embedding = await embed(userMessage);
-    const [hits, memHits] = await Promise.all([
-      searchBothKbs(operator.id, embedding, 5, 30, operator.archetype, operator.domainTags ?? []),
-      searchMemory(operator.id, embedding, 5, 0.7, 0.3, scope.scopeId),
-    ]);
-
-    const ragCtx = buildRagContext(hits);
-    const memCtx = buildMemoryContext(memHits);
-
-    // KB hits + memory hits woven into system prompt unlabeled per § 3 rule 10
-    // + § 4 architecture-as-secret. No more [KNOWLEDGE] / [MEMORY] labels in
-    // the operator's prompt — operator carries them as absorbed knowledge.
-    // Scope context: tell the operator which channel they are on, who the
-    // caller is (phone number, server-trusted from webhook), and which
-    // conversation reference applies.
-    const scopeLine = buildScopeContext({
-      scope,
-      conversationId: conv.id,
-    });
+    // KB and memory are retrievable by the operator on demand via tools (kb_search,
+    // memory tools). They are NOT pre-injected here — system prompt is identity only.
+    const scopeLine = buildScopeContext({ scope, conversationId: conv.id });
     const promptSections: string[] = [
       assembleOperatorPrompt(operator, null, { scopeLine }),
     ];
-    if (ragCtx) promptSections.push(ragCtx);
-    if (memCtx) promptSections.push(memCtx);
 
     // ── 5(a) Input tagger surface (Claim 5) — whatsapp channel ────────────
     // Stub returns null today; Phase 4 will populate.

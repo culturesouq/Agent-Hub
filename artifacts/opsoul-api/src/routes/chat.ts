@@ -16,10 +16,9 @@ import {
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
 import { detectSkillTrigger } from '../utils/skillTriggerEngine.js';
 import { executeSkill } from '../utils/skillExecutor.js';
-import { embed, semanticDistance } from '@workspace/opsoul-utils/ai';
+import { semanticDistance } from '@workspace/opsoul-utils/ai';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { lockLayer1IfUnlocked } from '../utils/lockLayer1.js';
-import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 // Curiosity engine is operator-governed (Patent claim 14): the operator's
 // self-awareness layer initiates curiosity, not the chat route. Silent
 // `[WEB CONTEXT]` auto-injection removed (Phase 4). The web_search tool
@@ -27,8 +26,7 @@ import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
 import { assembleOperatorPrompt, buildBirthSystemPrompt, buildTemporalContext, containsTimeKeywords } from '../utils/systemPrompt.js';
 import { OperatorAgent, renderTurnPlanSystemContext } from '../utils/operatorAgent.js';
 import type { SelfAwarenessSnapshot, BuildSystemPromptOpts } from '../utils/systemPrompt.js';
-import { searchMemory, distillMemoriesFromConversations } from '../utils/memoryEngine.js';
-import type { MemoryHit } from '../utils/memoryEngine.js';
+import { distillMemoriesFromConversations } from '../utils/memoryEngine.js';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import { BIRTH_MODEL_ID, resolveModel, DEFAULT_MODEL_ID } from '../utils/modelRegistry.js';
@@ -110,9 +108,6 @@ const AttachmentSchema = z.object({
 const SendMessageSchema = z.object({
   message: z.string().min(1, 'message is required').max(200000),
   stream: z.boolean().default(false),
-  kbSearch: z.boolean().default(true),
-  kbTopN: z.number().int().min(1).max(20).default(8),
-  kbMinConfidence: z.number().int().min(0).max(100).default(75),
   attachments: z.array(AttachmentSchema).optional(),
 });
 
@@ -459,7 +454,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  const { message, stream, kbSearch, kbTopN, kbMinConfidence, attachments } = parsed.data;
+  const { message, stream, attachments } = parsed.data;
 
   const chatApiKey = operator.openrouterApiKey
     ? (() => { try { return decryptToken(operator.openrouterApiKey!); } catch { return undefined; } })()
@@ -585,23 +580,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // tool / skill detection paths below; we don't need to materialise it here.
   const installedNames = new Set(skills.map((s: any) => s.name));
 
-  let kbContext = '';
-  let memoryHits: MemoryHit[] = [];
-
-  if (kbSearch) {
-    try {
-      const queryEmbedding = await embed(message);
-      const [kbHits, memHits] = await Promise.all([
-        searchBothKbs(operator.id, queryEmbedding, kbTopN, kbMinConfidence, operator.archetype ?? [], operator.domainTags ?? []),
-        searchMemory(operator.id, queryEmbedding, undefined, undefined, undefined, scope.scopeId),
-      ]);
-      kbContext = buildRagContext(kbHits);
-      memoryHits = memHits;
-    } catch {
-      kbContext = '';
-      memoryHits = [];
-    }
-  }
+  // KB and memory are retrievable by the operator on demand via tools (kb_search,
+  // memory tools). They are NOT pre-injected here — system prompt is identity only.
+  // The operator decides when it needs KB or memory context and calls the tool.
 
   // Single-model strategy: Kimi K2.5 handles chat + vision + tool calling natively.
   // 'opsoul/auto' sentinel now resolves directly to CHAT_MODEL (no per-turn switching).
@@ -1047,7 +1028,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         model: chatModel,
         usage: { promptTokens, completionTokens: finalTokens },
         activeSkillCount: skills.length,
-        memoryCount: memoryHits.length,
+        memoryCount: 0,
         // null today; Phase 4 fills in. Always present on the wire so the
         // UI contract doesn't change shape when the analyzer goes live.
         leakFeedback,
@@ -1203,7 +1184,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           completionTokens: finalCompletionTokens,
         },
         activeSkillCount: skills.length,
-        memoryCount: memoryHits.length,
+        memoryCount: 0,
         layer1WasLocked: operator.layer1LockedAt !== null,
         // null today; Phase 4 fills in. Always present so UI contract is stable.
         leakFeedback,

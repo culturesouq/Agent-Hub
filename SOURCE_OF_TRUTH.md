@@ -31,6 +31,14 @@
 
 ---
 
+## 🔴 TOMORROW TASKS (2026-06-16) �� DO THESE FIRST
+
+1. **Clean OpSoul of ALL AI model API keys** — remove every key, credential, and reference for: OpenRouter, OpenAI (direct), Kimi, DeepSeek, Gemini, Claude/Anthropic, and any other non-Azure model. Only Azure OpenAI stays. Remove from: env vars on the container app, secrets, any hardcoded references in code, any registry entries.
+2. **Strip all AI model mentions from the codebase** — model registry, CHAT_MODEL defaults, any fallback chain, any routing logic referencing non-Azure models. Azure OpenAI is the only model. One model, one path, no exceptions.
+3. **Full OpSoul audit** — every file agents touched in the last cleanup. Verify nothing was broken, nothing was introduced that violates architecture principles. Assume nothing is clean until verified.
+
+---
+
 ## 🔴 FULL OPSOUL AUDIT REQUIRED — scheduled 2026-06-16 (next session)
 
 The KB+memory injection regression (above) was introduced during an agent-assisted cleanup. Other agents worked across OpSoul and made changes that were not audited against architecture principles. Mohamed's directive: audit the ENTIRE OpSoul codebase tomorrow — every file the agent touched, every prompt assembly path, every place something external could be entering the system prompt, every place operator identity could be contaminated. Nothing is assumed clean. Start fresh with both eyes open.
