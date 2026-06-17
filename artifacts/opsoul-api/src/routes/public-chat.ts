@@ -491,4 +491,26 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
+// GET /v1/chat/identity-export
+// One-shot read — returns the operator's compiled identity JSON for in-process embedding.
+// Accepts any active slot key belonging to this operator.
+// Shape: { archetype, rawIdentity, mandate, roles, coreValues, ethicalBoundaries, layer2Soul }
+router.get('/identity-export', async (req: Request, res: Response): Promise<void> => {
+  const slot = req.slot!;
+  const [op] = await db
+    .select({
+      archetype:          operatorsTable.archetype,
+      rawIdentity:        operatorsTable.rawIdentity,
+      mandate:            operatorsTable.mandate,
+      roles:              operatorsTable.roles,
+      coreValues:         operatorsTable.coreValues,
+      ethicalBoundaries:  operatorsTable.ethicalBoundaries,
+      layer2Soul:         operatorsTable.layer2Soul,
+    })
+    .from(operatorsTable)
+    .where(eq(operatorsTable.id, slot.operatorId));
+  if (!op) { res.status(404).json({ error: 'Operator not found' }); return; }
+  res.json(op);
+});
+
 export default router;
