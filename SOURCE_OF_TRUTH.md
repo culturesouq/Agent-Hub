@@ -17,6 +17,18 @@
 
 ---
 
+## ✅ SESSION WORK — 2026-06-18
+
+1. **Nahil owner_kb rebuilt** — replaced 929-line broken document with 90-line NAHIL_OPERATOR_MAP.md (endpoint map + real bearer key `nahil_d0c5a0...`). Uploaded live to DB.
+2. **Nahil `default_model` fixed** — updated DB: `kimi-k2.5` → `azure/gpt-4o`.
+3. **BYO model config preserved** — attempted full removal (wrong), restored from HEAD~1. Rule locked: platform model = Azure only; BYO client config stays. Failure logged above.
+4. **`test/verify` added to ACTION_VERB_PATTERN** — "test endpoints" now triggers `execute` mode → http_request tool available. Commit `3f4553b`.
+5. **Introspect path fixed** — real tool list from `turnPlan.scaffolding` injected into `loopMessages` (not system prompt). Operators now self-report accurate tools. Commit `3f4553b`.
+6. **Nahil psychology session** — conversation history full of failed attempts caused narration loop. Mohamed talked Nahil through it; Nahil re-established operator-as-driver and successfully called http_request on foundermoment.ai.
+7. **Pending deploy** — commits since `56bc75e` (live): `159cdd7`, `1c2c9d7`, `2d3102d`, `3f4553b`. Deploy = new image tag.
+
+---
+
 ## 📋 TODO — Next session
 
 1. ✅ **Azure OpenAI GPT-5 deployed + wired** — DONE 2026-06-13. See Section 8 below.
