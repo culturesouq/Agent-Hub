@@ -7,6 +7,16 @@
 
 ---
 
+## ⚠ FAILURE LOG — 2026-06-18 (BYO model config over-deletion)
+
+**What happened:** Mohamed's directive was "delete other models from OpSoul except Azure OpenAI GPT-4o." Correct interpretation: platform default routing = Azure only; BYO model config for clients remains. I deleted the entire BYO infrastructure (operatorModelConfig.ts, model-config API routes, ByoModelPanel UI, BYO branching in openrouter.ts/chat.ts/growEngine.ts). This broke the client-facing feature that lets operators configure their own AI API key.
+
+**Correct rule (now locked):** Platform model = Azure OpenAI GPT-4o only. BYO model config for clients is a separate product feature — it stays. Never conflate them again.
+
+**Fix:** Restored all 7 files from HEAD~1 (commit `159cdd7`). Commit `1c2c9d7` (the bad deletion) is in git history. Restored commit: see below.
+
+---
+
 ## 📋 TODO — Next session
 
 1. ✅ **Azure OpenAI GPT-5 deployed + wired** — DONE 2026-06-13. See Section 8 below.

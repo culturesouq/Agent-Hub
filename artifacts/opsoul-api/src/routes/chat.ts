@@ -30,6 +30,8 @@ import { distillMemoriesFromConversations } from '../utils/memoryEngine.js';
 import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import { BIRTH_MODEL_ID, resolveModel, DEFAULT_MODEL_ID } from '../utils/modelRegistry.js';
+import { decryptToken } from '@workspace/opsoul-utils/crypto';
+import { getOperatorModelOverride } from '../utils/operatorModelConfig.js';
 import type { ChatMessage, ToolDefinition } from '../utils/openrouter.js';
 import { buildOwnerScope, buildScopeContext, type ValidatedScope } from '../utils/scopeResolver.js';
 import { scrapeUrl } from '../utils/urlScraper.js';
@@ -454,10 +456,17 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   const { message, stream, attachments } = parsed.data;
 
+  const chatApiKey = operator.openrouterApiKey
+    ? (() => { try { return decryptToken(operator.openrouterApiKey!); } catch { return undefined; } })()
+    : undefined;
   const rawModel = operator.defaultModel || CHAT_MODEL;
   let chatModel = rawModel;
 
-  const chatOpts = { get model() { return chatModel; } };
+  // Load per-operator BYO model override. If the operator has a custom model
+  // configured (model_config JSONB column), all LLM calls this turn use their
+  // key + endpoint instead of the platform default. Null = use platform default.
+  const _modelOverride = await getOperatorModelOverride(operator.id);
+  const chatOpts = { apiKey: chatApiKey, get model() { return chatModel; }, modelOverride: _modelOverride ?? undefined };
 
   // Stale queries removed 2026-05-13 (C — chat.ts cleanup): the old [STATION]
   // injection prefetched integrations / tasks / files / slots into a literal
