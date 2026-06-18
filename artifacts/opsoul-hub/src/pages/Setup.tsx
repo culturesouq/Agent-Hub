@@ -4,22 +4,14 @@ import { useToast } from "@/hooks/use-toast";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type ByoProvider = "openai" | "anthropic" | "azure_openai" | "openrouter" | "custom";
+type ByoProvider = "azure_openai";
 
 const PROVIDER_OPTIONS: { value: ByoProvider; label: string }[] = [
-  { value: "openai",       label: "OpenAI" },
-  { value: "anthropic",    label: "Anthropic" },
   { value: "azure_openai", label: "Azure OpenAI" },
-  { value: "openrouter",   label: "OpenRouter" },
-  { value: "custom",       label: "Custom endpoint" },
 ];
 
 const MODEL_PLACEHOLDERS: Record<ByoProvider, string> = {
-  openai:       "gpt-4o-mini",
-  anthropic:    "claude-haiku-4-5-20251001",
   azure_openai: "gpt-4o",
-  openrouter:   "openai/gpt-4o-mini",
-  custom:       "your-model-id",
 };
 
 // ── Shared visual primitives ─────────────────────────────────────────────────

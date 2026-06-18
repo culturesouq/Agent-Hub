@@ -4,7 +4,6 @@ import { eq, inArray } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { OWNER_OPERATORS } from './ownerOperatorsSeed';
 export { OWNER_EMAIL } from './ownerOperatorsSeed';
-import { seedPlatformKb } from './platformKbSeed.js';
 
 const SKILLS_TO_SEED = [
   // ── Executor ─────────────────────────────────────────────────────────────
@@ -224,7 +223,6 @@ export async function runInitSeed(): Promise<void> {
         deletedAt: null,
       });
       console.log(`[initSeed] Blank operator created — id: ${newId}`);
-      seedPlatformKb(newId, sovereignAdmins[0].id).catch(err => console.warn('[platformKbSeed]', err?.message));
     }
   } else {
     console.log('[initSeed] Blank operator already exists — skipping.');
@@ -292,7 +290,6 @@ export async function seedOwnerOperators(ownerId: string): Promise<void> {
       deletedAt: null,
     });
     console.log(`[initSeed]   + operator: ${op.name}`);
-    seedPlatformKb(newId, ownerId).catch(err => console.warn('[platformKbSeed]', err?.message));
     seeded++;
   }
 

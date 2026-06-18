@@ -1,24 +1,13 @@
 /**
- * Multi-provider LLM client — routes every chat completion through the
- * model registry so OpSoul can drive any LLM behind any SDK.
+ * Azure OpenAI LLM client — all completions route through Azure GPT-4o.
  *
  * Public API (stable — chat.ts, mcpServer.ts, etc. don't change):
  *   - streamChat(messages, opts) - AsyncGenerator of streaming chunks
  *   - chatCompletion(messages, opts) - non-streaming result
- *   - CHAT_MODEL / KB_MODEL / AUTO_MODEL - default model ids
+ *   - CHAT_MODEL / KB_MODEL - default model ids
  *   - MODEL_OPTIONS - frontend picker payload
  *
- * Internal: getClientForModel(modelId, apiKey?) consults modelRegistry to
- * pick the baseURL + API key + adapter for each call. Today all supported
- * providers are OpenAI-compatible (OpenRouter, Hajeri RunPod, OpenAI, etc.)
- * so a single OpenAI SDK client handles them all with different baseURLs.
- * The 'adapter' field on ProviderConfig is the seam for non-OpenAI-compat
- * providers (Anthropic Messages API, Google Gemini) when their adapter
- * modules are added later.
- *
- * Filename is historical ('openrouter.ts'). The module is now multi-
- * provider; OpenRouter is just one of many. A future commit can rename to
- * llmClient.ts or modelClient.ts — touches every importer.
+ * Filename is historical ('openrouter.ts'). Only Azure OpenAI is supported.
  */
 
 import OpenAI from 'openai';
@@ -37,10 +26,8 @@ import {
 
 /** Default model when an operator has no defaultModel set. */
 export const CHAT_MODEL = DEFAULT_MODEL_ID;
-/** Model used for KB intake distillation, GROW, birth — same as chat: GPT-5. */
+/** Model used for KB intake distillation, GROW, birth — same as chat. */
 export const KB_MODEL = DEFAULT_MODEL_ID;
-/** Sentinel model that means "let OpSoul pick per-turn". */
-export const AUTO_MODEL = 'opsoul/auto';
 
 /** Frontend model picker payload — sourced from the registry. */
 export const MODEL_OPTIONS = listAvailableModels().map((m) => ({
@@ -103,9 +90,6 @@ const LLM_RETRY_DELAYS_MS = [1000, 2000, 4000] as const;
  * tighten them, and deployments on Claude 4.7 1M can loosen them. The
  * mechanism stays the same — only the defaults moved to match reality.
  */
-// 2026-06-02: default raised 65_536 → 200_000 for single-user Kimi K2.5 deployment.
-// Kimi K2.5 max input is 256k; 200k leaves 56k headroom for output + safety.
-// Env override kept for future multi-tenant tightening (CHAT_LLM_BUDGET_TOKENS).
 const LLM_BUDGET_INPUT_TOKENS = Number.parseInt(process.env.CHAT_LLM_BUDGET_TOKENS ?? '200000', 10);
 const LLM_BUDGET_OUTPUT_TOKENS = Number.parseInt(process.env.CHAT_LLM_OUTPUT_TOKENS ?? '4096', 10);
 
@@ -199,81 +183,6 @@ async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
  */
 const clientCache = new Map<string, OpenAI>();
 
-// ───────────────────────────────────────────────────────────────────────────
-//  PER-OPERATOR MODEL OVERRIDE (BYO model config)
-// ───────────────────────────────────────────────────────────────────────────
-
-/**
- * Per-operator BYO model configuration.
- *
- * When an operator has a custom model configured (stored in modelConfig JSONB
- * column), callers pass a ModelOverride here instead of using the platform
- * default. The override bypasses the model registry entirely — the provided
- * apiKey, baseUrl, and model are used directly.
- *
- * Provider notes:
- *   openai        — baseUrl defaults to https://api.openai.com/v1
- *   anthropic     — Anthropic Messages API is NOT OpenAI-compat. For now,
- *                   log a warning and route via OpenRouter (OPENROUTER_API_KEY
- *                   is required; the operator's BYO key is ignored for this
- *                   provider until a native Anthropic adapter is added).
- *   azure_openai  — baseUrl is required (your Azure deployment endpoint).
- *   openrouter    — Uses the operator's BYO OpenRouter key with the platform
- *                   baseUrl. Same format as the existing openrouterApiKey flow.
- *   custom        — baseUrl is required. Wire format must be OpenAI-compatible.
- */
-export interface ModelOverride {
-  model: string;
-  apiKey: string;
-  baseUrl?: string;
-  provider?: 'openai' | 'anthropic' | 'azure_openai' | 'openrouter' | 'custom';
-}
-
-/**
- * Default base URLs per provider when the operator does not specify one.
- * Azure OpenAI and custom providers MUST supply their own baseUrl.
- */
-const DEFAULT_BASE_URL: Record<string, string> = {
-  openai: 'https://api.openai.com/v1',
-  openrouter: 'https://openrouter.ai/api/v1',
-};
-
-/**
- * Build an OpenAI-compatible client from a ModelOverride.
- * Returns { client, sendAs } — analogous to getClientForModel() for registry
- * models.
- */
-function getClientForOverride(
-  override: ModelOverride,
-): { client: OpenAI; sendAs: string } {
-  const provider = override.provider ?? 'openai';
-
-  if (provider === 'anthropic') {
-    throw new Error('ModelOverride provider=anthropic is not supported. Only azure_openai is available.');
-  }
-
-  // azure_openai and custom must supply a baseUrl
-  if ((provider === 'azure_openai' || provider === 'custom') && !override.baseUrl) {
-    throw new Error(`ModelOverride provider=${provider} requires baseUrl`);
-  }
-
-  const baseURL = override.baseUrl ?? DEFAULT_BASE_URL[provider] ?? 'https://api.openai.com/v1';
-  const apiKey = override.apiKey;
-  const cacheKey = `${baseURL}::${apiKey}`;
-  const cached = clientCache.get(cacheKey);
-  if (cached) return { client: cached, sendAs: override.model };
-
-  const client = new OpenAI({
-    baseURL,
-    apiKey: apiKey || 'unused',
-    defaultHeaders: {
-      'HTTP-Referer': process.env.APP_URL || 'https://opsoul.io',
-      'X-Title': 'OpSoul',
-    },
-  });
-  clientCache.set(cacheKey, client);
-  return { client, sendAs: override.model };
-}
 
 function buildClient(config: ProviderConfig, apiKey: string): OpenAI {
   const cacheKey = `${config.baseURL}::${apiKey}`;
@@ -308,10 +217,9 @@ function buildClient(config: ProviderConfig, apiKey: string): OpenAI {
  */
 function getClientForModel(
   modelId: string,
-  apiKeyOverride?: string | null,
 ): { client: OpenAI; sendAs: string; config: ProviderConfig } {
   const { config, sendAs } = resolveModel(modelId);
-  const apiKey = resolveApiKey(config, apiKeyOverride);
+  const apiKey = resolveApiKey(config);
   const client = buildClient(config, apiKey);
   return { client, sendAs, config };
 }
@@ -381,11 +289,8 @@ export interface StreamChunk {
 }
 
 export interface ChatOptions {
-  apiKey?: string | null;
   model?: string | null;
   tools?: ToolDefinition[];
-  /** BYO model override — if present, bypasses the model registry entirely. */
-  modelOverride?: ModelOverride;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -400,14 +305,9 @@ export async function* streamChat(
     ? { model: modelOrOptions }
     : modelOrOptions;
 
-  // BYO model override: bypass the registry entirely when the operator has
-  // a custom model + API key configured.
-  const resolved = opts.modelOverride
-    ? { ...getClientForOverride(opts.modelOverride), config: null }
-    : getClientForModel(opts.model || CHAT_MODEL, opts.apiKey);
-  const { client, sendAs } = resolved;
-  const useCompletionTokens = resolved.config?.useMaxCompletionTokens
-    ?? (opts.modelOverride?.provider === 'azure_openai');
+  const resolved = getClientForModel(opts.model || CHAT_MODEL);
+  const { client, sendAs, config } = resolved;
+  const useCompletionTokens = config.useMaxCompletionTokens ?? true;
 
   // Per-turn token budget (Claim 21). Clamp the requested output to whichever
   // is smaller — MAX_TOKENS or the per-turn output budget. Then validate the
@@ -494,14 +394,9 @@ export async function chatCompletion(
     ? { model: modelOrOptions }
     : modelOrOptions;
 
-  // BYO model override: bypass the registry entirely when the operator has
-  // a custom model + API key configured.
-  const resolvedC = opts.modelOverride
-    ? { ...getClientForOverride(opts.modelOverride), config: null }
-    : getClientForModel(opts.model || CHAT_MODEL, opts.apiKey);
-  const { client, sendAs } = resolvedC;
-  const useCompletionTokensC = resolvedC.config?.useMaxCompletionTokens
-    ?? (opts.modelOverride?.provider === 'azure_openai');
+  const resolvedC = getClientForModel(opts.model || CHAT_MODEL);
+  const { client, sendAs, config: configC } = resolvedC;
+  const useCompletionTokensC = configC.useMaxCompletionTokens ?? true;
 
   // Per-turn token budget (Claim 21). Clamp the requested output to whichever
   // is smaller — MAX_TOKENS or the per-turn output budget. Then validate the

@@ -15,6 +15,10 @@
 4. ✅ **Remove `OPENROUTER_API_KEY` env var** — DONE 2026-06-16. Also removed `OPENAI_API_KEY`.
 5. **Nahil upgrade** — deferred.
 6. ✅ **Deploy `azure-clean`** — DONE 2026-06-16. Revision `opsoul--0000099`. Image `banistudioacr.azurecr.io/opsoul-api:azure-clean` (digest `sha256:82d06e940873694b7fa26fa976515df19061f9816b9b03d3ecda3325e6b47dca`). Source commit `843cc74`. Azure-only, KB pre-injection fixed, no fallbacks.
+7. ✅ **Fix 404 "Resource not found" on all chat** — DONE 2026-06-16. Root cause: `openrouter.ts` `buildClient()` only sent `api-version` query param if `config.apiVersion` existed, but `ProviderConfig` had no such field — so it was always undefined, condition always false, no `api-version` sent → Azure returned 404. Fix: added `apiVersion?: string` to `ProviderConfig`, set `'2024-12-01-preview'` on `azure/gpt-4o` entry, changed guard to always send for Azure with hardcoded fallback. Commit `56bc75e`. Deployed as `azure-clean-3` → revision `opsoul--0000103`.
+8. ✅ **All non-Azure models removed** — DONE 2026-06-16. Only `azure/gpt-4o` remains in `modelRegistry.ts`. Anthropic fallback throws an error. No OpenRouter, no OpenAI direct, no Kimi, no Gemini.
+9. ✅ **Azure embedding wired** — DONE 2026-06-16. `lib/opsoul-utils/src/ai.ts` uses `text-embedding-3-small` deployment on `hajeri-data.openai.azure.com` with Azure `api-key` header. No OpenAI direct calls.
+10. **Open regressions (separate audit needed):** file upload blocked, paste length capped, 400 on large messages.
 
 ---
 
@@ -61,9 +65,9 @@ After "the last cleaning," the operator chat is **blocking things that used to w
 |---|---|
 | **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` |
 | **Container App** | `opsoul` (resource group `bani-studio-rg`, region `uaenorth`) |
-| **Active Revision** | `opsoul--0000094` (Healthy 2026-06-13 — platform tools fix) |
-| **Image** | `banistudioacr.azurecr.io/opsoul-api:tools-fix-c825d19` |
-| **Source commit (live)** | `c825d19` — wire platform secrets to SDK tools (web_search + all firecrawl_* now work). Prior: `559c86b` (gpt-4o migration). |
+| **Active Revision** | `opsoul--0000103` (Healthy 2026-06-16 — azure-clean-3, api-version fix) |
+| **Image** | `banistudioacr.azurecr.io/opsoul-api:azure-clean-3` |
+| **Source commit (live)** | `56bc75e` — fix Azure api-version query param (root cause of 404 on all chat). Prior chain: `dfdb89c` (azure-clean-2, env.ts + ai.ts), `843cc74` (azure-clean, KB pre-injection fix + no-fallbacks). |
 | **🛡 Rollback safety net (DO NOT DELETE)** | Three retained rollback fallbacks: (1) image `banistudioacr.azurecr.io/opsoul-api:upload-fix-dd7e32c` (rev `opsoul--0000066` — pre-station-rewrite), (2) image `banistudioacr.azurecr.io/opsoul-api:mcp-runtime-f9f23e4` (rev `opsoul--0000065` — MCP runtime layer, pre-upload-fix), (3) image `banistudioacr.azurecr.io/opsoul-api:webhook-fix-2c4ea80` (rev `opsoul--0000064` — pre-MCP). Owner directive 2026-05-19 (still in force): keep flagged, do **not** auto-prune; touch only on explicit owner directive. Rollback to pre-station-rewrite: `az containerapp update -n opsoul -g bani-studio-rg --image banistudioacr.azurecr.io/opsoul-api:upload-fix-dd7e32c`. Pre-MCP state: `--image banistudioacr.azurecr.io/opsoul-api:webhook-fix-2c4ea80`. |
 | **Live proof (2026-05-19)** | Nahil successfully called `http_request` tool against `https://nahilai.com/` via the new MCP runtime layer. Retrieved structured JSON, reported back: profile (Abu Dhabi admin), 5 active subsidies (Smart Irrigation, AgTech Grant, Organic Farming, Protected Agriculture, Water Desalination Access), empty sensors/seasons. Universal tool layer confirmed working in production on a real operator hitting real consumer-app data. |
 | **LLM model (entire stack)** | `azure/gpt-4o` (2024-11-20) via Azure OpenAI (`hajeri-data`, eastus) — chat, birth, GROW, KB distillation, all routes. Migrated 2026-06-13 from GPT-5 (GPT-5's extended thinking tokens drained 10K TPM silently, causing non-stop loop). gpt-4o: 450K TPM, fast first-token, jsonSchemaResponse, 50% cached input discount, no extended thinking. |

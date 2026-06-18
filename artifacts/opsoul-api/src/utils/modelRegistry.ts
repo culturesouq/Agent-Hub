@@ -1,14 +1,12 @@
 /**
  * Model registry — single source of truth for LLM routing in OpSoul.
  *
- * All operators use Hajeri (gatekeeper) via the per-operator BYO model
- * config (operators.model_config JSONB). The registry entry below is the
- * platform fallback only — reached when no BYO config is set.
+ * Only Azure OpenAI GPT-4o is supported. All operators use this model.
  *
  * Architecture:
  *   chat.ts / mcpServer.ts → openrouter.streamChat() → resolveModel(id)
  *                                                   → ProviderConfig
- *                                                   → OpenAI-compat SDK call
+ *                                                   → Azure OpenAI SDK call
  */
 
 export type AdapterKind = 'openai-compat' | 'anthropic' | 'google';
@@ -29,8 +27,6 @@ export interface ProviderConfig {
 }
 
 const PROVIDERS: Record<string, ProviderConfig> = {
-  // Platform fallback — reached only when no BYO model config is set.
-  // Primary path: Hajeri gatekeeper via operators.model_config BYO override.
   'azure/gpt-4o': {
     provider: 'azure_openai',
     adapter: 'openai-compat',
