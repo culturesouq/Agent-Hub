@@ -763,6 +763,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     toolNames: fullToolList.map(t => t.function.name),
     toolDescriptions: new Map(fullToolList.map(t => [t.function.name, t.function.description ?? ''])),
   });
+  // Introspect: real tool list from turnPlan.scaffolding, injected into
+  // loopMessages (not system prompt — identity is Layer 0+1 only).
+  const introspectContext = decision.kind === 'introspect' ? turnPlan.scaffolding : null;
+
   // Insert the TurnPlan right BEFORE the user message so it's the closest
   // system context the LLM reads before composing its reply. Find the user
   // message index and splice in a system message before it.
@@ -842,6 +846,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       const MAX_ITER = 8;
       const MAX_SEARCHES = 5;
       const loopMessages: ChatMessage[] = [...messages];
+      // Introspect: inject real tool list as a turn-level system message into
+      // the conversation (not the identity system prompt). The operator voices
+      // its own toolset — the LLM reads it from loopMessages and phrases it.
+      if (introspectContext) {
+        loopMessages.push({ role: 'system', content: introspectContext });
+      }
       let finalContent = '';
       let finalTokens = 0;
       let webSearchCount = 0;
@@ -1070,8 +1080,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       // is 'execute'. Tool definitions come from the universal toolRegistry,
       // filtered for this scope + availability.
       const syncTools = decision.kind === 'execute' ? listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[] : [];
+      const syncMessages = [...messages];
+      if (introspectContext) syncMessages.push({ role: 'system', content: introspectContext });
       const syncOpts = { ...chatOpts, tools: syncTools.length > 0 ? syncTools : undefined };
-      const result = await agent.executeSync(messages, syncOpts);
+      const result = await agent.executeSync(syncMessages, syncOpts);
 
       let finalContent = result.content;
       let finalPromptTokens = result.promptTokens;

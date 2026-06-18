@@ -88,7 +88,7 @@ export interface TurnPlan {
 // Heuristics — patterns the operator uses to decide whether a turn needs tool access.
 // Conservative: when in doubt, return `chat`. Tool use is a deliberate operator
 // decision, not an LLM default. Per patent: the operator decides; the LLM is the engine.
-const ACTION_VERB_PATTERN = /\b(search|find|look\s+up|lookup|check|fetch|get|query|read|write|create|save|store|schedule|book|remind|browse|visit|crawl|scrape|list|update|delete|pause|resume|send|post|email|message|call|run|execute|trigger|http|api|request|generate|build|make|set\s+up|configure|install|deploy|publish)\b/i;
+const ACTION_VERB_PATTERN = /\b(search|find|look\s+up|lookup|check|fetch|get|query|read|write|create|save|store|schedule|book|remind|browse|visit|crawl|scrape|list|update|delete|pause|resume|send|post|email|message|call|run|execute|trigger|http|api|request|generate|build|make|set\s+up|configure|install|deploy|publish|test|verify|ping|connect|hit|call)\b/i;
 const URL_PATTERN = /https?:\/\/|www\.|\.[a-z]{2,4}\//i;
 const FILE_PATTERN = /\.(md|txt|csv|json|html|pdf|docx?|xlsx?|png|jpg|jpeg|yml|yaml|sql|sh|ts|tsx|js|jsx|py|go|rs)\b/i;
 // Time keywords stay tool-eligible because the operator may want get_current_time.
