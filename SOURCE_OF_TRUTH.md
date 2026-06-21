@@ -58,6 +58,8 @@ Owner KB (`owner_kb`) + Operator KB (`operator_kb`) — both tables correct, ret
 
 ## ✅ SESSION WORK — 2026-06-21
 
+10. `b9ccd90` **Chat UI — file upload all formats/100MB, paste→attachment, live tool output** — Three improvements: (1) Upload: fileFilter removed → any format accepted; multer limit raised 10MB→100MB; catch-all UTF-8 fallback for unknown binary. (2) Paste: textarea `onPaste` intercepts text >1500 chars, converts to `.txt` attachment instead of spilling into the input. (3) Live tool output: backend emits `searching`/`running`/`calling` SSE before dispatch, `tool_result` SSE after — frontend accumulates live `ToolOutputBlock`s during the turn and preserves them after DONE until next send.
+
 1. **SDK HTTP bridge** — `sdkToolBridge.ts` rewritten from 829 lines (in-process registry + connector implementations) to 180 lines (HTTP client). All tool execution now routes to the live CultureEyes SDK server via `POST /execute`. Tool listing via `GET /v1/tools` (cached after first fetch). Tools scoped per operator via `X-Scope-ID: operator:{operatorId}`. Commits `8bee8a5`.
 2. **OpSoul consumer registered on SDK** — `consumerId: opsoul`, `tier: enterprise`, key stored as Azure secret `cy-sdk-key` on opsoul container app.
 3. **Env wired** — `CY_SDK_URL` (plain) + `CY_SDK_KEY` (secretref) added to opsoul container app.
