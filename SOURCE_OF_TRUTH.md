@@ -58,6 +58,8 @@ Owner KB (`owner_kb`) + Operator KB (`operator_kb`) — both tables correct, ret
 
 ## ✅ SESSION WORK — 2026-06-22
 
+### DEPLOYED `opsoul--0000114` · image `banistudioacr.azurecr.io/opsoul-api:chat-86381bd` · digest `sha256:7b011960de9d481f16e075bd2c60f83e94363ba8a61a573dc3c73003f1a7e764`
+
 ### KB search fixes (commit `6168287`)
 - `vectorSearch.ts`: removed `< 0.85` cosine distance cutoff from `searchOwnerKb` — owner KB entries now always surface regardless of query phrasing (trusted content, no cutoff needed). `searchOperatorKb` already had no distance cutoff.
 - `sdkToolBridge.ts`: removed 400-char slice on `kb_search` results — operators now receive full document content, not just the first paragraph.
