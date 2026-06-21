@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { chatCompletion } from './openrouter.js';
 import { db } from '@workspace/db';
 import {
   operatorsTable,
@@ -438,6 +439,50 @@ export async function buildSelfAwarenessState(
   };
 }
 
+// ── GROW Gap 1: soul evaluates curiosity before storage ───────────────────────
+//
+// Before any curiosity result is stored, the soul asks two questions:
+//   1. Does this resonate with who I am?
+//   2. Does this serve my mandate?
+// Both must be true. If either is false: log as observed, don't store.
+
+async function soulEvaluateCuriosity(
+  gap: string,
+  curiositySnippet: string,
+  soulState: SoulState,
+  identityState: IdentityState,
+): Promise<{ resonates: boolean; servesMandate: boolean }> {
+  const prompt = [
+    `You are evaluating whether a piece of external knowledge is relevant to an operator's soul and mandate.`,
+    ``,
+    `Operator mandate: ${identityState.mandate ?? 'not set'}`,
+    `Operator archetype: ${identityState.archetype.join(', ') || 'not set'}`,
+    `Operator core values: ${identityState.coreValues?.join(', ') ?? 'not set'}`,
+    ``,
+    `Knowledge gap being filled: ${gap}`,
+    `External source finding: ${curiositySnippet}`,
+    ``,
+    `Answer ONLY with valid JSON: {"resonates": true|false, "servesMandate": true|false}`,
+    `resonates = this finding aligns with who this operator is`,
+    `servesMandate = this finding helps fulfil this operator's stated mandate`,
+  ].join('\n');
+
+  try {
+    const result = await chatCompletion([
+      { role: 'user', content: prompt },
+    ]);
+
+    const text = result.content.trim();
+    const parsed = JSON.parse(text) as { resonates?: boolean; servesMandate?: boolean };
+    return {
+      resonates: parsed.resonates === true,
+      servesMandate: parsed.servesMandate === true,
+    };
+  } catch {
+    return { resonates: false, servesMandate: false };
+  }
+}
+
 export async function recomputeSelfAwareness(
   operatorId: string,
   trigger: SelfAwarenessTrigger,
@@ -488,17 +533,33 @@ export async function recomputeSelfAwareness(
           const curiosity = await curiositySearch(gap, operatorId);
 
           if (curiosity.verified && curiosity.corroborated) {
-            await storeMemory(
-              operatorId,
-              operatorId,
-              `Mandate gap filled — external source suggests: ${curiosity.sources[0]?.snippet ?? curiosity.bestSource}. Gap was: ${gap}`,
-              'pattern',
-              'ai_distilled',
-              0.65,
+            const snippet = curiosity.sources[0]?.snippet ?? curiosity.bestSource;
+
+            // Gap 1: soul evaluation before any storage.
+            const soulVerdict = await soulEvaluateCuriosity(
+              gap,
+              snippet,
+              computed.soulState,
+              computed.identityState,
             );
-            console.log(
-              `[self-awareness] gap filled for ${operatorId}: "${gap}" — tier: ${curiosity.tier}, source: ${curiosity.bestSource}`
-            );
+
+            if (soulVerdict.resonates && soulVerdict.servesMandate) {
+              await storeMemory(
+                operatorId,
+                operatorId,
+                `Mandate gap filled — external source suggests: ${snippet}. Gap was: ${gap}`,
+                'pattern',
+                'ai_distilled',
+                0.65,
+              );
+              console.log(
+                `[self-awareness] gap filled for ${operatorId}: "${gap}" — tier: ${curiosity.tier}, soul: resonates+mandate`
+              );
+            } else {
+              console.log(
+                `[self-awareness] gap observed but not stored for ${operatorId}: "${gap}" — soul gate: resonates=${soulVerdict.resonates} mandate=${soulVerdict.servesMandate}`
+              );
+            }
           } else {
             console.log(
               `[self-awareness] gap not resolved for ${operatorId}: "${gap}" — no corroborated source found`
