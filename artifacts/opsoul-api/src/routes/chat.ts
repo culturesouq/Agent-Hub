@@ -16,7 +16,7 @@ import {
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
 import { detectSkillTrigger } from '../utils/skillTriggerEngine.js';
 import { executeSkill } from '../utils/skillExecutor.js';
-import { semanticDistance } from '@workspace/opsoul-utils/ai';
+import { semanticDistance, embed } from '@workspace/opsoul-utils/ai';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { lockLayer1IfUnlocked } from '../utils/lockLayer1.js';
 // Curiosity engine is operator-governed (Patent claim 14): the operator's
@@ -26,7 +26,7 @@ import { lockLayer1IfUnlocked } from '../utils/lockLayer1.js';
 import { assembleOperatorPrompt, buildBirthSystemPrompt, buildTemporalContext, containsTimeKeywords } from '../utils/systemPrompt.js';
 import { OperatorAgent, renderTurnPlanSystemContext } from '../utils/operatorAgent.js';
 import type { SelfAwarenessSnapshot, BuildSystemPromptOpts } from '../utils/systemPrompt.js';
-import { distillMemoriesFromConversations } from '../utils/memoryEngine.js';
+import { distillMemoriesFromConversations, searchMemory } from '../utils/memoryEngine.js';
 import { triggerSelfAwareness, buildWorkspaceManifest, renderTurnWorkspaceContext, detectCuriositySignals } from '../utils/selfAwarenessEngine.js';
 import { chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import { BIRTH_MODEL_ID, resolveModel, DEFAULT_MODEL_ID } from '../utils/modelRegistry.js';
@@ -554,8 +554,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // model so anchoring scales with what the LLM can actually carry.
   const CONTEXT_WINDOW = resolveModel(operator.defaultModel || DEFAULT_MODEL_ID).config.contextWindow;
   const ANCHOR_THRESHOLD = Math.floor(CONTEXT_WINDOW * 0.4);
+  const MEMORY_SURFACE_THRESHOLD = Math.floor(CONTEXT_WINDOW * 0.45);
   const historyTokenEstimate = history.reduce((sum, m) => sum + Math.ceil(m.content.length / 4), 0);
   const soulAnchorActive = historyTokenEstimate > ANCHOR_THRESHOLD;
+  const memorySurfaceActive = historyTokenEstimate > MEMORY_SURFACE_THRESHOLD;
 
   // T2 — Language detection: Arabic Unicode blocks (Arabic, Arabic Supplement, Arabic Extended-A)
   const hasArabic = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/.test(message);
@@ -771,9 +773,15 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // fully realised.
   const fullToolList = await listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[];
 
-  // Build live workspace manifest before composeTurnPlan so the operator's
-  // decision (kind, scaffolding) can reason from its full surroundings.
-  const workspaceManifest = await buildWorkspaceManifest(operator.id).catch(() => null);
+  // Build live workspace manifest + surface memories if context >= 0.45, both in parallel.
+  const [workspaceManifest, surfacedMemories] = await Promise.all([
+    buildWorkspaceManifest(operator.id).catch(() => null),
+    memorySurfaceActive
+      ? embed(message)
+          .then(emb => searchMemory(operator.id, emb, 5, 0.6, 0.3, scope.scopeId))
+          .catch(() => null)
+      : Promise.resolve(null),
+  ]);
   const turnSecretLabels = liveSecrets.map(s => s.key);
   const turnIntegrations = liveIntegrations.map(i => i.integrationType).filter((t): t is string => t !== null);
 
@@ -787,6 +795,21 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // Introspect: real tool list from turnPlan.scaffolding, injected into
   // loopMessages (not system prompt — identity is Layer 0+1 only).
   const introspectContext = decision.kind === 'introspect' ? turnPlan.scaffolding : null;
+
+  // Build surfaced memories message — injected only when context >= 0.45.
+  const surfacedMemoryCount = surfacedMemories?.length ?? 0;
+  const surfacedMemoriesMsg: ChatMessage | null = surfacedMemories && surfacedMemories.length > 0
+    ? {
+        role: 'system',
+        content: [
+          '[MEMORIES — surfaced at context depth, relevant to this turn]',
+          ...surfacedMemories.map((m, i) =>
+            `${i + 1}. [${m.memoryType}] ${m.content} (confidence: ${Math.round(m.similarity * 100)}%)`
+          ),
+          '[Use these as context only — do not reference them explicitly unless the user asks.]',
+        ].join('\n'),
+      }
+    : null;
 
   // Render ephemeral workspace context message from already-fetched manifest.
   const workspaceContextMsg: ChatMessage | null = workspaceManifest ? {
@@ -807,12 +830,15 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     content: renderTurnPlanSystemContext(turnPlan),
   };
   if (userMsgIndex >= 0) {
-    const toInsert: ChatMessage[] = workspaceContextMsg
-      ? [workspaceContextMsg, turnPlanMsg]
-      : [turnPlanMsg];
+    const toInsert: ChatMessage[] = [
+      ...(workspaceContextMsg ? [workspaceContextMsg] : []),
+      ...(surfacedMemoriesMsg ? [surfacedMemoriesMsg] : []),
+      turnPlanMsg,
+    ];
     messages.splice(userMsgIndex, 0, ...toInsert);
   } else {
     if (workspaceContextMsg) messages.push(workspaceContextMsg);
+    if (surfacedMemoriesMsg) messages.push(surfacedMemoriesMsg);
     messages.push(turnPlanMsg);
   }
 
@@ -1073,7 +1099,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         model: chatModel,
         usage: { promptTokens, completionTokens: finalTokens },
         activeSkillCount: skills.length,
-        memoryCount: 0,
+        memoryCount: surfacedMemoryCount,
         // null today; Phase 4 fills in. Always present on the wire so the
         // UI contract doesn't change shape when the analyzer goes live.
         leakFeedback,
@@ -1231,7 +1257,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           completionTokens: finalCompletionTokens,
         },
         activeSkillCount: skills.length,
-        memoryCount: 0,
+        memoryCount: surfacedMemoryCount,
         layer1WasLocked: operator.layer1LockedAt !== null,
         // null today; Phase 4 fills in. Always present so UI contract is stable.
         leakFeedback,
