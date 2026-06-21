@@ -17,6 +17,16 @@
 
 ---
 
+## ✅ SESSION WORK — 2026-06-21
+
+1. **SDK HTTP bridge** — `sdkToolBridge.ts` rewritten from 829 lines (in-process registry + connector implementations) to 180 lines (HTTP client). All tool execution now routes to the live CultureEyes SDK server via `POST /execute`. Tool listing via `GET /v1/tools` (cached after first fetch). Tools scoped per operator via `X-Scope-ID: operator:{operatorId}`. Commits `8bee8a5`.
+2. **OpSoul consumer registered on SDK** — `consumerId: opsoul`, `tier: enterprise`, key stored as Azure secret `cy-sdk-key` on opsoul container app.
+3. **Env wired** — `CY_SDK_URL` (plain) + `CY_SDK_KEY` (secretref) added to opsoul container app.
+4. **Deployed** — revision `opsoul--0000110`, Healthy.
+5. **Gap noted** — operator secrets (custom HTTP integrations with `{{SECRET_LABEL}}`) live in OpSoul's DB; the SDK can't access them. `http_request` secret interpolation won't work via HTTP bridge until a secrets-forwarding mechanism is added. All other tools work.
+
+---
+
 ## ✅ SESSION WORK — 2026-06-18
 
 1. **Nahil owner_kb rebuilt** — replaced 929-line broken document with 90-line NAHIL_OPERATOR_MAP.md (endpoint map + real bearer key `nahil_d0c5a0...`). Uploaded live to DB.
@@ -87,9 +97,9 @@ After "the last cleaning," the operator chat is **blocking things that used to w
 |---|---|
 | **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` |
 | **Container App** | `opsoul` (resource group `bani-studio-rg`, region `uaenorth`) |
-| **Active Revision** | `opsoul--0000108` (Healthy 2026-06-18 — june18-3f4553b) |
-| **Image** | `banistudioacr.azurecr.io/opsoul-api:june18-3f4553b` |
-| **Source commit (live)** | `8e76b97` — session work 2026-06-18. Key fix: `3f4553b` (test/verify in ACTION_VERB_PATTERN + introspect real tools via loopMessages). Prior: `56bc75e` (azure-clean-3, api-version fix). |
+| **Active Revision** | `opsoul--0000110` (Healthy 2026-06-21 — sdk-http-bridge) |
+| **Image** | `banistudioacr.azurecr.io/opsoul-api:sdk-http-bridge` |
+| **Source commit (live)** | `8bee8a5` — SDK HTTP bridge (sdkToolBridge.ts rewrite: 829→180 lines, all tool dispatch → CultureEyes SDK server). Prior live: `8e76b97` (june18-3f4553b). |
 | **🛡 Rollback safety net (DO NOT DELETE)** | Three retained rollback fallbacks: (1) image `banistudioacr.azurecr.io/opsoul-api:upload-fix-dd7e32c` (rev `opsoul--0000066` — pre-station-rewrite), (2) image `banistudioacr.azurecr.io/opsoul-api:mcp-runtime-f9f23e4` (rev `opsoul--0000065` — MCP runtime layer, pre-upload-fix), (3) image `banistudioacr.azurecr.io/opsoul-api:webhook-fix-2c4ea80` (rev `opsoul--0000064` — pre-MCP). Owner directive 2026-05-19 (still in force): keep flagged, do **not** auto-prune; touch only on explicit owner directive. Rollback to pre-station-rewrite: `az containerapp update -n opsoul -g bani-studio-rg --image banistudioacr.azurecr.io/opsoul-api:upload-fix-dd7e32c`. Pre-MCP state: `--image banistudioacr.azurecr.io/opsoul-api:webhook-fix-2c4ea80`. |
 | **Live proof (2026-05-19)** | Nahil successfully called `http_request` tool against `https://nahilai.com/` via the new MCP runtime layer. Retrieved structured JSON, reported back: profile (Abu Dhabi admin), 5 active subsidies (Smart Irrigation, AgTech Grant, Organic Farming, Protected Agriculture, Water Desalination Access), empty sensors/seasons. Universal tool layer confirmed working in production on a real operator hitting real consumer-app data. |
 | **LLM model (entire stack)** | `azure/gpt-4o` (2024-11-20) via Azure OpenAI (`hajeri-data`, eastus) — chat, birth, GROW, KB distillation, all routes. Migrated 2026-06-13 from GPT-5 (GPT-5's extended thinking tokens drained 10K TPM silently, causing non-stop loop). gpt-4o: 450K TPM, fast first-token, jsonSchemaResponse, 50% cached input discount, no extended thinking. |
