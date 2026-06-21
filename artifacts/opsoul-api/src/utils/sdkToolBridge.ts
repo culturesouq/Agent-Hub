@@ -11,15 +11,18 @@
 
 import type { ToolHandlerContext } from './toolHandlers.js';
 import type { ScopeType } from './toolRegistry.js';
-import { db } from '@workspace/db';
+import { db, pool } from '@workspace/db';
 import {
   operatorSecretsTable,
   operatorIntegrationsTable,
   operatorFilesTable,
   operatorKbTable,
+  ownerKbTable,
 } from '@workspace/db';
-import { eq, count, gte, lt, and } from 'drizzle-orm';
+import { eq, count, gte, lt, and, ne } from 'drizzle-orm';
 import { decryptToken } from '@workspace/opsoul-utils/crypto';
+import { embed } from '@workspace/opsoul-utils/ai';
+import { searchBothKbs, KB_RETRIEVAL_MIN_CONFIDENCE } from './vectorSearch.js';
 
 // ── env ───────────────────────────────────────────────────────────────────────
 
@@ -186,7 +189,7 @@ async function handleListWorkspace(
 ): Promise<string> {
   const keyword = filter.toLowerCase();
 
-  const [allTools, integrations, files, kbHigh, kbMedium, kbLow, secretRows] = await Promise.all([
+  const [allTools, integrations, files, kbHigh, kbMedium, kbLow, ownerKbCount, secretRows] = await Promise.all([
     fetchSdkTools(),
     db.select({ integrationType: operatorIntegrationsTable.integrationType })
       .from(operatorIntegrationsTable)
@@ -200,6 +203,8 @@ async function handleListWorkspace(
       .where(and(eq(operatorKbTable.operatorId, operatorId), gte(operatorKbTable.confidenceScore, 50), lt(operatorKbTable.confidenceScore, 80))),
     db.select({ total: count() }).from(operatorKbTable)
       .where(and(eq(operatorKbTable.operatorId, operatorId), lt(operatorKbTable.confidenceScore, 50))),
+    db.select({ total: count() }).from(ownerKbTable)
+      .where(eq(ownerKbTable.operatorId, operatorId)),
     db.select({ key: operatorSecretsTable.key })
       .from(operatorSecretsTable)
       .where(eq(operatorSecretsTable.operatorId, operatorId)),
@@ -228,7 +233,7 @@ async function handleListWorkspace(
   lines.push(`FILES (${fileList.length}): ${fileList.length > 0 ? fileList.join(', ') : 'none'}`);
 
   lines.push('');
-  lines.push(`KNOWLEDGE BASE: ${Number(kbHigh[0]?.total ?? 0)} high-confidence · ${Number(kbMedium[0]?.total ?? 0)} medium · ${Number(kbLow[0]?.total ?? 0)} low`);
+  lines.push(`KNOWLEDGE BASE: ${Number(ownerKbCount[0]?.total ?? 0)} owner-facts · ${Number(kbHigh[0]?.total ?? 0)} high-confidence · ${Number(kbMedium[0]?.total ?? 0)} medium · ${Number(kbLow[0]?.total ?? 0)} low`);
 
   lines.push('');
   const secretLabels = secretRows.map(r => `{{${r.key}}}`);
@@ -260,6 +265,73 @@ export async function dispatchViaSdk(
     const operatorId = opCtx.operatorId ?? '';
     const content = await handleListWorkspace(operatorId, filter);
     return { content, meta: { terminateLoop: false } };
+  }
+
+  // KB tools — OpSoul owns the tables; SDK has no kbAdmin connector wired.
+  // Intercept and serve from local Postgres directly.
+  if (name === 'kb_search' || name === 'kb_query') {
+    const query = typeof params.query === 'string' ? params.query : '';
+    const topN = typeof params.topN === 'number' ? params.topN : typeof params.limit === 'number' ? params.limit : 4;
+    const operatorId = opCtx.operatorId ?? '';
+    if (!query) return { content: 'query is required', meta: { terminateLoop: false } };
+    const embedding = await embed(query);
+    const hits = await searchBothKbs(operatorId, embedding, topN, KB_RETRIEVAL_MIN_CONFIDENCE);
+    if (hits.length === 0) return { content: `No KB entries matched: "${query}".`, meta: { terminateLoop: false } };
+    const lines = hits.map((h, i) =>
+      `${i + 1}. [${h.kbSource}, sim ${h.similarity.toFixed(2)}${h.confidenceScore != null ? `, conf ${h.confidenceScore}` : ''}] (id ${h.id}) ${h.content.slice(0, 400)}`
+    );
+    return { content: `Top ${hits.length} KB hits for "${query}":\n${lines.join('\n')}`, meta: { terminateLoop: false } };
+  }
+
+  if (name === 'kb_seed') {
+    const content = typeof params.content === 'string' ? params.content : '';
+    const source = typeof params.source === 'string' ? params.source : 'operator_self';
+    const confidence = typeof params.confidence === 'number' ? Math.round(params.confidence) : 75;
+    const operatorId = opCtx.operatorId ?? '';
+    const ownerId = opCtx.ownerId ?? '';
+    if (!content) return { content: 'content is required', meta: { terminateLoop: false } };
+    const embedding = await embed(content.slice(0, 30000));
+    const vecStr = `[${embedding.join(',')}]`;
+    const id = (await import('node:crypto')).randomUUID();
+    await pool.query(
+      `INSERT INTO operator_kb (id, operator_id, owner_id, content, embedding, source_name, source_trust_level, confidence_score, intake_tags, is_pipeline_intake, privacy_cleared, content_cleared, verification_status, chunk_index, entity_type, created_at)
+       VALUES ($1,$2,$3,$4,$5::vector,$6,'operator_self',$7,'{}',false,false,false,'pending',0,'reference',NOW())`,
+      [id, operatorId, ownerId, content, vecStr, source, confidence],
+    );
+    return { content: `KB entry seeded (id ${id}, status: pending).`, meta: { terminateLoop: false } };
+  }
+
+  if (name === 'kb_delete_learned') {
+    const entryId = typeof params.entryId === 'string' ? params.entryId : '';
+    const operatorId = opCtx.operatorId ?? '';
+    if (!entryId) return { content: 'entryId is required', meta: { terminateLoop: false } };
+    const [row] = await db.select({ id: operatorKbTable.id, isSystem: operatorKbTable.isSystem })
+      .from(operatorKbTable)
+      .where(and(eq(operatorKbTable.id, entryId), eq(operatorKbTable.operatorId, operatorId)));
+    if (!row) return { content: `Entry ${entryId} not found.`, meta: { terminateLoop: false } };
+    if (row.isSystem) return { content: 'System-seeded entries cannot be deleted.', meta: { terminateLoop: false } };
+    await db.delete(operatorKbTable).where(eq(operatorKbTable.id, row.id));
+    return { content: `KB entry ${entryId} deleted.`, meta: { terminateLoop: false } };
+  }
+
+  if (name === 'kb_pending_list') {
+    const operatorId = opCtx.operatorId ?? '';
+    const rows = await db.select({
+      id: operatorKbTable.id,
+      content: operatorKbTable.content,
+      sourceName: operatorKbTable.sourceName,
+      confidenceScore: operatorKbTable.confidenceScore,
+      createdAt: operatorKbTable.createdAt,
+    })
+      .from(operatorKbTable)
+      .where(and(
+        eq(operatorKbTable.operatorId, operatorId),
+        eq(operatorKbTable.verificationStatus, 'pending'),
+        ne(operatorKbTable.isSystem, true),
+      ));
+    if (rows.length === 0) return { content: 'No pending KB entries.', meta: { terminateLoop: false } };
+    const lines = rows.map((r, i) => `${i + 1}. (id ${r.id}) [conf ${r.confidenceScore}] ${r.content.slice(0, 200)}`);
+    return { content: `${rows.length} pending KB entries:\n${lines.join('\n')}`, meta: { terminateLoop: false } };
   }
 
   const headers: Record<string, string> = {
