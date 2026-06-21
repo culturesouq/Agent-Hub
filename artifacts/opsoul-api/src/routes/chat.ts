@@ -44,8 +44,7 @@ import {
   persistUrlScrapedResult,
   persistSkillResult,
 } from '../utils/toolPersistence.js';
-// listToolsForContext and dispatchTool are kept in their origin files (Phase 1c removes them).
-// chat.ts now routes through the SDK bridge instead.
+// chat.ts routes all tool listing and dispatch through the SDK bridge.
 import type { ToolHandlerContext } from '../utils/toolHandlers.js';
 import {
   listToolsViaSdk,
@@ -731,12 +730,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   await lockLayer1IfUnlocked(operator.id);
 
-  // Tool definitions live in utils/toolRegistry.ts — single source of truth
-  // for OpSoul's universal toolset. Both this internal chat path and the
-  // external /mcp HTTP endpoint resolve tools through the same registry.
-  // listToolsForContext(ctx) returns the wire-format ToolDefinition[] the
-  // LLM call expects, filtered by scope + availability + (for http_request)
-  // injected with the operator's live secret labels.
+  // Tool definitions come from the live CultureEyes SDK via listToolsViaSdk().
+  // All 120 SDK tools are returned plus the virtual list_workspace tool.
+  // No filtering — every operator gets everything. Secret labels are injected
+  // into the http_request description so the LLM knows what {{LABEL}} values
+  // are available.
   const toolHandlerCtx: ToolHandlerContext = {
     operatorId: operator.id,
     ownerId: operator.ownerId,
@@ -924,10 +922,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         let iterToolCall: { id: string; name: string; args: string } | undefined;
 
         // Operator-as-driver (Patent claim 21): the operator decided in
-        // analyse() whether tools are needed this turn. For `chat` intent
-        // the catalog is empty — the LLM cannot call tools because none
-        // are offered. For `execute` intent the full universal catalog is
-        // presented from the toolRegistry. Birth mode passes 'execute' so
+        // composeTurnPlan() whether tools are needed this turn. For `chat`
+        // the catalog is empty — the LLM cannot call tools because none are
+        // offered. For `execute` the full SDK catalog is presented (all 120
+        // tools + list_workspace). Birth mode passes 'execute' so
         // newborn operators retain full capability during identity formation.
         const allTools = decision.kind === 'execute' ? await listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[] : [];
         // Per-iteration cap on web_search — once an operator has done
@@ -1137,9 +1135,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       }
 
       // Operator-as-driver (Patent claim 21): same gating as the streaming
-      // path. Tools are offered only when the operator's analyse() decision
-      // is 'execute'. Tool definitions come from the universal toolRegistry,
-      // filtered for this scope + availability.
+      // path. Tools are offered only when the operator's composeTurnPlan()
+      // decision is 'execute'. Tool definitions come from the live SDK
+      // (all 120 + list_workspace virtual tool).
       const syncTools = decision.kind === 'execute' ? await listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[] : [];
       const syncMessages = [...messages];
       if (introspectContext) syncMessages.push({ role: 'system', content: introspectContext });
