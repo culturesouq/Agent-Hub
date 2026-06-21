@@ -37,6 +37,7 @@
  */
 
 import type { ScopeType } from './scopeResolver.js';
+import type { WorkspaceManifest } from './selfAwarenessEngine.js';
 import { chatCompletion, streamChat, type ChatMessage, type ChatOptions, type StreamChunk, type CompletionResult } from './openrouter.js';
 
 export type AnalyseDecisionKind = 'execute' | 'chat' | 'introspect';
@@ -123,21 +124,54 @@ export function buildAgencyDescription(opts: {
   toolDescriptions?: Map<string, string>;
   operatorName: string;
   scopeType: ScopeType;
+  workspaceManifest?: WorkspaceManifest | null;
+  secretLabels?: string[];
+  integrations?: string[];
 }): string {
-  const { toolNames, toolDescriptions, operatorName, scopeType } = opts;
-  if (toolNames.length === 0) {
-    return `[OPERATOR-AGENCY-CONTENT]\nThe user asked you to introspect about your capabilities. Your real, current toolset is:\n\n(no tools available this scope/turn).\n\nVoice this fact in your own ${operatorName} voice. Do not invent tool names. Do not list tools you do not have.\n[/OPERATOR-AGENCY-CONTENT]`;
-  }
+  const { toolNames, toolDescriptions, operatorName, scopeType, workspaceManifest, secretLabels, integrations } = opts;
   const lines: string[] = [];
   lines.push(`[OPERATOR-AGENCY-CONTENT]`);
-  lines.push(`The user asked you to introspect about your capabilities. Your real, current toolset (scope=${scopeType}, ${toolNames.length} tools) is:`);
+  lines.push(`The user asked you to introspect about your capabilities. Your real, current workspace (scope=${scopeType}):`);
   lines.push('');
-  for (const name of toolNames) {
-    const desc = toolDescriptions?.get(name);
-    lines.push(desc ? `  - ${name} — ${desc}` : `  - ${name}`);
+
+  // Tools
+  if (toolNames.length === 0) {
+    lines.push('Tools: (none available this scope/turn)');
+  } else {
+    lines.push(`Tools (${toolNames.length}):`);
+    for (const name of toolNames) {
+      const desc = toolDescriptions?.get(name);
+      lines.push(desc ? `  - ${name} — ${desc}` : `  - ${name}`);
+    }
   }
+
+  // Integrations
+  if (integrations && integrations.length > 0) {
+    lines.push('');
+    lines.push(`Integrations connected: ${integrations.join(', ')}`);
+  }
+
+  // Secrets (labels only — values never surface)
+  if (secretLabels && secretLabels.length > 0) {
+    lines.push(`Stored secrets (labels, values are private): ${secretLabels.map(s => `{{${s}}}`).join(', ')}`);
+  }
+
+  // Workspace from manifest — files, KB, memory
+  if (workspaceManifest) {
+    if (workspaceManifest.fileCount > 0) {
+      lines.push(`Files: ${workspaceManifest.fileCount} (${workspaceManifest.fileNames.slice(0, 5).join(', ')}${workspaceManifest.fileNames.length > 5 ? ` … +${workspaceManifest.fileNames.length - 5} more` : ''})`);
+    }
+    const kbTotal = workspaceManifest.kbByTier.high + workspaceManifest.kbByTier.medium + workspaceManifest.kbByTier.low;
+    if (kbTotal > 0) {
+      lines.push(`Knowledge base: ${kbTotal} entries (${workspaceManifest.kbByTier.high} high-confidence)`);
+    }
+    if (workspaceManifest.totalMemoryActive > 0) {
+      lines.push(`Memory active: ${workspaceManifest.totalMemoryActive}`);
+    }
+  }
+
   lines.push('');
-  lines.push(`Voice this list in your own ${operatorName} voice. Group tools by capability if it helps. Do not invent tool names you do not have. Do not omit tools you do have.`);
+  lines.push(`Voice this in your own ${operatorName} voice. Do not invent capabilities you do not have. Do not omit what you do have.`);
   lines.push(`[/OPERATOR-AGENCY-CONTENT]`);
   return lines.join('\n');
 }
@@ -157,6 +191,12 @@ export interface ComposeTurnPlanOptions {
   toolNames?: string[];
   /** Optional name→description map for richer introspect content. */
   toolDescriptions?: Map<string, string>;
+  /** Live workspace manifest — integrations, files, KB counts, memory. Operator reasons from this. */
+  workspaceManifest?: WorkspaceManifest | null;
+  /** Secret labels available this turn (for agency description). */
+  secretLabels?: string[];
+  /** Integration types connected this turn. */
+  integrations?: string[];
 }
 
 export class OperatorAgent {
@@ -204,6 +244,9 @@ export class OperatorAgent {
         toolDescriptions: opts.toolDescriptions,
         operatorName,
         scopeType,
+        workspaceManifest: opts.workspaceManifest,
+        secretLabels: opts.secretLabels,
+        integrations: opts.integrations,
       });
       return {
         kind: 'introspect',

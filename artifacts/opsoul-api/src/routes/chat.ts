@@ -759,24 +759,32 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // mutating systemPrompt (which was already consumed). Patent claim 21
   // fully realised.
   const fullToolList = await listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[];
+
+  // Build live workspace manifest before composeTurnPlan so the operator's
+  // decision (kind, scaffolding) can reason from its full surroundings.
+  const workspaceManifest = await buildWorkspaceManifest(operator.id).catch(() => null);
+  const turnSecretLabels = liveSecrets.map(s => s.key);
+  const turnIntegrations = liveIntegrations.map(i => i.integrationType).filter((t): t is string => t !== null);
+
   const turnPlan = agent.composeTurnPlan(message, {
     toolNames: fullToolList.map(t => t.function.name),
     toolDescriptions: new Map(fullToolList.map(t => [t.function.name, t.function.description ?? ''])),
+    workspaceManifest,
+    secretLabels: turnSecretLabels,
+    integrations: turnIntegrations,
   });
   // Introspect: real tool list from turnPlan.scaffolding, injected into
   // loopMessages (not system prompt — identity is Layer 0+1 only).
   const introspectContext = decision.kind === 'introspect' ? turnPlan.scaffolding : null;
 
-  // Build live workspace manifest — ephemeral, this turn only.
-  // Gives the operator a real picture of its surroundings before it plans.
-  const workspaceManifest = await buildWorkspaceManifest(operator.id).catch(() => null);
+  // Render ephemeral workspace context message from already-fetched manifest.
   const workspaceContextMsg: ChatMessage | null = workspaceManifest ? {
     role: 'system',
     content: renderTurnWorkspaceContext(
       workspaceManifest,
       fullToolList.map(t => t.function.name),
-      liveSecrets.map(s => s.key),
-      liveIntegrations.map(i => i.integrationType).filter((t): t is string => t !== null),
+      turnSecretLabels,
+      turnIntegrations,
     ),
   } : null;
 
