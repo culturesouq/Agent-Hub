@@ -12,6 +12,10 @@
 import type { ToolHandlerContext } from './toolHandlers.js';
 import type { ScopeType, Availability } from './toolRegistry.js';
 import { UNIVERSAL_TOOLS } from './toolRegistry.js';
+import { db } from '@workspace/db';
+import { operatorSecretsTable } from '@workspace/db';
+import { eq } from 'drizzle-orm';
+import { decryptToken } from '@workspace/opsoul-utils/crypto';
 
 // ── env ───────────────────────────────────────────────────────────────────────
 
@@ -134,6 +138,24 @@ function sdkDataToOpSoulContent(
   return `\`\`\`opsoul-widget\n${JSON.stringify(widget)}\n\`\`\``;
 }
 
+// ── operator secrets resolver ─────────────────────────────────────────────────
+
+async function resolveOperatorSecrets(operatorId: string): Promise<Record<string, string>> {
+  const rows = await db
+    .select({ key: operatorSecretsTable.key, valueEncrypted: operatorSecretsTable.valueEncrypted })
+    .from(operatorSecretsTable)
+    .where(eq(operatorSecretsTable.operatorId, operatorId));
+  const out: Record<string, string> = {};
+  for (const row of rows) {
+    try {
+      out[row.key] = decryptToken(row.valueEncrypted);
+    } catch {
+      // skip unreadable entries
+    }
+  }
+  return out;
+}
+
 // ── dispatch ──────────────────────────────────────────────────────────────────
 
 interface SdkExecuteResult {
@@ -169,10 +191,14 @@ export async function dispatchViaSdk(
   const operatorId = opCtx.operatorId;
   if (operatorId) headers['X-Scope-ID'] = `operator:${operatorId}`;
 
+  // Fetch operator-stored secrets so the SDK can resolve {{LABEL}} in http_request
+  // and any per-operator overrides for platform tools (custom OpenAI keys, etc.).
+  const secrets = operatorId ? await resolveOperatorSecrets(operatorId) : {};
+
   const res = await fetch(`${CY_SDK_URL}/execute`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ tool: name, params }),
+    body: JSON.stringify({ tool: name, params, ...(Object.keys(secrets).length ? { secrets } : {}) }),
   });
 
   const result = await res.json() as SdkExecuteResult;
