@@ -23,7 +23,7 @@
 2. **OpSoul consumer registered on SDK** — `consumerId: opsoul`, `tier: enterprise`, key stored as Azure secret `cy-sdk-key` on opsoul container app.
 3. **Env wired** — `CY_SDK_URL` (plain) + `CY_SDK_KEY` (secretref) added to opsoul container app.
 4. **Deployed** — revision `opsoul--0000110`, Healthy.
-5. **Gap noted** — operator secrets (custom HTTP integrations with `{{SECRET_LABEL}}`) live in OpSoul's DB; the SDK can't access them. `http_request` secret interpolation won't work via HTTP bridge until a secrets-forwarding mechanism is added. All other tools work.
+5. **Secrets forwarding** — `resolveOperatorSecrets()` decrypts all operator secrets from OpSoul's DB and passes them in `body.secrets` on every `/execute` call. SDK merges `body.secrets → env`. `http_request` `{{LABEL}}` resolution and per-operator API key overrides work end-to-end. Commit `d4fad10`, revision `opsoul--0000111`.
 
 ---
 
@@ -97,9 +97,9 @@ After "the last cleaning," the operator chat is **blocking things that used to w
 |---|---|
 | **Live URL** | `https://opsoul.mangoforest-5c22eab7.uaenorth.azurecontainerapps.io/` |
 | **Container App** | `opsoul` (resource group `bani-studio-rg`, region `uaenorth`) |
-| **Active Revision** | `opsoul--0000110` (Healthy 2026-06-21 — sdk-http-bridge) |
-| **Image** | `banistudioacr.azurecr.io/opsoul-api:sdk-http-bridge` |
-| **Source commit (live)** | `8bee8a5` — SDK HTTP bridge (sdkToolBridge.ts rewrite: 829→180 lines, all tool dispatch → CultureEyes SDK server). Prior live: `8e76b97` (june18-3f4553b). |
+| **Active Revision** | `opsoul--0000111` (Healthy 2026-06-21 — sdk-secrets-fwd) |
+| **Image** | `banistudioacr.azurecr.io/opsoul-api:sdk-secrets-fwd` |
+| **Source commit (live)** | `d4fad10` — secrets forwarding (resolveOperatorSecrets decrypts operator DB secrets, passes in body.secrets on every /execute call). Prior: `8bee8a5` (sdk-http-bridge). |
 | **🛡 Rollback safety net (DO NOT DELETE)** | Three retained rollback fallbacks: (1) image `banistudioacr.azurecr.io/opsoul-api:upload-fix-dd7e32c` (rev `opsoul--0000066` — pre-station-rewrite), (2) image `banistudioacr.azurecr.io/opsoul-api:mcp-runtime-f9f23e4` (rev `opsoul--0000065` — MCP runtime layer, pre-upload-fix), (3) image `banistudioacr.azurecr.io/opsoul-api:webhook-fix-2c4ea80` (rev `opsoul--0000064` — pre-MCP). Owner directive 2026-05-19 (still in force): keep flagged, do **not** auto-prune; touch only on explicit owner directive. Rollback to pre-station-rewrite: `az containerapp update -n opsoul -g bani-studio-rg --image banistudioacr.azurecr.io/opsoul-api:upload-fix-dd7e32c`. Pre-MCP state: `--image banistudioacr.azurecr.io/opsoul-api:webhook-fix-2c4ea80`. |
 | **Live proof (2026-05-19)** | Nahil successfully called `http_request` tool against `https://nahilai.com/` via the new MCP runtime layer. Retrieved structured JSON, reported back: profile (Abu Dhabi admin), 5 active subsidies (Smart Irrigation, AgTech Grant, Organic Farming, Protected Agriculture, Water Desalination Access), empty sensors/seasons. Universal tool layer confirmed working in production on a real operator hitting real consumer-app data. |
 | **LLM model (entire stack)** | `azure/gpt-4o` (2024-11-20) via Azure OpenAI (`hajeri-data`, eastus) — chat, birth, GROW, KB distillation, all routes. Migrated 2026-06-13 from GPT-5 (GPT-5's extended thinking tokens drained 10K TPM silently, causing non-stop loop). gpt-4o: 450K TPM, fast first-token, jsonSchemaResponse, 50% cached input discount, no extended thinking. |
