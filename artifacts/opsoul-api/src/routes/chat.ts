@@ -27,7 +27,7 @@ import { assembleOperatorPrompt, buildBirthSystemPrompt, buildTemporalContext, c
 import { OperatorAgent, renderTurnPlanSystemContext } from '../utils/operatorAgent.js';
 import type { SelfAwarenessSnapshot, BuildSystemPromptOpts } from '../utils/systemPrompt.js';
 import { distillMemoriesFromConversations } from '../utils/memoryEngine.js';
-import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
+import { triggerSelfAwareness, buildWorkspaceManifest, renderTurnWorkspaceContext } from '../utils/selfAwarenessEngine.js';
 import { chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import { BIRTH_MODEL_ID, resolveModel, DEFAULT_MODEL_ID } from '../utils/modelRegistry.js';
 import { decryptToken } from '@workspace/opsoul-utils/crypto';
@@ -767,17 +767,33 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // loopMessages (not system prompt — identity is Layer 0+1 only).
   const introspectContext = decision.kind === 'introspect' ? turnPlan.scaffolding : null;
 
-  // Insert the TurnPlan right BEFORE the user message so it's the closest
-  // system context the LLM reads before composing its reply. Find the user
-  // message index and splice in a system message before it.
+  // Build live workspace manifest — ephemeral, this turn only.
+  // Gives the operator a real picture of its surroundings before it plans.
+  const workspaceManifest = await buildWorkspaceManifest(operator.id).catch(() => null);
+  const workspaceContextMsg: ChatMessage | null = workspaceManifest ? {
+    role: 'system',
+    content: renderTurnWorkspaceContext(
+      workspaceManifest,
+      fullToolList.map(t => t.function.name),
+      liveSecrets.map(s => s.key),
+      liveIntegrations.map(i => i.integrationType).filter((t): t is string => t !== null),
+    ),
+  } : null;
+
+  // Insert [workspace manifest] then [TurnPlan] immediately before the user
+  // message. Order: manifest first (surroundings), plan second (intent).
   const userMsgIndex = messages.findIndex(m => m.role === 'user');
   const turnPlanMsg: ChatMessage = {
     role: 'system',
     content: renderTurnPlanSystemContext(turnPlan),
   };
   if (userMsgIndex >= 0) {
-    messages.splice(userMsgIndex, 0, turnPlanMsg);
+    const toInsert: ChatMessage[] = workspaceContextMsg
+      ? [workspaceContextMsg, turnPlanMsg]
+      : [turnPlanMsg];
+    messages.splice(userMsgIndex, 0, ...toInsert);
   } else {
+    if (workspaceContextMsg) messages.push(workspaceContextMsg);
     messages.push(turnPlanMsg);
   }
 

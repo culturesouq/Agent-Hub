@@ -121,7 +121,7 @@ export interface SelfAwarenessState {
   lastUpdateTrigger: SelfAwarenessTrigger;
 }
 
-async function buildWorkspaceManifest(operatorId: string): Promise<WorkspaceManifest> {
+export async function buildWorkspaceManifest(operatorId: string): Promise<WorkspaceManifest> {
   const [kbHigh, kbMedium, kbLow, memoryRows, lastGrow, lastConv, filesRows] = await Promise.all([
     db.select({ total: count() }).from(operatorKbTable)
       .where(and(eq(operatorKbTable.operatorId, operatorId), gte(operatorKbTable.confidenceScore, 80))),
@@ -542,4 +542,42 @@ export async function triggerSelfAwareness(
       console.error(`[self-awareness] Background trigger failed (${trigger}):`, err.message);
     });
   });
+}
+
+// ── turn-time workspace context ───────────────────────────────────────────────
+//
+// Renders a compact ephemeral workspace manifest for injection into the current
+// turn context. Called once per turn, result spliced into messages immediately
+// before the TurnPlan so the operator reasons from a live picture of its
+// surroundings — not from stored state or assumptions.
+
+export function renderTurnWorkspaceContext(
+  manifest: WorkspaceManifest,
+  toolNames: string[],
+  secretLabels: string[],
+  integrations: string[],
+): string {
+  const lines: string[] = ['[WORKSPACE — live snapshot, this turn only]'];
+
+  lines.push(`Tools available: ${toolNames.length} (${toolNames.slice(0, 8).join(', ')}${toolNames.length > 8 ? ` … +${toolNames.length - 8} more` : ''})`);
+
+  if (integrations.length > 0) {
+    lines.push(`Integrations connected: ${integrations.join(', ')}`);
+  } else {
+    lines.push('Integrations connected: none');
+  }
+
+  if (secretLabels.length > 0) {
+    lines.push(`Stored secrets (labels only): ${secretLabels.map(s => `{{${s}}}`).join(', ')}`);
+  }
+
+  lines.push(`Files: ${manifest.fileCount}${manifest.fileNames.length > 0 ? ` (${manifest.fileNames.slice(0, 5).join(', ')}${manifest.fileNames.length > 5 ? ` … +${manifest.fileNames.length - 5} more` : ''})` : ''}`);
+  lines.push(`KB entries: ${manifest.kbByTier.high} high-confidence · ${manifest.kbByTier.medium} medium · ${manifest.kbByTier.low} low`);
+  lines.push(`Memory active: ${manifest.totalMemoryActive}`);
+
+  if (manifest.lastGrowActivity) {
+    lines.push(`Last GROW activity: ${manifest.lastGrowActivity}`);
+  }
+
+  return lines.join('\n');
 }
