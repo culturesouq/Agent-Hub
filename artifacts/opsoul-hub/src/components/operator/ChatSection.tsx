@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useReducer, memo } from "reac
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { Conversation, Message } from "@/types";
-import { Send, MessageSquare, Paperclip, X, Mic, ChevronDown, Search, Zap, Download, Link, Globe, Square, AlertCircle } from "lucide-react";
+import { Send, Paperclip, X, Mic, ChevronDown, Search, Zap, Globe, Square, AlertCircle, Link, Sparkles, Copy, Check, MessageSquare } from "lucide-react";
 import { format } from "date-fns";
 import { WidgetBlock } from "./widgets/WidgetBlock";
 import { parseWidgetPayload } from "./widgets/types";
@@ -31,7 +31,7 @@ type RenderedItem =
 // ─── Stream state ─────────────────────────────────────────────────────────────
 
 type StreamStatus = {
-  sending: boolean;        // true from START until first server event (shows thinking dots)
+  sending: boolean;
   content: string;
   snapshot: string;
   processing: boolean;
@@ -39,7 +39,6 @@ type StreamStatus = {
   seeding: string | null;
   reading: string | null;
   running: string | null;
-  ranSkill: string | null;
   writing: string | null;
   calling: string | null;
   error: string | null;
@@ -65,8 +64,8 @@ type StreamAction =
 const INITIAL_STATUS: StreamStatus = {
   sending: false, content: "", snapshot: "", processing: false,
   searching: null, seeding: null, reading: null,
-  running: null, ranSkill: null, writing: null,
-  calling: null, error: null, toolResults: [],
+  running: null, writing: null, calling: null,
+  error: null, toolResults: [],
 };
 
 function streamReducer(state: StreamStatus, action: StreamAction): StreamStatus {
@@ -95,18 +94,23 @@ function streamReducer(state: StreamStatus, action: StreamAction): StreamStatus 
     case "READING":
       return { ...state, sending: false, reading: action.url, searching: null, seeding: null, running: null, writing: null, calling: null, processing: false };
     case "RUNNING":
-      return { ...state, sending: false, running: action.tool, ranSkill: action.tool, searching: null, seeding: null, reading: null, writing: null, calling: null, processing: false };
+      return { ...state, sending: false, running: action.tool, searching: null, seeding: null, reading: null, writing: null, calling: null, processing: false };
     case "WRITING":
       return { ...state, sending: false, writing: action.file, searching: null, seeding: null, reading: null, running: null, calling: null, processing: false };
     case "CALLING":
-      return { ...state, sending: false, content: "", calling: action.url, searching: null, seeding: null, reading: null, running: null, writing: null, processing: false };
+      // Do NOT clear content here — streaming text must survive mid-turn HTTP calls
+      return { ...state, sending: false, calling: action.url, searching: null, seeding: null, reading: null, running: null, writing: null, processing: false };
     case "TOOL_RESULT":
-      return { ...state, toolResults: [...state.toolResults, { name: action.name, output: action.output, toolType: action.toolType }] };
+      // Tool finished — clear the active spinner so it doesn't duplicate alongside the result block
+      return {
+        ...state,
+        searching: null, seeding: null, reading: null,
+        running: null, writing: null, calling: null,
+        toolResults: [...state.toolResults, { name: action.name, output: action.output, toolType: action.toolType }],
+      };
     case "DONE":
-      // snapshot NOT preserved — optimistic cache injection eliminates the flash gap
-      // toolResults cleared — they were visible live during the turn; after DONE the
-      // assistant message lands in items first, making toolResults render below it (wrong order)
-      return { ...INITIAL_STATUS, ranSkill: state.ranSkill };
+      // toolResults persist until next START so the user can still expand them after the response lands
+      return { ...INITIAL_STATUS, toolResults: state.toolResults };
     case "ERROR":
       return { ...INITIAL_STATUS, error: action.message };
     case "ABORT":
@@ -114,6 +118,40 @@ function streamReducer(state: StreamStatus, action: StreamAction): StreamStatus 
     default:
       return state;
   }
+}
+
+// ─── Code block with copy button ──────────────────────────────────────────────
+
+function CodeBlock({ lang, code, operatorId }: { lang: string; code: string; operatorId?: string }) {
+  const [copied, setCopied] = useState(false);
+
+  if (lang === "opsoul-widget" && operatorId) {
+    const payload = parseWidgetPayload(code);
+    if (payload) return <WidgetBlock payload={payload} operatorId={operatorId} />;
+  }
+
+  const copy = () => {
+    navigator.clipboard.writeText(code).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }).catch(() => {});
+  };
+
+  return (
+    <div className="relative my-2 group/code">
+      <pre dir="ltr" className="bg-gray-950 text-gray-100 rounded-xl px-4 py-3 text-xs font-mono overflow-x-auto whitespace-pre leading-relaxed">
+        {lang && <span className="block text-gray-500 text-[10px] mb-2 select-none">{lang}</span>}
+        {code}
+      </pre>
+      <button
+        onClick={copy}
+        className="absolute top-2 right-2 opacity-0 group-hover/code:opacity-100 transition-opacity flex items-center gap-1 px-2 py-1 rounded-md bg-gray-800 hover:bg-gray-700 text-gray-300 text-[10px]"
+      >
+        {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+        {copied ? "Copied" : "Copy"}
+      </button>
+    </div>
+  );
 }
 
 // ─── Markdown renderer ─────────────────────────────────────────────────────────
@@ -147,28 +185,11 @@ const MarkdownMessage = memo(function MarkdownMessage({ content, operatorId }: {
       i++;
       while (i < lines.length && !lines[i].startsWith("```")) { codeLines.push(lines[i]); i++; }
       i++;
-
-      // Widget block — operator emits ```opsoul-widget\n{json}\n``` and the
-      // matching component renders inline. Parse-failure falls back to <pre>
-      // so a broken payload is visible, not silent.
-      if (lang === "opsoul-widget" && operatorId) {
-        const payload = parseWidgetPayload(codeLines.join("\n"));
-        if (payload) {
-          nodes.push(<WidgetBlock key={`widget-${i}`} payload={payload} operatorId={operatorId} />);
-          continue;
-        }
-      }
-
-      nodes.push(
-        <pre key={`code-${i}`} dir="ltr" className="text-left bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs font-mono overflow-x-auto my-2 whitespace-pre">
-          {lang && <span className="text-gray-400 text-[10px] block mb-1">{lang}</span>}
-          {codeLines.join("\n")}
-        </pre>
-      );
+      nodes.push(<CodeBlock key={`code-${i}`} lang={lang} code={codeLines.join("\n")} operatorId={operatorId} />);
       continue;
     }
 
-    if (/^---+$/.test(line.trim())) { nodes.push(<hr key={`hr-${i}`} className="border-gray-200 my-3" />); i++; continue; }
+    if (/^---+$/.test(line.trim())) { nodes.push(<hr key={`hr-${i}`} className="border-gray-100 my-3" />); i++; continue; }
     if (line.startsWith("### ")) { nodes.push(<h3 key={`h3-${i}`} className="text-sm font-semibold mt-3 mb-1 text-gray-900">{parseInline(line.slice(4))}</h3>); i++; continue; }
     if (line.startsWith("## "))  { nodes.push(<h2 key={`h2-${i}`} className="text-sm font-bold mt-4 mb-1 text-gray-900">{parseInline(line.slice(3))}</h2>); i++; continue; }
     if (line.startsWith("# "))   { nodes.push(<h1 key={`h1-${i}`} className="text-base font-bold mt-4 mb-1 text-gray-900">{parseInline(line.slice(2))}</h1>); i++; continue; }
@@ -196,7 +217,7 @@ const MarkdownMessage = memo(function MarkdownMessage({ content, operatorId }: {
     }
 
     if (line.startsWith("> ")) {
-      nodes.push(<blockquote key={`bq-${i}`} className="border-l-2 border-gray-300 pl-3 my-2 text-gray-600 italic text-sm">{parseInline(line.slice(2))}</blockquote>);
+      nodes.push(<blockquote key={`bq-${i}`} className="border-l-2 border-gray-200 pl-3 my-2 text-gray-500 italic text-sm">{parseInline(line.slice(2))}</blockquote>);
       i++; continue;
     }
 
@@ -209,7 +230,7 @@ const MarkdownMessage = memo(function MarkdownMessage({ content, operatorId }: {
   return <div className="text-gray-900">{nodes}</div>;
 });
 
-// ─── Tool block ───────────────────────────────────────────────────────────────
+// ─── Tool output block ────────────────────────────────────────────────────────
 
 function ToolOutputBlock({ skillName, output, toolType }: { skillName: string; output: string; toolType?: "skill" | "search" | "url" | "http" }) {
   const [open, setOpen] = useState(false);
@@ -217,25 +238,38 @@ function ToolOutputBlock({ skillName, output, toolType }: { skillName: string; o
     : toolType === "url" ? <Link className="w-3 h-3" />
     : toolType === "http" ? <Globe className="w-3 h-3" />
     : <Zap className="w-3 h-3" />;
-  const label = toolType === "search" ? `Searched: ${skillName}`
-    : toolType === "url" ? `Read: ${skillName}`
-    : toolType === "http" ? `Called: ${skillName}`
-    : `Ran: ${skillName}`;
+  const label = toolType === "search" ? `Searched "${skillName}"`
+    : toolType === "url" ? `Read ${skillName}`
+    : toolType === "http" ? `Called ${skillName}`
+    : `Used ${skillName}`;
+
   return (
-    <div className="my-1">
+    <div className="mb-2">
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors py-0.5"
+        className="group flex items-center gap-2 text-xs text-gray-400 hover:text-gray-600 transition-colors py-0.5"
       >
-        {icon}
+        <span className="flex items-center justify-center w-5 h-5 rounded-md border border-gray-200 group-hover:border-gray-300 transition-colors shrink-0">
+          {icon}
+        </span>
         <span>{label}</span>
         <ChevronDown className={`w-3 h-3 transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
-        <div className="mt-1.5 pl-4 border-l-2 border-gray-100 text-sm text-gray-700 leading-relaxed max-h-72 overflow-y-auto">
-          <MarkdownMessage content={output} />
+        <div className="mt-1.5 ml-7 pl-3 border-l-2 border-gray-100 text-xs text-gray-600 leading-relaxed max-h-72 overflow-y-auto">
+          <pre className="whitespace-pre-wrap font-sans">{output}</pre>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Operator avatar ──────────────────────────────────────────────────────────
+
+function OpAvatar() {
+  return (
+    <div className="w-7 h-7 rounded-full bg-violet-600 flex items-center justify-center shrink-0 mt-0.5">
+      <Sparkles className="w-3.5 h-3.5 text-white" />
     </div>
   );
 }
@@ -244,7 +278,7 @@ function ToolOutputBlock({ skillName, output, toolType }: { skillName: string; o
 
 function ThinkingDots() {
   return (
-    <div className="flex items-center gap-1 py-1">
+    <div className="flex items-center gap-1 py-2">
       <span className="w-1.5 h-1.5 rounded-full bg-gray-300 animate-bounce [animation-delay:0ms]" />
       <span className="w-1.5 h-1.5 rounded-full bg-gray-300 animate-bounce [animation-delay:150ms]" />
       <span className="w-1.5 h-1.5 rounded-full bg-gray-300 animate-bounce [animation-delay:300ms]" />
@@ -274,7 +308,6 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
   const audioChunksRef = useRef<Blob[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
   const queueRef = useRef<{ message: string; attachments: Attachment[] }[]>([]);
-  // tracks streamed content for done event — avoids stale closure over status.content
   const accumulatedRef = useRef<string>("");
 
   const isStreaming = !!status.content;
@@ -362,21 +395,6 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     if (convosArray.length > 0 && !activeConvId) setActiveConvId(convosArray[0].id);
   }, [convosArray, activeConvId]);
 
-  // Auto-create-Thread effect removed (2026-05-14). It was a race condition:
-  // for a freshly created operator, there is a small window where the
-  // conversations cache is briefly empty before the Birth conversation loads
-  // from the server. The effect could fire in that window and create a stray
-  // "Thread" conversation that competed with the Birth conversation. Now,
-  // missing-conversation creation is only triggered explicitly by the user
-  // ("New conversation" button) — the operator's existing conversations
-  // (Birth or otherwise) load from the server without auto-creation.
-
-  /**
-   * Streaming-aware auth fetch. Refreshes the token if it 401s and retries.
-   * NOTE: caller must pass `cloneBody` for requests with non-replayable bodies
-   * (FormData, ReadableStream). For those, do NOT use this — use
-   * `refreshTokenIfNeeded()` and then plain fetch with a fresh init object.
-   */
   const authFetch = async (url: string, init: RequestInit): Promise<Response> => {
     let token = localStorage.getItem("opsoul_token");
     const res = await fetch(url, { ...init, headers: { ...(init.headers ?? {}), Authorization: `Bearer ${token}` } });
@@ -393,11 +411,6 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     return res;
   };
 
-  /**
-   * Refresh the access token if the current one is missing/invalid.
-   * Used BEFORE FormData uploads so we never have to retry-after-401 with a
-   * consumed FormData body (the old bug: retry sent empty body silently).
-   */
   const refreshTokenIfNeeded = async (): Promise<string | null> => {
     const existing = localStorage.getItem("opsoul_token");
     if (existing) return existing;
@@ -416,43 +429,25 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     if (!file) return;
     setUploading(true);
     try {
-      // Ensure a valid token BEFORE building FormData — refreshing afterwards
-      // would consume the body. Industry-standard: refresh-before-stream.
       const token = await refreshTokenIfNeeded();
-      if (!token) {
-        throw new Error("Not authenticated. Please log in and try again.");
-      }
-
+      if (!token) throw new Error("Not authenticated. Please log in and try again.");
       const formData = new FormData();
       formData.append("file", file);
-
-      // Plain fetch — NOT authFetch — because we already refreshed the token
-      // and FormData is a stream we cannot replay on a retry. Do NOT set
-      // Content-Type manually: the browser auto-adds multipart/form-data with
-      // the right boundary; setting it ourselves breaks multipart parsing.
       const res = await fetch("/api/upload", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
-
-      // Robust error extraction: backend returns JSON on every error path now,
-      // but fall back to text() if something upstream returned HTML.
       if (!res.ok) {
         let detail = `HTTP ${res.status}`;
         try {
           const errJson = await res.json();
           detail = errJson.error ?? errJson.message ?? detail;
         } catch {
-          try {
-            const txt = await res.text();
-            // First line of HTML error pages is usually readable
-            detail = txt.split("\n")[0].slice(0, 200) || detail;
-          } catch { /* keep HTTP ${res.status} */ }
+          try { detail = (await res.text()).split("\n")[0].slice(0, 200) || detail; } catch { /* keep */ }
         }
         throw new Error(detail);
       }
-
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setAttachments(prev => [...prev, {
@@ -463,11 +458,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
         previewUrl: data.type === "image" ? `data:${data.mimeType};base64,${data.base64}` : undefined,
       }]);
     } catch (err: any) {
-      const detail = err?.message ? ` (${err.message})` : "";
-      dispatch({
-        type: "ERROR",
-        message: `That file didn't make it through${detail}. Checking the upload path — you can try a smaller file, a different format, or pick it again.`,
-      });
+      dispatch({ type: "ERROR", message: `That file didn't make it through${err?.message ? ` (${err.message})` : ""}. You can try again.` });
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -488,10 +479,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
       mediaRecorderRef.current = recorder;
       setRecording(true);
     } catch {
-      dispatch({
-        type: "ERROR",
-        message: "I can't reach the microphone — the browser may not have given permission yet. Check the mic icon in the address bar, allow access, then tap the mic again.",
-      });
+      dispatch({ type: "ERROR", message: "Microphone access denied. Check your browser permissions and try again." });
     }
   };
 
@@ -520,11 +508,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
       const data = await res.json();
       if (data.transcript) setInput(prev => prev ? `${prev} ${data.transcript}` : data.transcript);
     } catch (err: any) {
-      const detail = err?.message ? ` (${err.message})` : "";
-      dispatch({
-        type: "ERROR",
-        message: `The voice clip didn't transcribe${detail}. Checking the audio pipeline — you can record again, or type the message instead.`,
-      });
+      dispatch({ type: "ERROR", message: `Voice didn't transcribe${err?.message ? ` (${err.message})` : ""}. Try typing instead.` });
     } finally {
       setTranscribing(false);
       mediaRecorderRef.current = null;
@@ -567,12 +551,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
       });
 
       if (!response.ok) {
-        // Investigation-framed (per [[errors-as-investigation]]): describe what
-        // happened, what the user can try, no terminal-failure phrasing.
-        dispatch({
-          type: "ERROR",
-          message: `The server returned ${response.status} for that message. Your text is still in the box — retry, or try rephrasing while I check what's going on.`,
-        });
+        dispatch({ type: "ERROR", message: `Server returned ${response.status}. Your message is still in the input — try again.` });
         return;
       }
 
@@ -656,30 +635,12 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
       if (err?.name === "AbortError") {
         dispatch({ type: "ABORT" });
       } else {
-        // Investigation-framed: the stream dropped mid-flight; tell the user
-        // what happened and what to try next, not "it's broken, give up".
-        dispatch({
-          type: "ERROR",
-          message: "The connection dropped before the reply finished. Checking the link — you can resend, or wait a moment and try again.",
-        });
+        dispatch({ type: "ERROR", message: "Connection dropped before reply finished. Resend or wait a moment." });
       }
       abortControllerRef.current = null;
     }
   };
 
-  /**
-   * `/render <kind> <json>` slash command — bypasses the LLM and injects an
-   * assistant-shaped message containing a fenced opsoul-widget block. Lets
-   * the owner preview any widget (connect_form / chart / table / mermaid)
-   * without depending on the model choosing to call render_*. Local-only —
-   * the injected message is not persisted to the server.
-   *
-   * Examples:
-   *   /render chart {"chartType":"bar","data":[{"label":"A","value":3}]}
-   *   /render table {"columns":["A","B"],"rows":[["1","2"]]}
-   *   /render mermaid {"diagram":"flowchart TD\n A-->B"}
-   *   /render connect_form {"integrationType":"slack","label":"Slack","fields":[{"name":"token","label":"Bot Token","type":"password"}]}
-   */
   const tryInjectWidget = (text: string): boolean => {
     const m = text.trim().match(/^\/render\s+(\w+)\s+(\{[\s\S]*\})\s*$/);
     if (!m) return false;
@@ -690,20 +651,11 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
       dispatch({ type: "ERROR", message: `/render: invalid JSON — ${(err as Error).message}` });
       return true;
     }
-    const payload = { kind, ...parsed };
-    const fenced = "```opsoul-widget\n" + JSON.stringify(payload) + "\n```";
-
-    // Inject as a local-only assistant message in the messages query cache.
+    const fenced = "```opsoul-widget\n" + JSON.stringify({ kind, ...parsed }) + "\n```";
     queryClient.setQueryData(
       ["operators", operatorId, "conversations", activeConvId, "messages"],
       (old: Message[] | undefined) => {
-        const next: Message = {
-          id: `widget-test-${Date.now()}`,
-          role: "assistant",
-          content: fenced,
-          createdAt: new Date().toISOString(),
-          tokenCount: 0,
-        };
+        const next: Message = { id: `widget-test-${Date.now()}`, role: "assistant", content: fenced, createdAt: new Date().toISOString(), tokenCount: 0 };
         return old ? [...old, next] : [next];
       },
     );
@@ -715,12 +667,8 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     if (!input.trim() && attachments.length === 0) return;
     if (!activeConvId) return;
 
-    // Slash-command intercept — runs before the normal send path.
     if (input.trim().startsWith("/render ")) {
-      if (tryInjectWidget(input)) {
-        setInput("");
-        return;
-      }
+      if (tryInjectWidget(input)) { setInput(""); return; }
     }
 
     const msgText = input || `[${attachments.map(a => a.name).join(", ")}]`;
@@ -745,7 +693,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
     executeSend(queued.message, queued.attachments);
   }, [isBusy]);
 
-  // Build flat list with date separators and tool outputs
+  // Build flat list with date separators and historical tool blocks
   const items: RenderedItem[] = [];
   let lastDay = "";
   for (const msg of msgsArray) {
@@ -783,17 +731,19 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
 
   const displayContent = status.content || status.snapshot;
   const showStream = !!displayContent;
-  const showThinking = isBusy && !showStream && !status.searching && !status.running && !status.calling && !status.writing && !status.seeding && !status.reading && !status.error;
+  const hasActiveTool = !!status.searching || !!status.running || !!status.calling || !!status.writing || !!status.seeding || !!status.reading;
+  const showThinking = isBusy && !showStream && !hasActiveTool && !status.toolResults.length && !status.error;
+  const showLiveGroup = status.toolResults.length > 0 || showStream || showThinking || hasActiveTool;
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-white">
 
-      {/* Messages */}
+      {/* Messages area */}
       <div className="flex-1 overflow-y-auto" ref={scrollRef}>
         <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
           {msgsLoading || (!activeConvId && createConv.isPending) ? (
             <div className="flex items-center justify-center py-20 text-sm text-gray-400">Loading…</div>
-          ) : msgsArray.length === 0 && !showStream ? (
+          ) : msgsArray.length === 0 && !showLiveGroup ? (
             <div className="flex flex-col items-center justify-center py-24 text-gray-300 space-y-3">
               <MessageSquare className="w-10 h-10" />
               <p className="text-sm">Send a message to get started.</p>
@@ -804,88 +754,74 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                 item.kind === "separator" ? (
                   <div key={item.key} className="flex items-center gap-3">
                     <div className="flex-1 h-px bg-gray-100" />
-                    <span className="text-[10px] text-gray-400">{item.label}</span>
+                    <span className="text-[10px] text-gray-400 select-none">{item.label}</span>
                     <div className="flex-1 h-px bg-gray-100" />
                   </div>
                 ) : item.kind === "tool" ? (
-                  <ToolOutputBlock key={item.key} skillName={item.skillName} output={item.output} toolType={item.toolType} />
+                  <div key={item.key} className="flex gap-3">
+                    <div className="w-7 shrink-0" />
+                    <ToolOutputBlock skillName={item.skillName} output={item.output} toolType={item.toolType} />
+                  </div>
                 ) : item.msg.role === "user" ? (
                   <div key={item.msg.id} className="flex justify-end">
-                    <div className="max-w-[75%] bg-gray-100 text-gray-900 rounded-2xl rounded-br-sm px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap break-words">
+                    <div className="max-w-[80%] bg-gray-100 text-gray-900 rounded-2xl rounded-br-sm px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap break-words">
                       {item.msg.content}
                     </div>
                   </div>
                 ) : (
-                  <div key={item.msg.id} className="group">
-                    <div className="text-sm text-gray-900 leading-relaxed break-words">
+                  <div key={item.msg.id} className="flex gap-3">
+                    <OpAvatar />
+                    <div className="flex-1 min-w-0 text-sm text-gray-900 leading-relaxed break-words">
                       <MarkdownMessage content={item.msg.content} operatorId={operatorId} />
                     </div>
-                    {item.msg.content.length > 150 && (
-                      <button
-                        onClick={() => {
-                          const blob = new Blob([item.msg.content], { type: "text/markdown" });
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement("a");
-                          a.href = url; a.download = "response.md"; a.click();
-                          URL.revokeObjectURL(url);
-                        }}
-                        className="mt-1 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600"
-                        title="Download as Markdown"
-                      >
-                        <Download className="w-2.5 h-2.5" /> .md
-                      </button>
-                    )}
                   </div>
                 )
               )}
 
-              {/* Live tool results — accumulate during tool calls, stay until next send */}
-              {status.toolResults.length > 0 && (
-                <div className="space-y-0.5">
-                  {status.toolResults.map((tr, i) => (
-                    <ToolOutputBlock key={`live-tool-${i}`} skillName={tr.name} output={tr.output} toolType={tr.toolType} />
-                  ))}
-                </div>
-              )}
+              {/* Live group — tool results + spinner + streaming + thinking */}
+              {showLiveGroup && (
+                <div className="flex gap-3">
+                  <OpAvatar />
+                  <div className="flex-1 min-w-0 pt-0.5">
 
-              {/* Skill badge — shown while streaming the skill response */}
-              {status.ranSkill && showStream && (
-                <div className="flex items-center gap-1.5 text-xs text-gray-400">
-                  <Zap className="w-3 h-3" />
-                  <span>Ran: {status.ranSkill}</span>
-                </div>
-              )}
+                    {/* Tool result blocks — persist after DONE until next START */}
+                    {status.toolResults.map((tr, i) => (
+                      <ToolOutputBlock key={`live-tool-${i}`} skillName={tr.name} output={tr.output} toolType={tr.toolType} />
+                    ))}
 
-              {/* Streaming assistant content */}
-              {showStream && (
-                <div className="text-sm text-gray-900 leading-relaxed break-words">
-                  <MarkdownMessage content={displayContent} operatorId={operatorId} />
-                </div>
-              )}
+                    {/* Active tool spinner — cleared when TOOL_RESULT arrives */}
+                    {hasActiveTool && (
+                      <div className="flex items-center gap-2 text-xs text-gray-400 py-1 mb-1">
+                        <span className="w-3.5 h-3.5 rounded-full border-2 border-gray-200 border-t-gray-400 animate-spin shrink-0" />
+                        {status.searching && <span>Searching for "{status.searching}"</span>}
+                        {status.calling  && <span>Calling {status.calling}</span>}
+                        {status.running  && <span>Running {status.running}</span>}
+                        {status.writing  && <span>Writing {status.writing}</span>}
+                        {status.seeding  && <span>Learning…</span>}
+                        {status.reading  && <span>Reading…</span>}
+                      </div>
+                    )}
 
-              {/* Live execution indicator */}
-              {(status.searching || status.running || status.calling || status.writing || status.seeding || status.reading) && (
-                <div className="flex items-center gap-2 text-xs text-gray-400">
-                  <span className="w-3 h-3 rounded-full border-2 border-gray-200 border-t-gray-400 animate-spin shrink-0" />
-                  {status.searching && <span>Searching: {status.searching}</span>}
-                  {status.calling && <span>Calling: {status.calling}</span>}
-                  {status.running && <span>Running: {status.running}</span>}
-                  {status.writing && <span>Writing: {status.writing}</span>}
-                  {status.seeding && <span>Learning…</span>}
-                  {status.reading && <span>Reading…</span>}
+                    {/* Streaming response text */}
+                    {showStream && (
+                      <div className="text-sm text-gray-900 leading-relaxed break-words">
+                        <MarkdownMessage content={displayContent} operatorId={operatorId} />
+                      </div>
+                    )}
+
+                    {/* Thinking dots — while waiting for first token */}
+                    {showThinking && <ThinkingDots />}
+                  </div>
                 </div>
               )}
 
               {/* Error */}
               {status.error && (
-                <div className="flex items-start gap-2 text-sm text-red-600 bg-red-50 rounded-xl px-4 py-3">
+                <div className="flex items-start gap-3 bg-red-50 rounded-xl px-4 py-3 text-sm text-red-600">
                   <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                   <span>{status.error}</span>
                 </div>
               )}
-
-              {/* Thinking indicator — visible between send and first token */}
-              {showThinking && <ThinkingDots />}
 
               <div ref={sentinelRef} />
             </>
@@ -895,28 +831,29 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
 
       {/* Scroll to bottom */}
       {!isAtBottom && (
-        <div className="flex justify-center pb-2">
+        <div className="flex justify-center pb-2 pointer-events-none">
           <button
             onClick={() => scrollToBottom(false)}
-            className="flex items-center gap-1 px-3 py-1 rounded-full bg-white border border-gray-200 text-xs text-gray-500 hover:text-gray-700 shadow-sm transition-colors"
+            className="pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-gray-200 shadow-sm text-xs text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors"
           >
             <ChevronDown className="w-3 h-3" /> Latest
           </button>
         </div>
       )}
 
-      {/* Input */}
-      <div className="border-t border-gray-100 bg-white px-4 pb-4 pt-3 space-y-2">
+      {/* Input area */}
+      <div className="bg-white px-4 pb-5 pt-2">
+
+        {/* Attachment previews */}
         {attachments.length > 0 && (
-          <div className="max-w-3xl mx-auto flex flex-wrap gap-2">
+          <div className="max-w-3xl mx-auto flex flex-wrap gap-2 mb-3">
             {attachments.map((att, i) => (
-              <div key={i} className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-xs">
+              <div key={i} className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 text-xs">
                 {att.previewUrl
                   ? <img src={att.previewUrl} alt={att.name} className="w-7 h-7 rounded object-cover" />
-                  : <Paperclip className="w-3 h-3 text-gray-400" />
-                }
-                <span className="text-gray-700 max-w-[6rem] truncate">{att.name}</span>
-                <button type="button" onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))} className="text-gray-400 hover:text-red-500 ml-0.5">
+                  : <Paperclip className="w-3 h-3 text-gray-400" />}
+                <span className="text-gray-700 max-w-[8rem] truncate">{att.name}</span>
+                <button type="button" onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))} className="text-gray-300 hover:text-red-400 ml-0.5 transition-colors">
                   <X className="w-3 h-3" />
                 </button>
               </div>
@@ -924,13 +861,14 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
           </div>
         )}
 
+        {/* Queued messages */}
         {messageQueue.length > 0 && (
-          <div className="max-w-3xl mx-auto space-y-1">
+          <div className="max-w-3xl mx-auto space-y-1 mb-2">
             {messageQueue.map((msg, i) => (
-              <div key={i} className="flex items-center gap-2 text-xs text-gray-500">
-                <span className="text-gray-400 shrink-0">{i === 0 ? "Next:" : "Queued:"}</span>
+              <div key={i} className="flex items-center gap-2 text-xs text-gray-400">
+                <span className="shrink-0 text-gray-300">{i === 0 ? "Next:" : "Queued:"}</span>
                 <span className="truncate flex-1">{msg}</span>
-                <button type="button" onClick={() => { queueRef.current.splice(i, 1); setMessageQueue(prev => prev.filter((_, j) => j !== i)); }} className="text-gray-300 hover:text-gray-500 shrink-0">
+                <button type="button" onClick={() => { queueRef.current.splice(i, 1); setMessageQueue(prev => prev.filter((_, j) => j !== i)); }} className="text-gray-300 hover:text-gray-500 shrink-0 transition-colors">
                   <X className="w-3 h-3" />
                 </button>
               </div>
@@ -938,37 +876,14 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
           </div>
         )}
 
+        {/* Input card */}
         <div className="max-w-3xl mx-auto">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="*/*"
-            className="hidden"
-            onChange={handleFileSelect}
-          />
-          <form onSubmit={sendMessage} className="flex items-end gap-2 bg-gray-50 border border-gray-200 rounded-2xl px-3 py-2.5 focus-within:border-gray-300 transition-colors">
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isBusy || uploading || recording || transcribing}
-              className="text-gray-400 hover:text-gray-600 transition-colors shrink-0 p-0.5 disabled:opacity-30"
-              title="Attach file"
-            >
-              <Paperclip className={`w-4 h-4 ${uploading ? "animate-pulse text-blue-400" : ""}`} />
-            </button>
-            <button
-              type="button"
-              onMouseDown={startRecording}
-              onMouseUp={stopRecording}
-              onTouchStart={e => { e.preventDefault(); startRecording(); }}
-              onTouchEnd={e => { e.preventDefault(); stopRecording(); }}
-              onMouseLeave={() => { if (recording) stopRecording(); }}
-              disabled={isBusy || uploading}
-              title={recording ? "Release to transcribe" : transcribing ? "Transcribing…" : "Hold to record"}
-              className={`transition-colors shrink-0 p-0.5 ${recording ? "text-red-500 animate-pulse" : transcribing ? "text-blue-400 animate-pulse" : "text-gray-400 hover:text-gray-600"} disabled:opacity-30`}
-            >
-              <Mic className="w-4 h-4" />
-            </button>
+          <input ref={fileInputRef} type="file" accept="*/*" className="hidden" onChange={handleFileSelect} />
+          <form
+            onSubmit={sendMessage}
+            className="bg-white border border-gray-200 rounded-2xl shadow-sm focus-within:border-gray-300 focus-within:shadow-md transition-all"
+          >
+            {/* Textarea */}
             <textarea
               ref={textareaRef}
               value={input}
@@ -983,38 +898,67 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                 const text = e.clipboardData?.getData("text");
                 if (text && text.length > 1500) {
                   e.preventDefault();
-                  setAttachments(prev => [...prev, {
-                    type: "text",
-                    content: text,
-                    mimeType: "text/plain",
-                    name: `paste-${Date.now()}.txt`,
-                  }]);
+                  setAttachments(prev => [...prev, { type: "text", content: text, mimeType: "text/plain", name: `paste-${Date.now()}.txt` }]);
                 }
               }}
               placeholder="Message…"
               rows={1}
               disabled={isBusy}
-              className="flex-1 bg-transparent text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none resize-none overflow-y-auto leading-relaxed disabled:opacity-50"
-              style={{ minHeight: "24px", maxHeight: "200px" }}
+              className="w-full px-4 pt-3.5 pb-2 bg-transparent text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none resize-none overflow-y-auto leading-relaxed disabled:opacity-50"
+              style={{ minHeight: "52px", maxHeight: "200px" }}
             />
-            {isBusy ? (
-              <button
-                type="button"
-                onClick={() => { stopResponse(); setMessageQueue([]); }}
-                className="shrink-0 p-1.5 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-600 transition-colors"
-                title="Stop"
-              >
-                <Square className="w-4 h-4 fill-current" />
-              </button>
-            ) : (
-              <button
-                type="submit"
-                disabled={!input.trim() && attachments.length === 0}
-                className="shrink-0 p-1.5 rounded-lg bg-gray-900 hover:bg-gray-700 text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                <Send className="w-4 h-4" />
-              </button>
-            )}
+
+            {/* Bottom bar */}
+            <div className="flex items-center justify-between px-3 pb-3">
+              <div className="flex items-center gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isBusy || uploading || recording || transcribing}
+                  className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-30"
+                  title="Attach file"
+                >
+                  <Paperclip className={`w-4 h-4 ${uploading ? "animate-pulse text-violet-500" : ""}`} />
+                </button>
+                <button
+                  type="button"
+                  onMouseDown={startRecording}
+                  onMouseUp={stopRecording}
+                  onTouchStart={e => { e.preventDefault(); startRecording(); }}
+                  onTouchEnd={e => { e.preventDefault(); stopRecording(); }}
+                  onMouseLeave={() => { if (recording) stopRecording(); }}
+                  disabled={isBusy || uploading}
+                  title={recording ? "Release to send" : transcribing ? "Transcribing…" : "Hold to record"}
+                  className={`p-2 rounded-lg transition-colors disabled:opacity-30 ${
+                    recording ? "text-red-500 bg-red-50 animate-pulse"
+                    : transcribing ? "text-violet-500 animate-pulse"
+                    : "text-gray-400 hover:text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  <Mic className="w-4 h-4" />
+                </button>
+              </div>
+
+              {isBusy ? (
+                <button
+                  type="button"
+                  onClick={() => { stopResponse(); setMessageQueue([]); }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-medium transition-colors"
+                  title="Stop"
+                >
+                  <Square className="w-3.5 h-3.5 fill-current" />
+                  Stop
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={!input.trim() && attachments.length === 0}
+                  className="p-2 rounded-xl bg-gray-900 hover:bg-gray-700 text-white transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </form>
         </div>
       </div>

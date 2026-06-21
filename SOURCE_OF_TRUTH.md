@@ -56,6 +56,30 @@ Owner KB (`owner_kb`) + Operator KB (`operator_kb`) — both tables correct, ret
 
 ---
 
+## ✅ SESSION WORK — 2026-06-22
+
+### KB search fixes (commit `6168287`)
+- `vectorSearch.ts`: removed `< 0.85` cosine distance cutoff from `searchOwnerKb` — owner KB entries now always surface regardless of query phrasing (trusted content, no cutoff needed). `searchOperatorKb` already had no distance cutoff.
+- `sdkToolBridge.ts`: removed 400-char slice on `kb_search` results — operators now receive full document content, not just the first paragraph.
+
+### Chat UI — redesign + stream bug fixes (ChatSection.tsx)
+Three stream reducer bugs fixed:
+1. `CALLING` case was clearing `content: ""` — streaming text disappeared when operator made an HTTP call mid-response
+2. `TOOL_RESULT` case did not clear the active spinner — both the spinner and the result block showed simultaneously (duplication)
+3. `DONE` case now preserves `toolResults` until next `START` — results stay visible after response completes instead of disappearing
+
+Full visual redesign (Claude/ChatGPT style):
+- Operator messages: left-aligned with violet avatar circle (Sparkles icon)
+- User messages: right-aligned rounded bubble (gray-100)
+- Tool outputs: expandable rows with icon badge, clear label, rendered in the same avatar group
+- Code blocks: dark background with inline Copy button (click to copy, shows checkmark)
+- Input: card-style with textarea above and action icons (Paperclip, Mic) + Send/Stop below
+- Thinking dots now appear inside the assistant avatar group (not floating)
+- Removed: `.md` download button, redundant ranSkill badge
+- Historical tool messages from DB still parse and show correctly
+
+---
+
 ## ✅ SESSION WORK — 2026-06-21
 
 10. `b9ccd90` **Chat UI — file upload all formats/100MB, paste→attachment, live tool output** — Three improvements: (1) Upload: fileFilter removed → any format accepted; multer limit raised 10MB→100MB; catch-all UTF-8 fallback for unknown binary. (2) Paste: textarea `onPaste` intercepts text >1500 chars, converts to `.txt` attachment instead of spilling into the input. (3) Live tool output: backend emits `searching`/`running`/`calling` SSE before dispatch, `tool_result` SSE after — frontend accumulates live `ToolOutputBlock`s during the turn and preserves them after DONE until next send.
