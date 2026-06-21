@@ -7,6 +7,42 @@
 
 ---
 
+## 🔴 TO DO — Architecture backlog (confirmed 2026-06-21, locked spec)
+
+> These are not suggestions. Each item was audited against live code and confirmed missing or incomplete. Build order is Mohamed's call. No item starts without explicit go.
+
+### 1 — Tool filter removal ← PARTIALLY DONE, NOT DEPLOYED
+`sdkToolBridge.ts` filter against `UNIVERSAL_TOOLS` removed in local code. All 120 SDK tools visible to all operators, no availability gate. TypeScript clean. **Not yet committed or deployed.**
+
+### 2 — Self-awareness: live workspace manifest injected into turn context
+**Spec:** When triggered (incoming message intent, tool dispatch, workspace mutation, KB update) — build a live manifest: active tools from SDK, connected integrations, operator files, KB entries, stored secret labels, nav items, soul state, memory distillation state. Inject into current turn context only (ephemeral). Operator reasons from it.
+**Gap:** Manifest is built and stored to DB (`selfAwarenessEngine.ts`) but never injected into the turn context. `systemPrompt.ts` lines 543–553 explicitly voids it. The injection step is missing entirely.
+
+### 3 — Agency: operator knows full workspace at every turn
+**Spec:** Agency means the operator knows all its surroundings — tools, integrations, files, secrets, KB, nav items — and acts from that live picture, not from assumption.
+**Gap:** `composeTurnPlan()` in `operatorAgent.ts` only reads the current user message and heuristic patterns. It does not receive or reason from a workspace manifest. The live picture is not part of the turn decision.
+
+### 4 — GROW Gap 1: soul evaluates curiosity before storing
+**Spec:** Before curiosity stores anything, soul layer asks two questions: "does this resonate with who I am?" and "does this serve my mandate?" Yes → store + flag for potential GROW proposal. No → log as observed, not relevant, don't store.
+**Gap:** `selfAwarenessEngine.ts` lines 490–498 call `storeMemory()` directly after `curiositySearch()` returns. No soul evaluation between search result and storage. Insert point: after line 490, before `storeMemory()`.
+
+### 5 — GROW Gap 2: four proactive curiosity triggers
+**Spec:** Curiosity fires on four signals — conversation gap (operator couldn't answer well), mandate edge case (request close to but outside mandate), unexpected external signal (new in tool result or KB entry), identity tension (conflict between what operator is asked and who it is).
+**Gap:** Only one trigger exists: mandate gap from task failure rates. The other three signals are not detected or wired anywhere. Detection needed in: `chat.ts` post-response, `operatorAgent.ts` composeTurnPlan, `chat.ts` tool dispatch result.
+
+### 6 — GROW Gap 3: Adapt not Adopt gate before proposal enters DB
+**Spec:** Before any proposal reaches GROW: three questions against mandate, archetype, identity. All three yes → proposal goes to GROW. Any no → rejected at gate, logged as "observed, not mine."
+**Gap:** `growEngine.ts` line 360 — proposal inserted with status `evaluating` immediately after semantic guard. No structural alignment gate runs before this. Prompt says "don't contradict mandate" but that's an LLM instruction, not a hard gate. Insert point: between line 358 and line 360.
+
+### 7 — Memory retrieval at 0.45 context threshold
+**Spec:** When conversation context hits 45% of model's context window, relevant memories surface into the current turn. Layer 1 + Layer 2 searched against current message embedding. Count surfaced tracked as `memoryCount` in response payload.
+**Gap:** `chat.ts` lines 544–547 already compute `historyTokenEstimate` and `CONTEXT_WINDOW` for soul anchor at 0.4. The 0.45 threshold check is missing. No memory retrieval fires from context depth. `memoryCount` hardcoded `0` at lines 1041 and 1199.
+
+### 8 — KB two-layer confirmed clean, no action needed
+Owner KB (`owner_kb`) + Operator KB (`operator_kb`) — both tables correct, retrieval floor at confidence ≥ 75, two separate write paths. VAEL and platform KB permanently out of scope. No changes required.
+
+---
+
 ## ⚠ FAILURE LOG — 2026-06-18 (BYO model config over-deletion)
 
 **What happened:** Mohamed's directive was "delete other models from OpSoul except Azure OpenAI GPT-4o." Correct interpretation: platform default routing = Azure only; BYO model config for clients remains. I deleted the entire BYO infrastructure (operatorModelConfig.ts, model-config API routes, ByoModelPanel UI, BYO branching in openrouter.ts/chat.ts/growEngine.ts). This broke the client-facing feature that lets operators configure their own AI API key.
