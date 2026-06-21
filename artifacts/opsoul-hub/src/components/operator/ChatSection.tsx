@@ -104,8 +104,9 @@ function streamReducer(state: StreamStatus, action: StreamAction): StreamStatus 
       return { ...state, toolResults: [...state.toolResults, { name: action.name, output: action.output, toolType: action.toolType }] };
     case "DONE":
       // snapshot NOT preserved — optimistic cache injection eliminates the flash gap
-      // toolResults preserved so Mohamed can review what was called after the turn ends
-      return { ...INITIAL_STATUS, ranSkill: state.ranSkill, toolResults: state.toolResults };
+      // toolResults cleared — they were visible live during the turn; after DONE the
+      // assistant message lands in items first, making toolResults render below it (wrong order)
+      return { ...INITIAL_STATUS, ranSkill: state.ranSkill };
     case "ERROR":
       return { ...INITIAL_STATUS, error: action.message };
     case "ABORT":

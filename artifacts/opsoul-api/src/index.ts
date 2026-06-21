@@ -58,7 +58,7 @@ app.set('trust proxy', 1);
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
 
 app.use(express.json({
-  limit: '10mb',
+  limit: '100mb',
   verify: (req: express.Request & { rawBody?: Buffer }, _res, buf) => {
     req.rawBody = buf;
   },
