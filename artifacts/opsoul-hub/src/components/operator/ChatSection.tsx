@@ -17,6 +17,12 @@ type Attachment = {
   previewUrl?: string;
 };
 
+type LiveToolResult = {
+  name: string;
+  output: string;
+  toolType?: "skill" | "search" | "url" | "http";
+};
+
 type RenderedItem =
   | { kind: "msg"; msg: Message }
   | { kind: "separator"; label: string; key: string }
@@ -37,6 +43,7 @@ type StreamStatus = {
   writing: string | null;
   calling: string | null;
   error: string | null;
+  toolResults: LiveToolResult[];
 };
 
 type StreamAction =
@@ -50,6 +57,7 @@ type StreamAction =
   | { type: "RUNNING"; tool: string }
   | { type: "WRITING"; file: string }
   | { type: "CALLING"; url: string }
+  | { type: "TOOL_RESULT"; name: string; output: string; toolType?: "skill" | "search" | "url" | "http" }
   | { type: "DONE" }
   | { type: "ERROR"; message: string }
   | { type: "ABORT" };
@@ -58,7 +66,7 @@ const INITIAL_STATUS: StreamStatus = {
   sending: false, content: "", snapshot: "", processing: false,
   searching: null, seeding: null, reading: null,
   running: null, ranSkill: null, writing: null,
-  calling: null, error: null,
+  calling: null, error: null, toolResults: [],
 };
 
 function streamReducer(state: StreamStatus, action: StreamAction): StreamStatus {
@@ -92,9 +100,12 @@ function streamReducer(state: StreamStatus, action: StreamAction): StreamStatus 
       return { ...state, sending: false, writing: action.file, searching: null, seeding: null, reading: null, running: null, calling: null, processing: false };
     case "CALLING":
       return { ...state, sending: false, content: "", calling: action.url, searching: null, seeding: null, reading: null, running: null, writing: null, processing: false };
+    case "TOOL_RESULT":
+      return { ...state, toolResults: [...state.toolResults, { name: action.name, output: action.output, toolType: action.toolType }] };
     case "DONE":
       // snapshot NOT preserved — optimistic cache injection eliminates the flash gap
-      return { ...INITIAL_STATUS, ranSkill: state.ranSkill };
+      // toolResults preserved so Mohamed can review what was called after the turn ends
+      return { ...INITIAL_STATUS, ranSkill: state.ranSkill, toolResults: state.toolResults };
     case "ERROR":
       return { ...INITIAL_STATUS, error: action.message };
     case "ABORT":
@@ -607,6 +618,9 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                 dispatch({ type: "CALLING", url: displayUrl });
               } else if (data.file_created) {
                 queryClient.invalidateQueries({ queryKey: ["operator-files", operatorId] });
+              } else if (data.tool_result) {
+                const tr = data.tool_result as { name: string; output: string; toolType?: "skill" | "search" | "url" | "http" };
+                dispatch({ type: "TOOL_RESULT", name: tr.name, output: tr.output, toolType: tr.toolType });
               } else if (data.delta) {
                 accumulatedRef.current += data.delta;
                 dispatch({ type: "DELTA", text: data.delta });
@@ -824,6 +838,15 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                 )
               )}
 
+              {/* Live tool results — accumulate during tool calls, stay until next send */}
+              {status.toolResults.length > 0 && (
+                <div className="space-y-0.5">
+                  {status.toolResults.map((tr, i) => (
+                    <ToolOutputBlock key={`live-tool-${i}`} skillName={tr.name} output={tr.output} toolType={tr.toolType} />
+                  ))}
+                </div>
+              )}
+
               {/* Skill badge — shown while streaming the skill response */}
               {status.ranSkill && showStream && (
                 <div className="flex items-center gap-1.5 text-xs text-gray-400">
@@ -918,7 +941,7 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,.txt,.md,.csv,.json,.yaml,.yml,.doc,.docx,.xlsx,.xls"
+            accept="*/*"
             className="hidden"
             onChange={handleFileSelect}
           />
@@ -953,6 +976,18 @@ export default function ChatSection({ operatorId }: { operatorId: string }) {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   if (input.trim() || attachments.length > 0) sendMessage(e as any);
+                }
+              }}
+              onPaste={e => {
+                const text = e.clipboardData?.getData("text");
+                if (text && text.length > 1500) {
+                  e.preventDefault();
+                  setAttachments(prev => [...prev, {
+                    type: "text",
+                    content: text,
+                    mimeType: "text/plain",
+                    name: `paste-${Date.now()}.txt`,
+                  }]);
                 }
               }}
               placeholder="Message…"

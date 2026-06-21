@@ -51,31 +51,7 @@ function isSheetExt(filename: string): boolean {
  */
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
-  fileFilter: (_req, file, cb) => {
-    const fname = file.originalname || '';
-    const mime = file.mimetype || '';
-    const ok =
-      mime.startsWith('image/') ||
-      mime.startsWith('text/') ||
-      mime === 'application/pdf' ||
-      mime === 'application/json' ||
-      mime === 'application/msword' ||
-      mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-      mime === 'application/vnd.ms-excel' ||
-      mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
-      mime === 'application/octet-stream' || // browser couldn't sniff — trust extension
-      isImageExt(fname) ||
-      isTextExt(fname) ||
-      isDocExt(fname) ||
-      isSheetExt(fname);
-    if (ok) {
-      cb(null, true);
-    } else {
-      // Pass an Error — handled below by uploadErrorHandler which returns JSON.
-      cb(new Error(`Unsupported file: ${fname || 'unnamed'} (mime: ${mime || 'unknown'})`));
-    }
-  },
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB — no format restriction
 });
 
 /**
@@ -95,7 +71,7 @@ function uploadErrorHandler(err: unknown, _req: Request, res: Response, next: Ne
   let userMessage = message;
   if (code === 'LIMIT_FILE_SIZE') {
     status = 413;
-    userMessage = 'File too large — max 10 MB. Try compressing it or splitting into smaller files.';
+    userMessage = 'File too large — max 100 MB.';
   } else if (code === 'LIMIT_UNEXPECTED_FILE') {
     userMessage = 'Form field name must be "file".';
   }
@@ -193,11 +169,9 @@ router.post(
         return;
       }
 
-      // Shouldn't reach here — fileFilter should have rejected first.
-      res.status(415).json({
-        error: `Unsupported file type: ${mimetype || 'unknown'} (${originalname})`,
-        code: 'UNSUPPORTED_MIME',
-      });
+      // Catch-all: attempt UTF-8 read for anything else (binary may produce garbled text).
+      const content = buffer.toString('utf-8').slice(0, 12000);
+      res.json({ type: 'text', content: content || `[Binary file: ${originalname}]`, name: originalname });
     } catch (err) {
       console.error('[upload] parse error:', (err as Error).message);
       res.status(500).json({

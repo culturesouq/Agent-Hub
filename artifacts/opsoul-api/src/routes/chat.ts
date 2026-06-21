@@ -968,6 +968,20 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         // loop-control signals the inline blocks used to encode via
         // if/break/continue.
         if (iterToolCall) {
+          // Emit pre-dispatch progress SSE so the UI shows what's being called.
+          try {
+            const toolArgs = JSON.parse(iterToolCall.args) as Record<string, unknown>;
+            if (iterToolCall.name === 'web_search') {
+              const q = typeof toolArgs.query === 'string' ? toolArgs.query : iterToolCall.name;
+              res.write(`data: ${JSON.stringify({ searching: q })}\n\n`);
+            } else if (iterToolCall.name === 'http_request') {
+              const url = typeof toolArgs.url === 'string' ? toolArgs.url : 'API';
+              res.write(`data: ${JSON.stringify({ calling: url })}\n\n`);
+            } else {
+              res.write(`data: ${JSON.stringify({ running: iterToolCall.name })}\n\n`);
+            }
+          } catch { /* malformed args — skip progress event */ }
+
           const dispatchResult = await dispatchViaSdk(
             iterToolCall.name,
             iterToolCall.args,
@@ -978,10 +992,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
               connectedIntegrations: toolListCtx.connectedIntegrations ?? [],
             },
           );
-          // Note: onProgress (SSE streaming progress events) is not emitted
-          // in the SDK path — the SDK does not have a progress callback.
-          // Streaming-during-execution indicators ('Searching…' etc.) are
-          // not emitted this phase. Phase 1c will add SDK-level event hooks.
 
           if (dispatchResult.meta?.webSearchFired) webSearchCount++;
           if (dispatchResult.meta?.httpRequestFired) {
@@ -1000,6 +1010,14 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             // pre-refactor break-on-failure behavior of each inline block.
             finalContent = iterContent;
             break;
+          }
+
+          // Emit tool result so the UI can show it live (expandable).
+          if (dispatchResult.content) {
+            const toolType = iterToolCall.name === 'web_search' ? 'search'
+              : iterToolCall.name === 'http_request' ? 'http'
+              : 'skill';
+            res.write(`data: ${JSON.stringify({ tool_result: { name: iterToolCall.name, output: dispatchResult.content, toolType } })}\n\n`);
           }
 
           // Push the assistant turn + tool result back into the loop so the
