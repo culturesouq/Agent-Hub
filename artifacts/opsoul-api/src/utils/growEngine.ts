@@ -234,6 +234,48 @@ function categoriseFields(
   return { approved, rejected, needsOwnerReview };
 }
 
+// ── GROW Gap 3: Adapt not Adopt gate ─────────────────────────────────────────
+//
+// Pre-DB gate. Three questions against mandate, archetype, identity.
+// All three must be true or the proposal is rejected before it touches the DB.
+//   1. Does this serve the mandate?
+//   2. Does this fit the archetype?
+//   3. Does this strengthen (not weaken) identity?
+
+async function adaptNotAdoptGate(
+  operator: typeof operatorsTable.$inferSelect,
+  selfAwareness: Record<string, unknown> | null,
+): Promise<{ passed: boolean; reason: string }> {
+  const mandateGaps = Array.isArray((selfAwareness as Record<string, unknown> | null)?.mandateGaps)
+    ? ((selfAwareness as Record<string, unknown>).mandateGaps as string[]).join('; ')
+    : 'none';
+
+  const prompt = [
+    `You are a strict alignment gate for an operator's GROW proposal cycle.`,
+    ``,
+    `Operator mandate: ${operator.mandate ?? 'not set'}`,
+    `Operator archetype: ${Array.isArray(operator.archetype) ? (operator.archetype as string[]).join(', ') : operator.archetype ?? 'not set'}`,
+    `Mandate gaps driving this GROW cycle: ${mandateGaps}`,
+    ``,
+    `Ask three questions:`,
+    `1. Does addressing these gaps serve this operator's mandate?`,
+    `2. Does the proposed growth direction fit this operator's archetype?`,
+    `3. Would this adaptation strengthen (not weaken) this operator's identity?`,
+    ``,
+    `Answer ONLY with valid JSON: {"q1": true|false, "q2": true|false, "q3": true|false, "reason": "<one sentence>"}`,
+    `All three must be true for the proposal to proceed. Default to false when uncertain.`,
+  ].join('\n');
+
+  try {
+    const result = await chatCompletion([{ role: 'user', content: prompt }]);
+    const parsed = JSON.parse(result.content.trim()) as { q1?: boolean; q2?: boolean; q3?: boolean; reason?: string };
+    const passed = parsed.q1 === true && parsed.q2 === true && parsed.q3 === true;
+    return { passed, reason: parsed.reason ?? 'gate evaluation complete' };
+  } catch {
+    return { passed: false, reason: 'gate evaluation failed — defaulting to reject' };
+  }
+}
+
 export async function runGrowCycle(operatorId: string): Promise<{
   proposalId: string;
   status: string;
@@ -353,6 +395,34 @@ export async function runGrowCycle(operatorId: string): Promise<{
       fieldsBlocked: 0,
       needsOwnerReview: false,
       semanticGuardTriggered: true,
+      layer1ViolationsBlocked: 0,
+    };
+  }
+
+  // Gap 3: Adapt not Adopt gate — all three alignment questions must pass
+  // before the proposal touches the DB. Hard reject if any question fails.
+  const gateVerdict = await adaptNotAdoptGate(operator, selfAwareness as Record<string, unknown> | null);
+  if (!gateVerdict.passed) {
+    const gateRejectId = crypto.randomUUID();
+    await db.insert(growProposalsTable).values({
+      id: gateRejectId,
+      operatorId,
+      proposedChanges: {},
+      selfAwarenessSnapshot: selfAwareness ?? null,
+      status: 'rejected',
+      retryCount: 0,
+      claudeReasoning: `Adapt-not-adopt gate rejected: ${gateVerdict.reason}`,
+      evaluatedAt: new Date(),
+      decidedAt: new Date(),
+    });
+    console.log(`[GROW] Adapt-not-adopt gate blocked proposal for ${operatorId}: ${gateVerdict.reason}`);
+    return {
+      proposalId: gateRejectId,
+      status: 'rejected_gate',
+      changesApplied: 0,
+      fieldsBlocked: 0,
+      needsOwnerReview: false,
+      semanticGuardTriggered: false,
       layer1ViolationsBlocked: 0,
     };
   }
