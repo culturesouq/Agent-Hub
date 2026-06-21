@@ -11,8 +11,8 @@
 
 > These are not suggestions. Each item was audited against live code and confirmed missing or incomplete. Build order is Mohamed's call. No item starts without explicit go.
 
-### 1 — `90736ec` `2026-06-21T12:48:46+04:00` Tool filter removal ← PARTIALLY DONE, NOT DEPLOYED
-`sdkToolBridge.ts` filter against `UNIVERSAL_TOOLS` removed in local code. All 120 SDK tools visible to all operators, no availability gate. TypeScript clean. **Not yet committed or deployed.**
+### 1 — `523fbd3` `2026-06-21` KB tools + full tool open ← DEPLOYED `opsoul--0000113`
+KB tools (kb_search, kb_query, kb_seed, kb_delete_learned, kb_pending_list) intercepted locally in `sdkToolBridge.ts` — SDK had no kbAdmin connector wired so all KB calls returned "not connected". Now served from OpSoul's own owner_kb + operator_kb tables. list_workspace counts owner-facts too. All 120 SDK tools visible to all operators (UNIVERSAL_TOOLS filter removed in `90736ec`, shipped in this build). Image: `banistudioacr.azurecr.io/opsoul-api:kb-fix-523fbd3` (digest `sha256:bf01a5414754236b59f009d495feb764e28fdc524708fbb5ff4cc68a8d40ff69`).
 
 ### 2 — `b69ed44` `2026-06-21T12:51:25+04:00` Self-awareness: live workspace manifest injected into turn context
 **Spec:** When triggered (incoming message intent, tool dispatch, workspace mutation, KB update) — build a live manifest: active tools from SDK, connected integrations, operator files, KB entries, stored secret labels, nav items, soul state, memory distillation state. Inject into current turn context only (ephemeral). Operator reasons from it.
