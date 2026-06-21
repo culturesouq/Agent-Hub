@@ -38,6 +38,9 @@
 **Spec:** When conversation context hits 45% of model's context window, relevant memories surface into the current turn. Layer 1 + Layer 2 searched against current message embedding. Count surfaced tracked as `memoryCount` in response payload.
 **Gap:** `chat.ts` lines 544–547 already compute `historyTokenEstimate` and `CONTEXT_WINDOW` for soul anchor at 0.4. The 0.45 threshold check is missing. No memory retrieval fires from context depth. `memoryCount` hardcoded `0` at lines 1041 and 1199.
 
+### 9 — `843fc52` `2026-06-21T13:11:18+04:00` True agency: list_workspace tool
+Operator can call `list_workspace` any turn to browse its full workspace — all tools with descriptions (filterable), integrations, files, KB counts, secret labels. Virtual tool, handled by OpSoul, never forwarded to SDK. Operator decides when it needs the information; nothing is hidden or truncated.
+
 ### 8 — KB two-layer confirmed clean, no action needed
 Owner KB (`owner_kb`) + Operator KB (`operator_kb`) — both tables correct, retrieval floor at confidence ≥ 75, two separate write paths. VAEL and platform KB permanently out of scope. No changes required.
 
