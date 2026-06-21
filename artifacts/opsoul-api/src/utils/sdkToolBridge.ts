@@ -10,8 +10,7 @@
  */
 
 import type { ToolHandlerContext } from './toolHandlers.js';
-import type { ScopeType, Availability } from './toolRegistry.js';
-import { UNIVERSAL_TOOLS } from './toolRegistry.js';
+import type { ScopeType } from './toolRegistry.js';
 import { db } from '@workspace/db';
 import { operatorSecretsTable } from '@workspace/db';
 import { eq } from 'drizzle-orm';
@@ -36,6 +35,9 @@ export interface ProvisionedListCtx {
   scopeType: ScopeType;
   scopeTrust?: string;
 }
+
+// Kept for type compatibility with callers — no filtering applied.
+export { ScopeType };
 
 export interface SdkToolDefinition {
   type: 'function';
@@ -71,49 +73,30 @@ async function fetchSdkTools(): Promise<RawSdkTool[]> {
   return _toolCache;
 }
 
-// ── provisioned list ──────────────────────────────────────────────────────────
-
-function buildProvisionedList(ctx: ProvisionedListCtx): Set<string> {
-  const names = new Set<string>();
-  for (const tool of UNIVERSAL_TOOLS) {
-    const avail: Availability = tool.availability;
-    if (avail === 'web' && !ctx.hasWebSearch) continue;
-    if (avail === 'secrets' && ctx.liveSecrets.length === 0) continue;
-    if (avail === 'integration' && ctx.connectedIntegrations.length === 0) continue;
-    if (avail === 'firecrawl' && !ctx.hasFirecrawl) continue;
-    const scopes = tool.scopes;
-    if (scopes !== '*' && !scopes.includes(ctx.scopeType)) continue;
-    names.add(tool.name);
-  }
-  return names;
-}
-
 // ── list tools (async — awaited by chat.ts) ───────────────────────────────────
+// Returns all 120 SDK tools. No filtering — operators get everything.
 
 export async function listToolsViaSdk(ctx: ProvisionedListCtx): Promise<SdkToolDefinition[]> {
   const all = await fetchSdkTools();
-  const provisioned = buildProvisionedList(ctx);
 
-  return all
-    .filter(t => provisioned.has(t.name))
-    .map(t => {
-      let description = t.description;
-      if (t.name === 'http_request' && ctx.liveSecrets.length > 0) {
-        description = `${description} Available stored secret labels: ${ctx.liveSecrets.map(s => `{{${s}}}`).join(', ')}.`;
-      }
-      return {
-        type: 'function' as const,
-        function: {
-          name: t.name,
-          description,
-          parameters: {
-            type: 'object' as const,
-            properties: t.schema.properties,
-            required: t.schema.required ?? [],
-          },
+  return all.map(t => {
+    let description = t.description;
+    if (t.name === 'http_request' && ctx.liveSecrets.length > 0) {
+      description = `${description} Available stored secret labels: ${ctx.liveSecrets.map(s => `{{${s}}}`).join(', ')}.`;
+    }
+    return {
+      type: 'function' as const,
+      function: {
+        name: t.name,
+        description,
+        parameters: {
+          type: 'object' as const,
+          properties: t.schema.properties,
+          required: t.schema.required ?? [],
         },
-      };
-    });
+      },
+    };
+  });
 }
 
 // ── render tool fence transform ───────────────────────────────────────────────
