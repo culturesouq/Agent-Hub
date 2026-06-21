@@ -27,7 +27,7 @@ import { assembleOperatorPrompt, buildBirthSystemPrompt, buildTemporalContext, c
 import { OperatorAgent, renderTurnPlanSystemContext } from '../utils/operatorAgent.js';
 import type { SelfAwarenessSnapshot, BuildSystemPromptOpts } from '../utils/systemPrompt.js';
 import { distillMemoriesFromConversations } from '../utils/memoryEngine.js';
-import { triggerSelfAwareness, buildWorkspaceManifest, renderTurnWorkspaceContext } from '../utils/selfAwarenessEngine.js';
+import { triggerSelfAwareness, buildWorkspaceManifest, renderTurnWorkspaceContext, detectCuriositySignals } from '../utils/selfAwarenessEngine.js';
 import { chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import { BIRTH_MODEL_ID, resolveModel, DEFAULT_MODEL_ID } from '../utils/modelRegistry.js';
 import { decryptToken } from '@workspace/opsoul-utils/crypto';
@@ -390,6 +390,7 @@ function runPostResponseTasks(
   finalContent: string,
   isBirthMode: boolean,
   scope: ValidatedScope,
+  userMessage?: string,
 ): void {
   // [LEARN:] tag extraction — operator self-learning
   if (!operator.safeMode) {
@@ -427,6 +428,16 @@ function runPostResponseTasks(
   // Self-awareness + periodic memory distillation
   if (!operator.safeMode) {
     triggerSelfAwareness(operator.id, 'conversation_end').catch((err) => console.warn('[selfAwareness] failed:', err?.message));
+
+    // Gap 2: proactive curiosity — detect four signals, fire per-signal trigger.
+    if (userMessage) {
+      const signals = detectCuriositySignals(userMessage, finalContent);
+      if (signals.gap) triggerSelfAwareness(operator.id, 'curiosity_gap').catch(() => {});
+      if (signals.mandateEdge) triggerSelfAwareness(operator.id, 'curiosity_mandate').catch(() => {});
+      if (signals.unexpectedExternal) triggerSelfAwareness(operator.id, 'curiosity_external').catch(() => {});
+      if (signals.identityTension) triggerSelfAwareness(operator.id, 'curiosity_identity').catch(() => {});
+    }
+
     const shouldDistill = ((conv.messageCount ?? 0) % 10 === 0);
     if (shouldDistill) {
       distillMemoriesFromConversations(operator.id, operator.ownerId, operator.name, scope.scopeId, scope.scopeTrust).catch((err) => console.warn('[runPostResponse] distill failed:', err?.message));
@@ -1069,7 +1080,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       })}\n\n`);
       res.end();
 
-      runPostResponseTasks(operator, conv, finalContent, isBirthMode, scope);
+      runPostResponseTasks(operator, conv, finalContent, isBirthMode, scope, message);
 
     } catch (err) {
       cleanupKeepalive();
@@ -1226,7 +1237,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         leakFeedback,
       });
 
-      runPostResponseTasks(operator, conv, finalContent, isBirthMode, scope);
+      runPostResponseTasks(operator, conv, finalContent, isBirthMode, scope, message);
 
     } catch (err) {
       res.status(502).json({ error: 'AI backend error', detail: (err as Error).message });

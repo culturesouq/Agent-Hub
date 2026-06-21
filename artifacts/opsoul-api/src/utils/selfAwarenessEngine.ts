@@ -26,8 +26,12 @@ export type SelfAwarenessTrigger =
   | 'integration_change'
   | 'force'
   | 'owner_manual'
-  | 'stale_refresh'   // GET /self-awareness recomputed because cache was older than 6h
-  | 'no_cache';       // GET /self-awareness recomputed because no row existed yet
+  | 'stale_refresh'       // GET /self-awareness recomputed because cache was older than 6h
+  | 'no_cache'            // GET /self-awareness recomputed because no row existed yet
+  | 'curiosity_gap'       // Gap 2: operator couldn't answer — surfaced from response
+  | 'curiosity_mandate'   // Gap 2: user request near mandate edge
+  | 'curiosity_external'  // Gap 2: unexpected external data in tool result / response
+  | 'curiosity_identity'; // Gap 2: identity tension detected in response
 
 export interface HealthScore {
   score: number;
@@ -603,6 +607,36 @@ export async function triggerSelfAwareness(
       console.error(`[self-awareness] Background trigger failed (${trigger}):`, err.message);
     });
   });
+}
+
+// ── GROW Gap 2: proactive curiosity trigger detection ─────────────────────────
+//
+// Four signals that fire curiosity proactively after a turn completes.
+// All patterns are conservative — false negative is safer than false positive.
+
+const CONVERSATION_GAP_PATTERN = /\b(I (don'?t|do not) (know|have|understand)|I('?m| am) (not sure|unable|unsure)|I (couldn'?t|could not|cannot) (find|access|retrieve|answer)|I (don'?t|do not) have (access|enough information)|I (lack|lack) (context|information))\b/i;
+const IDENTITY_TENSION_PATTERN = /\b(I('?m| am) not (designed|built|meant|here) to|that (doesn'?t|does not) align (with|to) (who I am|my|me)|that('?s| is) (outside|beyond) (my|who I am)|that (conflicts|contradicts) (with)? (my (identity|values|soul|mandate)))\b/i;
+const MANDATE_EDGE_PATTERN = /\b(that('?s| is) (close to|near|at) the (edge|boundary|limit) of|I can try but|that('?s| is) a bit (outside|beyond)|I'?ll do my best but|this (may|might) not be my (strength|area|specialty))\b/i;
+const UNEXPECTED_EXTERNAL_PATTERN = /https?:\/\/[^\s)>"]+/i;
+
+export interface CuriositySignals {
+  gap: boolean;
+  mandateEdge: boolean;
+  unexpectedExternal: boolean;
+  identityTension: boolean;
+}
+
+export function detectCuriositySignals(
+  userMessage: string,
+  operatorResponse: string,
+): CuriositySignals {
+  return {
+    gap: CONVERSATION_GAP_PATTERN.test(operatorResponse),
+    mandateEdge: MANDATE_EDGE_PATTERN.test(operatorResponse),
+    unexpectedExternal: UNEXPECTED_EXTERNAL_PATTERN.test(operatorResponse) &&
+      !UNEXPECTED_EXTERNAL_PATTERN.test(userMessage),
+    identityTension: IDENTITY_TENSION_PATTERN.test(operatorResponse),
+  };
 }
 
 // ── turn-time workspace context ───────────────────────────────────────────────
