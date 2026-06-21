@@ -758,7 +758,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // contains the operator identity; we add the TurnPlan ON TOP, not by
   // mutating systemPrompt (which was already consumed). Patent claim 21
   // fully realised.
-  const fullToolList = listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[];
+  const fullToolList = await listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[];
   const turnPlan = agent.composeTurnPlan(message, {
     toolNames: fullToolList.map(t => t.function.name),
     toolDescriptions: new Map(fullToolList.map(t => [t.function.name, t.function.description ?? ''])),
@@ -868,7 +868,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         // are offered. For `execute` intent the full universal catalog is
         // presented from the toolRegistry. Birth mode passes 'execute' so
         // newborn operators retain full capability during identity formation.
-        const allTools = decision.kind === 'execute' ? listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[] : [];
+        const allTools = decision.kind === 'execute' ? await listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[] : [];
         // Per-iteration cap on web_search — once an operator has done
         // MAX_SEARCHES in this turn, filter it out of the offered set so
         // the LLM cannot keep searching in a loop.
@@ -1079,7 +1079,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       // path. Tools are offered only when the operator's analyse() decision
       // is 'execute'. Tool definitions come from the universal toolRegistry,
       // filtered for this scope + availability.
-      const syncTools = decision.kind === 'execute' ? listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[] : [];
+      const syncTools = decision.kind === 'execute' ? await listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[] : [];
       const syncMessages = [...messages];
       if (introspectContext) syncMessages.push({ role: 'system', content: introspectContext });
       const syncOpts = { ...chatOpts, tools: syncTools.length > 0 ? syncTools : undefined };
