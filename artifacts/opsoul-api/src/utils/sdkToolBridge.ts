@@ -278,7 +278,7 @@ export async function dispatchViaSdk(
     const hits = await searchBothKbs(operatorId, embedding, topN, KB_RETRIEVAL_MIN_CONFIDENCE);
     if (hits.length === 0) return { content: `No KB entries matched: "${query}".`, meta: { terminateLoop: false } };
     const lines = hits.map((h, i) =>
-      `${i + 1}. [${h.kbSource}, sim ${h.similarity.toFixed(2)}${h.confidenceScore != null ? `, conf ${h.confidenceScore}` : ''}] (id ${h.id}) ${h.content.slice(0, 400)}`
+      `${i + 1}. [${h.kbSource}, sim ${h.similarity.toFixed(2)}${h.confidenceScore != null ? `, conf ${h.confidenceScore}` : ''}] (id ${h.id})\n${h.content}`
     );
     return { content: `Top ${hits.length} KB hits for "${query}":\n${lines.join('\n')}`, meta: { terminateLoop: false } };
   }
