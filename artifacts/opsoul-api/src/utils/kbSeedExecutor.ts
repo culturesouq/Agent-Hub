@@ -1,6 +1,5 @@
-import { gateAndStoreOperatorKb, type KbGateResult } from './kbIntake.js';
-
-export type { KbGateResult as KbSeedResult };
+import { gateAndStoreOperatorKb } from './kbIntake.js';
+import type { KbGateResult } from './kbIntake.js';
 
 export async function seedKbEntry(
   operatorId: string,

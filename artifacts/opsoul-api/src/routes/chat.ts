@@ -377,10 +377,8 @@ function extractUrls(text: string): string[] {
 // containsTimeKeywords moved to ../utils/systemPrompt.js — shared with
 // public-chat.ts and any other route that needs hybrid time injection.
 
-// persistUrlScrapedResult, persistWebSearchResult, persistSkillResult moved
-// to utils/toolPersistence.js (2026-05-19, MCP refactor — see commit on
-// branch feat/mcp-runtime-layer). They are imported above and used
-// unchanged below in the agent loop.
+// persistUrlScrapedResult, persistSkillResult imported above from toolPersistence.ts.
+// persistWebSearchResult removed 2026-06-22 — web search KB intake routes through sdkToolBridge → gateAndStoreOperatorKb.
 
 // Runs all post-response fire-and-forget tasks — identical for both stream and sync.
 function runPostResponseTasks(

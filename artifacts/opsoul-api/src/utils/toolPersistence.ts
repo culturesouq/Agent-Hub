@@ -25,7 +25,6 @@ import {
   storeMemory,
   distillRawContentForMemory,
 } from './memoryEngine.js';
-import { gateAndStoreOperatorKb } from './kbIntake.js';
 import { triggerSelfAwareness } from './selfAwarenessEngine.js';
 import { executeHttpRequest } from './httpExecutor.js';
 
@@ -65,57 +64,6 @@ export async function persistUrlScrapedResult(
         'fact',
         'ai_distilled',
         0.6,
-        false,
-        scopeId,
-        scopeTrust,
-      );
-    })
-    .catch(() => {});
-}
-
-// ───────────────────────────────────────────────────────────────────────────
-//  PERSISTENCE — Web search result
-// ───────────────────────────────────────────────────────────────────────────
-
-export async function persistWebSearchResult(
-  operatorId: string,
-  ownerId: string,
-  convId: string,
-  searchQuery: string,
-  capResult: { output: string },
-  mandate: string,
-  scopeId?: string,
-  scopeTrust?: string,
-): Promise<void> {
-  await db.insert(messagesTable).values({
-    id:             crypto.randomUUID(),
-    operatorId,
-    conversationId: convId,
-    role:           'system',
-    content:        `[Web Search] ${searchQuery}\n${capResult.output}`,
-  });
-
-  gateAndStoreOperatorKb(
-    operatorId,
-    ownerId,
-    capResult.output,
-    searchQuery,
-    `web_search:${searchQuery}`,
-  ).catch(() => {});
-
-  // Distill the raw search output into one clean fact before persisting to
-  // memory. Conversation log keeps the raw snippet bundle above; long-term
-  // memory gets only the filtered takeaway.
-  distillRawContentForMemory(capResult.output, `web search: ${searchQuery}`)
-    .then((distilled) => {
-      if (!distilled) return;
-      return storeMemory(
-        operatorId,
-        ownerId,
-        `Web search "${searchQuery}": ${distilled}`,
-        'fact',
-        'ai_distilled',
-        0.65,
         false,
         scopeId,
         scopeTrust,
