@@ -5524,3 +5524,27 @@ Closing instruction: `The operator decides what is relevant.`
 
 All 5 commits (`a9d7e62` → `9090c6e`) are local — awaiting deploy command.
 Previous deploy: `opsoul--0000114` · image `banistudioacr.azurecr.io/opsoul-api:chat-86381bd`
+
+---
+
+## DEPLOYED `opsoul--0000115` · image `banistudioacr.azurecr.io/opsoul-api:audit-9090c6e` · digest `sha256:6b0c3ce384e21c7b39ad052a981dcd367ee88fe1312f2995d948e6b7107c0eb9`
+
+**Deploy timestamp:** 2026-06-22 08:28:45 UTC (12:28 UAE)
+**ACR Run ID:** `dgdc` — succeeded in 2m48s
+**Revision:** `opsoul--0000115` · provisioningState: Succeeded · Running
+**Previous revision:** `opsoul--0000114` (rollback target if needed)
+
+**Rollback command:**
+```
+az containerapp update -n opsoul -g bani-studio-rg --image banistudioacr.azurecr.io/opsoul-api:chat-86381bd
+```
+
+**What shipped in this deploy (commits `a9d7e62` → `9090c6e`):**
+
+1. `a9d7e62` — GROW adapt-not-adopt gate moved post-proposal (was blocking all 6 operators nightly)
+2. `a9d7e62` — kbConfidence formula: mainMemory×50% + ownerKb presence×25% + operatorKb×25%
+3. `a9d7e62` — Nahil 522 distilled memories restored (SQL restore from backup CSV)
+4. `3f86cd0` — Operator KB pipeline rebuilt: 4-check gate (PII / durability / dedup 0.80+LLM meaning / domain fit per mandate)
+5. `f1f614c` — Dead code: `persistWebSearchResult` removed, `KbSeedResult` re-export removed
+6. `9090c6e` — `analyse()` consolidated: returns full TurnPlan, no more double composeTurnPlan() per turn
+7. `9090c6e` — KB auto-surfaced at 25% context threshold (mirrors memory at 45%); embed computed once, reused for both
