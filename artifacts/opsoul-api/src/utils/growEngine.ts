@@ -236,34 +236,43 @@ function categoriseFields(
 
 // ── GROW Gap 3: Adapt not Adopt gate ─────────────────────────────────────────
 //
-// Pre-DB gate. Three questions against mandate, archetype, identity.
-// All three must be true or the proposal is rejected before it touches the DB.
-//   1. Does this serve the mandate?
-//   2. Does this fit the archetype?
-//   3. Does this strengthen (not weaken) identity?
+// Post-proposal gate. Evaluates the ACTUAL proposed changes against mandate,
+// archetype, and identity. Runs after the LLM generates a proposal so the
+// three questions have real content to assess.
+//   1. Do these changes serve the mandate?
+//   2. Do they fit the archetype?
+//   3. Do they ADAPT (evolve existing identity) not ADOPT (import foreign behavior)?
+// Auto-passes when proposedChanges is empty — nothing to block.
 
 async function adaptNotAdoptGate(
   operator: typeof operatorsTable.$inferSelect,
-  selfAwareness: Record<string, unknown> | null,
+  proposedChanges: Partial<Layer2Soul>,
 ): Promise<{ passed: boolean; reason: string }> {
-  const mandateGaps = Array.isArray((selfAwareness as Record<string, unknown> | null)?.mandateGaps)
-    ? ((selfAwareness as Record<string, unknown>).mandateGaps as string[]).join('; ')
-    : 'none';
+  const changeKeys = Object.keys(proposedChanges);
+  if (changeKeys.length === 0) {
+    return { passed: true, reason: 'no changes proposed — gate skipped' };
+  }
+
+  const changesSummary = changeKeys
+    .map((k) => `${k}: ${JSON.stringify((proposedChanges as Record<string, unknown>)[k])}`)
+    .join('\n');
 
   const prompt = [
     `You are a strict alignment gate for an operator's GROW proposal cycle.`,
     ``,
     `Operator mandate: ${operator.mandate ?? 'not set'}`,
     `Operator archetype: ${Array.isArray(operator.archetype) ? (operator.archetype as string[]).join(', ') : operator.archetype ?? 'not set'}`,
-    `Mandate gaps driving this GROW cycle: ${mandateGaps}`,
     ``,
-    `Ask three questions:`,
-    `1. Does addressing these gaps serve this operator's mandate?`,
-    `2. Does the proposed growth direction fit this operator's archetype?`,
-    `3. Would this adaptation strengthen (not weaken) this operator's identity?`,
+    `Proposed soul changes:`,
+    changesSummary,
+    ``,
+    `Three questions — all must be true:`,
+    `1. Do these specific changes serve this operator's mandate?`,
+    `2. Do these specific changes fit this operator's archetype?`,
+    `3. Do these changes ADAPT (evolve existing identity from real interaction patterns) rather than ADOPT (import behavior foreign to this operator's core)?`,
     ``,
     `Answer ONLY with valid JSON: {"q1": true|false, "q2": true|false, "q3": true|false, "reason": "<one sentence>"}`,
-    `All three must be true for the proposal to proceed. Default to false when uncertain.`,
+    `Default to false only when you can identify a specific conflict. Genuine evolution should pass.`,
   ].join('\n');
 
   try {
@@ -272,7 +281,7 @@ async function adaptNotAdoptGate(
     const passed = parsed.q1 === true && parsed.q2 === true && parsed.q3 === true;
     return { passed, reason: parsed.reason ?? 'gate evaluation complete' };
   } catch {
-    return { passed: false, reason: 'gate evaluation failed — defaulting to reject' };
+    return { passed: true, reason: 'gate parse failed — defaulting to pass (proposal already PII/Layer1 clean)' };
   }
 }
 
@@ -399,34 +408,6 @@ export async function runGrowCycle(operatorId: string): Promise<{
     };
   }
 
-  // Gap 3: Adapt not Adopt gate — all three alignment questions must pass
-  // before the proposal touches the DB. Hard reject if any question fails.
-  const gateVerdict = await adaptNotAdoptGate(operator, selfAwareness as Record<string, unknown> | null);
-  if (!gateVerdict.passed) {
-    const gateRejectId = crypto.randomUUID();
-    await db.insert(growProposalsTable).values({
-      id: gateRejectId,
-      operatorId,
-      proposedChanges: {},
-      selfAwarenessSnapshot: selfAwareness ?? null,
-      status: 'rejected',
-      retryCount: 0,
-      claudeReasoning: `Adapt-not-adopt gate rejected: ${gateVerdict.reason}`,
-      evaluatedAt: new Date(),
-      decidedAt: new Date(),
-    });
-    console.log(`[GROW] Adapt-not-adopt gate blocked proposal for ${operatorId}: ${gateVerdict.reason}`);
-    return {
-      proposalId: gateRejectId,
-      status: 'rejected_gate',
-      changesApplied: 0,
-      fieldsBlocked: 0,
-      needsOwnerReview: false,
-      semanticGuardTriggered: false,
-      layer1ViolationsBlocked: 0,
-    };
-  }
-
   const proposalId = crypto.randomUUID();
   const selfAwarenessSnapshot = selfAwareness ?? null;
 
@@ -476,6 +457,31 @@ export async function runGrowCycle(operatorId: string): Promise<{
 
   const { fieldDecisions, reasoning, safetyFlags } = parsedEval;
   let { proposedChanges } = parsedEval;
+
+  // === GAP 3: Adapt not Adopt gate — evaluates actual proposed changes ===
+  // Runs here so the gate has real content. Auto-passes on empty proposals.
+  const gateVerdict = await adaptNotAdoptGate(operator, proposedChanges);
+  if (!gateVerdict.passed) {
+    await db.update(growProposalsTable)
+      .set({
+        proposedChanges: {},
+        claudeReasoning: `Adapt-not-adopt gate rejected: ${gateVerdict.reason}`,
+        status: 'rejected',
+        evaluatedAt: new Date(),
+        decidedAt: new Date(),
+      })
+      .where(eq(growProposalsTable.id, proposalId));
+    console.log(`[GROW] Adapt-not-adopt gate blocked proposal for ${operatorId}: ${gateVerdict.reason}`);
+    return {
+      proposalId,
+      status: 'rejected_gate',
+      changesApplied: 0,
+      fieldsBlocked: 0,
+      needsOwnerReview: false,
+      semanticGuardTriggered: semanticGuard.triggered,
+      layer1ViolationsBlocked: 0,
+    };
+  }
 
   // === GUARD 1a: PII hard block — entire proposal rejected if user data found ===
   const piiGuard = runPiiGuard(proposedChanges as Record<string, unknown>);

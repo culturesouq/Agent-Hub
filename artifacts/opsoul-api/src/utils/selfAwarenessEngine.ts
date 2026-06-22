@@ -11,6 +11,7 @@ import {
   operatorKbTable,
   ownerKbTable,
   operatorMemoryTable,
+  operatorMainMemoryTable,
   conversationsTable,
   tasksTable,
   opsLogsTable,
@@ -88,6 +89,8 @@ export interface CapabilityState {
   ownerKbChunks: number;
   operatorKbChunks: number;
   operatorKbAvgConfidence: number;
+  mainMemoryAvgConfidence: number;
+  memoryAvgWeight: number;
 }
 
 export interface TaskHistorySummary {
@@ -212,7 +215,7 @@ async function buildSoulState(operatorId: string, op: typeof operatorsTable.$inf
 }
 
 async function buildCapabilityState(operatorId: string): Promise<CapabilityState> {
-  const [integrations, skillInstalls, ownerKbCount, operatorKbStats] = await Promise.all([
+  const [integrations, skillInstalls, ownerKbCount, operatorKbStats, mainMemoryStats] = await Promise.all([
     db
       .select({
         id: operatorIntegrationsTable.id,
@@ -249,6 +252,17 @@ async function buildCapabilityState(operatorId: string): Promise<CapabilityState
       })
       .from(operatorKbTable)
       .where(eq(operatorKbTable.operatorId, operatorId)),
+
+    db
+      .select({
+        avgConfidence: avg(operatorMainMemoryTable.confidence),
+        avgWeight: avg(operatorMainMemoryTable.weight),
+      })
+      .from(operatorMainMemoryTable)
+      .where(and(
+        eq(operatorMainMemoryTable.operatorId, operatorId),
+        isNull(operatorMainMemoryTable.archivedAt),
+      )),
   ]);
 
   return {
@@ -270,6 +284,8 @@ async function buildCapabilityState(operatorId: string): Promise<CapabilityState
     ownerKbChunks: Number(ownerKbCount[0]?.total ?? 0),
     operatorKbChunks: Number(operatorKbStats[0]?.total ?? 0),
     operatorKbAvgConfidence: Math.round(Number(operatorKbStats[0]?.avgConfidence ?? 0)),
+    mainMemoryAvgConfidence: Math.round(Number(mainMemoryStats[0]?.avgConfidence ?? 0) * 100),
+    memoryAvgWeight: Math.round(Number(mainMemoryStats[0]?.avgWeight ?? 0) * 100),
   };
 }
 
@@ -375,7 +391,14 @@ function computeHealthScore(
 ): HealthScore {
   const mandateCoverage = getMandateCoveragePercent(capabilityState);
   const growActivity = getGrowActivityScore(soulState);
-  const kbConfidence = capabilityState.operatorKbAvgConfidence;
+  // 50% from distilled memories (learned behavioral patterns, 0–1 scale → 0–100)
+  // 25% from owner KB presence (owner-curated = fully trusted when entries exist)
+  // 25% from operator KB avg confidence (explicit seeded entries)
+  const kbConfidence = Math.min(100, Math.round(
+    capabilityState.mainMemoryAvgConfidence * 0.50 +
+    (capabilityState.ownerKbChunks > 0 ? 100 : 0) * 0.25 +
+    capabilityState.operatorKbAvgConfidence * 0.25,
+  ));
   const mandateGapPenalty = Math.min(mandateGaps.length * 10, 40);
   const soulIntegrity = getSoulIntegrityScore(identityState);
 
