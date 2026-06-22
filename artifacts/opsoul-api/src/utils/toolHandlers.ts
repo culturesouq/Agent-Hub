@@ -22,7 +22,7 @@ export interface ToolHandlerContext {
   conversationId: string;
   /** Resolved scope from scopeResolver — handlers respect this when persisting. */
   scope: { scopeId?: string; scopeTrust?: string; scopeType: ScopeType };
-  /** Operator mandate — used by web_search verifyAndStore. */
+  /** Operator mandate — passed to KB gate for domain fit check. */
   mandate: string;
 }
 

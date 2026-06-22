@@ -4,7 +4,7 @@ import { operatorMemoryTable, operatorMainMemoryTable, messagesTable, conversati
 import { eq, and, isNull, isNotNull, inArray, desc } from 'drizzle-orm';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { chatCompletion } from './openrouter.js';
-import { verifyAndStore } from './kbIntake.js';
+import { gateAndStoreOperatorKb } from './kbIntake.js';
 import { redactPii } from './growGuards.js';
 import { DEFAULT_MODEL_ID } from './modelRegistry.js';
 
@@ -666,19 +666,9 @@ export async function distillMemoriesFromConversations(
               scopeId ?? 'owner',
             );
 
-            // Promote high-confidence insights to KB via curiosity engine
+            // Promote high-confidence insights to KB through the gate
             if (insight.confidence >= 0.85) {
-              const operatorRow = await db.select({ mandate: operatorsTable.mandate })
-                .from(operatorsTable)
-                .where(eq(operatorsTable.id, operatorId))
-                .limit(1);
-              const mandate = operatorRow[0]?.mandate ?? '';
-
-              const { curiositySearch } = await import('./curiosityEngine.js');
-              const curiosity = await curiositySearch(insight.content, operatorId, mandate);
-              if (curiosity.verified && curiosity.corroborated) {
-                verifyAndStore(operatorId, ownerId, insight.content, curiosity.bestSource, 'ai_distilled', mandate).catch(() => {});
-              }
+              gateAndStoreOperatorKb(operatorId, ownerId, insight.content, 'ai_distilled').catch(() => {});
             }
 
             storedLayer2++;

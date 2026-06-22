@@ -25,7 +25,7 @@ import {
   storeMemory,
   distillRawContentForMemory,
 } from './memoryEngine.js';
-import { verifyAndStore } from './kbIntake.js';
+import { gateAndStoreOperatorKb } from './kbIntake.js';
 import { triggerSelfAwareness } from './selfAwarenessEngine.js';
 import { executeHttpRequest } from './httpExecutor.js';
 
@@ -95,13 +95,12 @@ export async function persistWebSearchResult(
     content:        `[Web Search] ${searchQuery}\n${capResult.output}`,
   });
 
-  verifyAndStore(
+  gateAndStoreOperatorKb(
     operatorId,
     ownerId,
     capResult.output,
-    `web_search:${searchQuery}`,
     searchQuery,
-    mandate,
+    `web_search:${searchQuery}`,
   ).catch(() => {});
 
   // Distill the raw search output into one clean fact before persisting to

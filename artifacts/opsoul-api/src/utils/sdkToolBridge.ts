@@ -23,6 +23,7 @@ import { eq, count, gte, lt, and, ne } from 'drizzle-orm';
 import { decryptToken } from '@workspace/opsoul-utils/crypto';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { searchBothKbs, KB_RETRIEVAL_MIN_CONFIDENCE } from './vectorSearch.js';
+import { gateAndStoreOperatorKb } from './kbIntake.js';
 
 // ── env ───────────────────────────────────────────────────────────────────────
 
@@ -286,19 +287,14 @@ export async function dispatchViaSdk(
   if (name === 'kb_seed') {
     const content = typeof params.content === 'string' ? params.content : '';
     const source = typeof params.source === 'string' ? params.source : 'operator_self';
-    const confidence = typeof params.confidence === 'number' ? Math.round(params.confidence) : 75;
     const operatorId = opCtx.operatorId ?? '';
     const ownerId = opCtx.ownerId ?? '';
     if (!content) return { content: 'content is required', meta: { terminateLoop: false } };
-    const embedding = await embed(content.slice(0, 30000));
-    const vecStr = `[${embedding.join(',')}]`;
-    const id = (await import('node:crypto')).randomUUID();
-    await pool.query(
-      `INSERT INTO operator_kb (id, operator_id, owner_id, content, embedding, source_name, source_trust_level, confidence_score, intake_tags, is_pipeline_intake, privacy_cleared, content_cleared, verification_status, chunk_index, entity_type, created_at)
-       VALUES ($1,$2,$3,$4,$5::vector,$6,'operator_self',$7,'{}',false,false,false,'pending',0,'reference',NOW())`,
-      [id, operatorId, ownerId, content, vecStr, source, confidence],
-    );
-    return { content: `KB entry seeded (id ${id}, status: pending).`, meta: { terminateLoop: false } };
+    const result = await gateAndStoreOperatorKb(operatorId, ownerId, content, source);
+    if (!result.stored) {
+      return { content: `KB entry not stored: ${result.reason}`, meta: { terminateLoop: false } };
+    }
+    return { content: 'KB entry verified and stored.', meta: { terminateLoop: false } };
   }
 
   if (name === 'kb_delete_learned') {

@@ -36,7 +36,7 @@ import type { ChatMessage, ToolDefinition } from '../utils/openrouter.js';
 import { buildOwnerScope, buildScopeContext, type ValidatedScope } from '../utils/scopeResolver.js';
 import { scrapeUrl } from '../utils/urlScraper.js';
 import type { ContentPart } from '../utils/openrouter.js';
-import { verifyAndStore } from '../utils/kbIntake.js';
+import { gateAndStoreOperatorKb } from '../utils/kbIntake.js';
 import { eq, and, asc, sql } from 'drizzle-orm';
 import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
 import { isWebSearchAvailable, isFirecrawlAvailable } from '../utils/capabilityEngine.js';
@@ -398,13 +398,11 @@ function runPostResponseTasks(
       for (const match of learnMatches) {
         const text = match.replace(/\[LEARN:\s*/i, '').replace(/\]$/, '').trim();
         if (text.length > 20) {
-          verifyAndStore(
+          gateAndStoreOperatorKb(
             operator.id,
             operator.ownerId,
             text,
-            'self_learn',
             'operator_self_learn',
-            operator.mandate ?? '',
           ).catch(() => {});
         }
       }
@@ -676,25 +674,22 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   if (!operator.safeMode && attachments && attachments.length > 0) {
     for (const att of attachments) {
       if (att.type === 'text' && att.content.length > 100) {
-        verifyAndStore(
+        gateAndStoreOperatorKb(
           operator.id,
           operator.ownerId,
           att.content,
-          'file_upload',
           att.name ?? 'uploaded_document',
-          operator.mandate ?? '',
         ).catch(() => {});
       } else if (att.type === 'url') {
         try {
           const scraped = await scrapeUrl(att.content);
           if (scraped && scraped.length > 100) {
-            verifyAndStore(
+            gateAndStoreOperatorKb(
               operator.id,
               operator.ownerId,
               scraped,
               att.content,
               att.content,
-              operator.mandate ?? '',
             ).catch(() => {});
           }
         } catch {

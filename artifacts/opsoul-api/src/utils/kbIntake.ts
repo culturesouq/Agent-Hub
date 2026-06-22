@@ -1,173 +1,75 @@
 import crypto from 'crypto';
-import { pool } from '@workspace/db';
+import { pool, db } from '@workspace/db';
+import { operatorsTable } from '@workspace/db';
+import { eq } from 'drizzle-orm';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { chatCompletion } from './openrouter.js';
-import { curiositySearch } from './curiosityEngine.js';
 import { DEFAULT_MODEL_ID } from './modelRegistry.js';
 
-const DISTILL_MODEL = DEFAULT_MODEL_ID;
+const GATE_MODEL = DEFAULT_MODEL_ID;
 
-export type IntakeStatus = 'verified' | 'pending' | 'skipped';
-
-export interface IntakeResult {
+export interface KbGateResult {
   stored: boolean;
-  status: IntakeStatus;
   reason?: string;
 }
 
-async function llmCheck(prompt: string): Promise<string> {
-  const result = await chatCompletion(
-    [{ role: 'user', content: prompt }],
-    DISTILL_MODEL,
-  );
-  return result.content.trim();
-}
-
-export async function verifyAndStore(
-  operatorId: string,
-  ownerId: string,
-  content: string,
-  sourceUrl: string,
-  sourceName: string,
-  mandate: string,
-): Promise<IntakeResult> {
-
-  // Check 1: Durability — cheapest check first, no LLM knowledge scoring
+async function ask(question: string): Promise<string> {
   try {
-    const raw = await llmCheck(
-      `Is this fact stable over time, or is it ephemeral (price, today's news, live event)?\nContent: "${content.slice(0, 600)}"\nAnswer only "stable" or "ephemeral".`,
-    );
-    if (raw.toLowerCase().startsWith('ephemeral')) {
-      return { stored: false, status: 'skipped', reason: 'Content is ephemeral' };
-    }
-  } catch { /* non-critical */ }
-
-  // Check 2: Privacy
-  try {
-    const raw = await llmCheck(
-      `Does this content contain personal identifiable information (names, emails, phone numbers, addresses)?\nContent: "${content.slice(0, 600)}"\nAnswer only "yes" or "no".`,
-    );
-    if (raw.toLowerCase().startsWith('yes')) {
-      return { stored: false, status: 'skipped', reason: 'Content contains PII' };
-    }
-  } catch { /* non-critical */ }
-
-  // Embed for vector checks
-  let embedding: number[];
-  try {
-    embedding = await embed(content);
+    const r = await chatCompletion([{ role: 'user', content: question }], GATE_MODEL);
+    return r.content.trim().toLowerCase();
   } catch {
-    return { stored: false, status: 'skipped', reason: 'Embedding failed' };
+    return '';
   }
-  const vecStr = `[${embedding.join(',')}]`;
-
-  // Check 3: No duplication (similarity > 0.92)
-  try {
-    const dupResult = await pool.query<{ distance: number }>(
-      `SELECT (embedding <=> $1::vector) AS distance
-       FROM operator_kb
-       WHERE operator_id = $2 AND embedding IS NOT NULL
-       ORDER BY distance ASC LIMIT 1`,
-      [vecStr, operatorId],
-    );
-    if (dupResult.rows.length > 0 && (1 - Number(dupResult.rows[0].distance)) > 0.92) {
-      return { stored: false, status: 'skipped', reason: 'Duplicate content already in knowledge base' };
-    }
-  } catch { /* non-critical */ }
-
-  // Check 4: Contradiction detection
-  let flagReason: string | null = null;
-  try {
-    const contradictResult = await pool.query<{ distance: number }>(
-      `SELECT (embedding <=> $1::vector) AS distance
-       FROM operator_kb
-       WHERE operator_id = $2 AND embedding IS NOT NULL AND verification_status = 'verified'
-       ORDER BY distance ASC LIMIT 1`,
-      [vecStr, operatorId],
-    );
-    if (contradictResult.rows.length > 0 && (1 - Number(contradictResult.rows[0].distance)) > 0.85) {
-      flagReason = 'Possible contradiction with existing knowledge';
-    }
-  } catch { /* non-critical */ }
-
-  // Check 5: Source trust via curiositySearch
-  // We NEVER score from LLM memory. We always go to the real world.
-  const searchClaim = mandate
-    ? `${content.slice(0, 300)} related to: ${mandate.slice(0, 100)}`
-    : content.slice(0, 300);
-
-  const curiosity = await curiositySearch(searchClaim, operatorId, mandate);
-
-  // No trusted source found (Tier 1 or 2 required)
-  if (!curiosity.tier) {
-    return { stored: false, status: 'skipped', reason: 'No trusted external source found' };
-  }
-
-  // Single source only — corroboration required
-  if (!curiosity.corroborated) {
-    return { stored: false, status: 'skipped', reason: 'Single source only — corroboration required' };
-  }
-
-  // All checks passed — store at tier-derived confidence (75/85), status pending.
-  // Floor raised 2026-05-24 evening from 40 → 75 (owner direction): KB carries
-  // only entries that already cleared corroboration; unverified-tier sources
-  // never reach here (rejected above at the `!curiosity.tier` gate). Tier 1
-  // = 85 (high-trust corroborated), Tier 2 = 75 (acceptable corroborated).
-  const tierConfidence = curiosity.tier === 1 ? 85 : 75;
-  const id = crypto.randomUUID();
-  await pool.query(
-    `INSERT INTO operator_kb
-       (id, operator_id, owner_id, content, embedding, source_name, source_url,
-        source_trust_level, confidence_score, intake_tags, is_pipeline_intake,
-        privacy_cleared, content_cleared, verification_status, chunk_index,
-        flag_reason, created_at)
-     VALUES ($1,$2,$3,$4,$5::vector,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW())`,
-    [
-      id,
-      operatorId,
-      ownerId,
-      content,
-      vecStr,
-      sourceName || curiosity.bestSource || null,
-      sourceUrl || curiosity.bestSource || null,
-      curiosity.tier === 1 || curiosity.tier === 2 ? 'external_verified' : 'external_unverified',
-      tierConfidence,
-      [],
-      false,
-      true,
-      true,
-      'pending',
-      0,
-      flagReason,
-    ],
-  );
-
-  return { stored: true, status: 'pending' };
-}
-
-export interface KbSeedResult {
-  stored: boolean;
-  reason?: string;
 }
 
 /**
- * Direct-insert path for operator-synthesized knowledge.
- * Used when the operator calls the kb_seed tool after already doing research.
- * Skips curiositySearch (no redundant web round-trip) — the operator is the curator.
- * Duplicate check still runs. Entries land as pending at the given confidence, flagged
- * is_pipeline_intake=true so the VAEL cron picks them up for full verification.
+ * Four-check gate for all operator KB intake paths.
+ * Passes → stored immediately as verified. No pending limbo.
+ *
+ * 1. PII           — reject if personal data found
+ * 2. Durability    — reject if ephemeral (price, live event, today's news)
+ * 3. Dedup         — similarity > 0.80 triggers full meaning comparison
+ * 4. Domain fit    — must align with operator's mandate + archetype
+ *
+ * Domain check is skipped when operator has no mandate defined.
+ * Same criteria applied to every intake path — no special cases.
  */
-export async function persistKbSeedEntry(
+export async function gateAndStoreOperatorKb(
   operatorId: string,
   ownerId: string,
   content: string,
   sourceName: string,
-  confidence: number,
-): Promise<KbSeedResult> {
-  if (!content || content.trim().length < 50) {
-    return { stored: false, reason: 'Content too short (minimum 50 characters)' };
+  sourceUrl: string | null = null,
+): Promise<KbGateResult> {
+  if (!content || content.trim().length < 20) {
+    return { stored: false, reason: 'Content too short' };
   }
 
+  const [operator] = await db
+    .select({ mandate: operatorsTable.mandate, archetype: operatorsTable.archetype })
+    .from(operatorsTable)
+    .where(eq(operatorsTable.id, operatorId));
+  if (!operator) return { stored: false, reason: 'Operator not found' };
+
+  const mandate = operator.mandate ?? '';
+  const archetype = Array.isArray(operator.archetype)
+    ? (operator.archetype as string[]).join(', ')
+    : String(operator.archetype ?? '');
+  const snippet = content.slice(0, 800);
+
+  // 1. PII
+  const piiAnswer = await ask(
+    `Does this content contain personal identifiable information (names, emails, phone numbers, addresses, ID numbers)?\nContent: "${snippet}"\nAnswer only "yes" or "no".`,
+  );
+  if (piiAnswer.startsWith('yes')) return { stored: false, reason: 'Content contains PII' };
+
+  // 2. Durability
+  const durAnswer = await ask(
+    `Is this knowledge ephemeral (a current price, today's news, a live event, a temporary state) or is it stable knowledge?\nContent: "${snippet}"\nAnswer only "ephemeral" or "stable".`,
+  );
+  if (durAnswer.startsWith('ephemeral')) return { stored: false, reason: 'Content is ephemeral' };
+
+  // Embed once — used for both dedup and storage
   let embedding: number[];
   try {
     embedding = await embed(content);
@@ -176,56 +78,49 @@ export async function persistKbSeedEntry(
   }
   const vecStr = `[${embedding.join(',')}]`;
 
-  // Duplicate check — skip if similarity > 0.92 to avoid near-identical entries
+  // 3. Dedup — find nearest neighbour; if similarity > 0.80 read both in full
   try {
-    const dupResult = await pool.query<{ distance: number }>(
-      `SELECT (embedding <=> $1::vector) AS distance
+    const nearest = await pool.query<{ content: string; distance: number }>(
+      `SELECT content, (embedding <=> $1::vector) AS distance
        FROM operator_kb
        WHERE operator_id = $2 AND embedding IS NOT NULL
        ORDER BY distance ASC LIMIT 1`,
       [vecStr, operatorId],
     );
-    if (dupResult.rows.length > 0 && (1 - Number(dupResult.rows[0].distance)) > 0.92) {
-      return { stored: false, reason: 'Near-duplicate already in knowledge base' };
+    if (nearest.rows.length > 0) {
+      const similarity = 1 - Number(nearest.rows[0].distance);
+      if (similarity > 0.80) {
+        const dedupAnswer = await ask(
+          `Existing knowledge entry:\n"${nearest.rows[0].content}"\n\nNew knowledge entry:\n"${content}"\n\nDoes the new entry add meaningful knowledge not already covered by the existing one, or is it effectively the same information?\nAnswer only "new" or "duplicate".`,
+        );
+        if (dedupAnswer.startsWith('duplicate')) {
+          return { stored: false, reason: 'Duplicate — same knowledge already in KB' };
+        }
+      }
     }
   } catch { /* non-critical — proceed */ }
 
-  // Clamp confidence to the platform's retrieval-eligible range. Floor raised
-  // 2026-05-24 evening from 40 → 75 (owner direction): KB carries only entries
-  // ≥75 so retrieval (KB_RETRIEVAL_MIN_CONFIDENCE = 75) finds them.
-  const clampedConfidence = Math.max(75, Math.min(85, Math.round(confidence)));
-
-  try {
-    const id = crypto.randomUUID();
-    await pool.query(
-      `INSERT INTO operator_kb
-         (id, operator_id, owner_id, content, embedding, source_name, source_url,
-          source_trust_level, confidence_score, intake_tags, is_pipeline_intake,
-          privacy_cleared, content_cleared, verification_status, chunk_index,
-          flag_reason, created_at)
-       VALUES ($1,$2,$3,$4,$5::vector,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW())`,
-      [
-        id,
-        operatorId,
-        ownerId,
-        content,
-        vecStr,
-        sourceName || 'operator_research',
-        null,
-        'external_verified',
-        clampedConfidence,
-        [],
-        true,
-        true,
-        true,
-        'pending',
-        0,
-        null,
-      ],
+  // 4. Domain fit
+  if (mandate) {
+    const domainAnswer = await ask(
+      `Operator mandate: "${mandate}"\nOperator archetype: "${archetype}"\n\nKnowledge to store:\n"${snippet}"\n\nDoes this knowledge fall within the domain this operator serves?\nAnswer only "yes" or "no".`,
     );
-    return { stored: true };
-  } catch (err) {
-    console.error('[kb_seed] insert failed:', err);
-    return { stored: false, reason: 'Database error during storage' };
+    if (domainAnswer.startsWith('no')) {
+      return { stored: false, reason: 'Knowledge outside operator domain' };
+    }
   }
+
+  // All checks passed — store as verified immediately
+  const id = crypto.randomUUID();
+  await pool.query(
+    `INSERT INTO operator_kb
+       (id, operator_id, owner_id, content, embedding, source_name, source_url,
+        source_trust_level, confidence_score, intake_tags, is_pipeline_intake,
+        privacy_cleared, content_cleared, verification_status, chunk_index,
+        entity_type, created_at)
+     VALUES ($1,$2,$3,$4,$5::vector,$6,$7,'operator_self',80,'{}',false,true,true,'verified',0,'reference',NOW())`,
+    [id, operatorId, ownerId, content, vecStr, sourceName || null, sourceUrl],
+  );
+
+  return { stored: true };
 }

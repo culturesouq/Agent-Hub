@@ -434,14 +434,13 @@ export async function executeSkill(
         return { skillName: trigger.name, output: 'Could not extract KB seed parameters from context.', success: false, error: 'Parameter extraction failed' };
       }
       if (DEBUG) console.log(`[skillExecutor] kb_seed: source="${params.source}"`);
-      const confidence = Math.max(75, Math.min(85, params.confidence ?? 80));
-      const seedResult = await seedKbEntry(trigger.operatorId, trigger.operatorOwnerId, params.content, params.source, confidence);
+      const seedResult = await seedKbEntry(trigger.operatorId, trigger.operatorOwnerId, params.content, params.source);
       if (!seedResult.stored) {
         return { skillName: trigger.name, output: `KB entry not stored: ${seedResult.reason}`, success: false, error: seedResult.reason };
       }
       return {
         skillName: trigger.name,
-        output: `Knowledge entry stored from "${params.source}". Confidence: ${confidence}. Status: pending — queued for VAEL verification.`,
+        output: `Knowledge entry stored from "${params.source}" and verified.`,
         success: true,
       };
     }
