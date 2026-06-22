@@ -255,10 +255,6 @@ router.post('/:operatorId', async (req: RequestWithRawBody, res: Response): Prom
     scopeType: scope.scopeType,
   });
 
-  // Patent claim 21: tool-gating wired 2026-06-02 via runSyncAgentLoop's
-  // analyseDecision param. 'chat' → no tools offered; 'execute' → full
-  // catalogue. Mirrors chat.ts:613/855.
-  const decision = agent.analyse(userMessage);
 
   try {
     // KB and memory are retrievable by the operator on demand via tools (kb_search,
@@ -326,7 +322,7 @@ router.post('/:operatorId', async (req: RequestWithRawBody, res: Response): Prom
       messages: chatMessages,
       model,
       turnPlan,
-      analyseDecision: decision.kind,
+      analyseDecision: turnPlan.kind,
     });
     const finalContent = loopResult.content;
 

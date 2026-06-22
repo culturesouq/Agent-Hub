@@ -190,8 +190,6 @@ router.post('/:operatorId', async (req: Request, res: Response): Promise<void> =
     scopeType: scope.scopeType,
   });
 
-  const decision = agent.analyse(userMessage);
-  void decision; // tool gating in this webhook is handled at the executeSync layer; decision retained for future use
 
   try {
     // KB and memory are retrievable by the operator on demand via tools (kb_search,
@@ -262,7 +260,7 @@ router.post('/:operatorId', async (req: Request, res: Response): Promise<void> =
       model,
       turnPlan,
       // Legacy compat — kept in case anything inspects it; turnPlan takes precedence.
-      analyseDecision: decision.kind,
+      analyseDecision: turnPlan.kind,
     });
     const finalContent = loopResult.content;
 

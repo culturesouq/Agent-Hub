@@ -127,7 +127,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // 'chat' → LLM gets no tools (cannot autonomously call any); 'execute' →
   // full tool catalogue. Passed into runSyncAgentLoop below so the LLM never
   // sees tools the operator didn't authorise. Mirrors chat.ts:613/855.
-  const operatorDecision = agent.analyse(message);
 
   // ── Find or create conversation (DB-backed for persistent scopes only) ──
   let conv: typeof conversationsTable.$inferSelect | undefined;
@@ -345,7 +344,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         toolset,
         messages,
         model,
-        analyseDecision: operatorDecision.kind,
+        analyseDecision: turnPlan.kind,
         turnPlan,
       });
       const fullContent = loopResult.content;
@@ -426,7 +425,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         toolset,
         messages,
         model,
-        analyseDecision: operatorDecision.kind,
+        analyseDecision: turnPlan.kind,
         turnPlan,
       });
     } catch (llmErr: unknown) {

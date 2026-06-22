@@ -117,8 +117,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     scopeType: 'action',
   });
 
-  const actionDecision = actionAgent.analyse(actionText);
-  void actionDecision; // retained for future tool-gating
 
   // ── Try skill trigger first ──
   const trigger = await detectSkillTrigger(actionText, allSkills, operator.name);
@@ -251,7 +249,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       model: resolvedModel,
       turnPlan: actionTurnPlan,
       // Patent claim 21: operator-decided tool gating (legacy fallback).
-      analyseDecision: actionDecision.kind,
+      analyseDecision: actionTurnPlan.kind,
     });
   } catch (llmErr: unknown) {
     console.error('[public-crud] action LLM error', llmErr);

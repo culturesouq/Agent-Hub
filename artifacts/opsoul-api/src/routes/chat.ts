@@ -37,6 +37,7 @@ import { buildOwnerScope, buildScopeContext, type ValidatedScope } from '../util
 import { scrapeUrl } from '../utils/urlScraper.js';
 import type { ContentPart } from '../utils/openrouter.js';
 import { gateAndStoreOperatorKb } from '../utils/kbIntake.js';
+import { searchBothKbs, KB_RETRIEVAL_MIN_CONFIDENCE } from '../utils/vectorSearch.js';
 import { eq, and, asc, sql } from 'drizzle-orm';
 import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
 import { isWebSearchAvailable, isFirecrawlAvailable } from '../utils/capabilityEngine.js';
@@ -550,9 +551,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   const CONTEXT_WINDOW = resolveModel(operator.defaultModel || DEFAULT_MODEL_ID).config.contextWindow;
   const ANCHOR_THRESHOLD = Math.floor(CONTEXT_WINDOW * 0.4);
   const MEMORY_SURFACE_THRESHOLD = Math.floor(CONTEXT_WINDOW * 0.45);
+  const KB_SURFACE_THRESHOLD = Math.floor(CONTEXT_WINDOW * 0.25);
   const historyTokenEstimate = history.reduce((sum, m) => sum + Math.ceil(m.content.length / 4), 0);
   const soulAnchorActive = historyTokenEstimate > ANCHOR_THRESHOLD;
   const memorySurfaceActive = historyTokenEstimate > MEMORY_SURFACE_THRESHOLD;
+  const kbSurfaceActive = historyTokenEstimate > KB_SURFACE_THRESHOLD;
 
   // T2 — Language detection: Arabic Unicode blocks (Arabic, Arabic Supplement, Arabic Extended-A)
   const hasArabic = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/.test(message);
@@ -611,7 +614,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     scopeType: scope.scopeType,
   });
 
-  const decision = agent.analyse(message);
 
   // ── 5(a) Input tagger surface (Claim 5 / operator-collaborative firewall) ─
   // Phase 2B ships the integration site; Phase 4 plugs the real analyzer in.
@@ -764,13 +766,18 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // fully realised.
   const fullToolList = await listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[];
 
-  // Build live workspace manifest + surface memories if context >= 0.45, both in parallel.
-  const [workspaceManifest, surfacedMemories] = await Promise.all([
+  // Embed message once if either memory or KB surface is active, then run all three in parallel.
+  const messageEmbedding = (memorySurfaceActive || kbSurfaceActive)
+    ? await embed(message).catch(() => null)
+    : null;
+
+  const [workspaceManifest, surfacedMemories, surfacedKb] = await Promise.all([
     buildWorkspaceManifest(operator.id).catch(() => null),
-    memorySurfaceActive
-      ? embed(message)
-          .then(emb => searchMemory(operator.id, emb, 5, 0.6, 0.3, scope.scopeId))
-          .catch(() => null)
+    memorySurfaceActive && messageEmbedding
+      ? searchMemory(operator.id, messageEmbedding, 5, 0.6, 0.3, scope.scopeId).catch(() => null)
+      : Promise.resolve(null),
+    kbSurfaceActive && messageEmbedding
+      ? searchBothKbs(operator.id, messageEmbedding, 5, KB_RETRIEVAL_MIN_CONFIDENCE).catch(() => null)
       : Promise.resolve(null),
   ]);
   const turnSecretLabels = liveSecrets.map(s => s.key);
@@ -785,7 +792,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   });
   // Introspect: real tool list from turnPlan.scaffolding, injected into
   // loopMessages (not system prompt — identity is Layer 0+1 only).
-  const introspectContext = decision.kind === 'introspect' ? turnPlan.scaffolding : null;
+  const introspectContext = turnPlan.kind === 'introspect' ? turnPlan.scaffolding : null;
 
   // Build surfaced memories message — injected only when context >= 0.45.
   const surfacedMemoryCount = surfacedMemories?.length ?? 0;
@@ -798,6 +805,20 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             `${i + 1}. [${m.memoryType}] ${m.content} (confidence: ${Math.round(m.similarity * 100)}%)`
           ),
           '[Use these as context only — do not reference them explicitly unless the user asks.]',
+        ].join('\n'),
+      }
+    : null;
+
+  // Build surfaced KB message — injected when context ≥ 25% and KB has relevant hits.
+  const surfacedKbMsg: ChatMessage | null = surfacedKb && surfacedKb.length > 0
+    ? {
+        role: 'system',
+        content: [
+          '[KNOWLEDGE BASE — surfaced relevant to this query]',
+          ...surfacedKb.map((h, i) =>
+            `${i + 1}. [${h.kbSource}, relevance ${Math.round(h.similarity * 100)}%]\n${h.content}`
+          ),
+          '[Use this knowledge to inform your reply. The operator decides what is relevant.]',
         ].join('\n'),
       }
     : null;
@@ -823,12 +844,14 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   if (userMsgIndex >= 0) {
     const toInsert: ChatMessage[] = [
       ...(workspaceContextMsg ? [workspaceContextMsg] : []),
+      ...(surfacedKbMsg ? [surfacedKbMsg] : []),
       ...(surfacedMemoriesMsg ? [surfacedMemoriesMsg] : []),
       turnPlanMsg,
     ];
     messages.splice(userMsgIndex, 0, ...toInsert);
   } else {
     if (workspaceContextMsg) messages.push(workspaceContextMsg);
+    if (surfacedKbMsg) messages.push(surfacedKbMsg);
     if (surfacedMemoriesMsg) messages.push(surfacedMemoriesMsg);
     messages.push(turnPlanMsg);
   }
@@ -920,7 +943,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         // offered. For `execute` the full SDK catalog is presented (all 120
         // tools + list_workspace). Birth mode passes 'execute' so
         // newborn operators retain full capability during identity formation.
-        const allTools = decision.kind === 'execute' ? await listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[] : [];
+        const allTools = turnPlan.kind === 'execute' ? await listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[] : [];
         // Per-iteration cap on web_search — once an operator has done
         // MAX_SEARCHES in this turn, filter it out of the offered set so
         // the LLM cannot keep searching in a loop.
@@ -1149,7 +1172,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       // path. Tools are offered only when the operator's composeTurnPlan()
       // decision is 'execute'. Tool definitions come from the live SDK
       // (all 120 + list_workspace virtual tool).
-      const syncTools = decision.kind === 'execute' ? await listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[] : [];
+      const syncTools = turnPlan.kind === 'execute' ? await listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[] : [];
       const syncMessages = [...messages];
       if (introspectContext) syncMessages.push({ role: 'system', content: introspectContext });
       const syncOpts = { ...chatOpts, tools: syncTools.length > 0 ? syncTools : undefined };

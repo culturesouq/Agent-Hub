@@ -42,10 +42,6 @@ import { chatCompletion, streamChat, type ChatMessage, type ChatOptions, type St
 
 export type AnalyseDecisionKind = 'execute' | 'chat' | 'introspect';
 
-export type AnalyseDecision =
-  | { kind: 'execute' }     // operator dispatches LLM WITH tools available
-  | { kind: 'chat' }        // operator dispatches LLM WITHOUT tools — pure text reply
-  | { kind: 'introspect' }; // operator answers self-introspection from its own toolset, LLM voices the operator's content
 
 /**
  * TurnPlan — the operator's authoritative directive for this turn.
@@ -292,15 +288,11 @@ export class OperatorAgent {
   }
 
   /**
-   * Legacy entry point. Preserved for backward compat with callers that
-   * haven't been upgraded to TurnPlan yet. Delegates to composeTurnPlan
-   * and collapses to the prior {kind} shape.
-   *
-   * New callers should use composeTurnPlan() directly.
+   * @deprecated Use composeTurnPlan() directly — it returns the full TurnPlan.
+   * Kept only as a no-arg convenience; callers that need opts must call composeTurnPlan().
    */
-  analyse(userMessage: string): AnalyseDecision {
-    const plan = this.composeTurnPlan(userMessage);
-    return { kind: plan.kind };
+  analyse(userMessage: string): TurnPlan {
+    return this.composeTurnPlan(userMessage);
   }
 
   /**
