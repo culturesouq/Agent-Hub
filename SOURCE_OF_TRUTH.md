@@ -5424,3 +5424,103 @@ Self-awareness rebuilds on: conversation_end, kb_learn, grow_approved, stale_ref
 Commits `a9d7e62` and `3f86cd0` are local — awaiting deploy command.
 Previous deploy: `opsoul--0000114` · image `banistudioacr.azurecr.io/opsoul-api:chat-86381bd`
 Next deploy will include both new commits on top of `86381bd`.
+
+---
+
+## 2026-06-22 — Session Build Log (Part 2 — audit + cleanup + analyse() + KB auto-surface)
+
+### Commits this session (continued)
+
+| Commit | Timestamp (UTC+4) | Description |
+|---|---|---|
+| `f1f614c` | 2026-06-22 09:29 | chore: remove dead KB pipeline code |
+| `9090c6e` | 2026-06-22 11:45 | fix: consolidate analyse() into composeTurnPlan(); auto-inject KB at 25% context |
+
+Full commit set in this session (all pending deploy):
+
+| Commit | Timestamp (UTC+4) | Description |
+|---|---|---|
+| `a9d7e62` | 2026-06-22 08:49 | fix: GROW gate post-proposal + kbConfidence 50/25/25 |
+| `3f86cd0` | 2026-06-22 09:18 | rebuild: operator KB pipeline → 4-check domain gate |
+| `448a5a1` | 2026-06-22 09:21 | chore: SoT update (part 1) |
+| `f1f614c` | 2026-06-22 09:29 | chore: dead code cleanup |
+| `9090c6e` | 2026-06-22 11:45 | fix: analyse() + KB auto-surface |
+
+---
+
+### `f1f614c` — Dead code cleanup
+
+- `toolPersistence.ts`: `persistWebSearchResult` deleted (no callers since `3f86cd0`) + its `gateAndStoreOperatorKb` import removed
+- `kbSeedExecutor.ts`: `KbSeedResult` re-export removed (never imported anywhere)
+- `chat.ts`: stale comment updated to reflect removal
+- `kbSeedExecutor.ts`: imports split to separate value and type import (tsc hygiene)
+
+---
+
+### Pre-deploy audit findings (2026-06-22)
+
+Full audit across operator-as-driver, memory retrieval, KB retrieval, and tool trigger chain. Key findings:
+
+**Working correctly:**
+- All 5 surfaces (chat.ts, public-chat.ts, telegram-webhook.ts, whatsapp-webhook.ts, public-crud.ts) wire operator decision before LLM call ✓
+- TurnPlan (kind/intent/scaffolding/constraints/toolsAuthorised) injected as high-priority system message immediately before user turn ✓
+- Tool enforcement: empty tool catalog offered when mode ≠ execute — LLM cannot call tools it was never given ✓
+- Memory retrieval: two-layer (operator_memory scope-strict + operator_main_memory GROW-eligible), both at similarity ≥ 0.55, limit 8 each ✓
+- KB retrieval: owner_kb (no filter) + operator_kb (confidence ≥ 75, status != blocked), similarity ≥ 0.55 ✓
+- Tool loop: detect → dispatchViaSdk → role:tool result → loop. Terminates on clean response / terminateLoop flag / MAX_ITER 8 ✓
+
+**Gaps found and fixed:**
+
+1. `analyse()` was a legacy wrapper that ran `composeTurnPlan()` internally but returned only `{ kind }`. Every surface then called `composeTurnPlan()` again for the full TurnPlan — two executions per turn. **Fixed in `9090c6e`.**
+
+2. KB only reachable via explicit `kb_search` tool call, which requires `kind === 'execute'`. Conversational knowledge questions ("what do you know about drip irrigation?") don't trigger execute mode → operator's entire KB unreachable for that turn. **Fixed in `9090c6e` via auto-surface.**
+
+---
+
+### `9090c6e` — analyse() consolidation + KB auto-surface at 25%
+
+#### analyse() consolidated (`operatorAgent.ts`, all 5 surfaces)
+
+`analyse(userMessage)` now returns the full `TurnPlan` instead of `{ kind }`. All 5 surfaces:
+- Drop their redundant `composeTurnPlan()` call
+- Use `turnPlan.kind` directly wherever `decision.kind` / `operatorDecision.kind` / `actionDecision.kind` was used
+- One composeTurnPlan() execution per turn (was two)
+
+`AnalyseDecision` type removed — no callers remained after consolidation.
+
+#### KB auto-surface at 25% context threshold (`chat.ts`)
+
+New constant: `KB_SURFACE_THRESHOLD = Math.floor(CONTEXT_WINDOW * 0.25)`
+
+**Pattern mirrors memory surface (45%) exactly:**
+- `kbSurfaceActive` flag set when `historyTokenEstimate > KB_SURFACE_THRESHOLD`
+- When active: embed message → `searchBothKbs(operatorId, embedding, 5, 75)` → inject as system message
+- Threshold 25% fires earlier than memory (45%) — KB is stable structured knowledge, should appear before conversations get long
+
+**embed() called once, reused for both:**
+```typescript
+const messageEmbedding = (memorySurfaceActive || kbSurfaceActive)
+  ? await embed(message).catch(() => null)
+  : null;
+// then both searchMemory and searchBothKbs receive messageEmbedding
+```
+
+**Injection order before user turn (left = earliest, highest priority = last):**
+```
+[workspace manifest] → [KB — 25%+] → [MEMORIES — 45%+] → [TURN-PLAN] → [user message]
+```
+
+KB message label: `[KNOWLEDGE BASE — surfaced relevant to this query]`
+Format: numbered hits with kbSource tag + relevance % + full content.
+Closing instruction: `The operator decides what is relevant.`
+
+**Effect on Nahil:** Her 547 memories (main_memory) surface via memory path. Her operator_kb entries (when ≥75 confidence) surface via KB path. A conversational question about agriculture now reaches both layers without any action verb or tool call.
+
+**`kb_search` tool remains available** — for explicit deeper searches, different queries, or when outside the 25% threshold on short conversations.
+
+---
+
+### NOT YET DEPLOYED
+
+All 5 commits (`a9d7e62` → `9090c6e`) are local — awaiting deploy command.
+Previous deploy: `opsoul--0000114` · image `banistudioacr.azurecr.io/opsoul-api:chat-86381bd`
