@@ -40,7 +40,8 @@ import { scrapeUrl } from '../utils/urlScraper.js';
 import type { ContentPart } from '../utils/openrouter.js';
 import { verifyAndStore } from '../utils/kbIntake.js';
 import { eq, and, asc, sql } from 'drizzle-orm';
-import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
+// loadArchetypeSkills kept for reference — replaced by loadAllPlatformSkills (universal model).
+// import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
 import { isWebSearchAvailable, isFirecrawlAvailable } from '../utils/capabilityEngine.js';
 import {
   persistUrlScrapedResult,
@@ -222,6 +223,33 @@ async function loadActiveSkills(operatorId: string): Promise<ActiveSkill[]> {
     );
 
   return installs as unknown as ActiveSkill[];
+}
+
+// Loads the full platform skill catalog — every skill, no archetype filter.
+// Every operator gets all skills; the operator's mandate + cosine similarity
+// on triggerDescription ensures only relevant skills fire per conversation.
+async function loadAllPlatformSkills(): Promise<InstalledSkill[]> {
+  const rows = await db
+    .select({
+      id:                 platformSkillsTable.id,
+      name:               platformSkillsTable.name,
+      instructions:       platformSkillsTable.instructions,
+      outputFormat:       platformSkillsTable.outputFormat,
+      triggerDescription: platformSkillsTable.triggerDescription,
+      integrationType:    platformSkillsTable.integrationType,
+    })
+    .from(platformSkillsTable);
+
+  return rows.map(s => ({
+    installId:          `platform-${s.id}`,
+    skillId:            s.id,
+    name:               s.name,
+    triggerDescription: s.triggerDescription ?? '',
+    instructions:       s.instructions ?? '',
+    outputFormat:       s.outputFormat ?? null,
+    customInstructions: null,
+    integrationType:    s.integrationType ?? null,
+  }));
 }
 
 // ─── Birth identity extraction ───────────────────────────────────────────────
@@ -481,7 +509,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // (gmail, calendar, drive, github, notion, slack, linear, hubspot).
   const [skills, archetypeDefaultSkills, selfAwarenessRow, history, liveSecrets, liveIntegrations] = await Promise.all([
     loadActiveSkills(operator.id),
-    loadArchetypeSkills((operator.archetype as string[]) ?? []),
+    loadAllPlatformSkills(),
     db.select().from(selfAwarenessStateTable).where(eq(selfAwarenessStateTable.operatorId, operator.id)).limit(1),
     buildMessageHistory(conv.id),
     db.select({ key: operatorSecretsTable.key })

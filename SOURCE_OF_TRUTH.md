@@ -7,6 +7,34 @@
 
 ---
 
+## ✅ SESSION WORK — 2026-06-24
+
+### Universal Skills Catalog — decision + workflow running
+
+**Decision (2026-06-24):** Skills are now UNIVERSAL — no archetype assignment. Every operator receives the full platform skill catalog automatically. The operator's mandate + cosine similarity on `triggerDescription` is the only filter — a sales operator's users will never trigger a parenting skill; the match simply won't fire. No manual installation, no archetype gating.
+
+**Why operators were skill-less (root cause found):**
+- `loadActiveSkills(operator.id)` — reads `operatorSkillsTable` junction. Most operators have NO rows here (never manually installed).
+- `loadArchetypeSkills(operator.archetype[])` — reads platform skills filtered by archetype. If archetype not set, or names don't match DB → zero skills.
+- Result: operators walked into every conversation with 0 skills in `buildAgencySkills`. `detectSkillTrigger` never fired.
+
+**Fix (to build — awaiting go):**
+- Replace archetype-filtered load with `loadAllPlatformSkills()` — full catalog, every operator, every turn.
+- `archetype` column on `platform_skills` becomes nullable/null for universal skills.
+- `archetypeSkills.ts` either removed or kept only for the legacy 45 archetype-specific skills.
+
+**Existing skill catalog: 45 skills (9 archetypes × 5)**
+Executor, Advisor, Expert, Connector, Creator, Guardian, Builder, Catalyst, Analyst — seeded via `seedSkills.ts` + `seed-new-archetype-skills.ts`.
+
+**New universal skill catalog: ~1050 skills across 35 domains**
+Workflow `wf_7d06cfd9-f50` running (2026-06-24 late night). 35 parallel agents, 30 skills each. Domains: Personal Finance, Relationships & Family, Parenting & Children, Health & Wellbeing, Career Development, Leadership & Management, Marketing & Brand, Sales & Business Development, Legal & Contracts, Business Finance & Investment, Education & Learning, Events & Community, Travel & Logistics, Mental & Emotional Wellbeing, Entrepreneurship & Startups, Public Speaking & Presenting, Hiring & People Management, Product & Customer Experience, Writing & Content Creation, Research & Investigation, Operations & Process Design, Creativity & Design Thinking, Coaching & Personal Development, Negotiation & Deals, Strategy & Planning, Technology & Software Development, Social Media & Digital Presence, Nonprofit & Social Impact, Real Estate & Property, Crisis Management & Risk, Data & Analytics, Communication & Influence, Project Management, Innovation & Problem Solving, Diversity Culture & Inclusion.
+
+**Output when workflow finishes:** `scratchpad/seedUniversalSkills.ts` — drop-in seed script, same pattern as existing seed scripts. `archetype: null`, `author: 'opsoul-platform'`. Portable: to migrate skills to SDK later, point same file at SDK DB and run. One command.
+
+**Archetypes: CLOSED** — no new archetypes being added. Skills expansion is the direction.
+
+---
+
 ## 🔴 TO DO — Architecture backlog (confirmed 2026-06-21, locked spec)
 
 > These are not suggestions. Each item was audited against live code and confirmed missing or incomplete. Build order is Mohamed's call. No item starts without explicit go.
