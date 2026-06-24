@@ -29,9 +29,15 @@ Executor, Advisor, Expert, Connector, Creator, Guardian, Builder, Catalyst, Anal
 **New universal skill catalog: ~1050 skills across 35 domains**
 Workflow `wf_7d06cfd9-f50` running (2026-06-24 late night). 35 parallel agents, 30 skills each. Domains: Personal Finance, Relationships & Family, Parenting & Children, Health & Wellbeing, Career Development, Leadership & Management, Marketing & Brand, Sales & Business Development, Legal & Contracts, Business Finance & Investment, Education & Learning, Events & Community, Travel & Logistics, Mental & Emotional Wellbeing, Entrepreneurship & Startups, Public Speaking & Presenting, Hiring & People Management, Product & Customer Experience, Writing & Content Creation, Research & Investigation, Operations & Process Design, Creativity & Design Thinking, Coaching & Personal Development, Negotiation & Deals, Strategy & Planning, Technology & Software Development, Social Media & Digital Presence, Nonprofit & Social Impact, Real Estate & Property, Crisis Management & Risk, Data & Analytics, Communication & Influence, Project Management, Innovation & Problem Solving, Diversity Culture & Inclusion.
 
-**Output when workflow finishes:** `scratchpad/seedUniversalSkills.ts` — drop-in seed script, same pattern as existing seed scripts. `archetype: null`, `author: 'opsoul-platform'`. Portable: to migrate skills to SDK later, point same file at SDK DB and run. One command.
+**Seed script:** `server_staging/src/scripts/seedUniversalSkills.ts` — committed `0a41e3e`. 1077 skills, `archetype: null`, `author: 'opsoul-platform'`. Run against live DB to activate. Portable: to migrate to SDK later, point same file at SDK DB. One command.
+
+**chat.ts change (committed `0a41e3e`):** `loadArchetypeSkills()` → `loadAllPlatformSkills()`. New function at line ~231 loads entire `platformSkillsTable` with no filter. Variable name `archetypeDefaultSkills` kept in destructure for zero downstream disruption. `buildAgencySkills` merges platform catalog + any operator-specific overrides as before.
 
 **Archetypes: CLOSED** — no new archetypes being added. Skills expansion is the direction.
+
+**TO ACTIVATE (next session when Mohamed gives go):**
+1. Run `seedUniversalSkills.ts` against live DB (needs `DATABASE_URL`)
+2. Deploy new image
 
 ---
 
