@@ -204,8 +204,8 @@ Renamed utils/openrouter.ts → utils/bedrock.ts. Removed OpenAI imports, openai
 ### ✅ Phase 2 — Delete the BYO model system — DONE commit b54c079 2026-06-25
 Deleted operatorModelConfig.ts. Removed getOperatorModelOverride() from chat.ts + growEngine.ts. Removed openrouterApiKey logic + verify-key endpoint + all 4 model-config routes from operators.ts. Removed ModelOverride stub from bedrock.ts. Cleaned dead AdapterKind types from modelRegistry.ts.
 
-### Phase 3 — Clean the UI
-Fix `opsoul-hub/src/components/operator/SettingsSection.tsx` lines 893–905: replace "Using OpSoul's shared key — Your operator runs on OpSoul's OpenRouter key" banner with Bedrock branding. Remove OpenRouter from BYO provider dropdowns in `SettingsSection.tsx` and `Setup.tsx`. Remove OpenRouter mention from `PrivacyPage.tsx` line 22.
+### ✅ Phase 3 — Clean the UI — DONE commit fa119a6 2026-06-25
+Removed ByoModelPanel, all BYO banners, OpenRouter text from SettingsSection.tsx. Collapsed Setup.tsx to 2 steps (removed BYO key step). Updated PrivacyPage.tsx. Removed hasCustomApiKey from types.ts. FALLBACK_MODELS now points to Bedrock Claude Sonnet 4.6.
 
 ### Phase 4 — Remove `openai` npm package
 Remove `"openai": "^6.27.0"` from `artifacts/opsoul-api/package.json`. Update lockfile (`pnpm install`).
