@@ -1,12 +1,6 @@
 /**
- * Shared operator capability loop — used by both the sync chat route and the
- * scheduled-tasks cron.  Handles:
- *   1. First-pass LLM completion
- *   2. Skill trigger detection (two-pass: user message + operator response)
- *   3. Skill execution
- *   4. Second-pass LLM completion (if a skill fired)
- *
- * Returns the final response text.
+ * Shared operator capability loop — used by the scheduled-tasks cron.
+ * Skill-first: detect skill before LLM, inject as context, one LLM call.
  */
 
 import { db } from '@workspace/db';
@@ -14,8 +8,9 @@ import { operatorSkillsTable, platformSkillsTable } from '@workspace/db';
 import { eq, and } from 'drizzle-orm';
 import { chatCompletion, type ChatOptions, type ChatMessage } from './openrouter.js';
 import { detectSkillTrigger, type InstalledSkill } from './skillTriggerEngine.js';
-import { executeSkill } from './skillExecutor.js';
 import { DEFAULT_MODEL_ID } from './modelRegistry.js';
+import { embed } from '@workspace/opsoul-utils/ai';
+import { searchSkillByVector } from './vectorSearch.js';
 
 export type { ChatMessage };
 
@@ -60,53 +55,60 @@ export async function loadOperatorSkills(operatorId: string): Promise<InstalledS
   }));
 }
 
-function buildSecondPassMessages(
-  messages: ChatMessage[],
-  firstResponse: string,
-  skillOutput: string,
-): ChatMessage[] {
-  return [
-    ...messages,
-    { role: 'assistant', content: firstResponse },
-    { role: 'system',    content: `[Task completed — findings below]\n${skillOutput}` },
-  ];
-}
-
 export async function runCapabilityLoop(
   messages: ChatMessage[],
   userMessage: string,
-  skills: InstalledSkill[],
+  operatorSkills: InstalledSkill[],
   modelOrOptions: string | ChatOptions,
   operatorId?: string,
   operatorOwnerId?: string,
 ): Promise<CapabilityLoopResult> {
-  const modelStr = typeof modelOrOptions === 'string' ? modelOrOptions : (modelOrOptions.model ?? DEFAULT_MODEL_ID);
+  void operatorId; void operatorOwnerId; // retained in signature for callers
 
-  const first = await chatCompletion(messages, modelOrOptions);
-  let content            = first.content ?? '';
-  let promptTokens       = first.promptTokens ?? 0;
-  let completionTokens   = first.completionTokens ?? 0;
-  let skillFired         = false;
+  // Detect skill BEFORE the LLM runs — inject as context, not post-response.
+  let skillFired = false;
   let skillName: string | undefined;
 
-  if (skills.length > 0) {
-    const trigger = await detectSkillTrigger(userMessage, skills, content);
+  let messageEmbedding: number[] | null = null;
+  try { messageEmbedding = await embed(userMessage); } catch { /* non-fatal */ }
+
+  let activeSkill: { name: string; instructions: string; outputFormat: string | null } | null = null;
+
+  // 1. Operator-specific skills first (small set, on-the-fly embed)
+  if (operatorSkills.length > 0 && messageEmbedding) {
+    const trigger = await detectSkillTrigger(userMessage, operatorSkills).catch(() => null);
     if (trigger) {
-      if (operatorId) trigger.operatorId = operatorId;
-      if (operatorOwnerId) trigger.operatorOwnerId = operatorOwnerId;
-      console.log(`[capability-loop] skill triggered: ${trigger.name}`);
-      const result = await executeSkill(trigger, modelStr);
-      if (result.success) {
-        skillFired = true;
-        skillName  = trigger.name;
-        const secondMsgs = buildSecondPassMessages(messages, content, result.output);
-        const second = await chatCompletion(secondMsgs, modelOrOptions);
-        content          = second.content ?? content;
-        promptTokens     = second.promptTokens ?? promptTokens;
-        completionTokens = second.completionTokens ?? completionTokens;
-      }
+      activeSkill = { name: trigger.name, instructions: trigger.instructions, outputFormat: trigger.outputFormat };
     }
   }
 
-  return { content, promptTokens, completionTokens, skillFired, skillName };
+  // 2. Platform catalog — one vector query
+  if (!activeSkill && messageEmbedding) {
+    const hit = await searchSkillByVector(messageEmbedding, 0.55).catch(() => null);
+    if (hit) activeSkill = { name: hit.name, instructions: hit.instructions, outputFormat: hit.outputFormat };
+  }
+
+  // Inject skill before the first user message (same as chat.ts)
+  const withSkill = [...messages];
+  if (activeSkill) {
+    const skillContent = `[Active Skill: ${activeSkill.name}]\n${activeSkill.instructions}${activeSkill.outputFormat ? `\n\nOutput format: ${activeSkill.outputFormat}` : ''}`;
+    const userIdx = withSkill.findIndex(m => m.role === 'user');
+    if (userIdx >= 0) {
+      withSkill.splice(userIdx, 0, { role: 'system', content: skillContent });
+    } else {
+      withSkill.push({ role: 'system', content: skillContent });
+    }
+    skillFired = true;
+    skillName = activeSkill.name;
+    console.log(`[capability-loop] skill-first: "${activeSkill.name}"`);
+  }
+
+  const result = await chatCompletion(withSkill, modelOrOptions);
+  return {
+    content:          result.content ?? '',
+    promptTokens:     result.promptTokens ?? 0,
+    completionTokens: result.completionTokens ?? 0,
+    skillFired,
+    skillName,
+  };
 }

@@ -42,6 +42,7 @@ export async function searchOwnerKb(
      FROM owner_kb
      WHERE operator_id = $2
        AND embedding IS NOT NULL
+       AND (embedding <=> $1::vector) < 0.85
      ORDER BY distance ASC
      LIMIT $3`,
     [vecStr, operatorId, limit],
@@ -136,6 +137,58 @@ export async function searchBothKbs(
   const merged = [...ownerHits, ...operatorHits];
   merged.sort((a, b) => a.distance - b.distance);
   return merged.slice(0, topN);
+}
+
+export interface SkillHit {
+  id: string;
+  name: string;
+  instructions: string;
+  outputFormat: string | null;
+  triggerDescription: string;
+  similarity: number;
+}
+
+// Vector search against the full platform skill catalog.
+// Embeds the query once upstream; this function does one DB query.
+// Returns the single best match below distanceThreshold, or null.
+// User-message threshold: 0.55 (similarity >= 0.45)
+// Operator-response threshold: 0.40 (similarity >= 0.60)
+export async function searchSkillByVector(
+  embedding: number[],
+  distanceThreshold: number = 0.55,
+): Promise<SkillHit | null> {
+  const vecStr = `[${embedding.join(',')}]`;
+
+  const result = await pool.query<{
+    id: string;
+    name: string;
+    instructions: string;
+    output_format: string | null;
+    trigger_description: string;
+    distance: number;
+  }>(
+    `SELECT id, name, instructions, output_format, trigger_description,
+            (embedding <=> $1::vector) AS distance
+     FROM platform_skills
+     WHERE embedding IS NOT NULL
+     ORDER BY distance ASC
+     LIMIT 1`,
+    [vecStr],
+  );
+
+  if (result.rows.length === 0) return null;
+  const row = result.rows[0];
+  const distance = Number(row.distance);
+  if (distance > distanceThreshold) return null;
+
+  return {
+    id: row.id,
+    name: row.name,
+    instructions: row.instructions,
+    outputFormat: row.output_format,
+    triggerDescription: row.trigger_description,
+    similarity: 1 - distance,
+  };
 }
 
 export function buildRagContext(hits: VectorHit[]): string {
