@@ -58,3 +58,7 @@ Thumbs.db
 .cache/
 .local/
 attached_assets/
+
+# External project backups (not part of this repo)
+nahil_backup/
+electron/server_staging/
