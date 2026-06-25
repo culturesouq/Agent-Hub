@@ -151,18 +151,9 @@ expect(`getTool("does_not_exist") returns undefined`, getTool('does_not_exist') 
 section('Model Registry');
 
 const models = listAvailableModels();
-expect(`at least 5 models catalogued (got ${models.length})`, models.length >= 5);
+expect(`at least 1 model catalogued (got ${models.length})`, models.length >= 1);
 
-const expectedModels = [
-  'moonshotai/kimi-k2.5',
-  'hajeri-3b-v2',
-  'openai/gpt-5',
-  'anthropic/claude-sonnet-4.6',
-  'opsoul/auto',
-];
-for (const expected of expectedModels) {
-  expect(`model "${expected}" registered`, models.some((m) => m.id === expected));
-}
+expect(`bedrock/claude-sonnet-4-6 registered`, models.some((m) => m.id === 'bedrock/claude-sonnet-4-6'));
 
 // Every model has label + description + provider
 const badModels = models.filter((m) => !m.label || !m.description || !m.provider);
@@ -174,23 +165,9 @@ expect(
 // ── Model resolution ──────────────────────────────────────────────────
 section('resolveModel()');
 
-const kimi = resolveModel('moonshotai/kimi-k2.5');
-expect(`Kimi resolves to OpenRouter`, kimi.config.provider === 'openrouter');
-expect(`Kimi sendAs is unchanged`, kimi.sendAs === 'moonshotai/kimi-k2.5');
-
-const gpt5 = resolveModel('openai/gpt-5');
-expect(`GPT-5 resolves to OpenAI`, gpt5.config.provider === 'openai');
-expect(`GPT-5 sendAs is stripped to "gpt-5"`, gpt5.sendAs === 'gpt-5');
-
-const hajeri = resolveModel('hajeri-3b-v2');
-expect(`Hajeri resolves to "hajeri" provider`, hajeri.config.provider === 'hajeri');
-
-// Unknown slashed model → OpenRouter fallback
-const unknown = resolveModel('mistralai/codestral-22b');
-expect(
-  `unknown OpenRouter-shaped model falls back to OpenRouter`,
-  unknown.config.provider === 'openrouter',
-);
+const bedrockModel = resolveModel('bedrock/claude-sonnet-4-6');
+expect(`bedrock/claude-sonnet-4-6 resolves to bedrock`, bedrockModel.config.provider === 'bedrock');
+expect(`bedrock/claude-sonnet-4-6 sendAs is cross-region profile`, bedrockModel.sendAs === 'us.anthropic.claude-sonnet-4-6');
 
 // Unknown bare model → default
 const bare = resolveModel('totally-made-up');

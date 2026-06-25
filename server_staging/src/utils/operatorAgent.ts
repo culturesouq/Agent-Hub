@@ -37,14 +37,11 @@
  */
 
 import type { ScopeType } from './scopeResolver.js';
+import type { WorkspaceManifest } from './selfAwarenessEngine.js';
 import { chatCompletion, streamChat, type ChatMessage, type ChatOptions, type StreamChunk, type CompletionResult } from './openrouter.js';
 
 export type AnalyseDecisionKind = 'execute' | 'chat' | 'introspect';
 
-export type AnalyseDecision =
-  | { kind: 'execute' }     // operator dispatches LLM WITH tools available
-  | { kind: 'chat' }        // operator dispatches LLM WITHOUT tools — pure text reply
-  | { kind: 'introspect' }; // operator answers self-introspection from its own toolset, LLM voices the operator's content
 
 /**
  * TurnPlan — the operator's authoritative directive for this turn.
@@ -88,7 +85,7 @@ export interface TurnPlan {
 // Heuristics — patterns the operator uses to decide whether a turn needs tool access.
 // Conservative: when in doubt, return `chat`. Tool use is a deliberate operator
 // decision, not an LLM default. Per patent: the operator decides; the LLM is the engine.
-const ACTION_VERB_PATTERN = /\b(search|find|look\s+up|lookup|check|fetch|get|query|read|write|create|save|store|schedule|book|remind|browse|visit|crawl|scrape|list|update|delete|pause|resume|send|post|email|message|call|run|execute|trigger|http|api|request|generate|build|make|set\s+up|configure|install|deploy|publish)\b/i;
+const ACTION_VERB_PATTERN = /\b(search|find|look\s+up|lookup|check|fetch|get|query|read|write|create|save|store|schedule|book|remind|browse|visit|crawl|scrape|list|update|delete|pause|resume|send|post|email|message|call|run|execute|trigger|http|api|request|generate|build|make|set\s+up|configure|install|deploy|publish|test|verify|ping|connect|hit|call)\b/i;
 const URL_PATTERN = /https?:\/\/|www\.|\.[a-z]{2,4}\//i;
 const FILE_PATTERN = /\.(md|txt|csv|json|html|pdf|docx?|xlsx?|png|jpg|jpeg|yml|yaml|sql|sh|ts|tsx|js|jsx|py|go|rs)\b/i;
 // Time keywords stay tool-eligible because the operator may want get_current_time.
@@ -98,16 +95,6 @@ const TIME_QUERY_PATTERN = /\b(what\s+time|current\s+time|today's\s+date|right\s
 // abilities, what it can do). For these the operator answers from its own
 // authoritative toolset, the LLM is only used to voice the operator's content.
 const INTROSPECT_PATTERN = /\b(what\s+(tools?|capabilities|abilities|skills|features|functions|integrations)|(?:can|do)\s+you\s+(do|have|know|use|support)|(?:what'?s|tell\s+me)\s+(about\s+)?(?:your\s+)?(capabilities|tools|skills|abilities|toolkit|tool\s*set|stack)|what\s+are\s+(your\s+)?(tools|capabilities|skills|abilities|powers)|show\s+me\s+(your\s+)?(tools|capabilities|skills))\b/i;
-
-export function detectToolNeed(userMessage: string): boolean {
-  const m = userMessage ?? '';
-  if (m.length > 200) return true;
-  if (URL_PATTERN.test(m)) return true;
-  if (FILE_PATTERN.test(m)) return true;
-  if (TIME_QUERY_PATTERN.test(m)) return true;
-  if (ACTION_VERB_PATTERN.test(m)) return true;
-  return false;
-}
 
 export function detectIntrospection(userMessage: string): boolean {
   return INTROSPECT_PATTERN.test(userMessage ?? '');
@@ -123,21 +110,54 @@ export function buildAgencyDescription(opts: {
   toolDescriptions?: Map<string, string>;
   operatorName: string;
   scopeType: ScopeType;
+  workspaceManifest?: WorkspaceManifest | null;
+  secretLabels?: string[];
+  integrations?: string[];
 }): string {
-  const { toolNames, toolDescriptions, operatorName, scopeType } = opts;
-  if (toolNames.length === 0) {
-    return `[OPERATOR-AGENCY-CONTENT]\nThe user asked you to introspect about your capabilities. Your real, current toolset is:\n\n(no tools available this scope/turn).\n\nVoice this fact in your own ${operatorName} voice. Do not invent tool names. Do not list tools you do not have.\n[/OPERATOR-AGENCY-CONTENT]`;
-  }
+  const { toolNames, toolDescriptions, operatorName, scopeType, workspaceManifest, secretLabels, integrations } = opts;
   const lines: string[] = [];
   lines.push(`[OPERATOR-AGENCY-CONTENT]`);
-  lines.push(`The user asked you to introspect about your capabilities. Your real, current toolset (scope=${scopeType}, ${toolNames.length} tools) is:`);
+  lines.push(`The user asked you to introspect about your capabilities. Your real, current workspace (scope=${scopeType}):`);
   lines.push('');
-  for (const name of toolNames) {
-    const desc = toolDescriptions?.get(name);
-    lines.push(desc ? `  - ${name} — ${desc}` : `  - ${name}`);
+
+  // Tools
+  if (toolNames.length === 0) {
+    lines.push('Tools: (none available this scope/turn)');
+  } else {
+    lines.push(`Tools (${toolNames.length}):`);
+    for (const name of toolNames) {
+      const desc = toolDescriptions?.get(name);
+      lines.push(desc ? `  - ${name} — ${desc}` : `  - ${name}`);
+    }
   }
+
+  // Integrations
+  if (integrations && integrations.length > 0) {
+    lines.push('');
+    lines.push(`Integrations connected: ${integrations.join(', ')}`);
+  }
+
+  // Secrets (labels only — values never surface)
+  if (secretLabels && secretLabels.length > 0) {
+    lines.push(`Stored secrets (labels, values are private): ${secretLabels.map(s => `{{${s}}}`).join(', ')}`);
+  }
+
+  // Workspace from manifest — files, KB, memory
+  if (workspaceManifest) {
+    if (workspaceManifest.fileCount > 0) {
+      lines.push(`Files: ${workspaceManifest.fileCount} (${workspaceManifest.fileNames.slice(0, 5).join(', ')}${workspaceManifest.fileNames.length > 5 ? ` … +${workspaceManifest.fileNames.length - 5} more` : ''})`);
+    }
+    const kbTotal = workspaceManifest.kbByTier.high + workspaceManifest.kbByTier.medium + workspaceManifest.kbByTier.low;
+    if (kbTotal > 0) {
+      lines.push(`Knowledge base: ${kbTotal} entries (${workspaceManifest.kbByTier.high} high-confidence)`);
+    }
+    if (workspaceManifest.totalMemoryActive > 0) {
+      lines.push(`Memory active: ${workspaceManifest.totalMemoryActive}`);
+    }
+  }
+
   lines.push('');
-  lines.push(`Voice this list in your own ${operatorName} voice. Group tools by capability if it helps. Do not invent tool names you do not have. Do not omit tools you do have.`);
+  lines.push(`Voice this in your own ${operatorName} voice. Do not invent capabilities you do not have. Do not omit what you do have.`);
   lines.push(`[/OPERATOR-AGENCY-CONTENT]`);
   return lines.join('\n');
 }
@@ -157,6 +177,12 @@ export interface ComposeTurnPlanOptions {
   toolNames?: string[];
   /** Optional name→description map for richer introspect content. */
   toolDescriptions?: Map<string, string>;
+  /** Live workspace manifest — integrations, files, KB counts, memory. Operator reasons from this. */
+  workspaceManifest?: WorkspaceManifest | null;
+  /** Secret labels available this turn (for agency description). */
+  secretLabels?: string[];
+  /** Integration types connected this turn. */
+  integrations?: string[];
 }
 
 export class OperatorAgent {
@@ -204,6 +230,9 @@ export class OperatorAgent {
         toolDescriptions: opts.toolDescriptions,
         operatorName,
         scopeType,
+        workspaceManifest: opts.workspaceManifest,
+        secretLabels: opts.secretLabels,
+        integrations: opts.integrations,
       });
       return {
         kind: 'introspect',
@@ -219,45 +248,18 @@ export class OperatorAgent {
       };
     }
 
-    // Tool-need heuristics → 'execute' (tools authorised this turn).
-    if (detectToolNeed(message)) {
-      return {
-        kind: 'execute',
-        userMessage: message,
-        intent: 'This turn likely needs one or more tools to answer accurately.',
-        scaffolding: `[OPERATOR-INTENT] The user has implied or requested work that benefits from tools. Choose the right tools from your authorised set, execute them, and synthesise the result for the user. [/OPERATOR-INTENT]`,
-        constraints: [
-          'Only call tools that appear in your authorised tool list for this turn.',
-          'Do not fabricate tool results — if a tool errors, surface the real error.',
-        ],
-        toolsAuthorised: true,
-      };
-    }
-
-    // Default → 'chat': operator-driven conversational reply, no tools.
+    // Operator is always the driver — full tool catalog available every turn.
     return {
-      kind: 'chat',
+      kind: 'execute',
       userMessage: message,
-      intent: 'Conversational turn — answer the user directly in operator voice. No tools needed.',
-      scaffolding: `[OPERATOR-INTENT] This is a conversational turn. Reply as ${operatorName} in your own voice. Do not invent capabilities. Do not request tools you have not been authorised to use this turn. [/OPERATOR-INTENT]`,
+      intent: 'Operator decides which tools and skills to use.',
+      scaffolding: `[OPERATOR-INTENT] You have your full workspace available. Use your skills and tools as you see fit to serve the user. You decide. [/OPERATOR-INTENT]`,
       constraints: [
-        'No tool calls this turn — none are offered or authorised.',
-        'If you do not know something, say so honestly. Do not fabricate.',
+        'Do not fabricate tool results — if a tool errors, surface the real error.',
+        'If you do not know something, say so honestly.',
       ],
-      toolsAuthorised: false,
+      toolsAuthorised: true,
     };
-  }
-
-  /**
-   * Legacy entry point. Preserved for backward compat with callers that
-   * haven't been upgraded to TurnPlan yet. Delegates to composeTurnPlan
-   * and collapses to the prior {kind} shape.
-   *
-   * New callers should use composeTurnPlan() directly.
-   */
-  analyse(userMessage: string): AnalyseDecision {
-    const plan = this.composeTurnPlan(userMessage);
-    return { kind: plan.kind };
   }
 
   /**

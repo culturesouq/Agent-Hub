@@ -153,7 +153,7 @@ section('Model Registry');
 const models = listAvailableModels();
 expect(`at least 1 model catalogued (got ${models.length})`, models.length >= 1);
 
-expect(`azure/gpt-4o registered`, models.some((m) => m.id === 'azure/gpt-4o'));
+expect(`bedrock/claude-sonnet-4-6 registered`, models.some((m) => m.id === 'bedrock/claude-sonnet-4-6'));
 
 // Every model has label + description + provider
 const badModels = models.filter((m) => !m.label || !m.description || !m.provider);
@@ -165,9 +165,9 @@ expect(
 // ── Model resolution ──────────────────────────────────────────────────
 section('resolveModel()');
 
-const azureGpt4o = resolveModel('azure/gpt-4o');
-expect(`azure/gpt-4o resolves to azure_openai`, azureGpt4o.config.provider === 'azure_openai');
-expect(`azure/gpt-4o sendAs is "gpt-4o"`, azureGpt4o.sendAs === 'gpt-4o');
+const bedrockModel = resolveModel('bedrock/claude-sonnet-4-6');
+expect(`bedrock/claude-sonnet-4-6 resolves to bedrock`, bedrockModel.config.provider === 'bedrock');
+expect(`bedrock/claude-sonnet-4-6 sendAs is cross-region profile`, bedrockModel.sendAs === 'us.anthropic.claude-sonnet-4-6');
 
 // Unknown bare model → default
 const bare = resolveModel('totally-made-up');

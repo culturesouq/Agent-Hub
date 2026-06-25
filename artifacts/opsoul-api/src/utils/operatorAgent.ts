@@ -96,16 +96,6 @@ const TIME_QUERY_PATTERN = /\b(what\s+time|current\s+time|today's\s+date|right\s
 // authoritative toolset, the LLM is only used to voice the operator's content.
 const INTROSPECT_PATTERN = /\b(what\s+(tools?|capabilities|abilities|skills|features|functions|integrations)|(?:can|do)\s+you\s+(do|have|know|use|support)|(?:what'?s|tell\s+me)\s+(about\s+)?(?:your\s+)?(capabilities|tools|skills|abilities|toolkit|tool\s*set|stack)|what\s+are\s+(your\s+)?(tools|capabilities|skills|abilities|powers)|show\s+me\s+(your\s+)?(tools|capabilities|skills))\b/i;
 
-export function detectToolNeed(userMessage: string): boolean {
-  const m = userMessage ?? '';
-  if (m.length > 200) return true;
-  if (URL_PATTERN.test(m)) return true;
-  if (FILE_PATTERN.test(m)) return true;
-  if (TIME_QUERY_PATTERN.test(m)) return true;
-  if (ACTION_VERB_PATTERN.test(m)) return true;
-  return false;
-}
-
 export function detectIntrospection(userMessage: string): boolean {
   return INTROSPECT_PATTERN.test(userMessage ?? '');
 }
@@ -258,41 +248,18 @@ export class OperatorAgent {
       };
     }
 
-    // Tool-need heuristics → 'execute' (tools authorised this turn).
-    if (detectToolNeed(message)) {
-      return {
-        kind: 'execute',
-        userMessage: message,
-        intent: 'This turn likely needs one or more tools to answer accurately.',
-        scaffolding: `[OPERATOR-INTENT] The user has implied or requested work that benefits from tools. Choose the right tools from your authorised set, execute them, and synthesise the result for the user. [/OPERATOR-INTENT]`,
-        constraints: [
-          'Only call tools that appear in your authorised tool list for this turn.',
-          'Do not fabricate tool results — if a tool errors, surface the real error.',
-        ],
-        toolsAuthorised: true,
-      };
-    }
-
-    // Default → 'chat': operator-driven conversational reply, no tools.
+    // Operator is always the driver — full tool catalog available every turn.
     return {
-      kind: 'chat',
+      kind: 'execute',
       userMessage: message,
-      intent: 'Conversational turn — answer the user directly in operator voice. No tools needed.',
-      scaffolding: `[OPERATOR-INTENT] This is a conversational turn. Reply as ${operatorName} in your own voice. Do not invent capabilities. Do not request tools you have not been authorised to use this turn. [/OPERATOR-INTENT]`,
+      intent: 'Operator decides which tools and skills to use.',
+      scaffolding: `[OPERATOR-INTENT] You have your full workspace available. Use your skills and tools as you see fit to serve the user. You decide. [/OPERATOR-INTENT]`,
       constraints: [
-        'No tool calls this turn — none are offered or authorised.',
-        'If you do not know something, say so honestly. Do not fabricate.',
+        'Do not fabricate tool results — if a tool errors, surface the real error.',
+        'If you do not know something, say so honestly.',
       ],
-      toolsAuthorised: false,
+      toolsAuthorised: true,
     };
-  }
-
-  /**
-   * @deprecated Use composeTurnPlan() directly — it returns the full TurnPlan.
-   * Kept only as a no-arg convenience; callers that need opts must call composeTurnPlan().
-   */
-  analyse(userMessage: string): TurnPlan {
-    return this.composeTurnPlan(userMessage);
   }
 
   /**
