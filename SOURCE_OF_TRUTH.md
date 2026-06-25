@@ -237,9 +237,14 @@ Revision: opsoul--0000125 — Running
 - Running / Healthy — 2 replicas
 - ACR cleaned: only `analyse-fix-bc216d6` (live) and `bedrock-clean-fa0963e` (rollback) remain
 
+**Phase 9 — Switch embedding to Amazon Titan — DEPLOYED ✅ commit 5a8ef05 · revision opsoul--0000127 · 2026-06-25**
+- Replaced Cohere embed-multilingual-v3 (1024d) with Amazon Titan embed-text-v1 (1536d)
+- Titan produces 1536d vectors — identical to old Azure OpenAI text-embedding-3-small — no DB migration needed
+- Stays fully inside AWS Bedrock, same Bearer token key
+- Resolves pgvector error 22000 (dimension mismatch) on all 5 vector tables
+
 **Pending:**
-⚠ Remove `AZURE_OPENAI_KEY` from `REQUIRED_VARS` in `lib/opsoul-utils/src/env.ts` (Mohamed approves)
-⚠ re-embed all KB entries (dim changed 1536→1024 with Cohere Multilingual v3)
+⚠ Remove `AZURE_OPENAI_KEY` from `REQUIRED_VARS` in `lib/opsoul-utils/src/env.ts` (Mohamed approves, then remove from Azure)
 
 ---
 
