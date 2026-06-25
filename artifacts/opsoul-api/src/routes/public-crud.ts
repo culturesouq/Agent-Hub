@@ -8,6 +8,8 @@ import {
 } from '@workspace/db';
 import { requireSlotKey } from '../middleware/requireSlotKey.js';
 import { CHAT_MODEL } from '../utils/bedrock.js';
+import { embed } from '@workspace/opsoul-utils/ai';
+import { searchSkillByVector } from '../utils/vectorSearch.js';
 import { assembleOperatorPrompt } from '../utils/systemPrompt.js';
 import { distillActionTaskPattern } from '../utils/memoryEngine.js';
 import { buildScopeContext, type ValidatedScope } from '../utils/scopeResolver.js';
@@ -150,8 +152,28 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     toolDescriptions: new Map(actionToolset.tools.map(t => [t.function.name, t.function.description ?? ''])),
   });
 
-  // STEP 2 — Operator dispatches the LLM via the shared sync agent loop,
-  // which exposes the FULL universal tool catalogue for the action scope.
+  // ── Skill awareness — surface relevant skills to the operator ───────────
+  // Vector search finds skills relevant to this action and injects them as
+  // operator self-awareness context. The operator reads them and DECIDES
+  // whether and how to use them. The system never executes a skill directly.
+  const actionMessages: import('../utils/bedrock.js').ChatMessage[] = [
+    { role: 'system', content: systemPrompt },
+  ];
+  const actionEmbedding = await embed(actionText).catch(() => null);
+  if (actionEmbedding) {
+    const skillHits = await searchSkillByVector(actionEmbedding, 0.55, 3).catch(() => []);
+    if (skillHits.length > 0) {
+      const skillsBlock = [
+        '[SKILLS — relevant to this action, in order of relevance]',
+        ...skillHits.map((s, i) => `${i + 1}. ${s.name}: ${(s.instructions ?? '').slice(0, 150)}`),
+        '[These are your available skills for this action. Use them if they fit. You decide.]',
+      ].join('\n');
+      actionMessages.push({ role: 'system', content: skillsBlock });
+    }
+  }
+  actionMessages.push({ role: 'user', content: actionText });
+
+  // STEP 2 — Operator dispatches the LLM via the shared sync agent loop.
   // Per [[no-fallbacks]] + Claim 13: on LLM failure, propagate the real
   // upstream error as structured JSON. NEVER substitute synthetic operator
   // voice in the action result.
@@ -160,10 +182,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     result = await runSyncAgentLoop({
       agent: actionAgent,
       toolset: actionToolset,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: actionText },
-      ],
+      messages: actionMessages,
       model: resolvedModel,
       turnPlan: actionTurnPlan,
       // Patent claim 21: operator-decided tool gating (legacy fallback).
