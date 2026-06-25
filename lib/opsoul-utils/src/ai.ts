@@ -3,7 +3,7 @@ import {
   InvokeModelCommand,
 } from '@aws-sdk/client-bedrock-runtime';
 
-const EMBED_MODEL = 'cohere.embed-multilingual-v3';
+const EMBED_MODEL = 'amazon.titan-embed-text-v1';
 const EMBED_REGION = 'us-east-1';
 
 const bedrockEmbedClient = new BedrockRuntimeClient({
@@ -35,7 +35,7 @@ export async function embed(text: string): Promise<number[]> {
   const cached = embedCache.get(input);
   if (cached) return cached;
 
-  const body = JSON.stringify({ texts: [input], input_type: 'search_document' });
+  const body = JSON.stringify({ inputText: input });
 
   const command = new InvokeModelCommand({
     modelId: EMBED_MODEL,
@@ -46,10 +46,10 @@ export async function embed(text: string): Promise<number[]> {
 
   const response = await bedrockEmbedClient.send(command);
   const raw = JSON.parse(Buffer.from(response.body).toString('utf-8')) as {
-    embeddings: number[][];
+    embedding: number[];
   };
 
-  const embedding = raw.embeddings[0];
+  const embedding = raw.embedding;
   embedCache.set(input, embedding);
   return embedding;
 }
