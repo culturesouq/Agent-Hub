@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
-import { Lock, AlertTriangle, RefreshCw, Key, Globe, ShieldCheck, Copy, Shield, Cpu, Eye, EyeOff, Check, Loader2, ChevronDown, Info, Zap, Plus, Trash2, CheckCircle2, User, Circle, Server, Unplug, PlugZap } from "lucide-react";
+import { Lock, AlertTriangle, RefreshCw, Key, Globe, ShieldCheck, Copy, Shield, Cpu, Check, Loader2, ChevronDown, Zap, Plus, Trash2, CheckCircle2, User, Circle } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -34,7 +34,7 @@ type ModelOption = {
  * is still source of truth, this is a soft-fail.
  */
 const FALLBACK_MODELS: ModelOption[] = [
-  { id: "azure/gpt-4o", label: "GPT-4o (Azure)", description: "Azure OpenAI — platform model", badge: "Default", provider: "azure_openai", contextWindow: 128000 },
+  { id: "us.anthropic.claude-sonnet-4-6", label: "Claude Sonnet 4.6", description: "AWS Bedrock — platform model", badge: "Default", provider: "bedrock", contextWindow: 200000 },
 ];
 
 type EvolutionLevel = "OPEN" | "CONTROLLED" | "LOCKED";
@@ -376,302 +376,6 @@ function SecretsPanel({ operatorId }: { operatorId: string }) {
   );
 }
 
-// ── BYO Model types ──────────────────────────────────────────────────────────
-
-type ByoProvider = "openai" | "anthropic" | "azure_openai" | "openrouter" | "custom";
-
-const BYO_PROVIDER_OPTIONS: { value: ByoProvider; label: string }[] = [
-  { value: "openai",       label: "OpenAI" },
-  { value: "anthropic",    label: "Anthropic" },
-  { value: "azure_openai", label: "Azure OpenAI" },
-  { value: "openrouter",   label: "OpenRouter" },
-  { value: "custom",       label: "Custom endpoint" },
-];
-
-const BYO_MODEL_PLACEHOLDERS: Record<ByoProvider, string> = {
-  openai:       "gpt-4o-mini",
-  anthropic:    "claude-haiku-4-5-20251001",
-  azure_openai: "gpt-4o",
-  openrouter:   "openai/gpt-4o-mini",
-  custom:       "your-model-id",
-};
-
-interface ByoModelConfig {
-  configured: boolean;
-  provider?: ByoProvider;
-  maskedKey?: string;
-  modelId?: string;
-}
-
-interface ByoTestResult {
-  ok: boolean;
-  latencyMs?: number;
-  error?: string;
-}
-
-function ByoModelPanel({ operatorId }: { operatorId: string }) {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-
-  const { data: byo } = useQuery<ByoModelConfig>({
-    queryKey: ["operators", operatorId, "model-config"],
-    queryFn: () => apiFetch<ByoModelConfig>(`/operators/${operatorId}/model-config`),
-  });
-
-  const [provider, setProvider] = useState<ByoProvider>("openai");
-  const [modelId, setModelId] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [baseUrl, setBaseUrl] = useState("");
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [testResult, setTestResult] = useState<ByoTestResult | null>(null);
-  const [testPending, setTestPending] = useState(false);
-  const [removeConfirm, setRemoveConfirm] = useState(false);
-
-  const needsBaseUrl = provider === "azure_openai" || provider === "custom";
-
-  const saveConfig = useMutation({
-    mutationFn: () =>
-      apiFetch(`/operators/${operatorId}/model-config`, {
-        method: "PUT",
-        body: JSON.stringify({
-          provider,
-          modelId: modelId.trim(),
-          apiKey: apiKey.trim(),
-          ...(needsBaseUrl && baseUrl.trim() ? { baseUrl: baseUrl.trim() } : {}),
-        }),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "model-config"] });
-      queryClient.invalidateQueries({ queryKey: ["operators", operatorId] });
-      toast({ title: "Your model is active" });
-      setApiKey("");
-    },
-    onError: (err: Error) =>
-      toast({ title: "Save failed", description: err.message, variant: "destructive" }),
-  });
-
-  const removeConfig = useMutation({
-    mutationFn: () =>
-      apiFetch(`/operators/${operatorId}/model-config`, { method: "DELETE" }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["operators", operatorId, "model-config"] });
-      queryClient.invalidateQueries({ queryKey: ["operators", operatorId] });
-      toast({ title: "Reverted to platform default" });
-      setRemoveConfirm(false);
-    },
-    onError: (err: Error) =>
-      toast({ title: "Remove failed", description: err.message, variant: "destructive" }),
-  });
-
-  const handleTest = async () => {
-    if (!apiKey.trim()) return;
-    setTestPending(true);
-    setTestResult(null);
-    try {
-      const res = await apiFetch<ByoTestResult>(
-        `/operators/${operatorId}/model-config/test`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            provider,
-            modelId: modelId.trim(),
-            apiKey: apiKey.trim(),
-            ...(needsBaseUrl && baseUrl.trim() ? { baseUrl: baseUrl.trim() } : {}),
-          }),
-        }
-      );
-      setTestResult(res);
-    } catch (err: any) {
-      setTestResult({ ok: false, error: err.message ?? "Connection failed" });
-    } finally {
-      setTestPending(false);
-    }
-  };
-
-  return (
-    <div className="rounded-xl border border-border/30 bg-card/20 p-5 space-y-4 mt-6">
-      {/* Header */}
-      <div className="flex items-start gap-2.5">
-        <PlugZap className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
-        <div>
-          <p className="text-sm font-bold">Connect your own AI model</p>
-          <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-            Bring your own API key — your model, your cost, your data stays with you.
-          </p>
-        </div>
-      </div>
-
-      {/* Active badge */}
-      {byo?.configured && (
-        <div className="flex items-center justify-between rounded-lg border border-green-500/30 bg-green-500/5 px-4 py-2.5 gap-3">
-          <div className="flex items-center gap-2">
-            <Check className="w-3.5 h-3.5 text-green-500 shrink-0" />
-            <div>
-              <p className="text-xs font-bold text-green-500">Using your model</p>
-              <p className="text-[11px] text-muted-foreground">
-                {byo.provider} · {byo.maskedKey ?? "key saved"}
-                {byo.modelId ? ` · ${byo.modelId}` : ""}
-              </p>
-            </div>
-          </div>
-          {removeConfirm ? (
-            <div className="flex gap-2 shrink-0">
-              <Button
-                size="sm"
-                variant="outline"
-                className="text-xs h-7 text-destructive border-destructive/30 hover:bg-destructive/10"
-                onClick={() => removeConfig.mutate()}
-                disabled={removeConfig.isPending}
-              >
-                {removeConfig.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Yes, remove"}
-              </Button>
-              <Button size="sm" variant="ghost" className="text-xs h-7" onClick={() => setRemoveConfirm(false)}>
-                Cancel
-              </Button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setRemoveConfirm(true)}
-              className="text-[10px] text-muted-foreground hover:text-destructive transition-colors shrink-0"
-            >
-              Remove
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Form */}
-      <div className="space-y-3">
-        {/* Provider */}
-        <div className="space-y-1.5">
-          <label className="text-xs text-muted-foreground">Provider</label>
-          <div className="relative">
-            <select
-              value={provider}
-              onChange={(e) => {
-                setProvider(e.target.value as ByoProvider);
-                setTestResult(null);
-              }}
-              className="w-full appearance-none bg-background/60 border border-border/50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary/50 transition-colors pr-8"
-            >
-              {BYO_PROVIDER_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-          </div>
-        </div>
-
-        {/* Model ID */}
-        <div className="space-y-1.5">
-          <label className="text-xs text-muted-foreground">Model ID</label>
-          <Input
-            placeholder={BYO_MODEL_PLACEHOLDERS[provider]}
-            value={modelId}
-            onChange={(e) => setModelId(e.target.value)}
-            className="text-xs"
-            autoComplete="off"
-            spellCheck={false}
-          />
-        </div>
-
-        {/* API Key */}
-        <div className="space-y-1.5">
-          <label className="text-xs text-muted-foreground">API Key</label>
-          <div className="relative">
-            <Input
-              type={showApiKey ? "text" : "password"}
-              placeholder="sk-..."
-              value={apiKey}
-              onChange={(e) => { setApiKey(e.target.value); setTestResult(null); }}
-              className="text-xs pr-9"
-              autoComplete="off"
-            />
-            <button
-              type="button"
-              onClick={() => setShowApiKey((v) => !v)}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-              tabIndex={-1}
-            >
-              {showApiKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-            </button>
-          </div>
-        </div>
-
-        {/* Base URL — only for azure_openai and custom */}
-        {needsBaseUrl && (
-          <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">Base URL</label>
-            <Input
-              placeholder="https://your-resource.openai.azure.com/openai/deployments/gpt-4o"
-              value={baseUrl}
-              onChange={(e) => setBaseUrl(e.target.value)}
-              className="text-xs"
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </div>
-        )}
-
-        {/* Test result */}
-        {testResult && (
-          <div className={`rounded-lg border px-3 py-2 text-xs flex items-center gap-2 ${
-            testResult.ok
-              ? "border-green-500/30 bg-green-500/5 text-green-600"
-              : "border-destructive/30 bg-destructive/5 text-destructive"
-          }`}>
-            {testResult.ok ? (
-              <>
-                <Check className="w-3.5 h-3.5 shrink-0" />
-                Connected
-                {testResult.latencyMs !== undefined ? ` · ${testResult.latencyMs}ms` : ""}
-              </>
-            ) : (
-              <>
-                <Unplug className="w-3.5 h-3.5 shrink-0" />
-                {testResult.error ?? "Connection failed"}
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="flex items-center gap-2 pt-1 flex-wrap">
-          <Button
-            size="sm"
-            variant="outline"
-            className="text-xs border-border/40"
-            onClick={handleTest}
-            disabled={testPending || !apiKey.trim()}
-          >
-            {testPending ? (
-              <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Testing…</>
-            ) : (
-              <><Server className="w-3 h-3 mr-1.5" />Test Connection</>
-            )}
-          </Button>
-          <Button
-            size="sm"
-            className="text-xs"
-            onClick={() => saveConfig.mutate()}
-            disabled={saveConfig.isPending || !modelId.trim() || !apiKey.trim()}
-          >
-            {saveConfig.isPending ? (
-              <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Saving…</>
-            ) : (
-              "Save"
-            )}
-          </Button>
-          {saveConfig.isSuccess && !saveConfig.isPending && (
-            <span className="text-xs text-green-500 flex items-center gap-1">
-              <Check className="w-3 h-3" /> Your model is active
-            </span>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -682,18 +386,8 @@ export default function SettingsSection({ operator, section }: { operator: Opera
   const [safeMode, setSafeMode] = useState(operator.safeMode ?? false);
   const [freeRoaming, setFreeRoaming] = useState(operator.freeRoaming ?? false);
 
-  // When operator.defaultModel is NULL the backend uses azure/gpt-4o
-  // (DEFAULT_MODEL_ID from modelRegistry). The UI mirrors that so clicking
-  // Save without changing the dropdown keeps the operator on its actual default.
-  const defaultModelId = operator.defaultModel ?? "azure/gpt-4o";
+  const defaultModelId = operator.defaultModel ?? "us.anthropic.claude-sonnet-4-6";
   const [selectedModel, setSelectedModel] = useState<string>(defaultModelId);
-  const [apiKeyInput, setApiKeyInput] = useState("");
-  // showKey + verifyStatus drive the "Verify API key" panel that the next UI
-  // pass will re-attach to the BYO-key form. State + handler retained per
-  // [[expand-never-cut]] so the wiring is in place; void-references below
-  // satisfy noUnusedLocals without forcing premature deletion.
-  const [showKey, setShowKey] = useState(false);
-  const [verifyStatus, setVerifyStatus] = useState<"idle" | "verifying" | "ok" | "fail">("idle");
   const [showModelDropdown, setShowModelDropdown] = useState(false);
 
   // Fetch the live model catalog from the backend registry. Single source
@@ -708,7 +402,7 @@ export default function SettingsSection({ operator, section }: { operator: Opera
   const selectedModelInfo = MODELS.find((m) => m.id === selectedModel) ?? MODELS[0];
 
   const saveModelSettings = useMutation({
-    mutationFn: (payload: { apiKey?: string; model?: string; clearApiKey?: boolean }) =>
+    mutationFn: (payload: { model?: string }) =>
       apiFetch(`/operators/${operator.id}/model-settings`, {
         method: "PATCH",
         body: JSON.stringify(payload),
@@ -716,33 +410,9 @@ export default function SettingsSection({ operator, section }: { operator: Opera
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["operators", operator.id] });
       toast({ title: "Model settings saved" });
-      setApiKeyInput("");
     },
     onError: (err: Error) => toast({ title: "Save failed", description: err.message, variant: "destructive" }),
   });
-
-  const verifyKey = async () => {
-    if (!apiKeyInput.trim()) return;
-    setVerifyStatus("verifying");
-    try {
-      const r = await apiFetch<{ ok: boolean }>(`/operators/${operator.id}/model-settings/verify-key`, {
-        method: "POST",
-        body: JSON.stringify({ apiKey: apiKeyInput.trim() }),
-      });
-      setVerifyStatus(r.ok ? "ok" : "fail");
-      if (r.ok) toast({ title: "Key verified — it's working" });
-      else toast({ title: "Key responded but check failed", variant: "destructive" });
-    } catch {
-      setVerifyStatus("fail");
-      toast({ title: "Key verification failed — check the key and try again", variant: "destructive" });
-    }
-  };
-  // Scaffolding-only — the JSX that wires showKey / verifyStatus / verifyKey
-  // into the BYO-key panel was removed when the panel was paused; the state
-  // + handler stay per [[expand-never-cut]] so the next pass plugs the JSX
-  // back in without re-introducing the wiring. Reference here keeps the
-  // noUnusedLocals sweep quiet.
-  void showKey; void setShowKey; void verifyStatus; void verifyKey;
 
   const currentLevel = (["OPEN", "CONTROLLED", "LOCKED"].includes(operator.growLockLevel ?? "")
     ? operator.growLockLevel
@@ -886,34 +556,6 @@ export default function SettingsSection({ operator, section }: { operator: Opera
             <h2 className="font-headline font-bold text-base">Model & AI</h2>
           </div>
 
-          {!operator.hasCustomApiKey && (
-            <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3">
-              <Info className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
-              <div className="space-y-0.5">
-                <p className="text-xs font-bold text-amber-500">Using OpSoul's shared key</p>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Your operator runs on OpSoul's OpenRouter key. Add your own key to get full model access and remove usage limits.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {operator.hasCustomApiKey && (
-            <div className="flex items-start gap-3 rounded-lg border border-green-500/30 bg-green-500/5 px-4 py-3">
-              <Check className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
-              <div className="space-y-0.5">
-                <p className="text-xs font-bold text-green-500">Custom OpenRouter key active</p>
-                <p className="text-[11px] text-muted-foreground">Your operator uses your own API key.</p>
-              </div>
-              <button
-                onClick={() => saveModelSettings.mutate({ clearApiKey: true })}
-                className="ml-auto text-[10px] text-muted-foreground hover:text-destructive transition-colors shrink-0"
-              >
-                Remove key
-              </button>
-            </div>
-          )}
-
           <div className="space-y-2">
             <label className="text-xs text-muted-foreground tracking-wider">Default Model</label>
             <div className="relative">
@@ -970,7 +612,6 @@ export default function SettingsSection({ operator, section }: { operator: Opera
             </Button>
           </div>
 
-          <ByoModelPanel operatorId={operator.id} />
         </section>
       )}
 

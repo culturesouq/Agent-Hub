@@ -18,7 +18,6 @@ export interface Operator {
   growLockLevel: "OPEN" | "CONTROLLED" | "LOCKED" | "FROZEN";
   safeMode: boolean;
   freeRoaming: boolean;
-  hasCustomApiKey: boolean;
   defaultModel: string | null;
   createdAt: string;
   soul: {

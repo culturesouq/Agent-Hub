@@ -19,7 +19,7 @@ const sections = [
   },
   {
     title: "Third-Party Services",
-    body: `OpSoul integrates with third-party services to provide its functionality, including OpenRouter for AI inference and Neon for database hosting. These providers are bound by their own privacy policies and by contractual obligations to handle data securely. We do not authorise these providers to use your data for any purpose other than providing services to OpSoul.`,
+    body: `OpSoul integrates with third-party services to provide its functionality, including AWS Bedrock for AI inference and Neon for database hosting. These providers are bound by their own privacy policies and by contractual obligations to handle data securely. We do not authorise these providers to use your data for any purpose other than providing services to OpSoul.`,
   },
   {
     title: "Cookies and Session Data",

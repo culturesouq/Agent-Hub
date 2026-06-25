@@ -1,26 +1,7 @@
 import { useState } from "react";
-import { Loader2, Eye, EyeOff, Check, ChevronDown, ArrowRight } from "lucide-react";
+import { Loader2, Eye, EyeOff, Check, ArrowRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-// ── Types ────────────────────────────────────────────────────────────────────
-
-type ByoProvider = "openai" | "anthropic" | "azure_openai" | "openrouter" | "custom";
-
-const PROVIDER_OPTIONS: { value: ByoProvider; label: string }[] = [
-  { value: "openai",       label: "OpenAI" },
-  { value: "anthropic",    label: "Anthropic" },
-  { value: "azure_openai", label: "Azure OpenAI" },
-  { value: "openrouter",   label: "OpenRouter" },
-  { value: "custom",       label: "Custom endpoint" },
-];
-
-const MODEL_PLACEHOLDERS: Record<ByoProvider, string> = {
-  openai:       "gpt-4o-mini",
-  anthropic:    "claude-haiku-4-5-20251001",
-  azure_openai: "gpt-4o",
-  openrouter:   "openai/gpt-4o-mini",
-  custom:       "your-model-id",
-};
 
 // ── Shared visual primitives ─────────────────────────────────────────────────
 
@@ -260,126 +241,9 @@ function Step1({
   );
 }
 
-// ── Step 2: AI model key ──────────────────────────────────────────────────────
+// ── Step 2: Done ──────────────────────────────────────────────────────────────
 
-function Step2({
-  onComplete,
-  onSkip,
-}: {
-  onComplete: () => void;
-  onSkip: () => void;
-}) {
-  const { toast } = useToast();
-  const [provider, setProvider] = useState<ByoProvider>("openai");
-  const [modelId, setModelId] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [baseUrl, setBaseUrl] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  const needsBaseUrl = provider === "azure_openai" || provider === "custom";
-
-  const handleComplete = async () => {
-    if (!apiKey.trim() || !modelId.trim()) {
-      toast({ title: "Missing fields", description: "Provide a model ID and API key, or skip for now.", variant: "destructive" });
-      return;
-    }
-
-    setSaving(true);
-    try {
-      // Store pending config in localStorage — applied per-operator via Settings later
-      const config = {
-        provider,
-        modelId: modelId.trim(),
-        apiKey: apiKey.trim(),
-        ...(needsBaseUrl && baseUrl.trim() ? { baseUrl: baseUrl.trim() } : {}),
-      };
-      localStorage.setItem("opsoul_pending_model_config", JSON.stringify(config));
-      onComplete();
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="w-full flex flex-col gap-5">
-      <div className="mb-2">
-        <h2 className="font-headline text-2xl font-medium tracking-tight text-foreground text-center">
-          Your AI model
-        </h2>
-        <p className="text-sm text-muted-foreground text-center mt-1.5">
-          Connect your own API key. You can also do this later in operator Settings.
-        </p>
-      </div>
-
-      {/* Provider */}
-      <div className="space-y-1.5">
-        <label className="block text-xs font-medium px-1 text-muted-foreground">Provider</label>
-        <div className="relative">
-          <select
-            value={provider}
-            onChange={(e) => setProvider(e.target.value as ByoProvider)}
-            className="w-full appearance-none h-14 rounded-xl px-5 text-sm outline-none transition-all duration-200 bg-muted/40 border border-border text-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 pr-10"
-          >
-            {PROVIDER_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-          <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-        </div>
-      </div>
-
-      {/* Model ID */}
-      <LightInput
-        id="setup-model-id"
-        label="Model ID"
-        placeholder={MODEL_PLACEHOLDERS[provider]}
-        value={modelId}
-        onChange={(e) => setModelId(e.target.value)}
-        autoComplete="off"
-      />
-
-      {/* API Key */}
-      <PasswordInput
-        id="setup-api-key"
-        label="API Key"
-        placeholder="sk-..."
-        value={apiKey}
-        onChange={(e) => setApiKey(e.target.value)}
-        autoComplete="off"
-      />
-
-      {/* Base URL — only for azure_openai and custom */}
-      {needsBaseUrl && (
-        <LightInput
-          id="setup-base-url"
-          label="Base URL"
-          placeholder="https://your-resource.openai.azure.com/openai/deployments/gpt-4o"
-          value={baseUrl}
-          onChange={(e) => setBaseUrl(e.target.value)}
-          autoComplete="off"
-        />
-      )}
-
-      <PrimaryButton onClick={handleComplete} loading={saving}>
-        {saving ? "Saving…" : "Complete setup"}
-      </PrimaryButton>
-
-      <button
-        type="button"
-        onClick={onSkip}
-        className="text-sm text-muted-foreground hover:text-foreground transition-colors text-center"
-      >
-        Skip for now — add it in Settings later
-      </button>
-    </div>
-  );
-}
-
-// ── Step 3: Done ──────────────────────────────────────────────────────────────
-
-function Step3({ onOpen }: { onOpen: () => void }) {
+function Step2({ onOpen }: { onOpen: () => void }) {
   return (
     <div className="w-full flex flex-col items-center gap-6 text-center">
       <div className="w-16 h-16 rounded-full bg-green-500/10 border border-green-500/30 flex items-center justify-center">
@@ -409,12 +273,7 @@ export default function Setup({ onComplete }: { onComplete: () => void }) {
     setStep(1);
   };
 
-  const handleStep2Done = () => {
-    setStep(2);
-  };
-
   const handleOpen = () => {
-    // Reload so AuthContext picks up the token already in localStorage
     window.location.href = "/";
   };
 
@@ -423,16 +282,13 @@ export default function Setup({ onComplete }: { onComplete: () => void }) {
       <main className="w-full max-w-[480px]">
         <div className="bg-white border border-border rounded-[2rem] p-10 md:p-12 flex flex-col items-center shadow-sm">
           <OpSoulHeader />
-          <StepDots current={step} total={3} />
+          <StepDots current={step} total={2} />
 
           {step === 0 && (
             <Step1 onDone={handleStep1Done} />
           )}
           {step === 1 && (
-            <Step2 onComplete={handleStep2Done} onSkip={handleStep2Done} />
-          )}
-          {step === 2 && (
-            <Step3 onOpen={handleOpen} />
+            <Step2 onOpen={handleOpen} />
           )}
         </div>
 
