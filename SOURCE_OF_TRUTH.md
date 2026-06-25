@@ -216,12 +216,11 @@ Rewrote lib/opsoul-utils/src/ai.ts to use BedrockRuntimeClient + InvokeModelComm
 ### ✅ Phase 6 — Fix `/v1/action` 503 — DONE commit 30c10c0 2026-06-25
 Replaced raw fetch() in bedrockConverse() with ConverseCommand via bedrockSdkClient. Added ConverseCommand to SDK import. Both streaming and non-streaming now use same Bearer middleware. Raw fetch block deleted.
 
-### Phase 7 — Deploy
-Build: `docker build --platform linux/amd64 -t banistudioacr.azurecr.io/opsoul-api:bedrock-clean-<hash> .`
-Push: `docker push ...`
-Update: `az containerapp update -n opsoul -g bani-studio-rg --image ...`
-After deploy: remove `AZURE_OPENAI_KEY` from container environment variables.
-After deploy: re-embed all KB entries (Mohamed runs or triggers).
+### ✅ Phase 7 — Deploy — DONE 2026-06-25
+Image: banistudioacr.azurecr.io/opsoul-api:bedrock-clean-fa0963e
+Revision: opsoul--0000125 — Running
+⚠ TODO: remove AZURE_OPENAI_KEY from container env (no longer used)
+⚠ TODO: re-embed all KB entries (dim changed 1536→1024 with Cohere Multilingual v3)
 
 ---
 
