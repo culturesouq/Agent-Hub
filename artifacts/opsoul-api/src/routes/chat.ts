@@ -874,13 +874,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         const iterFullStart = fullContent.length; // mark start of this iteration in fullContent
         let iterToolCall: { id: string; name: string; args: string } | undefined;
 
-        // Operator-as-driver (Patent claim 21): the operator decided in
-        // composeTurnPlan() whether tools are needed this turn. For `chat`
-        // the catalog is empty — the LLM cannot call tools because none are
-        // offered. For `execute` the full SDK catalog is presented (all 120
-        // tools + list_workspace). Birth mode passes 'execute' so
-        // newborn operators retain full capability during identity formation.
-        const allTools = turnPlan.kind === 'execute' ? await listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[] : [];
+        // Operator-as-driver (Patent claim 21): operator always has the full
+        // tool catalog — it decides which tools to use, not the system.
+        const allTools = await listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[];
         // Per-iteration cap on web_search — once an operator has done
         // MAX_SEARCHES in this turn, filter it out of the offered set so
         // the LLM cannot keep searching in a loop.
@@ -1081,9 +1077,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
       // Operator-as-driver (Patent claim 21): same gating as the streaming
       // path. Tools are offered only when the operator's composeTurnPlan()
-      // decision is 'execute'. Tool definitions come from the live SDK
-      // (all 120 + list_workspace virtual tool).
-      const syncTools = turnPlan.kind === 'execute' ? await listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[] : [];
+      // Operator-as-driver: full tool catalog always available — operator decides.
+      const syncTools = await listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[];
       const syncMessages = [...messages];
       if (introspectContext) syncMessages.push({ role: 'system', content: introspectContext });
       const syncOpts = { ...chatOpts, tools: syncTools.length > 0 ? syncTools : undefined };

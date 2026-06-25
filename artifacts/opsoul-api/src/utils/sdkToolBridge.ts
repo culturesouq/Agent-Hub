@@ -23,6 +23,7 @@ import { eq, count, gte, lt, and, ne } from 'drizzle-orm';
 import { decryptToken } from '@workspace/opsoul-utils/crypto';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { searchBothKbs, KB_RETRIEVAL_MIN_CONFIDENCE } from './vectorSearch.js';
+import { platformSkillsTable } from '@workspace/db';
 import { gateAndStoreOperatorKb } from './kbIntake.js';
 
 // ── env ───────────────────────────────────────────────────────────────────────
@@ -190,7 +191,7 @@ async function handleListWorkspace(
 ): Promise<string> {
   const keyword = filter.toLowerCase();
 
-  const [allTools, integrations, files, kbHigh, kbMedium, kbLow, ownerKbCount, secretRows] = await Promise.all([
+  const [allTools, integrations, files, kbHigh, kbMedium, kbLow, ownerKbCount, secretRows, allSkills] = await Promise.all([
     fetchSdkTools(),
     db.select({ integrationType: operatorIntegrationsTable.integrationType })
       .from(operatorIntegrationsTable)
@@ -209,6 +210,9 @@ async function handleListWorkspace(
     db.select({ key: operatorSecretsTable.key })
       .from(operatorSecretsTable)
       .where(eq(operatorSecretsTable.operatorId, operatorId)),
+    db.select({ name: platformSkillsTable.name, description: platformSkillsTable.description })
+      .from(platformSkillsTable)
+      .orderBy(platformSkillsTable.name),
   ]);
 
   const matchingTools = keyword
@@ -239,6 +243,15 @@ async function handleListWorkspace(
   lines.push('');
   const secretLabels = secretRows.map(r => `{{${r.key}}}`);
   lines.push(`SECRETS (labels only): ${secretLabels.length > 0 ? secretLabels.join(', ') : 'none'}`);
+
+  lines.push('');
+  const matchingSkills = keyword
+    ? allSkills.filter(s => s.name.toLowerCase().includes(keyword) || (s.description ?? '').toLowerCase().includes(keyword))
+    : allSkills;
+  lines.push(`SKILLS (${matchingSkills.length} of ${allSkills.length} total):`);
+  for (const s of matchingSkills) {
+    lines.push(`  ${s.name} — ${s.description ?? ''}`);
+  }
 
   return lines.join('\n');
 }

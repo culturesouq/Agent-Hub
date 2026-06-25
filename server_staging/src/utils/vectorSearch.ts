@@ -154,7 +154,7 @@ export interface SkillHit {
 export async function searchSkillByVector(
   embedding: number[],
   distanceThreshold: number = 0.55,
-  limit: number = 3,
+  limit: number = 10,
 ): Promise<SkillHit[]> {
   const vecStr = `[${embedding.join(',')}]`;
 

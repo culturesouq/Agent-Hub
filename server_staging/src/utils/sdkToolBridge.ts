@@ -1,102 +1,41 @@
 /**
- * sdkToolBridge.ts — CultureEyes SDK ↔ OpSoul tool dispatch adapter (Phase 1b).
+ * sdkToolBridge.ts — OpSoul → CultureEyes SDK HTTP adapter.
  *
- * Five responsibilities:
- *   A. Lazy registry singleton — createRegistry() + seedCatalog() once.
- *   B. buildProvisionedList() — mirrors listToolsForContext() filtering logic
- *      but returns string[] (tool names) for registry.list(provisioned).
- *   C. buildSdkCtx() — assembles a ToolCtx from OpSoul's ToolHandlerContext.
- *   D. dispatchViaSdk() — single dispatch entry point; maps SDK ToolResult →
- *      OpSoul ToolResult (content + meta hints for the agent loop).
- *   E. listToolsViaSdk() — replaces listToolsForContext(); returns the same
- *      ToolDefinition[] shape the LLM call expects.
+ * All tool execution routes through the live SDK server over HTTP.
+ * No local registry, no connector implementations — the SDK owns all of that.
  *
- * Phase 1c will remove the old toolHandlers/toolRegistry dispatch paths.
- * Until then BOTH paths co-exist; chat.ts uses dispatchViaSdk from here.
- *
- * DO NOT TOUCH: system prompts, identity layers (L0-L4), GROW engine, memory
- * engine birth engine, operator soul/identity, or any patent-protected mechanism.
+ * Two public surfaces:
+ *   listToolsViaSdk(ctx)         → GET /v1/tools (filtered + description-annotated)
+ *   dispatchViaSdk(name, args, …) → POST /execute (scoped per operator)
  */
 
-import { createRegistry, seedCatalog } from '@cultureyes/tools';
-import type { Registry } from '@cultureyes/tools';
-import type { ToolCtx } from '@cultureyes/tools';
-import type { AllConnectors } from '@cultureyes/tools';
-import type {
-  FileStore,
-  FileEntry,
-  PdfExtractor,
-} from '@cultureyes/tools';
-import type {
-  MemoryConnector,
-  KbAdminConnector,
-  StoredMemoryRecord as SdkMemoryRecord,
-  MemoryHit as SdkMemoryHit,
-  KbSearchHit,
-  KbPendingEntry,
-  KbSeedResult as SdkKbSeedResult,
-  KbDeleteResult,
-} from '@cultureyes/tools';
-import type {
-  TaskStore,
-  Task,
-  TaskPatch,
-  TaskStatus,
-  TaskRunResult,
-} from '@cultureyes/tools';
-import type {
-  IntegrationsConnector,
-  SecretsAdmin,
-  SelfInfoProvider,
-  ConversationsStore,
-  Integration,
-  SelfInfo,
-  ConversationSummary,
-} from '@cultureyes/tools';
-
-import { db } from '@workspace/db';
+import type { ToolHandlerContext } from './toolHandlers.js';
+import type { ScopeType } from './toolRegistry.js';
+import { db, pool } from '@workspace/db';
 import {
-  operatorFilesTable,
-  tasksTable,
-  operatorMemoryTable,
-  operatorKbTable,
   operatorSecretsTable,
   operatorIntegrationsTable,
-  operatorsTable,
-  conversationsTable,
+  operatorFilesTable,
+  operatorKbTable,
+  ownerKbTable,
 } from '@workspace/db';
-import { and, eq, desc } from 'drizzle-orm';
-import crypto from 'crypto';
-
-import { storeMemory, searchMemory } from './memoryEngine.js';
+import { eq, count, gte, lt, and, ne } from 'drizzle-orm';
+import { decryptToken } from '@workspace/opsoul-utils/crypto';
 import { embed } from '@workspace/opsoul-utils/ai';
-import { searchBothKbs } from './vectorSearch.js';
-import { persistKbSeedEntry } from './kbIntake.js';
-import { runSingleTask } from '../cron/tasksCron.js';
+import { searchBothKbs, KB_RETRIEVAL_MIN_CONFIDENCE } from './vectorSearch.js';
+import { platformSkillsTable } from '@workspace/db';
+import { gateAndStoreOperatorKb } from './kbIntake.js';
 
-import type { ToolHandlerContext, ToolResult as OpSoulToolResult } from './toolHandlers.js';
-import type { ScopeType, Availability } from './toolRegistry.js';
-import { UNIVERSAL_TOOLS } from './toolRegistry.js';
-// capabilityEngine (isWebSearchAvailable / isFirecrawlAvailable) is called by
-// callers of buildProvisionedList() — not needed here directly.
+// ── env ───────────────────────────────────────────────────────────────────────
 
-// ───────────────────────────────────────────────────────────────────────────
-//  A. REGISTRY SINGLETON
-// ───────────────────────────────────────────────────────────────────────────
+const CY_SDK_URL = (process.env.CY_SDK_URL ?? '').replace(/\/$/, '');
+const CY_SDK_KEY = process.env.CY_SDK_KEY ?? '';
 
-let _registry: Registry | null = null;
-
-export function getRegistry(): Registry {
-  if (!_registry) {
-    _registry = createRegistry();
-    seedCatalog(_registry);
-  }
-  return _registry;
+if (!CY_SDK_URL) {
+  console.warn('[sdkBridge] CY_SDK_URL not set — tool calls will fail');
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-//  B. PROVISIONED LIST — mirrors listToolsForContext() filtering logic
-// ───────────────────────────────────────────────────────────────────────────
+// ── types ─────────────────────────────────────────────────────────────────────
 
 export interface ProvisionedListCtx {
   liveSecrets: string[];
@@ -107,42 +46,9 @@ export interface ProvisionedListCtx {
   scopeTrust?: string;
 }
 
-/**
- * Returns the set of tool names the registry should provision for this turn.
- * Mirrors the availability + scope filtering in listToolsForContext() in
- * toolRegistry.ts — same gates, same output, different return shape (string[]).
- */
-export function buildProvisionedList(ctx: ProvisionedListCtx): string[] {
-  const names: string[] = [];
+// Kept for type compatibility with callers — no filtering applied.
+export { ScopeType };
 
-  for (const tool of UNIVERSAL_TOOLS) {
-    // 1. Availability gate
-    const avail: Availability = tool.availability;
-    if (avail === 'web' && !ctx.hasWebSearch) continue;
-    if (avail === 'secrets' && ctx.liveSecrets.length === 0) continue;
-    if (avail === 'integration' && ctx.connectedIntegrations.length === 0) continue;
-    if (avail === 'firecrawl' && !ctx.hasFirecrawl) continue;
-    // 'always' always passes
-
-    // 2. Scope gate — '*' or list includes the scope
-    const scopes = tool.scopes;
-    if (scopes !== '*' && !scopes.includes(ctx.scopeType)) continue;
-
-    names.push(tool.name);
-  }
-
-  return names;
-}
-
-// ───────────────────────────────────────────────────────────────────────────
-//  B2. LIST TOOLS — replaces listToolsForContext(), returns ToolDefinition[]
-// ───────────────────────────────────────────────────────────────────────────
-
-/**
- * Replica of ToolDefinition from openrouter.ts — defined locally to avoid a
- * cross-module import. The shape must stay byte-identical to the one chat.ts
- * and operatorToolset.ts use so all three callers interoperate.
- */
 export interface SdkToolDefinition {
   type: 'function';
   function: {
@@ -156,623 +62,210 @@ export interface SdkToolDefinition {
   };
 }
 
-/**
- * Replacement for listToolsForContext(). Returns the ToolDefinition[] the LLM
- * call expects, built from the SDK registry filtered by buildProvisionedList().
- *
- * Preserves the http_request dynamic-description suffix (live secret labels)
- * that was applied inside toToolDefinition() in toolRegistry.ts.
- */
-export function listToolsViaSdk(ctx: ProvisionedListCtx): SdkToolDefinition[] {
-  const provisioned = buildProvisionedList(ctx);
-  const defs = getRegistry().list(provisioned);
+export type { ToolResult as OpSoulToolResult } from './toolHandlers.js';
 
-  return defs.map(def => {
-    let description = def.description;
-    // Preserve the http_request live-secret-labels suffix from the old registry.
-    if (def.name === 'http_request' && ctx.liveSecrets.length > 0) {
+// ── tool schema cache ─────────────────────────────────────────────────────────
+
+interface RawSdkTool {
+  name: string;
+  description: string;
+  schema: { type: 'object'; properties: Record<string, unknown>; required?: string[] };
+}
+
+let _toolCache: RawSdkTool[] | null = null;
+
+async function fetchSdkTools(): Promise<RawSdkTool[]> {
+  if (_toolCache) return _toolCache;
+  const res = await fetch(`${CY_SDK_URL}/v1/tools`);
+  if (!res.ok) throw new Error(`[sdkBridge] GET /v1/tools failed: HTTP ${res.status}`);
+  const body = await res.json() as { tools: RawSdkTool[] };
+  _toolCache = body.tools;
+  return _toolCache;
+}
+
+// ── list tools (async — awaited by chat.ts) ───────────────────────────────────
+// Returns all SDK tools + the virtual list_workspace tool.
+// No filtering — operators get everything.
+
+export async function listToolsViaSdk(ctx: ProvisionedListCtx): Promise<SdkToolDefinition[]> {
+  const all = await fetchSdkTools();
+
+  const sdkTools = all.map(t => {
+    let description = t.description;
+    if (t.name === 'http_request' && ctx.liveSecrets.length > 0) {
       description = `${description} Available stored secret labels: ${ctx.liveSecrets.map(s => `{{${s}}}`).join(', ')}.`;
     }
-    const schema = def.schema as { type: 'object'; properties: Record<string, unknown>; required?: string[] };
     return {
       type: 'function' as const,
       function: {
-        name: def.name,
+        name: t.name,
         description,
         parameters: {
           type: 'object' as const,
-          properties: schema.properties,
-          required: schema.required ?? [],
+          properties: t.schema.properties,
+          required: t.schema.required ?? [],
         },
       },
     };
   });
+
+  // Virtual tool — handled by OpSoul, never forwarded to SDK.
+  // Gives the operator true agency: browse and choose from its full workspace.
+  const listWorkspaceTool: SdkToolDefinition = {
+    type: 'function',
+    function: {
+      name: 'list_workspace',
+      description: 'Browse your complete workspace — all available tools with full descriptions, connected integrations, stored files, KB entries, and secret labels. Call this any time you want to know exactly what you have available before choosing what to use.',
+      parameters: {
+        type: 'object',
+        properties: {
+          filter: {
+            type: 'string',
+            description: 'Optional keyword to narrow the tool list (e.g. "search", "file", "http", "render"). Omit to get everything.',
+          },
+        },
+        required: [],
+      },
+    },
+  };
+
+  return [...sdkTools, listWorkspaceTool];
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-//  C. SDK CONTEXT BUILDER — assembles ToolCtx from OpSoul's handler context
-// ───────────────────────────────────────────────────────────────────────────
+// ── render tool fence transform ───────────────────────────────────────────────
 
-const DEBUG = process.env.LOG_LEVEL === 'debug';
-
-/**
- * Build the ToolCtx that the SDK registry passes into every tool execute().
- * Connectors wrap OpSoul's existing DB / engine functions — same data, same
- * persistence paths, just behind the SDK interface.
- */
-export function buildSdkCtx(
-  opCtx: ToolHandlerContext,
-  _extraCtx: {
-    operatorName: string;
-    liveSecrets: string[];
-    connectedIntegrations: string[];
-  },
-): ToolCtx {
-  const { operatorId, ownerId } = opCtx;
-
-  // ── secrets accessor ──────────────────────────────────────────────────────
-  const secrets = {
-    get: async (name: string): Promise<string | undefined> => {
-      const key = name.toUpperCase();
-      const [row] = await db
-        .select({ valueEncrypted: operatorSecretsTable.valueEncrypted })
-        .from(operatorSecretsTable)
-        .where(and(
-          eq(operatorSecretsTable.operatorId, operatorId),
-          eq(operatorSecretsTable.key, key),
-        ))
-        .limit(1);
-      if (!row) return undefined;
-      const { decryptToken } = await import('@workspace/opsoul-utils/crypto');
-      return decryptToken(row.valueEncrypted);
-    },
-  };
-
-  // ── logger ────────────────────────────────────────────────────────────────
-  const logger = {
-    info: (msg: string, meta?: unknown) => {
-      if (DEBUG) console.log('[sdk]', msg, meta ?? '');
-    },
-    error: (msg: string, meta?: unknown) => {
-      console.error('[sdk]', msg, meta ?? '');
-    },
-  };
-
-  // ── files connector ────────────────────────────────────────────────────────
-  const filesConnector: FileStore = {
-    name: 'opsoul-files',
-    async put(name: string, content: string) {
-      const existing = await db
-        .select({ id: operatorFilesTable.id })
-        .from(operatorFilesTable)
-        .where(and(eq(operatorFilesTable.operatorId, operatorId), eq(operatorFilesTable.filename, name)))
-        .limit(1);
-      if (existing.length > 0) {
-        await db.update(operatorFilesTable)
-          .set({ content, updatedAt: new Date() })
-          .where(eq(operatorFilesTable.id, existing[0].id));
-      } else {
-        await db.insert(operatorFilesTable).values({
-          id: crypto.randomUUID(),
-          operatorId,
-          ownerId,
-          filename: name,
-          content,
-        });
-      }
-      return { size: content.length };
-    },
-    async get(name: string): Promise<string | null> {
-      const [file] = await db
-        .select({ content: operatorFilesTable.content })
-        .from(operatorFilesTable)
-        .where(and(eq(operatorFilesTable.operatorId, operatorId), eq(operatorFilesTable.filename, name)))
-        .limit(1);
-      return file?.content ?? null;
-    },
-    async list(): Promise<FileEntry[]> {
-      const rows = await db
-        .select({
-          filename: operatorFilesTable.filename,
-          content: operatorFilesTable.content,
-          updatedAt: operatorFilesTable.updatedAt,
-        })
-        .from(operatorFilesTable)
-        .where(eq(operatorFilesTable.operatorId, operatorId));
-      return rows.map(r => ({
-        filename: r.filename,
-        size: r.content.length,
-        updatedAt: r.updatedAt?.toISOString(),
-      }));
-    },
-    async delete(name: string): Promise<boolean> {
-      const result = await db
-        .delete(operatorFilesTable)
-        .where(and(eq(operatorFilesTable.operatorId, operatorId), eq(operatorFilesTable.filename, name)))
-        .returning({ id: operatorFilesTable.id });
-      return result.length > 0;
-    },
-    async append(name: string, content: string): Promise<{ created: boolean; size: number }> {
-      const [existing] = await db
-        .select()
-        .from(operatorFilesTable)
-        .where(and(eq(operatorFilesTable.operatorId, operatorId), eq(operatorFilesTable.filename, name)));
-      if (existing) {
-        const next = `${existing.content}${content}`;
-        await db.update(operatorFilesTable)
-          .set({ content: next, updatedAt: new Date() })
-          .where(eq(operatorFilesTable.id, existing.id));
-        return { created: false, size: next.length };
-      }
-      await db.insert(operatorFilesTable).values({
-        id: crypto.randomUUID(),
-        operatorId,
-        ownerId,
-        filename: name,
-        content,
-      });
-      return { created: true, size: content.length };
-    },
-  };
-
-  // ── PDF extractor connector — wraps the same pdf-parse path as the handler ──
-  const pdfConnector: PdfExtractor = {
-    name: 'opsoul-pdf',
-    async extract(input: { url?: string; bytes?: Uint8Array }): Promise<string> {
-      let buffer: Buffer;
-      if (input.bytes) {
-        buffer = Buffer.from(input.bytes);
-      } else if (input.url) {
-        const res = await fetch(input.url);
-        if (!res.ok) throw new Error(`Fetch returned HTTP ${res.status}`);
-        buffer = Buffer.from(await res.arrayBuffer());
-      } else {
-        throw new Error('extract_pdf_text requires url or bytes');
-      }
-      const { PDFParse } = await import('pdf-parse');
-      const parser = new PDFParse({ data: new Uint8Array(buffer) });
-      const result = await parser.getText();
-      await parser.destroy();
-      return result.text;
-    },
-  };
-
-  // ── memory connector ──────────────────────────────────────────────────────
-  const memoryConnector: MemoryConnector = {
-    name: 'opsoul-memory',
-    async store(rec) {
-      const type = rec.memoryType as Parameters<typeof storeMemory>[3];
-      const stored = await storeMemory(
-        operatorId,
-        ownerId,
-        rec.content,
-        type,
-        'user',
-        rec.weight,
-        false,
-        opCtx.scope.scopeId,
-        opCtx.scope.scopeTrust,
-      );
-      const result: SdkMemoryRecord = {
-        id: stored.id,
-        content: stored.content,
-        memoryType: stored.memoryType as SdkMemoryRecord['memoryType'],
-        weight: stored.weight ?? 1,
-        createdAt: stored.createdAt?.toISOString(),
-      };
-      return result;
-    },
-    async search(query: string, k: number): Promise<SdkMemoryHit[]> {
-      const embedding = await embed(query);
-      const hits = await searchMemory(operatorId, embedding, k);
-      return hits.map(h => ({
-        content: h.content,
-        memoryType: h.memoryType as SdkMemoryHit['memoryType'],
-        similarity: h.similarity,
-      }));
-    },
-    async list(n: number): Promise<SdkMemoryRecord[]> {
-      const rows = await db
-        .select({
-          id: operatorMemoryTable.id,
-          content: operatorMemoryTable.content,
-          memoryType: operatorMemoryTable.memoryType,
-          weight: operatorMemoryTable.weight,
-          createdAt: operatorMemoryTable.createdAt,
-        })
-        .from(operatorMemoryTable)
-        .where(eq(operatorMemoryTable.operatorId, operatorId))
-        .orderBy(desc(operatorMemoryTable.createdAt))
-        .limit(n);
-      return rows.map(r => ({
-        id: r.id,
-        content: r.content,
-        memoryType: r.memoryType as SdkMemoryRecord['memoryType'],
-        weight: r.weight ?? 1,
-        createdAt: r.createdAt?.toISOString(),
-      }));
-    },
-  };
-
-  // ── kbAdmin connector ─────────────────────────────────────────────────────
-  const kbAdminConnector: KbAdminConnector = {
-    name: 'opsoul-kb',
-    async seed(entry): Promise<SdkKbSeedResult> {
-      const result = await persistKbSeedEntry(
-        operatorId,
-        ownerId,
-        entry.content,
-        entry.source,
-        entry.confidence,
-      );
-      return { stored: result.stored, reason: result.reason };
-    },
-    async search(query: string, topN: number): Promise<KbSearchHit[]> {
-      const embedding = await embed(query);
-      const hits = await searchBothKbs(operatorId, embedding, topN, 30, []);
-      return hits.map((h: { source?: string; content: string; similarity?: number; confidence?: number; entryId?: string }) => ({
-        entryId: h.entryId,
-        content: h.content,
-        source: h.source,
-        similarity: h.similarity,
-        confidence: h.confidence,
-      }));
-    },
-    async deleteLearned(entryId: string): Promise<KbDeleteResult> {
-      const [entry] = await db
-        .select()
-        .from(operatorKbTable)
-        .where(and(
-          eq(operatorKbTable.id, entryId),
-          eq(operatorKbTable.operatorId, operatorId),
-        ));
-      if (!entry) return { deleted: false, reason: 'not_found' };
-      if (entry.isSystem) return { deleted: false, reason: 'protected' };
-      await db.delete(operatorKbTable).where(eq(operatorKbTable.id, entryId));
-      return { deleted: true, source: entry.sourceName ?? undefined };
-    },
-    async pendingList(): Promise<KbPendingEntry[]> {
-      const rows = await db
-        .select({
-          id: operatorKbTable.id,
-          content: operatorKbTable.content,
-          sourceName: operatorKbTable.sourceName,
-          confidenceScore: operatorKbTable.confidenceScore,
-          createdAt: operatorKbTable.createdAt,
-        })
-        .from(operatorKbTable)
-        .where(and(
-          eq(operatorKbTable.operatorId, operatorId),
-          eq(operatorKbTable.verificationStatus, 'pending'),
-        ))
-        .orderBy(desc(operatorKbTable.createdAt))
-        .limit(20);
-      return rows.map(r => ({
-        id: r.id,
-        content: r.content,
-        source: r.sourceName ?? undefined,
-        confidence: r.confidenceScore ?? undefined,
-        createdAt: r.createdAt?.toISOString(),
-      }));
-    },
-  };
-
-  // ── tasks connector ───────────────────────────────────────────────────────
-  const tasksConnector: TaskStore = {
-    name: 'opsoul-tasks',
-    async create(task) {
-      const intervalMs = task.schedule === 'daily'
-        ? 24 * 60 * 60 * 1000
-        : 7 * 24 * 60 * 60 * 1000;
-      const taskId = crypto.randomUUID();
-      await db.insert(tasksTable).values({
-        id: taskId,
-        operatorId,
-        conversationId: opCtx.conversationId,
-        contextName: task.name,
-        taskType: task.schedule,
-        integrationLabel: 'self_scheduled',
-        prompt: task.prompt,
-        payload: { description: task.prompt, scheduledBy: 'operator' },
-        status: 'active',
-        nextRunAt: new Date(Date.now() + intervalMs),
-      });
-      const result: Task = {
-        name: task.name,
-        prompt: task.prompt,
-        schedule: task.schedule,
-        status: 'active',
-        nextRunAt: new Date(Date.now() + intervalMs).toISOString(),
-      };
-      return result;
-    },
-    async update(name: string, patch: TaskPatch): Promise<Task | null> {
-      const [task] = await db
-        .select()
-        .from(tasksTable)
-        .where(and(eq(tasksTable.operatorId, operatorId), eq(tasksTable.contextName, name)));
-      if (!task) return null;
-      const dbPatch: Record<string, unknown> = {};
-      if (patch.name) dbPatch.contextName = patch.name;
-      if (patch.prompt) dbPatch.prompt = patch.prompt;
-      if (patch.schedule) dbPatch.taskType = patch.schedule;
-      if (Object.keys(dbPatch).length > 0) {
-        await db.update(tasksTable).set(dbPatch).where(eq(tasksTable.id, task.id));
-      }
-      return {
-        name: (patch.name ?? task.contextName) as string,
-        prompt: (patch.prompt ?? task.prompt) as string,
-        schedule: (patch.schedule ?? task.taskType) as Task['schedule'],
-        status: (task.status ?? 'active') as TaskStatus,
-        lastRunAt: task.lastRunAt?.toISOString() ?? null,
-        nextRunAt: task.nextRunAt?.toISOString() ?? null,
-      };
-    },
-    async setStatus(name: string, status: TaskStatus): Promise<boolean> {
-      const result = await db
-        .update(tasksTable)
-        .set({ status })
-        .where(and(eq(tasksTable.operatorId, operatorId), eq(tasksTable.contextName, name)))
-        .returning({ id: tasksTable.id });
-      return result.length > 0;
-    },
-    async delete(name: string): Promise<boolean> {
-      const result = await db
-        .delete(tasksTable)
-        .where(and(eq(tasksTable.operatorId, operatorId), eq(tasksTable.contextName, name)))
-        .returning({ id: tasksTable.id });
-      return result.length > 0;
-    },
-    async list(): Promise<Task[]> {
-      const rows = await db
-        .select({
-          name: tasksTable.contextName,
-          prompt: tasksTable.prompt,
-          schedule: tasksTable.taskType,
-          status: tasksTable.status,
-          lastRunAt: tasksTable.lastRunAt,
-          nextRunAt: tasksTable.nextRunAt,
-          payload: tasksTable.payload,
-        })
-        .from(tasksTable)
-        .where(eq(tasksTable.operatorId, operatorId))
-        .orderBy(desc(tasksTable.createdAt));
-      return rows.map(r => ({
-        name: r.name as string,
-        prompt: (r.prompt ?? '') as string,
-        schedule: (r.schedule ?? 'daily') as Task['schedule'],
-        status: (r.status ?? 'active') as TaskStatus,
-        lastRunAt: r.lastRunAt?.toISOString() ?? null,
-        nextRunAt: r.nextRunAt?.toISOString() ?? null,
-      }));
-    },
-    async history(name: string): Promise<Task | null> {
-      const [task] = await db
-        .select()
-        .from(tasksTable)
-        .where(and(eq(tasksTable.operatorId, operatorId), eq(tasksTable.contextName, name)));
-      if (!task) return null;
-      const payload = (task.payload ?? {}) as { lastRunSummary?: string; lastRunDurationSec?: number };
-      return {
-        name: task.contextName as string,
-        prompt: (task.prompt ?? '') as string,
-        schedule: (task.taskType ?? 'daily') as Task['schedule'],
-        status: (task.status ?? 'active') as TaskStatus,
-        lastRunAt: task.lastRunAt?.toISOString() ?? null,
-        nextRunAt: task.nextRunAt?.toISOString() ?? null,
-        lastRunSummary: payload.lastRunSummary ?? null,
-        lastRunDurationSec: payload.lastRunDurationSec ?? null,
-      };
-    },
-    async runNow(name: string): Promise<TaskRunResult> {
-      const [task] = await db
-        .select({ id: tasksTable.id })
-        .from(tasksTable)
-        .where(and(eq(tasksTable.operatorId, operatorId), eq(tasksTable.contextName, name)));
-      if (!task) return { ok: false, summary: `No task named "${name}".`, durationSec: 0 };
-      const result = await runSingleTask(task.id, { rescheduleAfter: false });
-      return {
-        ok: result.ok,
-        summary: result.summary,
-        durationSec: result.durationSec,
-      };
-    },
-  };
-
-  // ── integrations connector ─────────────────────────────────────────────────
-  const integrationsConnector: IntegrationsConnector = {
-    name: 'opsoul-integrations',
-    async list(): Promise<Integration[]> {
-      const rows = await db
-        .select({
-          integrationType: operatorIntegrationsTable.integrationType,
-          integrationLabel: operatorIntegrationsTable.integrationLabel,
-          status: operatorIntegrationsTable.status,
-          isCustomApp: operatorIntegrationsTable.isCustomApp,
-          baseUrl: operatorIntegrationsTable.baseUrl,
-        })
-        .from(operatorIntegrationsTable)
-        .where(eq(operatorIntegrationsTable.operatorId, operatorId));
-      return rows.map(r => ({
-        integrationType: r.integrationType as string,
-        integrationLabel: r.integrationLabel as string,
-        status: r.status ?? 'connected',
-        isCustomApp: r.isCustomApp ?? false,
-        baseUrl: r.baseUrl ?? undefined,
-      }));
-    },
-    async connect(args): Promise<boolean> {
-      const key = args.secretName.toUpperCase();
-      const [secret] = await db
-        .select()
-        .from(operatorSecretsTable)
-        .where(and(
-          eq(operatorSecretsTable.operatorId, operatorId),
-          eq(operatorSecretsTable.key, key),
-        ));
-      if (!secret) return false;
-      const { encryptToken, decryptToken } = await import('@workspace/opsoul-utils/crypto');
-      const plain = decryptToken(secret.valueEncrypted);
-      const encrypted = encryptToken(plain);
-      await db.insert(operatorIntegrationsTable).values({
-        id: crypto.randomUUID(),
-        operatorId,
-        ownerId,
-        integrationType: args.integrationType,
-        integrationLabel: args.label,
-        tokenEncrypted: encrypted,
-        scopes: [args.integrationType],
-        status: 'connected',
-        ...(args.baseUrl ? { baseUrl: args.baseUrl, isCustomApp: true } : {}),
-      });
-      return true;
-    },
-    async disconnect(integrationType: string): Promise<number> {
-      const result = await db
-        .delete(operatorIntegrationsTable)
-        .where(and(
-          eq(operatorIntegrationsTable.operatorId, operatorId),
-          eq(operatorIntegrationsTable.integrationType, integrationType),
-        ))
-        .returning({ id: operatorIntegrationsTable.id });
-      return result.length;
-    },
-  };
-
-  // ── secrets admin (label listing only — no values) ─────────────────────────
-  const secretsAdmin: SecretsAdmin = {
-    name: 'opsoul-secrets-admin',
-    async listNames(): Promise<string[]> {
-      const rows = await db
-        .select({ key: operatorSecretsTable.key })
-        .from(operatorSecretsTable)
-        .where(eq(operatorSecretsTable.operatorId, operatorId));
-      return rows.map(r => r.key);
-    },
-  };
-
-  // ── self info provider ─────────────────────────────────────────────────────
-  const selfInfoProvider: SelfInfoProvider = {
-    name: 'opsoul-self',
-    async getSelf(): Promise<SelfInfo | null> {
-      const [op] = await db
-        .select()
-        .from(operatorsTable)
-        .where(eq(operatorsTable.id, operatorId));
-      if (!op) return null;
-      return {
-        id: op.id,
-        name: op.name,
-        archetypes: (op.archetype as string[] | null) ?? [],
-        mandate: op.mandate ?? undefined,
-        model: op.defaultModel ?? undefined,
-        ownerId: op.ownerId,
-        identityLocked: !!op.layer1LockedAt,
-      };
-    },
-  };
-
-  // ── conversations store ────────────────────────────────────────────────────
-  const conversationsStore: ConversationsStore = {
-    name: 'opsoul-conversations',
-    async list(limit: number): Promise<ConversationSummary[]> {
-      const rows = await db
-        .select({
-          id: conversationsTable.id,
-          contextName: conversationsTable.contextName,
-          scopeId: conversationsTable.scopeId,
-          lastMessageAt: conversationsTable.lastMessageAt,
-        })
-        .from(conversationsTable)
-        .where(eq(conversationsTable.operatorId, operatorId))
-        .orderBy(desc(conversationsTable.lastMessageAt))
-        .limit(limit);
-      return rows.map(r => ({
-        id: r.id,
-        contextName: r.contextName ?? undefined,
-        scopeId: r.scopeId ?? undefined,
-        lastMessageAt: r.lastMessageAt?.toISOString() ?? undefined,
-      }));
-    },
-  };
-
-  // ── assemble the full AllConnectors bag ───────────────────────────────────
-  const connectors: AllConnectors = {
-    files: filesConnector,
-    pdf: pdfConnector,
-    memory: memoryConnector,
-    kbAdmin: kbAdminConnector,
-    tasks: tasksConnector,
-    integrations: integrationsConnector,
-    secretsAdmin,
-    selfInfo: selfInfoProvider,
-    conversations: conversationsStore,
-    // Integration connectors (gmail, telegram, slack, etc.) are not wired here.
-    // The SDK tools for those connectors will gracefully return ok:false
-    // "not connected". Those tools go through the existing OAuth handler in
-    // toolHandlers.ts until Phase 1c replaces them. When that phase arrives,
-    // wire each connector by adapting loadIntegration() from toolHandlers.ts.
-  };
-
-  return {
-    consumerId: operatorId,
-    deploymentId: ownerId,
-    secrets,
-    logger,
-    connectors,
-  };
-}
-
-// ───────────────────────────────────────────────────────────────────────────
-//  D. DISPATCH BRIDGE
-// ───────────────────────────────────────────────────────────────────────────
-
-// Tool names whose SDK content output needs to be re-wrapped in the
-// opsoul-widget fence that ChatSection.tsx expects.
-// render_chart / render_table / render_diagram emit their payload in
-// result.data rather than result.content when going through the SDK.
 const RENDER_TOOLS = new Set(['render_chart', 'render_table', 'render_diagram']);
 
-function sdkDataToOpSoulContent(name: string, sdkResult: { ok: boolean; content: string; data?: unknown }): string {
+function sdkDataToOpSoulContent(
+  name: string,
+  sdkResult: { ok: boolean; content: string; data?: unknown },
+): string {
   if (!RENDER_TOOLS.has(name) || !sdkResult.ok || !sdkResult.data) {
     return sdkResult.content;
   }
-  // Reconstruct the opsoul-widget fence the frontend ChatSection.tsx expects.
-  // SDK data shape: { type: 'chart'|'table'|'diagram', ... }
   const payload = sdkResult.data as Record<string, unknown>;
   const kind = payload.type === 'chart' ? 'chart'
     : payload.type === 'table' ? 'table'
     : payload.type === 'diagram' ? 'mermaid'
     : null;
   if (!kind) return sdkResult.content;
-  const widget = { kind, ...payload, type: undefined };
-  // Remove the extra 'type' key (already promoted to 'kind')
-  delete widget.type;
+  const { type: _type, ...rest } = payload;
+  const widget = { kind, ...rest };
   return `\`\`\`opsoul-widget\n${JSON.stringify(widget)}\n\`\`\``;
 }
 
-/**
- * Dispatch a tool call through the CultureEyes SDK registry.
- *
- * Maps the SDK ToolResult → OpSoul ToolResult:
- *   - content: always present; render tools get re-fenced in opsoul-widget.
- *   - meta.terminateLoop: true when sdk result.ok === false
- *   - meta.webSearchFired: true for web_search calls that succeeded
- *   - meta.httpRequestFired: true for http_request calls (for fullContent trim)
- */
+// ── operator secrets resolver ─────────────────────────────────────────────────
+
+async function resolveOperatorSecrets(operatorId: string): Promise<Record<string, string>> {
+  const rows = await db
+    .select({ key: operatorSecretsTable.key, valueEncrypted: operatorSecretsTable.valueEncrypted })
+    .from(operatorSecretsTable)
+    .where(eq(operatorSecretsTable.operatorId, operatorId));
+  const out: Record<string, string> = {};
+  for (const row of rows) {
+    try {
+      out[row.key] = decryptToken(row.valueEncrypted);
+    } catch {
+      // skip unreadable entries
+    }
+  }
+  return out;
+}
+
+// ── dispatch ──────────────────────────────────────────────────────────────────
+
+interface SdkExecuteResult {
+  ok: boolean;
+  content: string;
+  data?: unknown;
+  error?: { code: string; message: string };
+}
+
+// ── list_workspace handler ────────────────────────────────────────────────────
+// Virtual tool — assembled entirely from OpSoul's DB + SDK tool catalog.
+// Never forwarded to the SDK server.
+
+async function handleListWorkspace(
+  operatorId: string,
+  filter: string,
+): Promise<string> {
+  const keyword = filter.toLowerCase();
+
+  const [allTools, integrations, files, kbHigh, kbMedium, kbLow, ownerKbCount, secretRows, allSkills] = await Promise.all([
+    fetchSdkTools(),
+    db.select({ integrationType: operatorIntegrationsTable.integrationType })
+      .from(operatorIntegrationsTable)
+      .where(eq(operatorIntegrationsTable.operatorId, operatorId)),
+    db.select({ filename: operatorFilesTable.filename })
+      .from(operatorFilesTable)
+      .where(eq(operatorFilesTable.operatorId, operatorId)),
+    db.select({ total: count() }).from(operatorKbTable)
+      .where(and(eq(operatorKbTable.operatorId, operatorId), gte(operatorKbTable.confidenceScore, 80))),
+    db.select({ total: count() }).from(operatorKbTable)
+      .where(and(eq(operatorKbTable.operatorId, operatorId), gte(operatorKbTable.confidenceScore, 50), lt(operatorKbTable.confidenceScore, 80))),
+    db.select({ total: count() }).from(operatorKbTable)
+      .where(and(eq(operatorKbTable.operatorId, operatorId), lt(operatorKbTable.confidenceScore, 50))),
+    db.select({ total: count() }).from(ownerKbTable)
+      .where(eq(ownerKbTable.operatorId, operatorId)),
+    db.select({ key: operatorSecretsTable.key })
+      .from(operatorSecretsTable)
+      .where(eq(operatorSecretsTable.operatorId, operatorId)),
+    db.select({ name: platformSkillsTable.name, description: platformSkillsTable.description })
+      .from(platformSkillsTable)
+      .orderBy(platformSkillsTable.name),
+  ]);
+
+  const matchingTools = keyword
+    ? allTools.filter(t => t.name.includes(keyword) || t.description.toLowerCase().includes(keyword))
+    : allTools;
+
+  const lines: string[] = [];
+
+  lines.push(`=== WORKSPACE — ${matchingTools.length} tool${matchingTools.length !== 1 ? 's' : ''}${keyword ? ` matching "${filter}"` : ''} of ${allTools.length} total ===`);
+  lines.push('');
+
+  lines.push('TOOLS:');
+  for (const t of matchingTools) {
+    lines.push(`  ${t.name} — ${t.description}`);
+  }
+
+  lines.push('');
+  const integrationList = integrations.map(i => i.integrationType).filter((t): t is string => !!t);
+  lines.push(`INTEGRATIONS: ${integrationList.length > 0 ? integrationList.join(', ') : 'none connected'}`);
+
+  lines.push('');
+  const fileList = files.map(f => f.filename).filter((n): n is string => !!n);
+  lines.push(`FILES (${fileList.length}): ${fileList.length > 0 ? fileList.join(', ') : 'none'}`);
+
+  lines.push('');
+  lines.push(`KNOWLEDGE BASE: ${Number(ownerKbCount[0]?.total ?? 0)} owner-facts · ${Number(kbHigh[0]?.total ?? 0)} high-confidence · ${Number(kbMedium[0]?.total ?? 0)} medium · ${Number(kbLow[0]?.total ?? 0)} low`);
+
+  lines.push('');
+  const secretLabels = secretRows.map(r => `{{${r.key}}}`);
+  lines.push(`SECRETS (labels only): ${secretLabels.length > 0 ? secretLabels.join(', ') : 'none'}`);
+
+  lines.push('');
+  const matchingSkills = keyword
+    ? allSkills.filter(s => s.name.toLowerCase().includes(keyword) || (s.description ?? '').toLowerCase().includes(keyword))
+    : allSkills;
+  lines.push(`SKILLS (${matchingSkills.length} of ${allSkills.length} total):`);
+  for (const s of matchingSkills) {
+    lines.push(`  ${s.name} — ${s.description ?? ''}`);
+  }
+
+  return lines.join('\n');
+}
+
 export async function dispatchViaSdk(
   name: string,
   rawArgs: string,
   opCtx: ToolHandlerContext,
-  extraCtx: {
+  _extraCtx: {
     operatorName: string;
     liveSecrets: string[];
     connectedIntegrations: string[];
   },
-): Promise<OpSoulToolResult> {
-  const registry = getRegistry();
-  const sdkCtx = buildSdkCtx(opCtx, extraCtx);
-
+): Promise<{ content: string; meta: { terminateLoop: boolean; webSearchFired?: boolean; httpRequestFired?: boolean } }> {
   let params: Record<string, unknown>;
   try {
     params = JSON.parse(rawArgs) as Record<string, unknown>;
@@ -780,7 +273,103 @@ export async function dispatchViaSdk(
     params = {};
   }
 
-  const result = await registry.execute(name, params, sdkCtx);
+  // Intercept virtual tools — never forward to SDK.
+  if (name === 'list_workspace') {
+    const filter = typeof params.filter === 'string' ? params.filter : '';
+    const operatorId = opCtx.operatorId ?? '';
+    const content = await handleListWorkspace(operatorId, filter);
+    return { content, meta: { terminateLoop: false } };
+  }
+
+  // KB tools — OpSoul owns the tables; SDK has no kbAdmin connector wired.
+  // Intercept and serve from local Postgres directly.
+  if (name === 'kb_search' || name === 'kb_query') {
+    const query = typeof params.query === 'string' ? params.query : '';
+    const topN = typeof params.topN === 'number' ? params.topN : typeof params.limit === 'number' ? params.limit : 4;
+    const operatorId = opCtx.operatorId ?? '';
+    if (!query) return { content: 'query is required', meta: { terminateLoop: false } };
+    const embedding = await embed(query);
+    const hits = await searchBothKbs(operatorId, embedding, topN, KB_RETRIEVAL_MIN_CONFIDENCE);
+    if (hits.length === 0) return { content: `No KB entries matched: "${query}".`, meta: { terminateLoop: false } };
+    const lines = hits.map((h, i) =>
+      `${i + 1}. [${h.kbSource}, sim ${h.similarity.toFixed(2)}${h.confidenceScore != null ? `, conf ${h.confidenceScore}` : ''}] (id ${h.id})\n${h.content}`
+    );
+    return { content: `Top ${hits.length} KB hits for "${query}":\n${lines.join('\n')}`, meta: { terminateLoop: false } };
+  }
+
+  if (name === 'kb_seed') {
+    const content = typeof params.content === 'string' ? params.content : '';
+    const source = typeof params.source === 'string' ? params.source : 'operator_self';
+    const operatorId = opCtx.operatorId ?? '';
+    const ownerId = opCtx.ownerId ?? '';
+    if (!content) return { content: 'content is required', meta: { terminateLoop: false } };
+    const result = await gateAndStoreOperatorKb(operatorId, ownerId, content, source);
+    if (!result.stored) {
+      return { content: `KB entry not stored: ${result.reason}`, meta: { terminateLoop: false } };
+    }
+    return { content: 'KB entry verified and stored.', meta: { terminateLoop: false } };
+  }
+
+  if (name === 'kb_delete_learned') {
+    const entryId = typeof params.entryId === 'string' ? params.entryId : '';
+    const operatorId = opCtx.operatorId ?? '';
+    if (!entryId) return { content: 'entryId is required', meta: { terminateLoop: false } };
+    const [row] = await db.select({ id: operatorKbTable.id, isSystem: operatorKbTable.isSystem })
+      .from(operatorKbTable)
+      .where(and(eq(operatorKbTable.id, entryId), eq(operatorKbTable.operatorId, operatorId)));
+    if (!row) return { content: `Entry ${entryId} not found.`, meta: { terminateLoop: false } };
+    if (row.isSystem) return { content: 'System-seeded entries cannot be deleted.', meta: { terminateLoop: false } };
+    await db.delete(operatorKbTable).where(eq(operatorKbTable.id, row.id));
+    return { content: `KB entry ${entryId} deleted.`, meta: { terminateLoop: false } };
+  }
+
+  if (name === 'kb_pending_list') {
+    const operatorId = opCtx.operatorId ?? '';
+    const rows = await db.select({
+      id: operatorKbTable.id,
+      content: operatorKbTable.content,
+      sourceName: operatorKbTable.sourceName,
+      confidenceScore: operatorKbTable.confidenceScore,
+      createdAt: operatorKbTable.createdAt,
+    })
+      .from(operatorKbTable)
+      .where(and(
+        eq(operatorKbTable.operatorId, operatorId),
+        eq(operatorKbTable.verificationStatus, 'pending'),
+        ne(operatorKbTable.isSystem, true),
+      ));
+    if (rows.length === 0) return { content: 'No pending KB entries.', meta: { terminateLoop: false } };
+    const lines = rows.map((r, i) => `${i + 1}. (id ${r.id}) [conf ${r.confidenceScore}] ${r.content.slice(0, 200)}`);
+    return { content: `${rows.length} pending KB entries:\n${lines.join('\n')}`, meta: { terminateLoop: false } };
+  }
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (CY_SDK_KEY) headers['Authorization'] = `Bearer ${CY_SDK_KEY}`;
+
+  // Scope per operator so memory/KB/files are isolated between operators.
+  const operatorId = opCtx.operatorId;
+  if (operatorId) headers['X-Scope-ID'] = `operator:${operatorId}`;
+
+  // Fetch operator-stored secrets so the SDK can resolve {{LABEL}} in http_request
+  // and any per-operator overrides for platform tools (custom OpenAI keys, etc.).
+  const secrets = operatorId ? await resolveOperatorSecrets(operatorId) : {};
+
+  const res = await fetch(`${CY_SDK_URL}/execute`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ tool: name, params, ...(Object.keys(secrets).length ? { secrets } : {}) }),
+  });
+
+  const result = await res.json() as SdkExecuteResult;
+
+  if (!res.ok && result.error) {
+    return {
+      content: `Tool error: ${result.error.message}`,
+      meta: { terminateLoop: true },
+    };
+  }
 
   const content = sdkDataToOpSoulContent(name, result);
 
