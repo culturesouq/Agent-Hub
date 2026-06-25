@@ -11,6 +11,7 @@
 
 import {
   BedrockRuntimeClient,
+  ConverseCommand,
   ConverseStreamCommand,
 } from '@aws-sdk/client-bedrock-runtime';
 import {
@@ -296,36 +297,21 @@ async function bedrockConverse(
   tools: ToolDefinition[],
   maxTokens: number,
 ): Promise<CompletionResult> {
-  const apiKey = process.env.AWS_BEDROCK_API_KEY ?? '';
-  const body: Record<string, unknown> = { messages, inferenceConfig: { maxTokens } };
-  if (system.length > 0) body.system = system;
-  if (tools.length > 0) body.toolConfig = { tools: toConverseTools(tools) };
-
-  const resp = await fetch(
-    `https://bedrock-runtime.us-east-1.amazonaws.com/model/${modelId}/converse`,
-    {
-      method:  'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body:    JSON.stringify(body),
-    },
+  const input = Object.assign(
+    { modelId, messages, inferenceConfig: { maxTokens } },
+    system.length > 0 ? { system } : {},
+    tools.length > 0 ? { toolConfig: { tools: toConverseTools(tools) } } : {},
   );
 
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({})) as { message?: string };
-    const error = Object.assign(new Error(err.message ?? `Bedrock HTTP ${resp.status}`), { status: resp.status });
-    throw error;
-  }
-
-  const data = await resp.json() as {
-    output?: { message?: { content?: Array<{ text?: string; toolUse?: { toolUseId?: string; name?: string; input?: unknown } }> } };
-    usage?: { inputTokens?: number; outputTokens?: number };
-  };
+  const response = await bedrockSdkClient.send(
+    new ConverseCommand(input as Parameters<typeof ConverseCommand>[0]),
+  );
 
   let content  = '';
   let toolCall: ToolCall | undefined;
-  for (const block of data.output?.message?.content ?? []) {
-    if (block.text) content += block.text;
-    if (block.toolUse) {
+  for (const block of response.output?.message?.content ?? []) {
+    if ('text' in block && block.text) content += block.text;
+    if ('toolUse' in block && block.toolUse) {
       toolCall = {
         id:   block.toolUse.toolUseId ?? '',
         name: block.toolUse.name      ?? '',
@@ -337,8 +323,8 @@ async function bedrockConverse(
   return {
     content,
     toolCall,
-    promptTokens:     data.usage?.inputTokens  ?? 0,
-    completionTokens: data.usage?.outputTokens ?? 0,
+    promptTokens:     response.usage?.inputTokens  ?? 0,
+    completionTokens: response.usage?.outputTokens ?? 0,
   };
 }
 
