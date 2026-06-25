@@ -7,52 +7,81 @@
 
 ---
 
-## ✅ SESSION WORK — 2026-06-24
+## ✅ SESSION WORK — 2026-06-24 / 2026-06-25  ·  COMPLETE
 
-### Universal Skills Catalog — decision + workflow running
+### Universal Skills Self-Awareness Architecture — SHIPPED `aa5ac1a` · pushed 2026-06-25
 
-**Decision (2026-06-24):** Skills are now UNIVERSAL — no archetype assignment. Every operator receives the full platform skill catalog automatically. The operator's mandate + cosine similarity on `triggerDescription` is the only filter — a sales operator's users will never trigger a parenting skill; the match simply won't fire. No manual installation, no archetype gating.
+**Root cause confirmed (why operators were always skill-less):**
+- `loadActiveSkills(operator.id)` read junction table — most operators had zero rows (never manually installed)
+- `loadArchetypeSkills(archetype[])` filtered by archetype name — names didn't match DB → zero skills
+- `buildAgencySkills` merged two empty arrays → `detectSkillTrigger` never fired → every operator ran 0 skills
 
-**Why operators were skill-less (root cause found):**
-- `loadActiveSkills(operator.id)` — reads `operatorSkillsTable` junction. Most operators have NO rows here (never manually installed).
-- `loadArchetypeSkills(operator.archetype[])` — reads platform skills filtered by archetype. If archetype not set, or names don't match DB → zero skills.
-- Result: operators walked into every conversation with 0 skills in `buildAgencySkills`. `detectSkillTrigger` never fired.
+**Architecture (this session's decision):**
+Skills are like tools — operator must KNOW they exist before it can choose to use them. Skills surface in self-awareness, BEFORE tools, so the operator picks the right cognitive framework before picking capabilities. Universal catalog — all 1077 skills available to every operator via one vector query per turn. Mandate is locked → operator anchors naturally → no external filter needed.
 
-**Fix (to build — awaiting go):**
-- Replace archetype-filtered load with `loadAllPlatformSkills()` — full catalog, every operator, every turn.
-- `archetype` column on `platform_skills` becomes nullable/null for universal skills.
-- `archetypeSkills.ts` either removed or kept only for the legacy 45 archetype-specific skills.
+**Removed entirely (`aa5ac1a`):**
+- `loadActiveSkills` / `loadOperatorSkills` — no junction-table loading
+- `loadArchetypeSkills` / `buildAgencySkills` — no archetype layer
+- `detectSkillTrigger` — no post-message pattern matching
+- `InstalledSkill` type — no installed-skills concept anywhere
+- `operatorSkillsTable` / `platformSkillsTable` imports from chat + public-crud
 
-**Existing skill catalog: 45 skills (9 archetypes × 5)**
-Executor, Advisor, Expert, Connector, Creator, Guardian, Builder, Catalyst, Analyst — seeded via `seedSkills.ts` + `seed-new-archetype-skills.ts`.
+**What replaced it (`aa5ac1a`):**
+- `vectorSearch.ts → searchSkillByVector(embedding, threshold=0.55, limit=3)` now returns `SkillHit[]` (was `SkillHit | null`). SQL uses distance filter + `LIMIT $3`.
+- `chat.ts` — `skillsContextMsg` built from `surfacedSkills`, inserted **FIRST** in `toInsert` (before workspace, KB, memory, TurnPlan). Embedding reused from KB step. `activeSkillCount` = `surfacedSkills.length`.
+- `public-crud.ts` (action) — embed → `searchSkillByVector(limit=1)` → `executeSkill` → return. Falls to LLM on miss.
+- `operatorCapabilityLoop.ts` — full rewrite. Signature: `(messages, embedding|null, model)`. Retrieves skills, splices context before user message, one LLM call. Returns `{ skillFired, skillName }`.
+- `tasksCron.ts` — `loadOperatorSkills` removed from Promise.all. `runCapabilityLoop` receives `taskEmbedding` directly.
 
-**New universal skill catalog: ~1050 skills across 35 domains**
-Workflow `wf_7d06cfd9-f50` running (2026-06-24 late night). 35 parallel agents, 30 skills each. Domains: Personal Finance, Relationships & Family, Parenting & Children, Health & Wellbeing, Career Development, Leadership & Management, Marketing & Brand, Sales & Business Development, Legal & Contracts, Business Finance & Investment, Education & Learning, Events & Community, Travel & Logistics, Mental & Emotional Wellbeing, Entrepreneurship & Startups, Public Speaking & Presenting, Hiring & People Management, Product & Customer Experience, Writing & Content Creation, Research & Investigation, Operations & Process Design, Creativity & Design Thinking, Coaching & Personal Development, Negotiation & Deals, Strategy & Planning, Technology & Software Development, Social Media & Digital Presence, Nonprofit & Social Impact, Real Estate & Property, Crisis Management & Risk, Data & Analytics, Communication & Influence, Project Management, Innovation & Problem Solving, Diversity Culture & Inclusion.
+**Context injection order (all surfaces):**
+```
+skills → workspace manifest → KB → memories → TurnPlan → user message
+```
 
-**Seed script:** `server_staging/src/scripts/seedUniversalSkills.ts` — committed `0a41e3e`. 1077 skills, `archetype: null`, `author: 'opsoul-platform'`. Run against live DB to activate. Portable: to migrate to SDK later, point same file at SDK DB. One command.
+**Both codebases synced:** `artifacts/opsoul-api/src/` and `server_staging/src/` identical as of `aa5ac1a`.
 
-**chat.ts change (committed `0a41e3e`):** `loadArchetypeSkills()` → `loadAllPlatformSkills()`. New function at line ~231 loads entire `platformSkillsTable` with no filter. Variable name `archetypeDefaultSkills` kept in destructure for zero downstream disruption. `buildAgencySkills` merges platform catalog + any operator-specific overrides as before.
+**Previous session commits (skills evolution, still live):**
+- `0a41e3e` — seed script `seedUniversalSkills.ts` (1077 skills, 35 domains, `archetype: null`)
+- `791c6b8` — `embedding vector(1536)` column + `searchSkillByVector` first version
+- `d91c4ce` — skill-first detection (pre-`aa5ac1a` intermediate)
+- `aa5ac1a` — final clean rewrite: universal self-awareness, all old layers gone
 
-**Archetypes: CLOSED** — no new archetypes being added. Skills expansion is the direction.
+**Pending (operator cannot do this — Mohamed runs):**
+1. Start Docker Desktop → build + push ACR image (ACR cloud build has "failed to download context" — Azure-side issue)
+2. Run `seedUniversalSkills.ts` against live DB — populates 1077 skill embeddings
+3. Deploy
 
-**Vector retrieval (commit `791c6b8`):** Skills are NOT injected or bulk-loaded. Architecture:
-- `platform_skills` table: `embedding vector(1536)` column added (schema + `ALTER TABLE IF NOT EXISTS` in seed)
-- Seed time: each skill's `triggerDescription` embedded once, stored in DB
-- Runtime: `messageEmbedding` computed once per turn (outside kbSearch block, reused for KB + skill search). `searchSkillByVector()` in `vectorSearch.ts` — one cosine-distance query, returns best match or null. User threshold 0.55 (sim ≥ 0.45), operator-response 0.40 (sim ≥ 0.60)
-- Operator-specific installed skills checked first (small set, old embed-on-the-fly path). Platform catalog only if no operator-specific match.
-- No `loadAllPlatformSkills()`, no bulk embed storm, no noise. Identical principle to KB retrieval.
+---
 
-**Skill-first architecture (commit `d91c4ce`):** Skills detect BEFORE the LLM, not after. Sequence every turn:
-1. `messageEmbedding` computed (reused for KB + skill)
-2. Skill detected: operator-specific first, then `searchSkillByVector()` against platform catalog
-3. Active skill injected into messages as ephemeral `[Active Skill: name]` system context — right before user message, after TurnPlan
-4. LLM runs: reads skill instructions, chooses tools IN SERVICE of the skill's steps, produces one response already shaped by the skill
-- Removed: post-response skill detection, `executeSkill()`, `persistSkillResult()`. No more 3-LLM-call chain per skill.
+### LLM Brain — Claude Sonnet 4.6 on AWS Bedrock — CODE SHIPPED `71ffc0d` · env wired · AWAITING BUILD+DEPLOY
 
-**TO ACTIVATE (Mohamed gives go):**
-1. Push 4 commits to remote (`git push`)
-2. Run `seedUniversalSkills.ts` against live DB — adds `embedding vector(1536)` column, inserts 1077 skills, embeds all triggerDescriptions
-3. Build + deploy new image
+**Decision:** Replace Azure GPT-4o with Claude Sonnet 4.6 on AWS Bedrock. One model, no routing, no fallbacks.
+
+**Why:** GPT-4o was chatty and distracted. Claude Sonnet 4.6 has stronger reasoning, tool use, 1M context window, and better operator discipline. Mohamed tested in Bedrock playground — confirmed working 2026-06-25.
+
+**What was built (`71ffc0d`):**
+- `modelRegistry.ts` — single entry `bedrock/claude-sonnet-4-6`. Model ID: `us.anthropic.claude-sonnet-4-6` (US cross-region inference profile). Env: `AWS_BEDROCK_API_KEY`. GPT-4o entry removed entirely.
+- `openrouter.ts` — full rewrite. Bedrock Converse API adapter. Non-streaming via `fetch` to `/converse`. Streaming via `@aws-sdk/client-bedrock-runtime` `ConverseStreamCommand` (handles AWS binary EventStream). Bearer token injected via SDK middleware. BYO operator override path (OpenAI-compat) preserved.
+- `package.json` — added `@aws-sdk/client-bedrock-runtime ^3.826.0`.
+- Both codebases synced: `artifacts/opsoul-api/src/` and `server_staging/src/`.
+
+**Auth:** AWS Bedrock long-term API key (Bearer token). NOT IAM/SigV4.
+- Secret name on Container App: `aws-bedrock-api-key`
+- Env var wired: `AWS_BEDROCK_API_KEY=secretref:aws-bedrock-api-key` ✅ done
+- `AZURE_OPENAI_KEY` env var removed ✅ done
+- `azure-openai-key` secret still exists on Container App (harmless — clean up later)
+
+**Live test result:** `STATUS: 200` → `"Hello!"` — 12 input tokens, 5 output tokens. ✅
+
+**Pricing:** $3/MTok input, $15/MTok output (US East 1).
+
+**Pending (build + deploy):**
+1. Build Docker image — ACR cloud build fails ("failed to download context" — persistent Azure agent issue). Options: GitHub Actions (manual trigger) or Docker Desktop locally.
+2. Push image to `banistudioacr.azurecr.io/opsoul-api:bedrock-71ffc0d`
+3. Deploy to Container App `opsoul` (bani-studio-rg)
+4. Run `seedUniversalSkills.ts` against live DB (Mohamed runs — populates 1077 skill embeddings)
+
+**GitHub Actions decision:** Mohamed wants manual-trigger deploy (not auto on every push). Next step: set up `.github/workflows/deploy.yml` with `workflow_dispatch` trigger.
 
 ---
 

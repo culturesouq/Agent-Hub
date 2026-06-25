@@ -1,0 +1,347 @@
+import { Router, type Request, type Response } from 'express';
+import { z } from 'zod';
+import { db } from '@workspace/db';
+import {
+  operatorsTable,
+  growProposalsTable,
+  selfAwarenessStateTable,
+  messagesTable,
+  conversationsTable,
+} from '@workspace/db';
+import { eq, and, desc, inArray } from 'drizzle-orm';
+import { requireAuth } from '../middleware/requireAuth.js';
+import { runGrowCycle } from '../utils/growEngine.js';
+import { recomputeSelfAwareness } from '../utils/selfAwarenessEngine.js';
+import { buildSystemPrompt } from '../utils/systemPrompt.js';
+import type { OperatorIdentity } from '../utils/systemPrompt.js';
+import { chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
+import type { Layer2Soul } from '../validation/operator.js';
+
+const router = Router({ mergeParams: true });
+router.use(requireAuth);
+
+async function resolveOperator(req: Request, res: Response): Promise<string | null> {
+  const [op] = await db
+    .select({ id: operatorsTable.id, growLockLevel: operatorsTable.growLockLevel })
+    .from(operatorsTable)
+    .where(
+      and(
+        eq(operatorsTable.id, req.params.operatorId as string),
+        eq(operatorsTable.ownerId, req.owner!.ownerId),
+      ),
+    );
+  if (!op) {
+    res.status(404).json({ error: 'Operator not found' });
+    return null;
+  }
+  return op.id;
+}
+
+router.post('/trigger', async (req: Request, res: Response): Promise<void> => {
+  const operatorId = await resolveOperator(req, res);
+  if (!operatorId) return;
+
+  try {
+    const result = await runGrowCycle(operatorId);
+    res.json(result);
+  } catch (err) {
+    res.status(502).json({ error: 'GROW cycle failed', detail: (err as Error).message });
+  }
+});
+
+function mapProposal(p: typeof growProposalsTable.$inferSelect) {
+  const proposedChanges = (p.proposedChanges ?? {}) as Record<string, unknown>;
+  const claudeEval = (p.claudeEvaluation ?? {}) as Record<string, unknown>;
+  const needsReview = Array.isArray(claudeEval.needsOwnerReview) ? claudeEval.needsOwnerReview as string[] : [];
+  const approved   = Array.isArray(claudeEval.approved) ? claudeEval.approved as string[] : [];
+
+  // Pick the primary field: prefer first review field, then first approved, then first key
+  const primaryField: string =
+    needsReview[0] ??
+    approved[0] ??
+    Object.keys(proposedChanges)[0] ??
+    '';
+
+  const fieldDecisions = (claudeEval.fieldDecisions ?? {}) as Record<string, { confidence?: number }>;
+  const confidence: number =
+    typeof fieldDecisions[primaryField]?.confidence === 'number'
+      ? (fieldDecisions[primaryField].confidence as number)
+      : 70;
+
+  return {
+    ...p,
+    targetField: primaryField,
+    proposedValue: primaryField ? proposedChanges[primaryField] : undefined,
+    rationale: p.claudeReasoning ?? '',
+    confidence,
+    allProposedChanges: proposedChanges,
+  };
+}
+
+router.get('/proposals', async (req: Request, res: Response): Promise<void> => {
+  const operatorId = await resolveOperator(req, res);
+  if (!operatorId) return;
+
+  const limitRaw = parseInt(req.query.limit as string ?? '20', 10);
+  const limit = isNaN(limitRaw) || limitRaw < 1 ? 20 : Math.min(limitRaw, 100);
+
+  const rows = await db
+    .select()
+    .from(growProposalsTable)
+    .where(eq(growProposalsTable.operatorId, operatorId))
+    .orderBy(desc(growProposalsTable.createdAt))
+    .limit(limit);
+
+  const proposals = rows.map(mapProposal);
+  res.json({ operatorId, count: proposals.length, proposals });
+});
+
+router.get('/proposals/:proposalId', async (req: Request, res: Response): Promise<void> => {
+  const operatorId = await resolveOperator(req, res);
+  if (!operatorId) return;
+
+  const [proposal] = await db
+    .select()
+    .from(growProposalsTable)
+    .where(
+      and(
+        eq(growProposalsTable.id, req.params.proposalId as string),
+        eq(growProposalsTable.operatorId, operatorId),
+      ),
+    );
+
+  if (!proposal) { res.status(404).json({ error: 'Proposal not found' }); return; }
+  res.json(proposal);
+});
+
+const DecideSchema = z.object({
+  decision: z.enum(['approve', 'reject']),
+  reason: z.string().max(500).optional(),
+});
+
+router.patch('/proposals/:proposalId/decide', async (req: Request, res: Response): Promise<void> => {
+  const operatorId = await resolveOperator(req, res);
+  if (!operatorId) return;
+
+  const parsed = DecideSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Validation failed', issues: parsed.error.flatten().fieldErrors });
+    return;
+  }
+
+  const [proposal] = await db
+    .select()
+    .from(growProposalsTable)
+    .where(
+      and(
+        eq(growProposalsTable.id, req.params.proposalId as string),
+        eq(growProposalsTable.operatorId, operatorId),
+      ),
+    );
+
+  if (!proposal) { res.status(404).json({ error: 'Proposal not found' }); return; }
+  if (proposal.status !== 'needs_owner_review') {
+    res.status(409).json({ error: `Proposal is in '${proposal.status}' state, only 'needs_owner_review' proposals can be decided` });
+    return;
+  }
+
+  const { decision, reason } = parsed.data;
+
+  if (decision === 'approve') {
+    const [operator] = await db
+      .select()
+      .from(operatorsTable)
+      .where(eq(operatorsTable.id, operatorId));
+
+    if (operator.growLockLevel === 'FROZEN') {
+      res.status(423).json({ error: 'Soul is FROZEN — cannot apply GROW changes' });
+      return;
+    }
+
+    const evaluation = proposal.claudeEvaluation as {
+      approved?: string[];
+      needsOwnerReview?: string[];
+    } | null;
+
+    const proposedChanges = proposal.proposedChanges as Record<string, unknown>;
+    const fieldsToApply = [
+      ...(evaluation?.approved ?? []),
+      ...(evaluation?.needsOwnerReview ?? []),
+    ];
+
+    if (fieldsToApply.length > 0 && proposedChanges) {
+      const currentSoul = operator.layer2Soul as Record<string, unknown>;
+      const updatedSoul = { ...currentSoul };
+      for (const field of fieldsToApply) {
+        if (proposedChanges[field] !== undefined) {
+          updatedSoul[field] = proposedChanges[field];
+        }
+      }
+      await db.update(operatorsTable)
+        .set({ layer2Soul: updatedSoul })
+        .where(eq(operatorsTable.id, operatorId));
+    }
+  }
+
+  const [updated] = await db.update(growProposalsTable)
+    .set({
+      status: decision === 'approve' ? 'applied' : 'rejected',
+      ownerDecision: `${decision}${reason ? `: ${reason}` : ''}`,
+      decidedAt: new Date(),
+    })
+    .where(eq(growProposalsTable.id, proposal.id))
+    .returning();
+
+  res.json({ ok: true, proposalId: proposal.id, status: updated.status });
+
+  recomputeSelfAwareness(operatorId, 'grow_approved').catch(() => {});
+});
+
+/** Stale-after window for the cached self-awareness row. After this, GET
+ *  recomputes before returning so operators can't sit at outdated 100%
+ *  health forever when a trigger silently failed. */
+const SELF_AWARENESS_STALE_MS = 6 * 60 * 60 * 1000;
+
+router.get('/self-awareness', async (req: Request, res: Response): Promise<void> => {
+  const operatorId = await resolveOperator(req, res);
+  if (!operatorId) return;
+
+  const [stored] = await db
+    .select()
+    .from(selfAwarenessStateTable)
+    .where(eq(selfAwarenessStateTable.operatorId, operatorId));
+
+  const isStale = !stored || !stored.lastUpdated || (Date.now() - stored.lastUpdated.getTime()) > SELF_AWARENESS_STALE_MS;
+
+  if (stored && !isStale) {
+    res.json(stored);
+    return;
+  }
+
+  try {
+    // Either no cache or cache is stale — recompute, persist, return fresh.
+    await recomputeSelfAwareness(operatorId, isStale && stored ? 'stale_refresh' : 'no_cache');
+    const [updated] = await db
+      .select()
+      .from(selfAwarenessStateTable)
+      .where(eq(selfAwarenessStateTable.operatorId, operatorId));
+    res.json(updated ?? stored ?? { error: 'No state available' });
+  } catch (err) {
+    // If recompute fails, surface the stale value rather than 502 — owner
+    // still sees something, with a note that the refresh failed.
+    if (stored) {
+      res.json({ ...stored, note: `Recompute failed: ${(err as Error).message}` });
+      return;
+    }
+    res.status(502).json({ error: 'Failed to compute self-awareness state', detail: (err as Error).message });
+  }
+});
+
+router.post('/self-awareness/recompute', async (req: Request, res: Response): Promise<void> => {
+  const operatorId = await resolveOperator(req, res);
+  if (!operatorId) return;
+
+  try {
+    await recomputeSelfAwareness(operatorId, 'force');
+    const [updated] = await db
+      .select()
+      .from(selfAwarenessStateTable)
+      .where(eq(selfAwarenessStateTable.operatorId, operatorId));
+    res.json({ ok: true, state: updated });
+  } catch (err) {
+    res.status(502).json({ error: 'Recompute failed', detail: (err as Error).message });
+  }
+});
+
+// Fixed diverse test messages used when no conversation history is available
+const FALLBACK_TEST_MESSAGES = [
+  'Can you help me understand what you can do for me?',
+  'I have a problem I need help solving — where do I start?',
+  'Give me your honest take on something difficult.',
+];
+
+// T5 — GROW Test Mode: preview before/after with 3 real or fallback messages
+router.post('/test-proposal/:proposalId', async (req: Request, res: Response): Promise<void> => {
+  const operatorId = await resolveOperator(req, res);
+  if (!operatorId) return;
+
+  const [proposal] = await db
+    .select()
+    .from(growProposalsTable)
+    .where(and(eq(growProposalsTable.id, req.params.proposalId as string), eq(growProposalsTable.operatorId, operatorId)));
+  if (!proposal) { res.status(404).json({ error: 'Proposal not found' }); return; }
+
+  const [operator] = await db.select().from(operatorsTable).where(eq(operatorsTable.id, operatorId));
+  if (!operator) { res.status(404).json({ error: 'Operator not found' }); return; }
+
+  // Get recent user messages — owner + authenticated user scopes only.
+  // Channel messages (Telegram/WhatsApp) and public guest sessions must never
+  // feed into GROW validation — those are external surfaces and would let
+  // outside users steer the operator's evolution prompts.
+  const recentUserMsgs = await db
+    .select({ content: messagesTable.content, createdAt: messagesTable.createdAt })
+    .from(messagesTable)
+    .innerJoin(conversationsTable, eq(messagesTable.conversationId, conversationsTable.id))
+    .where(and(
+      eq(messagesTable.operatorId, operatorId),
+      eq(messagesTable.role, 'user'),
+      inArray(conversationsTable.scopeType, ['owner', 'authenticated']),
+    ))
+    .orderBy(desc(messagesTable.createdAt))
+    .limit(9);
+
+  let testPrompts: string[];
+  if (recentUserMsgs.length >= 3) {
+    // Temporal spread: latest, middle, oldest of the retrieved set
+    const msgs = recentUserMsgs.map(m => m.content);
+    testPrompts = [msgs[0], msgs[Math.floor(msgs.length / 2)], msgs[msgs.length - 1]];
+  } else if (recentUserMsgs.length > 0) {
+    // Pad with fallbacks to always reach 3
+    const real = recentUserMsgs.map(m => m.content);
+    const needed = FALLBACK_TEST_MESSAGES.slice(real.length);
+    testPrompts = [...real, ...needed];
+  } else {
+    // No history at all — use fixed diverse messages so test always runs
+    testPrompts = FALLBACK_TEST_MESSAGES;
+  }
+
+  const currentSoul = operator.layer2Soul as Layer2Soul;
+  const proposedChanges = (proposal.proposedChanges ?? {}) as Partial<Layer2Soul>;
+  const proposedSoul: Layer2Soul = { ...currentSoul, ...proposedChanges };
+
+  const opIdentity: OperatorIdentity = {
+    name: operator.name,
+    archetype: operator.archetype,
+    roles: operator.roles ?? [],
+    rawIdentity: operator.rawIdentity ?? undefined,
+    mandate: operator.mandate,
+    coreValues: operator.coreValues,
+    ethicalBoundaries: operator.ethicalBoundaries,
+    layer2Soul: currentSoul,
+  };
+
+  const currentSystemPrompt = buildSystemPrompt(opIdentity);
+  const proposedSystemPrompt = buildSystemPrompt({ ...opIdentity, layer2Soul: proposedSoul });
+
+  try {
+    const results = await Promise.all(
+      testPrompts.map(async (prompt) => {
+        const [currentRes, proposedRes] = await Promise.all([
+          chatCompletion([{ role: 'system', content: currentSystemPrompt }, { role: 'user', content: prompt }], CHAT_MODEL),
+          chatCompletion([{ role: 'system', content: proposedSystemPrompt }, { role: 'user', content: prompt }], CHAT_MODEL),
+        ]);
+        return {
+          message: prompt,
+          current: currentRes.content,
+          proposed: proposedRes.content,
+        };
+      }),
+    );
+
+    res.json({ testPrompts, results, proposalId: proposal.id });
+  } catch (err) {
+    res.status(502).json({ error: 'Test generation failed', detail: (err as Error).message });
+  }
+});
+
+export default router;

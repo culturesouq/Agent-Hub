@@ -1,0 +1,302 @@
+import { db } from '@workspace/db';
+import { platformSkillsTable, ownersTable, operatorsTable } from '@workspace/db';
+import { eq, inArray } from 'drizzle-orm';
+import { randomUUID } from 'crypto';
+import { OWNER_OPERATORS } from './ownerOperatorsSeed';
+export { OWNER_EMAIL } from './ownerOperatorsSeed';
+import { seedPlatformKb } from './platformKbSeed.js';
+
+const SKILLS_TO_SEED = [
+  // ── Executor ─────────────────────────────────────────────────────────────
+  { name: 'Task Breakdown', archetype: 'Executor', description: 'Breaks a goal into actionable steps with owners and deadlines.', triggerDescription: 'user has a goal or project and wants it broken into clear tasks with owners and timelines', instructions: `Ask what the goal is and when it needs to be done. Then produce a structured breakdown:\n1. List every required action (be specific — name the actual task, not a vague category)\n2. For each task: assign a suggested owner type and a target deadline\n3. Flag any dependencies (task B cannot start until task A is done)\n4. Identify the first task to start today\nKeep it concrete. If the goal is vague, ask one clarifying question first.`, outputFormat: 'Task list → owner → deadline → dependencies → first action today' },
+  { name: 'Action Extractor', archetype: 'Executor', description: 'Pulls concrete next actions out of messy conversations, documents, or briefs.', triggerDescription: 'user has a meeting summary, document, or conversation and needs the actual next actions extracted', instructions: `Read what they give you. Extract every item that requires someone to do something. For each action:\n1. State it as a verb-first instruction ("Send the report", "Schedule the call", "Review the contract")\n2. Identify the owner (who must do it)\n3. Identify the deadline (when it must be done by)\n4. Flag any blocker (what must happen first)\nDo not include discussion items, observations, or notes — only real actions. If something is ambiguous, resolve it toward the most actionable interpretation.`, outputFormat: 'Action → owner → deadline → blocker (if any)' },
+  { name: 'Blocker Breaker', archetype: 'Executor', description: 'Identifies what is blocking progress and finds the fastest path through it.', triggerDescription: 'user is stuck, something is blocked, or progress has stopped and they need to move again', instructions: `Find the exact blocker. Ask: "What exactly cannot happen right now, and what is stopping it?"\nThen:\n1. Name the real constraint (resource, decision, dependency, skill gap, unclear ownership)\n2. Identify two workarounds that bypass it without solving the root cause\n3. Identify the root fix that removes it permanently\n4. Name the one thing they can do in the next hour to make any forward movement\nDo not leave them without something actionable. Even a 10% unblock is better than nothing.`, outputFormat: 'Blocker → real constraint → workarounds → root fix → next action this hour' },
+  { name: 'Deadline Monitor', archetype: 'Executor', description: 'Flags overdue items and builds a recovery plan to get back on track.', triggerDescription: 'user has missed a deadline or is at risk of missing one and needs a recovery plan', instructions: `Ask what was due, when, and the current state. Then:\n1. Assess the real gap — how far behind, and is recovery realistic?\n2. Identify the cause — scoping? execution? dependencies?\n3. Build a recovery plan — specific actions, revised timeline, any scope cuts needed\n4. Flag downstream impact — what else is affected?\n5. Propose a new commitment date they can actually hold\nBe honest about what is recoverable and what is not.`, outputFormat: 'Gap → cause → recovery plan → downstream impact → new commitment date' },
+  { name: 'Sprint Planner', archetype: 'Executor', description: 'Turns a list of work into a focused sprint with clear priorities and time allocations.', triggerDescription: 'user wants to plan a sprint, week, or short time-boxed period of focused work', instructions: `Ask: what is the time window (days/weeks), who is working, and what is the full backlog?\nThen build the sprint:\n1. Capacity — how many working hours are available after meetings and overhead?\n2. Priority sort — rank backlog items by urgency × impact\n3. Sprint selection — pick only what fits the capacity (protect 20% buffer)\n4. Daily sequence — how does the work flow day by day?\n5. Definition of done — what does a successful sprint look like?\nLeave nothing ambiguous. Every task should have an owner and a clear done state.`, outputFormat: 'Capacity → prioritized backlog → sprint selection → daily sequence → definition of done' },
+
+  // ── Advisor ──────────────────────────────────────────────────────────────
+  { name: 'Decision Framework', archetype: 'Advisor', description: 'Structures a decision with options, tradeoffs, and a clear recommendation.', triggerDescription: 'user is facing a decision and needs a structured way to think through it', instructions: `Identify the decision clearly. Ask: "What exactly are you deciding, and by when?"\nThen structure it:\n1. Decision statement — one sentence defining exactly what is being chosen\n2. Options — list every realistic option (including doing nothing)\n3. Criteria — what matters most in making this choice\n4. Tradeoffs — for each option, the key upside and key downside\n5. Recommendation — which option best fits the criteria and why\nMake the recommendation clear. Don't hedge.`, outputFormat: 'Decision statement → options → criteria → tradeoffs → recommendation' },
+  { name: 'Strategy Review', archetype: 'Advisor', description: 'Evaluates a strategy against stated goals to find gaps and misalignments.', triggerDescription: 'user has a strategy or plan and wants an honest evaluation of whether it will achieve the goal', instructions: `Ask them to share the strategy and the goal it is meant to achieve. Then evaluate:\n1. Goal clarity — is the goal specific and measurable?\n2. Strategic fit — does the strategy actually address the goal?\n3. Strengths — what parts are well-designed?\n4. Weaknesses — what will not work, and why?\n5. Missing elements — what is not in the strategy that should be?\n6. Verdict — will this strategy achieve the goal? Yes / No / Partially\nBe direct. Name what does not work.`, outputFormat: 'Goal clarity → fit assessment → strengths → weaknesses → gaps → verdict' },
+  { name: 'Vision Pressure Test', archetype: 'Advisor', description: 'Stress-tests a vision or big idea by challenging its core assumptions.', triggerDescription: 'user has a vision, big idea, or long-term plan and wants to know if it holds up under pressure', instructions: `Listen to the vision. Then pressure test it:\n1. Core assumption — what must be true for this vision to be achievable?\n2. The hardest question — what is the one challenge that could kill this?\n3. Evidence check — what evidence supports it, and what contradicts it?\n4. The skeptic's view — what would a smart critic say about this?\n5. What survives — after all of the above, what still holds?\nBe honest. The goal is not to kill the vision — it is to make it stronger.`, outputFormat: 'Core assumption → hardest question → evidence → skeptic view → what survives' },
+  { name: 'Tough Love Frame', archetype: 'Advisor', description: 'Delivers an honest assessment of what is not working, directly and without softening.', triggerDescription: 'user needs honest feedback on a plan, idea, pitch, or decision — not reassurance', instructions: `Read what they share carefully. Then give the honest assessment:\n1. What is working — acknowledge it briefly and specifically\n2. What is not working — name it clearly, without softening\n3. Why it matters — explain the consequence if it is not fixed\n4. What needs to change — specific, actionable\n5. The real question — what is the underlying issue they may not be asking?\nDo not cushion the truth with excessive praise. Respect them enough to tell them what they need to hear.`, outputFormat: 'What works → what does not → why it matters → what to change → the real question' },
+  { name: 'Options Mapper', archetype: 'Advisor', description: 'Lists all viable paths for a problem with pros and cons for each.', triggerDescription: 'user is facing a problem and wants a full view of their options before deciding', instructions: `Understand the problem and constraints. Then map every viable path:\n- Include the obvious options\n- Include the non-obvious options\n- Include the "do nothing" option if relevant\nFor each option:\n1. What it involves briefly\n2. Main pro\n3. Main con\n4. Who it is best suited for\nEnd with a synthesis: which 1-2 options stand out given their situation, and why.`, outputFormat: 'Option → what it involves → pro → con → best for → synthesis' },
+
+  // ── Expert ───────────────────────────────────────────────────────────────
+  { name: 'Deep Research', archetype: 'Expert', description: 'Finds and synthesizes authoritative information on a topic into a clear summary.', triggerDescription: 'user needs thorough reliable information on a specific topic or question', instructions: `Identify the exact topic or question. Then research and synthesize:\n1. Core answer — what does the evidence say?\n2. Key findings — 3-5 specific substantive points worth knowing\n3. Expert perspectives — cite authoritative views where relevant\n4. Where evidence is uncertain or contested\n5. Practical implications — what does this mean for the user's situation?\nUse only reliable sources. Flag where information is incomplete or debated.`, outputFormat: 'Core answer → key findings → expert perspectives → uncertainty → implications' },
+  { name: 'Fact Checker', archetype: 'Expert', description: 'Verifies claims against reliable sources and flags what is unverified.', triggerDescription: 'user has a claim, statistic, or assertion they want to verify', instructions: `Take the claim being made. Then:\n1. Restate it clearly so there is no ambiguity\n2. Check it against what is known from reliable sources\n3. Verdict: True / False / Partially True / Unverified — with explanation\n4. If false or partial: what is actually true?\n5. Source quality — how reliable is the evidence base?\nNever guess. If you cannot verify, say so clearly.`, outputFormat: 'Claim → verdict → explanation → what is actually true → source quality' },
+  { name: 'Source Validator', archetype: 'Expert', description: 'Evaluates the credibility and reliability of a source before trusting its claims.', triggerDescription: 'user wants to know if a source, study, article, or reference can be trusted', instructions: `Ask them to share the source or describe it. Then evaluate:\n1. Origin — who produced it and what is their track record?\n2. Methodology — how was the information gathered or verified?\n3. Bias check — does the source have an interest in a particular conclusion?\n4. Corroboration — do other reliable sources say the same thing?\n5. Verdict — can this source be trusted, partially trusted, or treated with skepticism?\nBe specific. "Treat with caution" is not useful without saying why.`, outputFormat: 'Origin → methodology → bias check → corroboration → verdict' },
+  { name: 'Knowledge Summarizer', archetype: 'Expert', description: 'Distills a complex body of information into a clear, usable summary.', triggerDescription: 'user has a long document, complex topic, or large volume of information they need summarized', instructions: `Read or receive the material. Then produce a layered summary:\n1. One-sentence answer — the core point in plain language\n2. Key points — 3-5 most important things to know\n3. What is often missed — the insight that most people skip\n4. Practical takeaway — what should the reader do or know based on this?\n5. What is still unclear — any gaps or unresolved questions\nWrite for someone who needs to act on this, not just read it.`, outputFormat: 'One-sentence answer → key points → what is often missed → takeaway → open questions' },
+  { name: 'Deep Dive Explainer', archetype: 'Expert', description: 'Explains a complex concept at the right depth for the person asking.', triggerDescription: 'user wants to understand a complex topic, concept, or technical subject in depth', instructions: `Gauge their level — are they new to this or do they have background? Ask if unclear.\nThen explain at the right depth:\n1. The core idea in one sentence — no jargon\n2. How it works — the mechanism, not just the label\n3. A concrete example that makes it tangible\n4. Where it gets complicated — the nuances worth knowing\n5. What most people get wrong about it\nMatch depth to the person. A beginner needs the mental model. An expert needs the edge case.`, outputFormat: 'Core idea → how it works → example → nuances → common misconceptions' },
+
+  // ── Connector ────────────────────────────────────────────────────────────
+  { name: 'Relationship Mapper', archetype: 'Connector', description: 'Maps the key relationships in a network and identifies gaps and opportunities.', triggerDescription: 'user wants to understand their network, who matters, and where the gaps are', instructions: `Ask them to describe their current network relevant to their goal. Then map it:\n1. Key nodes — who are the most important people and why?\n2. Relationship quality — for each key person: strong, weak, or nonexistent?\n3. Gaps — what types of connections are missing for what they are trying to do?\n4. Bridge opportunities — who in the network could connect them to who they need?\n5. Next move — one specific relationship to activate or build this week\nBe specific. Vague network advice is useless.`, outputFormat: 'Key nodes → relationship quality → gaps → bridges → next move' },
+  { name: 'Network Gap Analysis', archetype: 'Connector', description: 'Identifies missing connections that would unlock progress on a specific goal.', triggerDescription: 'user has a goal and wants to know what relationships they are missing to achieve it', instructions: `Understand the goal. Then identify what is missing:\n1. What type of person or role would most accelerate progress?\n2. What specific knowledge, access, or credibility is the network not currently providing?\n3. Where do those people typically exist? (communities, events, platforms, companies)\n4. Who in the current network is one degree away from that person?\n5. Outreach priority — which gap is most urgent to close and why?\nTurn the analysis into a specific person profile to find, not a category.`, outputFormat: 'Missing type → what they unlock → where they exist → who connects → outreach priority' },
+  { name: 'Intro Composer', archetype: 'Connector', description: 'Writes a warm introduction message between two people or from one person to another.', triggerDescription: 'user wants to introduce two people or request an introduction to someone', instructions: `Ask: who are the two people, what do they each do, and why should they meet? What is the shared value?\nThen write the introduction:\n1. Opening — establish the context clearly\n2. Person A — who they are and why they are relevant to Person B\n3. Person B — who they are and why they are relevant to Person A\n4. The reason to connect — the specific shared value or opportunity\n5. The ask — simple, one-step next action\nKeep it short. Introductions that take more than 90 seconds to read usually go unread.`, outputFormat: 'Subject line + introduction message (under 150 words)' },
+  { name: 'Follow-up Composer', archetype: 'Connector', description: 'Writes a follow-up message that continues a relationship without being pushy.', triggerDescription: 'user wants to follow up with someone after a meeting, introduction, or previous outreach', instructions: `Ask: who are they following up with, what was the last interaction, and what is the goal of this follow-up?\nThen write the message:\n1. Reference the last interaction specifically (not generically)\n2. Add value — share something relevant since the last conversation\n3. Soft advance — move the relationship one step without pressure\n4. Clear next action — make it easy for them to respond\nNever start with "Just following up." It signals low confidence and low value.`, outputFormat: 'Subject line + follow-up message (under 120 words)' },
+  { name: 'Bridge Builder', archetype: 'Connector', description: 'Identifies how to connect two parties who could help each other but have not yet met.', triggerDescription: 'user sees an opportunity to connect two people or groups and wants to create that bridge', instructions: `Understand both sides: who are they, what do they each need, and what is the shared opportunity?\nThen build the bridge:\n1. The shared interest — what both sides genuinely gain\n2. The framing — how to position the connection so both sides say yes\n3. The intro structure — who sends it, in what context, and in what order\n4. The timing — when is the right moment to make this connection?\n5. The follow-through — what happens after the intro to make it stick?\nA bridge that nobody crosses is not a bridge.`, outputFormat: 'Shared interest → framing → intro structure → timing → follow-through' },
+
+  // ── Creator ──────────────────────────────────────────────────────────────
+  { name: 'Idea Generator', archetype: 'Creator', description: 'Generates a range of original ideas on a topic or problem.', triggerDescription: 'user needs fresh ideas, creative options, or a brainstorm on a topic or challenge', instructions: `Understand the brief — what is the topic, constraint, and desired outcome?\nGenerate ideas across three modes:\n1. Obvious — the ideas everyone would think of (start here, establish the baseline)\n2. Adjacent — ideas from related domains that could apply here\n3. Unexpected — ideas that break the obvious frame entirely\nFor each idea: name it, describe it in one sentence, and explain what makes it interesting.\nDo not filter during generation. Produce at least 8-10 ideas. Filtering comes after.`, outputFormat: 'Obvious ideas → adjacent ideas → unexpected ideas → what makes each interesting' },
+  { name: 'Idea Expander', archetype: 'Creator', description: 'Takes one idea and develops it into something richer and more fully formed.', triggerDescription: 'user has a seed idea and wants to develop it further before committing to it', instructions: `Take the seed idea and push it in every direction:\n1. The core — what is this really about at its center?\n2. The full version — if this was built completely, what would it be?\n3. The minimal version — what is the smallest thing that proves this idea works?\n4. The unexpected angle — what is the version of this that nobody would expect?\n5. What it unlocks — what other ideas or opportunities does this open?\nDo not stay on the surface. The goal is to find what the idea is actually capable of.`, outputFormat: 'Core → full version → minimal version → unexpected angle → what it unlocks' },
+  { name: 'Draft Generator', archetype: 'Creator', description: 'Produces a first draft of a piece of writing based on a brief or outline.', triggerDescription: 'user needs a first draft written — article, post, email, pitch, script, or any written piece', instructions: `Ask for: the format, the audience, the goal, the tone, and any key points to include.\nThen produce a complete first draft:\n1. Opening — hooks the reader without a slow warmup\n2. Body — develops the main point with substance, not filler\n3. Close — ends with something that lands, not a generic summary\nWrite like a person, not a machine. Cut any sentence that exists only to fill space.\nA first draft should be 70% ready — not perfect, but usable.`, outputFormat: 'Complete first draft — opening, body, close — ready to edit' },
+  { name: 'Story Framer', archetype: 'Creator', description: 'Frames an idea, product, or message as a compelling narrative.', triggerDescription: 'user wants to tell a story about their product, company, idea, or journey in a way that lands', instructions: `Understand what they are trying to communicate and who the audience is.\nThen build the story frame:\n1. The before — what was the world or situation before this existed?\n2. The tension — what problem, gap, or frustration made the old way unsatisfying?\n3. The turn — what changed, was discovered, or was built?\n4. The after — what is now possible that was not before?\n5. The human moment — the specific person or moment that makes this real\nStory is not decoration. It is the thing that makes people remember.`, outputFormat: 'Before → tension → turn → after → human moment' },
+  { name: 'Creative Brief Builder', archetype: 'Creator', description: 'Builds a clear creative brief that gives a creator or team exactly what they need to start.', triggerDescription: 'user needs to brief a designer, writer, filmmaker, or creative team on a project', instructions: `Ask what the project is, who it is for, and what it needs to achieve.\nThen build the brief:\n1. Project overview — what this is in one paragraph\n2. Audience — who exactly, and what do they care about?\n3. Goal — what should the audience feel, think, or do after experiencing this?\n4. Tone and style — describe it in adjectives and references\n5. Deliverables — what exactly is being produced, in what format, by when?\n6. What to avoid — things that should not appear in this work\nA good brief eliminates 80% of revision cycles before they start.`, outputFormat: 'Overview → audience → goal → tone/style → deliverables → what to avoid' },
+
+  // ── Guardian ─────────────────────────────────────────────────────────────
+  { name: 'Boundary Enforcer', archetype: 'Guardian', description: 'Identifies when a request, plan, or action crosses a line and explains why clearly.', triggerDescription: 'user is about to do something or asking about something that crosses an ethical, legal, or policy boundary', instructions: `Identify exactly what the boundary is and why it exists.\n1. Name the line — what specifically is being crossed?\n2. Why it matters — what is the actual risk or harm?\n3. What is not allowed — state it clearly without softening\n4. What is allowed — redirect to what they can do within the boundary\n5. The call — make a clear recommendation: stop, proceed differently, or seek expert guidance\nDo not moralize. State the boundary, explain the consequence, and give them a path.`, outputFormat: 'The line → why it matters → what is not allowed → what is allowed → the call' },
+  { name: 'Risk Scan', archetype: 'Guardian', description: 'Scans a plan or situation for hidden risks before they become problems.', triggerDescription: 'user has a plan, decision, or situation and needs someone to look for what could go wrong', instructions: `Ask them to describe the plan or situation. Then scan across risk categories:\n- Execution risk: what could fail in delivery?\n- Financial risk: what could cost more or return less than expected?\n- Legal or compliance risk: what regulatory or contractual exposure exists?\n- Reputational risk: what could damage trust or credibility?\n- Dependency risk: what external factors could derail this?\nFor each risk: name it, rate likelihood (Low/Medium/High) and impact (Low/Medium/High), and propose a mitigation.\nHighlight the top 2 risks to address before proceeding.`, outputFormat: 'Risk → likelihood → impact → mitigation → top 2 to fix first' },
+  { name: 'Edge Case Spotter', archetype: 'Guardian', description: 'Finds the scenarios a plan has not accounted for that could break it.', triggerDescription: 'user has a plan or system and needs someone to find the edge cases and failure modes', instructions: `Understand the plan or system. Then systematically explore the edges:\n1. What happens at maximum scale — does the plan hold under volume?\n2. What happens at minimum — does it work when almost nothing is there?\n3. What happens when the main assumption is wrong?\n4. What is the worst-case user behavior — how could someone misuse or break this?\n5. What external event would cause this to fail completely?\nFor each edge case: describe the scenario, the failure mode, and the mitigation.\nThe edge case that is not thought of is the one that causes the crisis.`, outputFormat: 'Edge case → failure mode → mitigation → which one is most likely to hit' },
+  { name: 'Early Warning Brief', archetype: 'Guardian', description: 'Identifies early signals that something is going wrong before it becomes a crisis.', triggerDescription: 'user wants to monitor a situation, project, or system for warning signs before problems escalate', instructions: `Understand what is being monitored — project, relationship, system, or business metric.\nThen build the early warning brief:\n1. What to watch — the 3-5 most important indicators of health\n2. Warning thresholds — at what point does each indicator become a concern?\n3. Early signals — what are the subtle signs before the threshold is crossed?\n4. Response protocol — when a signal appears, what is the immediate action?\n5. Escalation trigger — at what point does this go from monitoring to intervention?\nMake it specific. A warning system that flags everything flags nothing.`, outputFormat: 'What to watch → thresholds → early signals → response protocol → escalation trigger' },
+  { name: 'Decision Safety Check', archetype: 'Guardian', description: 'Reviews a decision before it is made to ensure it is safe, legal, and fully considered.', triggerDescription: 'user is about to make a significant decision and wants a safety check before committing', instructions: `Ask what the decision is, what the options are, and what the stakes are.\nThen run the safety check:\n1. Is this decision reversible or irreversible? (affects how much caution is warranted)\n2. What information is missing that should be known before deciding?\n3. Who else is affected and have their interests been considered?\n4. Are there any legal, financial, or ethical implications?\n5. What is the worst realistic outcome if this is wrong?\n6. Verdict — is it safe to proceed, proceed with changes, or pause and get more information?\nNever approve a decision just because someone wants to hear yes.`, outputFormat: 'Reversibility → missing info → stakeholders → implications → worst case → verdict' },
+
+  // ── Builder ──────────────────────────────────────────────────────────────
+  { name: 'System Scope', archetype: 'Builder', description: 'Defines the boundaries and components of what needs to be built before a line of code is written.', triggerDescription: 'user wants to build something and needs to define what is in scope, what is out, and what the system is made of', instructions: `Understand what they are trying to build and why. Then scope it:\n1. Core purpose — what is the one thing this system must do well?\n2. Components — what are the distinct parts that make it work?\n3. In scope — what is being built in this version?\n4. Out of scope — what is explicitly not being built now?\n5. Dependencies — what does this need to connect to or rely on?\n6. First build target — what is the smallest scoped version that proves the system works?\nScope creep starts before the first line of code. Scope tightly.`, outputFormat: 'Core purpose → components → in scope → out of scope → dependencies → first build target' },
+  { name: 'Ship Readiness Check', archetype: 'Builder', description: 'Reviews a build before shipping to confirm it is actually ready.', triggerDescription: 'user thinks something is ready to ship and wants a readiness check before going live', instructions: `Ask them to describe what is being shipped and to whom. Then run the check:\n1. Core function — does the primary use case work end-to-end without failure?\n2. Edge cases — what happens when something unexpected occurs?\n3. Error handling — does the system fail gracefully with a useful message?\n4. Performance — is it fast enough for the expected load?\n5. Security — are there any obvious vulnerabilities (auth, data exposure, injection)?\n6. Rollback plan — if something breaks in production, how is it reversed?\n7. Verdict — ship / fix these things first / do not ship\nShipping broken software is more expensive than shipping late.`, outputFormat: 'Core function → edge cases → error handling → performance → security → rollback → verdict' },
+  { name: 'Technical Debt Read', archetype: 'Builder', description: 'Identifies technical debt in a codebase or system and prioritizes what to address.', triggerDescription: 'user wants to understand the technical debt in their system and what to pay down first', instructions: `Ask them to describe the system — age, size, stack, and known pain points.\nThen assess the debt:\n1. Structural debt — architectural decisions that now limit the system\n2. Code quality debt — areas where the code is hard to read, test, or change\n3. Dependency debt — outdated or fragile external dependencies\n4. Documentation debt — missing knowledge that slows down development\n5. Test debt — areas with no test coverage that are risky to touch\nPrioritize: which debt is actively slowing development vs which can wait?\nGive a pay-down sequence: tackle the thing blocking everything else first.`, outputFormat: 'Structural → code quality → dependency → documentation → test debt → pay-down sequence' },
+  { name: 'First Version Frame', archetype: 'Builder', description: 'Defines what the first version of something should be — minimal, working, and valuable.', triggerDescription: 'user wants to build something and needs to define the first version clearly before starting', instructions: `Understand the full vision. Then strip it down:\n1. Core value — what is the one thing the first version must deliver for someone to find it useful?\n2. Minimum feature set — the smallest set of features that delivers the core value\n3. What to cut — everything that can wait for v2 (and a rule for deciding what that is)\n4. Success definition — how will you know v1 worked?\n5. Build sequence — in what order do you build the minimum feature set?\nThe goal of v1 is not to impress. It is to prove.`, outputFormat: 'Core value → minimum feature set → what to cut → success definition → build sequence' },
+  { name: 'Blocker to Build Plan', archetype: 'Builder', description: 'Converts a build blocker into a concrete plan to get past it.', triggerDescription: 'user is blocked on a technical or build problem and cannot move forward', instructions: `Identify the blocker precisely. Ask: "What exactly cannot be built or does not work, and why?"\nThen plan the path through:\n1. Root cause — is this a knowledge gap, a tooling issue, an architecture problem, or a dependency?\n2. Fastest path — what is the quickest way to get something working, even imperfectly?\n3. Clean path — what is the right way to solve this properly?\n4. Workarounds — are there approaches that bypass the blocker without solving it?\n5. Next action — what do they do in the next hour to make progress?\nA blocked builder who has a plan is no longer blocked.`, outputFormat: 'Root cause → fastest path → clean path → workarounds → next action' },
+
+  // ── Catalyst ─────────────────────────────────────────────────────────────
+  { name: 'Reframe Frame', archetype: 'Catalyst', description: 'Reframes a stuck situation from a new angle to unlock movement.', triggerDescription: 'user is stuck, going in circles, or feels like there is no way forward', instructions: `Understand the current frame — how they are seeing the situation. Then offer alternative frames:\n1. The opposite frame — what if the opposite of their assumption was true?\n2. The zoomed-out frame — what does this look like from 5 years away?\n3. The resource frame — if they had everything they needed, what would they do?\n4. The permission frame — what if the obstacle they think is blocking them was not actually blocking them?\n5. The simplest frame — what is the simplest true thing about this situation?\nOffer the frames without forcing one. Ask which one shifts something for them.`, outputFormat: 'Current frame → opposite → zoomed-out → resource → permission → simplest → which lands?' },
+  { name: 'Momentum Starter', archetype: 'Catalyst', description: 'Breaks inertia by identifying the smallest possible first move.', triggerDescription: 'user has not started something, is procrastinating, or cannot find the energy to begin', instructions: `Do not analyze why they are stuck. Find the smallest move.\nAsk: "What is the one thing that, if done in the next 20 minutes, would mean you started?"\nIf they don't know:\n1. Break the task into the smallest possible unit (not "write the report" — "open the document")\n2. Remove every decision from the first action (no choices, just do)\n3. Remove every precondition ("I can't start until X" — challenge that)\n4. Set the clock — tell them to do it for 10 minutes and then stop if they want\nThe goal is not to finish. The goal is to have started. Starting changes everything.`, outputFormat: 'Smallest first move → decision removed → precondition challenged → 10-minute action' },
+  { name: 'Energy Read', archetype: 'Catalyst', description: 'Reads where someone is energetically and responds to what they actually need.', triggerDescription: 'user seems drained, flat, overwhelmed, or is running on empty and needs someone to read the room', instructions: `Read their message carefully — not the words, the energy behind them.\nThen respond to what is actually there:\n1. Name what you are sensing — not as diagnosis, as observation ("It sounds like you are running on fumes")\n2. Validate it — this makes sense given what they are dealing with\n3. Ask the right question — not "what do you need?" but one specific question that opens something\n4. Do not immediately jump to solutions — be with them for a moment first\n5. Then, only if they are ready — offer one small thing that might help\nEnergy first. Action second.`, outputFormat: 'What you sense → validation → the right question → one small thing (when ready)' },
+  { name: 'Commitment Closer', archetype: 'Catalyst', description: 'Helps someone move from intention to actual commitment on something they keep deferring.', triggerDescription: 'user keeps talking about doing something but never commits — they need to decide or let it go', instructions: `Name what is happening without judgment: they keep returning to this but not committing.\nThen move toward a real decision:\n1. What is the actual commitment? (make it specific — not "I will work on it" but "I will do X by Y")\n2. What is stopping commitment? (fear? resources? clarity? competing priorities?)\n3. Is this actually something they want, or something they think they should want?\n4. If yes — what is the commitment, said out loud, right now?\n5. If no — give them permission to let it go without guilt\nIndecision is a decision. Help them make the real one.`, outputFormat: 'What the commitment is → what is stopping it → do they actually want it → commit or release' },
+  { name: 'Progress Amplifier', archetype: 'Catalyst', description: 'Finds and amplifies what is already working to build momentum.', triggerDescription: 'user is in motion but losing confidence or energy and needs to see what is working', instructions: `Ask them to tell you what has happened recently — even small things.\nThen find and amplify:\n1. Wins — what has actually been accomplished (name them specifically, not generically)\n2. Movement — what is in motion that they may not be seeing as progress?\n3. Capability signal — what does this progress reveal about what they are capable of?\n4. The next amplifier — what is the one thing that, if done next, would build the most on what is working?\n5. The reframe — restate their current situation as a story of momentum, not struggle\nPeople undercount their progress. Help them count it right.`, outputFormat: 'Wins → movement → capability signal → next amplifier → momentum reframe' },
+
+  // ── Analyst ──────────────────────────────────────────────────────────────
+  { name: 'Signal vs Noise Sort', archetype: 'Analyst', description: 'Separates what matters from what does not in a pile of data, feedback, or information.', triggerDescription: 'user has too much information and cannot tell what is important and what to ignore', instructions: `Ask them to share what they are looking at. Then sort it:\n1. High signal — what actually indicates something real and important?\n2. Noise — what is present but meaningless for the decision or goal?\n3. Missing signal — what is not there that should be, before drawing conclusions?\n4. Misleading signal — what looks important but is actually distorting the picture?\n5. The one thing — if there is one thing to focus on, what is it and why?\nDo not treat all data as equal. Some things matter. Most things don't.`, outputFormat: 'High signal → noise → missing signal → misleading signal → the one thing' },
+  { name: 'Comparative Analysis', archetype: 'Analyst', description: 'Compares two or more options, systems, or approaches on the dimensions that actually matter.', triggerDescription: 'user needs to compare two or more things and choose between them based on evidence', instructions: `Identify what is being compared and what the decision criteria are.\nThen compare across the dimensions that matter:\n1. Define the criteria — what actually matters for this decision?\n2. For each option: how does it perform on each criterion?\n3. Where they are similar — do not over-distinguish what is actually the same\n4. Where they are different — focus on the differences that change the decision\n5. Verdict — given the criteria, which wins and why?\nComparison without criteria is just a list.`, outputFormat: 'Criteria → performance per option → similarities → key differences → verdict' },
+  { name: 'Pattern Report', archetype: 'Analyst', description: 'Finds the pattern in a set of data points, events, or observations.', triggerDescription: 'user has a set of data points, events, or observations and wants to know what pattern is emerging', instructions: `Ask them to share the data or events. Then find the pattern:\n1. What repeats — what happens consistently across the set?\n2. What changes — what varies and under what conditions?\n3. What is the exception — what does not fit and what might that mean?\n4. What direction — is the pattern trending, stable, or reversing?\n5. What it means — given the pattern, what is the implication for the decision or situation?\nA pattern is only useful if it tells you something actionable.`, outputFormat: 'What repeats → what changes → the exception → direction → implication' },
+  { name: 'Decision Brief', archetype: 'Analyst', description: 'Produces a tight brief with the key facts needed to make a specific decision.', triggerDescription: 'user needs to make a decision and wants the relevant facts organized for clarity', instructions: `Ask what decision is being made. Then build the brief:\n1. Decision — one sentence stating exactly what is being decided\n2. Key facts — the 3-5 facts most relevant to this decision\n3. What is known with confidence — solid, verified\n4. What is uncertain — needs to be assumed or estimated\n5. Recommendation — what the facts point toward\n6. What would change the recommendation — the condition that would reverse it\nA decision brief is not a report. It is the minimum needed to decide well.`, outputFormat: 'Decision → key facts → known → uncertain → recommendation → what would change it' },
+  { name: 'Assumption Audit', archetype: 'Analyst', description: 'Surfaces and stress-tests the assumptions embedded in a plan, argument, or decision.', triggerDescription: 'user has a plan or argument and needs the hidden assumptions identified and tested', instructions: `Read their plan or argument carefully. Extract every assumption.\nFor each assumption:\n1. State it explicitly ("This assumes that X")\n2. Is it validated or taken for granted?\n3. What is the risk if this assumption is wrong? Low / Medium / High\n4. How could it be tested or de-risked?\n5. Which assumption is the most load-bearing — the one that, if wrong, breaks everything?\nAssumptions are not problems. Unexamined assumptions are.`, outputFormat: 'Assumption → validated? → risk if wrong → how to test → most load-bearing' },
+];
+
+const PLATFORM_SKILLS_GENERIC: Array<{
+  name: string;
+  archetype: string;
+  description: string;
+  triggerDescription: string;
+  instructions: string;
+  outputFormat: string;
+  integrationType?: string;
+}> = [
+  {
+    name: 'Explore Connected App',
+    archetype: 'All',
+    description: 'Explores what actions are possible with a custom connected app and suggests where to start.',
+    triggerDescription: 'user asks what operator can do with their app, wants to explore connected app capabilities, or mentions a custom app connection',
+    instructions: `When a user asks what you can do with their connected app, check the app schema if available. Summarize in plain language what actions are possible. Suggest 3 specific things to start with. Ask which one they want. Never dump raw schema. Talk like a person.`,
+    outputFormat: 'conversational',
+  },
+  {
+    name: 'Web Search',
+    archetype: 'All',
+    integrationType: 'web_search',
+    description: 'Searches the web for current information, recent events, and real-time data.',
+    triggerDescription: 'user asks about current events, recent news, live data, or anything requiring up-to-date information from the web',
+    instructions: 'When triggered, extract the most relevant search query from the user request. Run the search. Synthesize the top results into a clear, factual answer. Cite sources where relevant. Do not fabricate results.',
+    outputFormat: 'Findings summary with source references',
+  },
+  {
+    name: 'HTTP Request',
+    archetype: 'All',
+    integrationType: 'http_request',
+    description: 'Makes authenticated HTTP requests to external APIs using stored operator secrets.',
+    triggerDescription: 'user wants to call an external API, fetch data from a URL, or interact with a web service using stored credentials',
+    instructions: 'Extract the HTTP method, URL, headers, and body from the context. Use {{SECRET_NAME}} placeholders in headers or body to reference stored secrets. Execute the request and return the response in a readable format.',
+    outputFormat: 'HTTP response summary with status code and key data',
+  },
+  {
+    name: 'Write File',
+    archetype: 'All',
+    integrationType: 'write_file',
+    description: 'Creates or updates a file in the operator file workspace.',
+    triggerDescription: 'user wants to save content, create a document, write a file, or persist output to the operator workspace',
+    instructions: 'Extract the filename and content from the context. Write the file to the operator workspace. Confirm the write was successful and report the filename and size.',
+    outputFormat: 'File write confirmation with filename and character count',
+  },
+  {
+    name: 'KB Seed',
+    archetype: 'All',
+    integrationType: 'kb_seed',
+    description: 'Stores verified knowledge into the operator knowledge base for future recall.',
+    triggerDescription: 'user or operator has synthesized knowledge worth storing for future reference, or wants to add a fact to the knowledge base',
+    instructions: 'Extract the knowledge content, its source, and an appropriate confidence level (40-85). Store it in the KB. Report the outcome including confidence and verification status.',
+    outputFormat: 'KB storage confirmation with confidence and status',
+  },
+];
+
+export async function runInitSeed(): Promise<void> {
+  console.log('[initSeed] Checking seed state...');
+
+  // ── Generic platform skills (non-archetype) ──────────────────────────────
+  const genericNames = PLATFORM_SKILLS_GENERIC.map(s => s.name);
+  const existingGeneric = await db
+    .select({ name: platformSkillsTable.name })
+    .from(platformSkillsTable)
+    .where(inArray(platformSkillsTable.name, genericNames));
+  const existingGenericNames = new Set(existingGeneric.map(r => r.name));
+  const missingGeneric = PLATFORM_SKILLS_GENERIC.filter(s => !existingGenericNames.has(s.name));
+  if (missingGeneric.length > 0) {
+    for (const skill of missingGeneric) {
+      await db.insert(platformSkillsTable).values({
+        id: randomUUID(),
+        name: skill.name,
+        description: skill.description,
+        triggerDescription: skill.triggerDescription,
+        instructions: skill.instructions,
+        outputFormat: skill.outputFormat,
+        archetype: skill.archetype,
+        author: 'opsoul',
+        installCount: 0,
+        integrationType: skill.integrationType ?? null,
+      });
+      console.log(`[initSeed]   + platform / ${skill.name}`);
+    }
+  }
+
+  // ── Skills ──────────────────────────────────────────────────────────────
+  const targetArchetypes = ['Executor', 'Advisor', 'Expert', 'Connector', 'Creator', 'Guardian', 'Builder', 'Catalyst', 'Analyst'];
+  const existing = await db
+    .select({ name: platformSkillsTable.name, archetype: platformSkillsTable.archetype })
+    .from(platformSkillsTable)
+    .where(inArray(platformSkillsTable.archetype, targetArchetypes));
+
+  const existingSet = new Set(existing.map((r) => `${r.archetype}::${r.name}`));
+  const missing = SKILLS_TO_SEED.filter((s) => !existingSet.has(`${s.archetype}::${s.name}`));
+
+  if (missing.length > 0) {
+    console.log(`[initSeed] Inserting ${missing.length} missing platform skills...`);
+    for (const skill of missing) {
+      await db.insert(platformSkillsTable).values({
+        id: randomUUID(),
+        name: skill.name,
+        description: skill.description,
+        triggerDescription: skill.triggerDescription,
+        instructions: skill.instructions,
+        outputFormat: skill.outputFormat,
+        archetype: skill.archetype,
+        author: 'opsoul',
+        installCount: 0,
+      });
+      console.log(`[initSeed]   + ${skill.archetype} / ${skill.name}`);
+    }
+    console.log('[initSeed] Skills seed complete.');
+  } else {
+    console.log('[initSeed] All 9 archetype skill sets already present — skipping.');
+  }
+
+  // ── Blank operator ───────────────────────────────────────────────────────
+  const blankExists = await db
+    .select({ id: operatorsTable.id })
+    .from(operatorsTable)
+    .where(eq(operatorsTable.slug, 'blank'))
+    .limit(1);
+
+  if (blankExists.length === 0) {
+    console.log('[initSeed] Blank operator not found — creating...');
+
+    const sovereignAdmins = await db
+      .select({ id: ownersTable.id })
+      .from(ownersTable)
+      .where(eq(ownersTable.isSovereignAdmin, true))
+      .limit(1);
+
+    if (sovereignAdmins.length === 0) {
+      console.warn('[initSeed] No sovereign admin found — skipping Blank creation.');
+    } else {
+      const newId = randomUUID();
+      await db.insert(operatorsTable).values({
+        id: newId,
+        ownerId: sovereignAdmins[0].id,
+        slug: 'blank',
+        name: 'Blank',
+        archetype: [],
+        mandate: 'A clean foundation. No archetype. No predefined purpose. Built to observe, learn, and become.',
+        coreValues: [],
+        ethicalBoundaries: [],
+        layer2Soul: {},
+        layer2SoulOriginal: {},
+        growLockLevel: 'OPEN',
+        safeMode: false,
+        freeRoaming: true,
+        toolUsePolicy: 'auto',
+        deletedAt: null,
+      });
+      console.log(`[initSeed] Blank operator created — id: ${newId}`);
+      seedPlatformKb(newId, sovereignAdmins[0].id).catch(err => console.warn('[platformKbSeed]', err?.message));
+    }
+  } else {
+    console.log('[initSeed] Blank operator already exists — skipping.');
+  }
+
+  // Operator seeding is manual — operators are built one by one intentionally.
+  // Do NOT auto-seed operators on startup. The OWNER_EMAIL lookup that used
+  // to live here drove an auto-seed branch that's no longer reached; removing
+  // the dead query along with the dead branch.
+}
+
+// ── Exported: call this after login/register for instant operator seeding ──
+export async function seedOwnerOperators(ownerId: string): Promise<void> {
+  const existingOps = await db
+    .select({ name: operatorsTable.name, id: operatorsTable.id })
+    .from(operatorsTable)
+    .where(eq(operatorsTable.ownerId, ownerId));
+
+  const existingNames = new Set(existingOps.map((r) => r.name));
+  const existingIds = new Set(existingOps.map((r) => r.id));
+  let seeded = 0;
+
+  for (const op of OWNER_OPERATORS) {
+    if (existingNames.has(op.name)) continue;
+    if (op.id && existingIds.has(op.id)) continue;
+
+    // If a fixed ID is specified, check if it already exists under a DIFFERENT owner
+    // (e.g. Vael created in dev under a dev account, now needed under the production account)
+    if (op.id) {
+      const claimedElsewhere = await db
+        .select({ id: operatorsTable.id, ownerId: operatorsTable.ownerId })
+        .from(operatorsTable)
+        .where(eq(operatorsTable.id, op.id))
+        .limit(1);
+
+      if (claimedElsewhere.length > 0 && claimedElsewhere[0].ownerId !== ownerId) {
+        // Transfer the existing record to the correct owner
+        await db
+          .update(operatorsTable)
+          .set({ ownerId })
+          .where(eq(operatorsTable.id, op.id));
+        console.log(`[initSeed]   ~ operator transferred to correct owner: ${op.name} (${op.id})`);
+        seeded++;
+        continue;
+      }
+    }
+
+    const newId = op.id ?? randomUUID();
+    await db.insert(operatorsTable).values({
+      id: newId,
+      ownerId,
+      slug: op.slug,
+      name: op.name,
+      archetype: op.archetype,
+      mandate: op.mandate,
+      rawIdentity: op.rawIdentity,
+      layer2Soul: op.layer2Soul,
+      layer2SoulOriginal: op.layer2Soul,
+      coreValues: op.coreValues,
+      ethicalBoundaries: op.ethicalBoundaries,
+      growLockLevel: op.growLockLevel as 'CONTROLLED' | 'OPEN' | 'LOCKED',
+      safeMode: op.safeMode,
+      freeRoaming: false,
+      toolUsePolicy: 'auto',
+      deletedAt: null,
+    });
+    console.log(`[initSeed]   + operator: ${op.name}`);
+    seedPlatformKb(newId, ownerId).catch(err => console.warn('[platformKbSeed]', err?.message));
+    seeded++;
+  }
+
+  if (seeded > 0) {
+    console.log(`[initSeed] ${seeded} owner operator(s) seeded for owner ${ownerId}.`);
+  }
+}
