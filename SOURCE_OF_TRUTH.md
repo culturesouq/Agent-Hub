@@ -249,7 +249,7 @@ Revision: opsoul--0000125 — Running
 - Stays fully inside AWS Bedrock, same Bearer token key
 - Resolves pgvector error 22000 (dimension mismatch) on all 5 vector tables
 
-**Phase 10 — Close operator-as-driver gaps + correct skill surfacing — BUILT ✅ commits 5633353 + e5ddd1f · image operator-driver-5633353 · 2026-06-25 — AWAITING DEPLOY**
+**Phase 10 — Close operator-as-driver gaps + correct skill surfacing — DEPLOYED ✅ commits 5633353 + e5ddd1f · image phase10-0773fe2 · revision opsoul--0000128 · 2026-06-25**
 
 Gap 1+2 (chat.ts): streaming + sync paths now gate tools on `turnPlan.toolsAuthorised`. Introspect plan → tools suppressed in ALL paths. Was always offering full catalog regardless of plan.
 
