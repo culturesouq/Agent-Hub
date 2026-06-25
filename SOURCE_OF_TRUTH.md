@@ -243,6 +243,12 @@ Revision: opsoul--0000125 — Running
 - Stays fully inside AWS Bedrock, same Bearer token key
 - Resolves pgvector error 22000 (dimension mismatch) on all 5 vector tables
 
+**Phase 10 — Close operator-as-driver gaps — BUILT ✅ commit 5633353 · image operator-driver-5633353 · 2026-06-25 — AWAITING DEPLOY**
+- Gap 1+2: chat.ts streaming + sync paths gate tools on `turnPlan.toolsAuthorised` — if operator composes introspect plan, tools are suppressed in ALL paths (was always offering full catalog regardless of plan)
+- Gap 3: operatorAgentLoop.ts legacy fallback removed entirely — `turnPlan` is now required, throws if missing. No plan = no dispatch
+- Gap 4: skill shortcut in public-crud.ts removed — it called `executeSkill()` directly BEFORE `composeTurnPlan()` was reached, bypassing the operator entirely. Operator now handles skills through its toolset like everything else
+- Removed dead imports: embed, searchSkillByVector, executeSkill from public-crud.ts
+
 **Pending:**
 ⚠ Remove `AZURE_OPENAI_KEY` from `REQUIRED_VARS` in `lib/opsoul-utils/src/env.ts` (Mohamed approves, then remove from Azure)
 
