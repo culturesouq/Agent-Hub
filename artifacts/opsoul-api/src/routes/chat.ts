@@ -866,9 +866,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         const iterFullStart = fullContent.length; // mark start of this iteration in fullContent
         let iterToolCall: { id: string; name: string; args: string } | undefined;
 
-        // Operator-as-driver (Patent claim 21): operator always has the full
-        // tool catalog — it decides which tools to use, not the system.
-        const allTools = await listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[];
+        // Operator-as-driver (Patent claim 21): tools offered only when
+        // the operator's TurnPlan authorises them. toolsAuthorised: false
+        // means introspect — LLM voices the operator's content, no tools.
+        const allTools = turnPlan.toolsAuthorised
+          ? await listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[]
+          : [];
         // Per-iteration cap on web_search — once an operator has done
         // MAX_SEARCHES in this turn, filter it out of the offered set so
         // the LLM cannot keep searching in a loop.
@@ -1067,10 +1070,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         }
       }
 
-      // Operator-as-driver (Patent claim 21): same gating as the streaming
-      // path. Tools are offered only when the operator's composeTurnPlan()
-      // Operator-as-driver: full tool catalog always available — operator decides.
-      const syncTools = await listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[];
+      // Operator-as-driver: tools offered only when TurnPlan authorises them.
+      const syncTools = turnPlan.toolsAuthorised
+        ? await listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[]
+        : [];
       const syncMessages = [...messages];
       if (introspectContext) syncMessages.push({ role: 'system', content: introspectContext });
       const syncOpts = { ...chatOpts, tools: syncTools.length > 0 ? syncTools : undefined };

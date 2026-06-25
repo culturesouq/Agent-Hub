@@ -8,9 +8,6 @@ import {
 } from '@workspace/db';
 import { requireSlotKey } from '../middleware/requireSlotKey.js';
 import { CHAT_MODEL } from '../utils/bedrock.js';
-import { executeSkill } from '../utils/skillExecutor.js';
-import { embed } from '@workspace/opsoul-utils/ai';
-import { searchSkillByVector } from '../utils/vectorSearch.js';
 import { assembleOperatorPrompt } from '../utils/systemPrompt.js';
 import { distillActionTaskPattern } from '../utils/memoryEngine.js';
 import { buildScopeContext, type ValidatedScope } from '../utils/scopeResolver.js';
@@ -65,39 +62,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     isBirthMode: false,
     scopeType: 'action',
   });
-
-  // ── Skill retrieval — universal catalog, one vector query ────────────
-  // Action surface: if a skill matches, execute it directly and return.
-  // No archetype filter, no installed-skills distinction — all operators
-  // have access to the full platform catalog.
-  const actionEmbedding = await embed(actionText).catch(() => null);
-  if (actionEmbedding) {
-    const [skillMatch] = await searchSkillByVector(actionEmbedding, 0.55, 1).catch(() => []);
-    if (skillMatch) {
-      try {
-        const skillModel = operator.defaultModel && operator.defaultModel !== 'opsoul/auto'
-          ? operator.defaultModel
-          : CHAT_MODEL;
-        const skillResult = await executeSkill(
-          {
-            installId:          `platform-${skillMatch.id}`,
-            skillId:            skillMatch.id,
-            name:               skillMatch.name,
-            instructions:       skillMatch.instructions,
-            outputFormat:       skillMatch.outputFormat,
-            customInstructions: null,
-            extractedParams:    actionText,
-            operatorId:         slot.operatorId,
-            operatorOwnerId:    slot.ownerId,
-          },
-          skillModel,
-        );
-        res.json({ result: skillResult.output, skill: skillMatch.name });
-        distillActionTaskPattern(slot.operatorId, slot.ownerId, operator.name, action, payload ?? null, skillResult.output).catch(() => {});
-        return;
-      } catch { /* fall through to LLM */ }
-    }
-  }
 
   // KB + station + skill injection pre-MCP removed — the agent loop's
   // universal toolset (buildOperatorToolset → Claims 4/9/31/36) gives the

@@ -114,19 +114,12 @@ export async function runSyncAgentLoop(opts: RunSyncAgentLoopOptions): Promise<A
   const maxIter = opts.maxIterations ?? DEFAULT_MAX_ITER;
   const maxSearches = opts.maxSearches ?? DEFAULT_MAX_SEARCHES;
 
-  // Resolve effective mode: TurnPlan wins if provided; else legacy decision;
-  // else default to 'execute' for backward compatibility.
-  const legacy = opts.analyseDecision ?? 'execute';
-  const mode: 'execute' | 'chat' | 'introspect' = turnPlan
-    ? turnPlan.kind
-    : legacy;
-
-  // If we have a TurnPlan, inject the operator's authoring scaffolding into
-  // the LLM message stream so the LLM sees the operator's intent + scaffolding
-  // + constraints. Without a TurnPlan we run on legacy behaviour (no inject).
-  const effectiveMessages: ChatMessage[] = turnPlan
-    ? injectTurnPlan(messages, turnPlan)
-    : [...messages];
+  // Operator is the driver — no TurnPlan means no dispatch.
+  if (!turnPlan) {
+    throw new Error('[agent-loop] turnPlan is required — operator must compose a plan before dispatch');
+  }
+  const mode: 'execute' | 'chat' | 'introspect' = turnPlan.kind;
+  const effectiveMessages: ChatMessage[] = injectTurnPlan(messages, turnPlan);
 
   // ── INTROSPECT (operator-authored content; LLM voices it; NO tools) ───
   if (mode === 'introspect') {
