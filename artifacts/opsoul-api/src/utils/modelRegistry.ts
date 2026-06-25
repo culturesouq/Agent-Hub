@@ -8,7 +8,7 @@
  * Env var: AWS_BEDROCK_API_KEY
  */
 
-export type AdapterKind = 'openai-compat' | 'anthropic' | 'bedrock' | 'google';
+export type AdapterKind = 'bedrock';
 
 export interface ProviderConfig {
   provider:      string;

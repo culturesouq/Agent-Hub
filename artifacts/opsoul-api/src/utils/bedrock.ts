@@ -165,17 +165,9 @@ export interface StreamChunk {
   usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
 }
 
-export interface ModelOverride {
-  model: string;
-  apiKey: string;
-  baseUrl?: string;
-}
-
 export interface ChatOptions {
-  apiKey?: string | null;
   model?: string | null;
   tools?: ToolDefinition[];
-  modelOverride?: ModelOverride;
 }
 
 export interface CompletionResult {
