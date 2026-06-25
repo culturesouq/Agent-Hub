@@ -35,9 +35,17 @@ Workflow `wf_7d06cfd9-f50` running (2026-06-24 late night). 35 parallel agents, 
 
 **Archetypes: CLOSED** — no new archetypes being added. Skills expansion is the direction.
 
-**TO ACTIVATE (next session when Mohamed gives go):**
-1. Run `seedUniversalSkills.ts` against live DB (needs `DATABASE_URL`)
-2. Deploy new image
+**Vector retrieval (commit `791c6b8`):** Skills are NOT injected or bulk-loaded. Architecture:
+- `platform_skills` table: `embedding vector(1536)` column added (schema + `ALTER TABLE IF NOT EXISTS` in seed)
+- Seed time: each skill's `triggerDescription` embedded once, stored in DB
+- Runtime: `messageEmbedding` computed once per turn (outside kbSearch block, reused for KB + skill search). `searchSkillByVector()` in `vectorSearch.ts` — one cosine-distance query, returns best match or null. User threshold 0.55 (sim ≥ 0.45), operator-response 0.40 (sim ≥ 0.60)
+- Operator-specific installed skills checked first (small set, old embed-on-the-fly path). Platform catalog only if no operator-specific match.
+- No `loadAllPlatformSkills()`, no bulk embed storm, no noise. Identical principle to KB retrieval.
+
+**TO ACTIVATE (Mohamed gives go):**
+1. Push 3 commits to remote (`git push`)
+2. Run `seedUniversalSkills.ts` against live DB — adds column + inserts 1077 skills + embeds all triggerDescriptions
+3. Build + deploy new image
 
 ---
 
