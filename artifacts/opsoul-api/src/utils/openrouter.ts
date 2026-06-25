@@ -290,21 +290,24 @@ const bedrockSdkClient = new BedrockRuntimeClient({
   credentials: { accessKeyId: 'BEDROCK_KEY', secretAccessKey: 'BEDROCK_KEY' },
 });
 
-// Inject Bearer token as Authorization header on every request.
-// This replaces the AWS Signature V4 auth that the SDK would normally add.
+// Inject Bearer token AFTER SigV4 runs (priority: low = last in finalizeRequest).
+// SigV4 adds its own Authorization header; we delete it and set ours so Bedrock
+// only ever sees one Authorization value.
 bedrockSdkClient.middlewareStack.add(
   (next) => async (args) => {
     const req = args.request as { headers?: Record<string, string> };
     if (req?.headers) {
       const apiKey = process.env.AWS_BEDROCK_API_KEY ?? '';
-      req.headers['Authorization'] = `Bearer ${apiKey}`;
-      // Remove SDK-generated SigV4 auth to avoid conflicts
+      delete req.headers['authorization'];
+      delete req.headers['Authorization'];
       delete req.headers['x-amz-date'];
       delete req.headers['x-amz-security-token'];
+      delete req.headers['x-amz-content-sha256'];
+      req.headers['authorization'] = `Bearer ${apiKey}`;
     }
     return next(args);
   },
-  { step: 'finalizeRequest', name: 'bedrockBearerAuth', priority: 'high' },
+  { step: 'finalizeRequest', name: 'bedrockBearerAuth', priority: 'low' },
 );
 
 // ── BEDROCK NON-STREAMING (fetch — clean JSON in/out) ─────────────────────────
