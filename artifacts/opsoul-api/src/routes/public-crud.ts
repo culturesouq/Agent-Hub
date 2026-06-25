@@ -65,8 +65,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     isBirthMode: false,
     scopeType: 'action',
   });
-  const actionDecision = actionAgent.analyse(actionText);
-  void actionDecision;
 
   // ── Skill retrieval — universal catalog, one vector query ────────────
   // Action surface: if a skill matches, execute it directly and return.
