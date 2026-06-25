@@ -328,7 +328,7 @@ async function bedrockConverse(
     `https://bedrock-runtime.us-east-1.amazonaws.com/model/${modelId}/converse`,
     {
       method:  'POST',
-      headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/x-amz-json-1.1' },
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body:    JSON.stringify(body),
     },
   );
