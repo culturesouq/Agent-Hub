@@ -1,4 +1,5 @@
 import { pgTable, text, integer, timestamp } from 'drizzle-orm/pg-core';
+import { vector } from './types';
 
 export const platformSkillsTable = pgTable('platform_skills', {
   id: text('id').primaryKey(),
@@ -11,5 +12,6 @@ export const platformSkillsTable = pgTable('platform_skills', {
   author: text('author').default('opsoul'),
   installCount: integer('install_count').default(0),
   integrationType: text('integration_type'),
+  embedding: vector('embedding', { dimensions: 1536 }),
   createdAt: timestamp('created_at').defaultNow(),
 });

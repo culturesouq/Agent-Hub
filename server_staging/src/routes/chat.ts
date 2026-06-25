@@ -19,7 +19,7 @@ import { executeSkill } from '../utils/skillExecutor.js';
 import { embed, semanticDistance } from '@workspace/opsoul-utils/ai';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { lockLayer1IfUnlocked } from '../utils/lockLayer1.js';
-import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';
+import { searchBothKbs, buildRagContext, searchSkillByVector } from '../utils/vectorSearch.js';
 // Curiosity engine is operator-governed (Patent claim 14): the operator's
 // self-awareness layer initiates curiosity, not the chat route. Silent
 // `[WEB CONTEXT]` auto-injection removed (Phase 4). The web_search tool
@@ -223,33 +223,6 @@ async function loadActiveSkills(operatorId: string): Promise<ActiveSkill[]> {
     );
 
   return installs as unknown as ActiveSkill[];
-}
-
-// Loads the full platform skill catalog — every skill, no archetype filter.
-// Every operator gets all skills; the operator's mandate + cosine similarity
-// on triggerDescription ensures only relevant skills fire per conversation.
-async function loadAllPlatformSkills(): Promise<InstalledSkill[]> {
-  const rows = await db
-    .select({
-      id:                 platformSkillsTable.id,
-      name:               platformSkillsTable.name,
-      instructions:       platformSkillsTable.instructions,
-      outputFormat:       platformSkillsTable.outputFormat,
-      triggerDescription: platformSkillsTable.triggerDescription,
-      integrationType:    platformSkillsTable.integrationType,
-    })
-    .from(platformSkillsTable);
-
-  return rows.map(s => ({
-    installId:          `platform-${s.id}`,
-    skillId:            s.id,
-    name:               s.name,
-    triggerDescription: s.triggerDescription ?? '',
-    instructions:       s.instructions ?? '',
-    outputFormat:       s.outputFormat ?? null,
-    customInstructions: null,
-    integrationType:    s.integrationType ?? null,
-  }));
 }
 
 // ─── Birth identity extraction ───────────────────────────────────────────────
@@ -507,9 +480,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // went with it. liveSecrets + liveIntegrations are kept — used by the
   // toolListCtx below to gate http_request and the wave-3 connected-app tools
   // (gmail, calendar, drive, github, notion, slack, linear, hubspot).
-  const [skills, archetypeDefaultSkills, selfAwarenessRow, history, liveSecrets, liveIntegrations] = await Promise.all([
+  const [skills, selfAwarenessRow, history, liveSecrets, liveIntegrations] = await Promise.all([
     loadActiveSkills(operator.id),
-    loadAllPlatformSkills(),
     db.select().from(selfAwarenessStateTable).where(eq(selfAwarenessStateTable.operatorId, operator.id)).limit(1),
     buildMessageHistory(conv.id),
     db.select({ key: operatorSecretsTable.key })
@@ -616,12 +588,19 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   let kbContext = '';
   let memoryHits: MemoryHit[] = [];
 
-  if (kbSearch) {
+  // Embed the user message once — reused for KB search AND skill detection.
+  let messageEmbedding: number[] | null = null;
+  try {
+    messageEmbedding = await embed(message);
+  } catch {
+    messageEmbedding = null;
+  }
+
+  if (kbSearch && messageEmbedding) {
     try {
-      const queryEmbedding = await embed(message);
       const [kbHits, memHits] = await Promise.all([
-        searchBothKbs(operator.id, queryEmbedding, kbTopN, kbMinConfidence, operator.archetype ?? [], operator.domainTags ?? []),
-        searchMemory(operator.id, queryEmbedding, undefined, undefined, undefined, scope.scopeId),
+        searchBothKbs(operator.id, messageEmbedding, kbTopN, kbMinConfidence, operator.archetype ?? [], operator.domainTags ?? []),
+        searchMemory(operator.id, messageEmbedding, undefined, undefined, undefined, scope.scopeId),
       ]);
       kbContext = buildRagContext(kbHits);
       memoryHits = memHits;
@@ -1012,10 +991,33 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
       // ── Skill detection (streaming path) — fires after tool loop, before DB commit ──
       if (!httpRequestFired && finalContent && finalContent.trim().length > 10) {
-        const installedSkills = buildAgencySkills(skills, archetypeDefaultSkills, installedNames, operator);
-        if (installedSkills.length > 0) {
-          const trigger = await detectSkillTrigger(message, installedSkills, finalContent).catch(() => null);
-          if (trigger) {
+        let trigger: Awaited<ReturnType<typeof detectSkillTrigger>> = null;
+
+        // 1. Operator-specific installed skills (small set, takes precedence)
+        const operatorSkills = buildAgencySkills(skills, [], installedNames, operator);
+        if (operatorSkills.length > 0) {
+          trigger = await detectSkillTrigger(message, operatorSkills, finalContent).catch(() => null);
+        }
+
+        // 2. Platform catalog — one vector query, no bulk load
+        if (!trigger && messageEmbedding) {
+          const platformMatch = await searchSkillByVector(messageEmbedding, 0.55).catch(() => null);
+          if (platformMatch) {
+            console.log(`[agency] stream user → platform skill "${platformMatch.name}" sim=${platformMatch.similarity.toFixed(3)}`);
+            trigger = { installId: `platform-${platformMatch.id}`, skillId: platformMatch.id, name: platformMatch.name, instructions: platformMatch.instructions, outputFormat: platformMatch.outputFormat, customInstructions: null, extractedParams: message, initiatedBy: 'user' };
+          } else {
+            const opEmbed = await embed(finalContent).catch(() => null);
+            if (opEmbed) {
+              const opMatch = await searchSkillByVector(opEmbed, 0.40).catch(() => null);
+              if (opMatch) {
+                console.log(`[agency] stream operator → platform skill "${opMatch.name}" sim=${opMatch.similarity.toFixed(3)}`);
+                trigger = { installId: `platform-${opMatch.id}`, skillId: opMatch.id, name: opMatch.name, instructions: opMatch.instructions, outputFormat: opMatch.outputFormat, customInstructions: null, extractedParams: finalContent, initiatedBy: 'operator' };
+              }
+            }
+          }
+        }
+
+        if (trigger) {
             trigger.operatorId = operator.id;
             trigger.operatorOwnerId = operator.ownerId;
             console.log(`[agency] stream — skill triggered: ${trigger.name}`);
@@ -1172,10 +1174,33 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
       // ── Skill detection (sync path) ───────────────────────────────────────────
       if (!capabilityFired && finalContent && finalContent.trim().length > 10) {
-        const installedSkills = buildAgencySkills(skills, archetypeDefaultSkills, installedNames, operator);
-        if (installedSkills.length > 0) {
-          const trigger = await detectSkillTrigger(message, installedSkills, finalContent).catch(() => null);
-          if (trigger) {
+        let trigger: Awaited<ReturnType<typeof detectSkillTrigger>> = null;
+
+        // 1. Operator-specific installed skills (small set, takes precedence)
+        const operatorSkills = buildAgencySkills(skills, [], installedNames, operator);
+        if (operatorSkills.length > 0) {
+          trigger = await detectSkillTrigger(message, operatorSkills, finalContent).catch(() => null);
+        }
+
+        // 2. Platform catalog — one vector query, no bulk load
+        if (!trigger && messageEmbedding) {
+          const platformMatch = await searchSkillByVector(messageEmbedding, 0.55).catch(() => null);
+          if (platformMatch) {
+            console.log(`[agency] sync user → platform skill "${platformMatch.name}" sim=${platformMatch.similarity.toFixed(3)}`);
+            trigger = { installId: `platform-${platformMatch.id}`, skillId: platformMatch.id, name: platformMatch.name, instructions: platformMatch.instructions, outputFormat: platformMatch.outputFormat, customInstructions: null, extractedParams: message, initiatedBy: 'user' };
+          } else {
+            const opEmbed = await embed(finalContent).catch(() => null);
+            if (opEmbed) {
+              const opMatch = await searchSkillByVector(opEmbed, 0.40).catch(() => null);
+              if (opMatch) {
+                console.log(`[agency] sync operator → platform skill "${opMatch.name}" sim=${opMatch.similarity.toFixed(3)}`);
+                trigger = { installId: `platform-${opMatch.id}`, skillId: opMatch.id, name: opMatch.name, instructions: opMatch.instructions, outputFormat: opMatch.outputFormat, customInstructions: null, extractedParams: finalContent, initiatedBy: 'operator' };
+              }
+            }
+          }
+        }
+
+        if (trigger) {
             trigger.operatorId = operator.id;
             trigger.operatorOwnerId = operator.ownerId;
             console.log(`[agency] sync — skill triggered: ${trigger.name}`);

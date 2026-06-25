@@ -2,6 +2,7 @@ import { db, pool } from '@workspace/db';
 import { platformSkillsTable } from '@workspace/db';
 import { eq } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
+import { embed } from '@workspace/opsoul-utils/ai';
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
@@ -7557,8 +7558,16 @@ const UNIVERSAL_SKILLS = [
 ];
 
 async function run() {
+  // Ensure embedding column exists before inserting
+  await pool.query(`
+    ALTER TABLE platform_skills
+    ADD COLUMN IF NOT EXISTS embedding vector(1536)
+  `);
+  console.log('Column embedding vector(1536) ready.');
+
   let inserted = 0;
   let skipped = 0;
+  let embedded = 0;
 
   for (const skill of UNIVERSAL_SKILLS) {
     const existing = await db
@@ -7573,8 +7582,22 @@ async function run() {
       continue;
     }
 
+    const id = randomUUID();
+
+    // Compute triggerDescription embedding at seed time — stored once,
+    // queried by vector search at runtime (no per-turn bulk load).
+    let embeddingVec: number[] | null = null;
+    if (skill.triggerDescription) {
+      try {
+        embeddingVec = await embed(skill.triggerDescription);
+        embedded++;
+      } catch {
+        console.warn(`  EMBED FAILED  ${skill.name} — inserting without embedding`);
+      }
+    }
+
     await db.insert(platformSkillsTable).values({
-      id: randomUUID(),
+      id,
       name: skill.name,
       description: skill.description,
       triggerDescription: skill.triggerDescription,
@@ -7585,11 +7608,19 @@ async function run() {
       installCount: 0,
     });
 
+    // Store embedding via raw SQL (drizzle vector type uses string format)
+    if (embeddingVec) {
+      await pool.query(
+        `UPDATE platform_skills SET embedding = $1::vector WHERE id = $2`,
+        [`[${embeddingVec.join(',')}]`, id],
+      );
+    }
+
     console.log(`  INSERT  ${skill.name}`);
     inserted++;
   }
 
-  console.log(`\nDone. Inserted: ${inserted}  Skipped: ${skipped}`);
+  console.log(`\nDone. Inserted: ${inserted}  Skipped: ${skipped}  Embedded: ${embedded}`);
   await pool.end();
 }
 
