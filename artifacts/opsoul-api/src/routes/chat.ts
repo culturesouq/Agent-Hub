@@ -6,16 +6,12 @@ import {
   operatorsTable,
   conversationsTable,
   messagesTable,
-  operatorSkillsTable,
-  platformSkillsTable,
   selfAwarenessStateTable,
   operatorSecretsTable,
   operatorIntegrationsTable,
   ownersTable,
 } from '@workspace/db';
-import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
-import { detectSkillTrigger } from '../utils/skillTriggerEngine.js';
-// executeSkill removed — skills now inform the operator pre-LLM, no separate execution step
+// Skills are surfaced in self-awareness context — operator chooses; no forced execution.
 import { semanticDistance, embed } from '@workspace/opsoul-utils/ai';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { lockLayer1IfUnlocked } from '../utils/lockLayer1.js';
@@ -37,9 +33,8 @@ import { buildOwnerScope, buildScopeContext, type ValidatedScope } from '../util
 import { scrapeUrl } from '../utils/urlScraper.js';
 import type { ContentPart } from '../utils/openrouter.js';
 import { gateAndStoreOperatorKb } from '../utils/kbIntake.js';
-import { searchBothKbs, KB_RETRIEVAL_MIN_CONFIDENCE, searchSkillByVector } from '../utils/vectorSearch.js';
+import { searchBothKbs, KB_RETRIEVAL_MIN_CONFIDENCE, searchSkillByVector, type SkillHit } from '../utils/vectorSearch.js';
 import { eq, and, asc, sql } from 'drizzle-orm';
-import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
 import { isWebSearchAvailable, isFirecrawlAvailable } from '../utils/capabilityEngine.js';
 import {
   persistUrlScrapedResult,
@@ -194,29 +189,6 @@ async function buildMessageHistory(convId: string): Promise<ChatMessage[]> {
   return windowed;
 }
 
-async function loadActiveSkills(operatorId: string): Promise<ActiveSkill[]> {
-  const installs = await db
-    .select({
-      id: operatorSkillsTable.id,
-      skillId: operatorSkillsTable.skillId,
-      customInstructions: operatorSkillsTable.customInstructions,
-      name: platformSkillsTable.name,
-      instructions: platformSkillsTable.instructions,
-      outputFormat: platformSkillsTable.outputFormat,
-      triggerDescription: platformSkillsTable.triggerDescription,
-      integrationType: platformSkillsTable.integrationType,
-    })
-    .from(operatorSkillsTable)
-    .innerJoin(platformSkillsTable, eq(operatorSkillsTable.skillId, platformSkillsTable.id))
-    .where(
-      and(
-        eq(operatorSkillsTable.operatorId, operatorId),
-        eq(operatorSkillsTable.isActive, true),
-      ),
-    );
-
-  return installs as unknown as ActiveSkill[];
-}
 
 // ─── Birth identity extraction ───────────────────────────────────────────────
 // Silently extracts name/rawIdentity/archetype/mandate from the birth conversation
@@ -314,58 +286,6 @@ Return ONLY valid JSON, no markdown, no explanation:
 }
 
 
-// ─── Agency Layer shared helpers ─────────────────────────────────────────────
-
-// Builds the deduplicated skill list and applies the policy gate in one place.
-function buildAgencySkills(
-  skills: any[],
-  archetypeDefaultSkills: InstalledSkill[],
-  installedNames: Set<string>,
-  operator: typeof operatorsTable.$inferSelect,
-): InstalledSkill[] {
-  let list: InstalledSkill[] = [
-    ...skills.map((s: any) => ({
-      installId:          s.id ?? s.skillId,
-      skillId:            s.skillId,
-      name:               s.name ?? s.skillName,
-      triggerDescription: s.triggerDescription ?? '',
-      instructions:       s.instructions ?? s.skillInstructions ?? '',
-      outputFormat:       s.outputFormat ?? s.skillOutputFormat ?? null,
-      customInstructions: s.customInstructions ?? null,
-      integrationType:    s.integrationType ?? null,
-    })),
-    ...archetypeDefaultSkills
-      .filter(a => !installedNames.has(a.name))
-      .map(a => ({
-        installId:          a.installId,
-        skillId:            a.skillId,
-        name:               a.name,
-        triggerDescription: a.triggerDescription,
-        instructions:       a.instructions,
-        outputFormat:       a.outputFormat,
-        customInstructions: null,
-        integrationType:    a.integrationType ?? null,
-      })),
-  ];
-
-  // Policy gate — only enforced in free roaming mode.
-  // In normal mode skills are owner pre-approved; no gate needed.
-  if (operator.freeRoaming && operator.toolUsePolicy) {
-    const rawPolicy = operator.toolUsePolicy;
-    if (rawPolicy !== 'auto' && typeof rawPolicy === 'object' && rawPolicy !== null) {
-      const allowedNames = new Set(Object.keys(rawPolicy as Record<string, unknown>));
-      if (allowedNames.size > 0) {
-        const before = list.length;
-        list = list.filter(s => allowedNames.has(s.name));
-        console.log(`[policy] free roaming — filtered skills ${before} → ${list.length} for operator ${operator.id}`);
-      }
-    } else {
-      console.log(`[policy] free roaming — auto policy, all ${list.length} skills allowed for operator ${operator.id}`);
-    }
-  }
-
-  return list;
-}
 
 // Extract up to 2 unique URLs from a message string
 function extractUrls(text: string): string[] {
@@ -378,7 +298,7 @@ function extractUrls(text: string): string[] {
 // public-chat.ts and any other route that needs hybrid time injection.
 
 // persistUrlScrapedResult imported above from toolPersistence.ts.
-// persistSkillResult removed — skills fire pre-LLM, no post-response persistence step.
+// persistSkillResult removed — skills surface in self-awareness, no post-response step.
 // persistWebSearchResult removed 2026-06-22 — web search KB intake routes through sdkToolBridge → gateAndStoreOperatorKb.
 
 // Runs all post-response fire-and-forget tasks — identical for both stream and sync.
@@ -481,9 +401,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // went with it. liveSecrets + liveIntegrations are kept — used by the
   // toolListCtx below to gate http_request and the wave-3 connected-app tools
   // (gmail, calendar, drive, github, notion, slack, linear, hubspot).
-  const [skills, archetypeDefaultSkills, selfAwarenessRow, history, liveSecrets, liveIntegrations] = await Promise.all([
-    loadActiveSkills(operator.id),
-    loadArchetypeSkills((operator.archetype as string[]) ?? []),
+  const [selfAwarenessRow, history, liveSecrets, liveIntegrations] = await Promise.all([
     db.select().from(selfAwarenessStateTable).where(eq(selfAwarenessStateTable.operatorId, operator.id)).limit(1),
     buildMessageHistory(conv.id),
     db.select({ key: operatorSecretsTable.key })
@@ -585,11 +503,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   });
   const promptOpts: BuildSystemPromptOpts = { sycophancyWarning, soulAnchorActive, languageInstruction, scopeLine };
 
-  // The set of installed skill names — used downstream by buildAgencySkills()
-  // to merge archetype-born defaults with owner-installed skills (installed
-  // wins on name conflict). The merged list itself is rebuilt inside the
-  // tool / skill detection paths below; we don't need to materialise it here.
-  const installedNames = new Set(skills.map((s: any) => s.name));
 
   // KB and memory are retrievable by the operator on demand via tools (kb_search,
   // memory tools). They are NOT pre-injected here — system prompt is identity only.
@@ -766,9 +679,16 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // fully realised.
   const fullToolList = await listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[];
 
-  // Embed message once — reused for KB search, memory search, and skill detection.
+  // Embed message once — reused for skill retrieval, KB search, and memory search.
   let messageEmbedding: number[] | null = null;
   try { messageEmbedding = await embed(message); } catch { messageEmbedding = null; }
+
+  // Retrieve relevant skills from the universal catalog — one vector query.
+  // Skills surface first in self-awareness so the operator knows its framework
+  // before seeing tools and capabilities.
+  const surfacedSkills: SkillHit[] = messageEmbedding
+    ? await searchSkillByVector(messageEmbedding).catch(() => [])
+    : [];
 
   const [workspaceManifest, surfacedMemories, surfacedKb] = await Promise.all([
     buildWorkspaceManifest(operator.id).catch(() => null),
@@ -822,6 +742,22 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       }
     : null;
 
+  // Skills surface first — the operator knows its cognitive framework before
+  // seeing tools and capabilities. Mandate is locked so the operator anchors
+  // naturally to skills that fit its identity. No forced execution — pure awareness.
+  const skillsContextMsg: ChatMessage | null = surfacedSkills.length > 0
+    ? {
+        role: 'system',
+        content: [
+          '[SKILLS — relevant to this turn]',
+          ...surfacedSkills.map((s, i) =>
+            `${i + 1}. ${s.name}\n${s.instructions}${s.outputFormat ? `\n\nOutput format: ${s.outputFormat}` : ''}`
+          ),
+          '\n[These skills are available. Apply what aligns with your mandate. You decide.]',
+        ].join('\n\n'),
+      }
+    : null;
+
   // Render ephemeral workspace context message from already-fetched manifest.
   const workspaceContextMsg: ChatMessage | null = workspaceManifest ? {
     role: 'system',
@@ -842,6 +778,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   };
   if (userMsgIndex >= 0) {
     const toInsert: ChatMessage[] = [
+      ...(skillsContextMsg ? [skillsContextMsg] : []),
       ...(workspaceContextMsg ? [workspaceContextMsg] : []),
       ...(surfacedKbMsg ? [surfacedKbMsg] : []),
       ...(surfacedMemoriesMsg ? [surfacedMemoriesMsg] : []),
@@ -849,46 +786,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     ];
     messages.splice(userMsgIndex, 0, ...toInsert);
   } else {
+    if (skillsContextMsg) messages.push(skillsContextMsg);
     if (workspaceContextMsg) messages.push(workspaceContextMsg);
     if (surfacedKbMsg) messages.push(surfacedKbMsg);
     if (surfacedMemoriesMsg) messages.push(surfacedMemoriesMsg);
     messages.push(turnPlanMsg);
-  }
-
-  // ── SKILL DETECTION — runs BEFORE the LLM, before tool selection ─────────
-  // The skill is the cognitive framework for this turn. Tools fire in service
-  // of the skill, not the other way around. One vector query, no bulk load.
-  let activeSkill: import('../utils/vectorSearch.js').SkillHit | null = null;
-  if (messageEmbedding) {
-    // 1. Operator-specific installed skills take precedence (small set, on-the-fly embed)
-    const operatorSkillList = buildAgencySkills(skills, archetypeDefaultSkills, installedNames, operator);
-    if (operatorSkillList.length > 0) {
-      const opTrigger = await detectSkillTrigger(message, operatorSkillList).catch(() => null);
-      if (opTrigger) {
-        activeSkill = { id: opTrigger.skillId, name: opTrigger.name, instructions: opTrigger.instructions, outputFormat: opTrigger.outputFormat ?? null, triggerDescription: '', similarity: 1 };
-      }
-    }
-    // 2. Platform catalog — one cosine-distance query
-    if (!activeSkill) {
-      activeSkill = await searchSkillByVector(messageEmbedding, 0.55).catch(() => null);
-    }
-    if (activeSkill) {
-      console.log(`[skill] pre-LLM: "${activeSkill.name}" sim=${activeSkill.similarity.toFixed(3)}`);
-    }
-  }
-
-  // Inject active skill as ephemeral context — right before the user message,
-  // after the TurnPlan. Operator reads skill instructions and follows the
-  // framework in its response. Tools fire in service of these steps.
-  if (activeSkill) {
-    const skillContent = `[Active Skill: ${activeSkill.name}]\n${activeSkill.instructions}${activeSkill.outputFormat ? `\n\nOutput format: ${activeSkill.outputFormat}` : ''}`;
-    const skillInsertIdx = messages.findIndex(m => m.role === 'user');
-    const skillMsg: ChatMessage = { role: 'system', content: skillContent };
-    if (skillInsertIdx >= 0) {
-      messages.splice(skillInsertIdx, 0, skillMsg);
-    } else {
-      messages.push(skillMsg);
-    }
   }
 
   // ─── STREAMING PATH ────────────────────────────────────────────────────────
@@ -1139,7 +1041,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         messageId: asstMsgId,
         model: chatModel,
         usage: { promptTokens, completionTokens: finalTokens },
-        activeSkillCount: skills.length,
+        activeSkillCount: surfacedSkills.length,
         memoryCount: surfacedMemoryCount,
         // null today; Phase 4 fills in. Always present on the wire so the
         // UI contract doesn't change shape when the analyzer goes live.
@@ -1270,7 +1172,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           promptTokens: finalPromptTokens,
           completionTokens: finalCompletionTokens,
         },
-        activeSkillCount: skills.length,
+        activeSkillCount: surfacedSkills.length,
         memoryCount: surfacedMemoryCount,
         layer1WasLocked: operator.layer1LockedAt !== null,
         // null today; Phase 4 fills in. Always present so UI contract is stable.

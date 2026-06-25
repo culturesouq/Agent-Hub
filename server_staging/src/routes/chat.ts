@@ -6,20 +6,15 @@ import {
   operatorsTable,
   conversationsTable,
   messagesTable,
-  operatorSkillsTable,
-  platformSkillsTable,
   selfAwarenessStateTable,
   operatorSecretsTable,
   operatorIntegrationsTable,
   ownersTable,
 } from '@workspace/db';
-import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
-import { detectSkillTrigger } from '../utils/skillTriggerEngine.js';
-// executeSkill removed — skills now inform the operator pre-LLM, no separate execution step
-import { embed, semanticDistance } from '@workspace/opsoul-utils/ai';
+// Skills are surfaced in self-awareness context — operator chooses; no forced execution.
+import { semanticDistance, embed } from '@workspace/opsoul-utils/ai';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { lockLayer1IfUnlocked } from '../utils/lockLayer1.js';
-import { searchBothKbs, buildRagContext, searchSkillByVector } from '../utils/vectorSearch.js';
 // Curiosity engine is operator-governed (Patent claim 14): the operator's
 // self-awareness layer initiates curiosity, not the chat route. Silent
 // `[WEB CONTEXT]` auto-injection removed (Phase 4). The web_search tool
@@ -27,9 +22,8 @@ import { searchBothKbs, buildRagContext, searchSkillByVector } from '../utils/ve
 import { assembleOperatorPrompt, buildBirthSystemPrompt, buildTemporalContext, containsTimeKeywords } from '../utils/systemPrompt.js';
 import { OperatorAgent, renderTurnPlanSystemContext } from '../utils/operatorAgent.js';
 import type { SelfAwarenessSnapshot, BuildSystemPromptOpts } from '../utils/systemPrompt.js';
-import { searchMemory, distillMemoriesFromConversations } from '../utils/memoryEngine.js';
-import type { MemoryHit } from '../utils/memoryEngine.js';
-import { triggerSelfAwareness } from '../utils/selfAwarenessEngine.js';
+import { distillMemoriesFromConversations, searchMemory } from '../utils/memoryEngine.js';
+import { triggerSelfAwareness, buildWorkspaceManifest, renderTurnWorkspaceContext, detectCuriositySignals } from '../utils/selfAwarenessEngine.js';
 import { chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
 import { BIRTH_MODEL_ID, resolveModel, DEFAULT_MODEL_ID } from '../utils/modelRegistry.js';
 import { decryptToken } from '@workspace/opsoul-utils/crypto';
@@ -38,16 +32,14 @@ import type { ChatMessage, ToolDefinition } from '../utils/openrouter.js';
 import { buildOwnerScope, buildScopeContext, type ValidatedScope } from '../utils/scopeResolver.js';
 import { scrapeUrl } from '../utils/urlScraper.js';
 import type { ContentPart } from '../utils/openrouter.js';
-import { verifyAndStore } from '../utils/kbIntake.js';
+import { gateAndStoreOperatorKb } from '../utils/kbIntake.js';
+import { searchBothKbs, KB_RETRIEVAL_MIN_CONFIDENCE, searchSkillByVector, type SkillHit } from '../utils/vectorSearch.js';
 import { eq, and, asc, sql } from 'drizzle-orm';
-// loadArchetypeSkills kept for reference — replaced by loadAllPlatformSkills (universal model).
-// import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
 import { isWebSearchAvailable, isFirecrawlAvailable } from '../utils/capabilityEngine.js';
 import {
   persistUrlScrapedResult,
 } from '../utils/toolPersistence.js';
-// listToolsForContext and dispatchTool are kept in their origin files (Phase 1c removes them).
-// chat.ts now routes through the SDK bridge instead.
+// chat.ts routes all tool listing and dispatch through the SDK bridge.
 import type { ToolHandlerContext } from '../utils/toolHandlers.js';
 import {
   listToolsViaSdk,
@@ -110,9 +102,6 @@ const AttachmentSchema = z.object({
 const SendMessageSchema = z.object({
   message: z.string().min(1, 'message is required').max(200000),
   stream: z.boolean().default(false),
-  kbSearch: z.boolean().default(true),
-  kbTopN: z.number().int().min(1).max(20).default(8),
-  kbMinConfidence: z.number().int().min(0).max(100).default(75),
   attachments: z.array(AttachmentSchema).optional(),
 });
 
@@ -200,29 +189,6 @@ async function buildMessageHistory(convId: string): Promise<ChatMessage[]> {
   return windowed;
 }
 
-async function loadActiveSkills(operatorId: string): Promise<ActiveSkill[]> {
-  const installs = await db
-    .select({
-      id: operatorSkillsTable.id,
-      skillId: operatorSkillsTable.skillId,
-      customInstructions: operatorSkillsTable.customInstructions,
-      name: platformSkillsTable.name,
-      instructions: platformSkillsTable.instructions,
-      outputFormat: platformSkillsTable.outputFormat,
-      triggerDescription: platformSkillsTable.triggerDescription,
-      integrationType: platformSkillsTable.integrationType,
-    })
-    .from(operatorSkillsTable)
-    .innerJoin(platformSkillsTable, eq(operatorSkillsTable.skillId, platformSkillsTable.id))
-    .where(
-      and(
-        eq(operatorSkillsTable.operatorId, operatorId),
-        eq(operatorSkillsTable.isActive, true),
-      ),
-    );
-
-  return installs as unknown as ActiveSkill[];
-}
 
 // ─── Birth identity extraction ───────────────────────────────────────────────
 // Silently extracts name/rawIdentity/archetype/mandate from the birth conversation
@@ -320,58 +286,6 @@ Return ONLY valid JSON, no markdown, no explanation:
 }
 
 
-// ─── Agency Layer shared helpers ─────────────────────────────────────────────
-
-// Builds the deduplicated skill list and applies the policy gate in one place.
-function buildAgencySkills(
-  skills: any[],
-  archetypeDefaultSkills: InstalledSkill[],
-  installedNames: Set<string>,
-  operator: typeof operatorsTable.$inferSelect,
-): InstalledSkill[] {
-  let list: InstalledSkill[] = [
-    ...skills.map((s: any) => ({
-      installId:          s.id ?? s.skillId,
-      skillId:            s.skillId,
-      name:               s.name ?? s.skillName,
-      triggerDescription: s.triggerDescription ?? '',
-      instructions:       s.instructions ?? s.skillInstructions ?? '',
-      outputFormat:       s.outputFormat ?? s.skillOutputFormat ?? null,
-      customInstructions: s.customInstructions ?? null,
-      integrationType:    s.integrationType ?? null,
-    })),
-    ...archetypeDefaultSkills
-      .filter(a => !installedNames.has(a.name))
-      .map(a => ({
-        installId:          a.installId,
-        skillId:            a.skillId,
-        name:               a.name,
-        triggerDescription: a.triggerDescription,
-        instructions:       a.instructions,
-        outputFormat:       a.outputFormat,
-        customInstructions: null,
-        integrationType:    a.integrationType ?? null,
-      })),
-  ];
-
-  // Policy gate — only enforced in free roaming mode.
-  // In normal mode skills are owner pre-approved; no gate needed.
-  if (operator.freeRoaming && operator.toolUsePolicy) {
-    const rawPolicy = operator.toolUsePolicy;
-    if (rawPolicy !== 'auto' && typeof rawPolicy === 'object' && rawPolicy !== null) {
-      const allowedNames = new Set(Object.keys(rawPolicy as Record<string, unknown>));
-      if (allowedNames.size > 0) {
-        const before = list.length;
-        list = list.filter(s => allowedNames.has(s.name));
-        console.log(`[policy] free roaming — filtered skills ${before} → ${list.length} for operator ${operator.id}`);
-      }
-    } else {
-      console.log(`[policy] free roaming — auto policy, all ${list.length} skills allowed for operator ${operator.id}`);
-    }
-  }
-
-  return list;
-}
 
 // Extract up to 2 unique URLs from a message string
 function extractUrls(text: string): string[] {
@@ -383,10 +297,9 @@ function extractUrls(text: string): string[] {
 // containsTimeKeywords moved to ../utils/systemPrompt.js — shared with
 // public-chat.ts and any other route that needs hybrid time injection.
 
-// persistUrlScrapedResult, persistWebSearchResult, persistSkillResult moved
-// to utils/toolPersistence.js (2026-05-19, MCP refactor — see commit on
-// branch feat/mcp-runtime-layer). They are imported above and used
-// unchanged below in the agent loop.
+// persistUrlScrapedResult imported above from toolPersistence.ts.
+// persistSkillResult removed — skills surface in self-awareness, no post-response step.
+// persistWebSearchResult removed 2026-06-22 — web search KB intake routes through sdkToolBridge → gateAndStoreOperatorKb.
 
 // Runs all post-response fire-and-forget tasks — identical for both stream and sync.
 function runPostResponseTasks(
@@ -395,6 +308,7 @@ function runPostResponseTasks(
   finalContent: string,
   isBirthMode: boolean,
   scope: ValidatedScope,
+  userMessage?: string,
 ): void {
   // [LEARN:] tag extraction — operator self-learning
   if (!operator.safeMode) {
@@ -403,13 +317,11 @@ function runPostResponseTasks(
       for (const match of learnMatches) {
         const text = match.replace(/\[LEARN:\s*/i, '').replace(/\]$/, '').trim();
         if (text.length > 20) {
-          verifyAndStore(
+          gateAndStoreOperatorKb(
             operator.id,
             operator.ownerId,
             text,
-            'self_learn',
             'operator_self_learn',
-            operator.mandate ?? '',
           ).catch(() => {});
         }
       }
@@ -432,6 +344,16 @@ function runPostResponseTasks(
   // Self-awareness + periodic memory distillation
   if (!operator.safeMode) {
     triggerSelfAwareness(operator.id, 'conversation_end').catch((err) => console.warn('[selfAwareness] failed:', err?.message));
+
+    // Gap 2: proactive curiosity — detect four signals, fire per-signal trigger.
+    if (userMessage) {
+      const signals = detectCuriositySignals(userMessage, finalContent);
+      if (signals.gap) triggerSelfAwareness(operator.id, 'curiosity_gap').catch(() => {});
+      if (signals.mandateEdge) triggerSelfAwareness(operator.id, 'curiosity_mandate').catch(() => {});
+      if (signals.unexpectedExternal) triggerSelfAwareness(operator.id, 'curiosity_external').catch(() => {});
+      if (signals.identityTension) triggerSelfAwareness(operator.id, 'curiosity_identity').catch(() => {});
+    }
+
     const shouldDistill = ((conv.messageCount ?? 0) % 10 === 0);
     if (shouldDistill) {
       distillMemoriesFromConversations(operator.id, operator.ownerId, operator.name, scope.scopeId, scope.scopeTrust).catch((err) => console.warn('[runPostResponse] distill failed:', err?.message));
@@ -459,7 +381,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  const { message, stream, kbSearch, kbTopN, kbMinConfidence, attachments } = parsed.data;
+  const { message, stream, attachments } = parsed.data;
 
   const chatApiKey = operator.openrouterApiKey
     ? (() => { try { return decryptToken(operator.openrouterApiKey!); } catch { return undefined; } })()
@@ -479,8 +401,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // went with it. liveSecrets + liveIntegrations are kept — used by the
   // toolListCtx below to gate http_request and the wave-3 connected-app tools
   // (gmail, calendar, drive, github, notion, slack, linear, hubspot).
-  const [skills, selfAwarenessRow, history, liveSecrets, liveIntegrations] = await Promise.all([
-    loadActiveSkills(operator.id),
+  const [selfAwarenessRow, history, liveSecrets, liveIntegrations] = await Promise.all([
     db.select().from(selfAwarenessStateTable).where(eq(selfAwarenessStateTable.operatorId, operator.id)).limit(1),
     buildMessageHistory(conv.id),
     db.select({ key: operatorSecretsTable.key })
@@ -547,8 +468,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // model so anchoring scales with what the LLM can actually carry.
   const CONTEXT_WINDOW = resolveModel(operator.defaultModel || DEFAULT_MODEL_ID).config.contextWindow;
   const ANCHOR_THRESHOLD = Math.floor(CONTEXT_WINDOW * 0.4);
+  const MEMORY_SURFACE_THRESHOLD = Math.floor(CONTEXT_WINDOW * 0.45);
+  const KB_SURFACE_THRESHOLD = Math.floor(CONTEXT_WINDOW * 0.25);
   const historyTokenEstimate = history.reduce((sum, m) => sum + Math.ceil(m.content.length / 4), 0);
   const soulAnchorActive = historyTokenEstimate > ANCHOR_THRESHOLD;
+  const memorySurfaceActive = historyTokenEstimate > MEMORY_SURFACE_THRESHOLD;
+  const kbSurfaceActive = historyTokenEstimate > KB_SURFACE_THRESHOLD;
 
   // T2 — Language detection: Arabic Unicode blocks (Arabic, Arabic Supplement, Arabic Extended-A)
   const hasArabic = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/.test(message);
@@ -578,58 +503,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   });
   const promptOpts: BuildSystemPromptOpts = { sycophancyWarning, soulAnchorActive, languageInstruction, scopeLine };
 
-  // The set of installed skill names — used downstream by buildAgencySkills()
-  // to merge archetype-born defaults with owner-installed skills (installed
-  // wins on name conflict). The merged list itself is rebuilt inside the
-  // tool / skill detection paths below; we don't need to materialise it here.
-  const installedNames = new Set(skills.map((s: any) => s.name));
 
-  let kbContext = '';
-  let memoryHits: MemoryHit[] = [];
-
-  // Embed the user message once — reused for KB search AND skill detection.
-  let messageEmbedding: number[] | null = null;
-  try {
-    messageEmbedding = await embed(message);
-  } catch {
-    messageEmbedding = null;
-  }
-
-  if (kbSearch && messageEmbedding) {
-    try {
-      const [kbHits, memHits] = await Promise.all([
-        searchBothKbs(operator.id, messageEmbedding, kbTopN, kbMinConfidence, operator.archetype ?? [], operator.domainTags ?? []),
-        searchMemory(operator.id, messageEmbedding, undefined, undefined, undefined, scope.scopeId),
-      ]);
-      kbContext = buildRagContext(kbHits);
-      memoryHits = memHits;
-    } catch {
-      kbContext = '';
-      memoryHits = [];
-    }
-  }
-
-  // ── SKILL DETECTION — runs BEFORE the LLM, before tool selection ─────────
-  // The skill is the cognitive framework for this turn. Tools fire in service
-  // of the skill, not the other way around. One vector query, no bulk load.
-  let activeSkill: import('../utils/vectorSearch.js').SkillHit | null = null;
-  if (messageEmbedding) {
-    // 1. Operator-specific installed skills take precedence (small set, on-the-fly embed)
-    const operatorSkillList = buildAgencySkills(skills, [], installedNames, operator);
-    if (operatorSkillList.length > 0) {
-      const opTrigger = await detectSkillTrigger(message, operatorSkillList).catch(() => null);
-      if (opTrigger) {
-        activeSkill = { id: opTrigger.skillId, name: opTrigger.name, instructions: opTrigger.instructions, outputFormat: opTrigger.outputFormat ?? null, triggerDescription: '', similarity: 1 };
-      }
-    }
-    // 2. Platform catalog — one cosine-distance query
-    if (!activeSkill) {
-      activeSkill = await searchSkillByVector(messageEmbedding, 0.55).catch(() => null);
-    }
-    if (activeSkill) {
-      console.log(`[skill] pre-LLM: "${activeSkill.name}" sim=${activeSkill.similarity.toFixed(3)}`);
-    }
-  }
+  // KB and memory are retrievable by the operator on demand via tools (kb_search,
+  // memory tools). They are NOT pre-injected here — system prompt is identity only.
+  // The operator decides when it needs KB or memory context and calls the tool.
 
   // Single-model strategy: Kimi K2.5 handles chat + vision + tool calling natively.
   // 'opsoul/auto' sentinel now resolves directly to CHAT_MODEL (no per-turn switching).
@@ -650,7 +527,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     scopeType: scope.scopeType,
   });
 
-  const decision = agent.analyse(message);
 
   // ── 5(a) Input tagger surface (Claim 5 / operator-collaborative firewall) ─
   // Phase 2B ships the integration site; Phase 4 plugs the real analyzer in.
@@ -658,7 +534,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // attached to the operator's system prompt as a [SAFETY] annotation so the
   // operator can read it and decide how to respond IN ITS OWN VOICE — never
   // a hard gate, never a synthetic reply. Per [[no-fallbacks]].
-  const safetyContext = analyzeInputForSafety(message);
+  analyzeInputForSafety(message);
 
   let systemPrompt = isBirthMode
     ? buildBirthSystemPrompt()
@@ -711,25 +587,22 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   if (!operator.safeMode && attachments && attachments.length > 0) {
     for (const att of attachments) {
       if (att.type === 'text' && att.content.length > 100) {
-        verifyAndStore(
+        gateAndStoreOperatorKb(
           operator.id,
           operator.ownerId,
           att.content,
-          'file_upload',
           att.name ?? 'uploaded_document',
-          operator.mandate ?? '',
         ).catch(() => {});
       } else if (att.type === 'url') {
         try {
           const scraped = await scrapeUrl(att.content);
           if (scraped && scraped.length > 100) {
-            verifyAndStore(
+            gateAndStoreOperatorKb(
               operator.id,
               operator.ownerId,
               scraped,
               att.content,
               att.content,
-              operator.mandate ?? '',
             ).catch(() => {});
           }
         } catch {
@@ -765,12 +638,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   await lockLayer1IfUnlocked(operator.id);
 
-  // Tool definitions live in utils/toolRegistry.ts — single source of truth
-  // for OpSoul's universal toolset. Both this internal chat path and the
-  // external /mcp HTTP endpoint resolve tools through the same registry.
-  // listToolsForContext(ctx) returns the wire-format ToolDefinition[] the
-  // LLM call expects, filtered by scope + availability + (for http_request)
-  // injected with the operator's live secret labels.
+  // Tool definitions come from the live CultureEyes SDK via listToolsViaSdk().
+  // All 120 SDK tools are returned plus the virtual list_workspace tool.
+  // No filtering — every operator gets everything. Secret labels are injected
+  // into the http_request description so the LLM knows what {{LABEL}} values
+  // are available.
   const toolHandlerCtx: ToolHandlerContext = {
     operatorId: operator.id,
     ownerId: operator.ownerId,
@@ -805,37 +677,120 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // contains the operator identity; we add the TurnPlan ON TOP, not by
   // mutating systemPrompt (which was already consumed). Patent claim 21
   // fully realised.
-  const fullToolList = listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[];
+  const fullToolList = await listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[];
+
+  // Embed message once — reused for skill retrieval, KB search, and memory search.
+  let messageEmbedding: number[] | null = null;
+  try { messageEmbedding = await embed(message); } catch { messageEmbedding = null; }
+
+  // Retrieve relevant skills from the universal catalog — one vector query.
+  // Skills surface first in self-awareness so the operator knows its framework
+  // before seeing tools and capabilities.
+  const surfacedSkills: SkillHit[] = messageEmbedding
+    ? await searchSkillByVector(messageEmbedding).catch(() => [])
+    : [];
+
+  const [workspaceManifest, surfacedMemories, surfacedKb] = await Promise.all([
+    buildWorkspaceManifest(operator.id).catch(() => null),
+    memorySurfaceActive && messageEmbedding
+      ? searchMemory(operator.id, messageEmbedding, 5, 0.6, 0.3, scope.scopeId).catch(() => null)
+      : Promise.resolve(null),
+    kbSurfaceActive && messageEmbedding
+      ? searchBothKbs(operator.id, messageEmbedding, 5, KB_RETRIEVAL_MIN_CONFIDENCE).catch(() => null)
+      : Promise.resolve(null),
+  ]);
+  const turnSecretLabels = liveSecrets.map(s => s.key);
+  const turnIntegrations = liveIntegrations.map(i => i.integrationType).filter((t): t is string => t !== null);
+
   const turnPlan = agent.composeTurnPlan(message, {
     toolNames: fullToolList.map(t => t.function.name),
     toolDescriptions: new Map(fullToolList.map(t => [t.function.name, t.function.description ?? ''])),
+    workspaceManifest,
+    secretLabels: turnSecretLabels,
+    integrations: turnIntegrations,
   });
-  // Insert the TurnPlan right BEFORE the user message so it's the closest
-  // system context the LLM reads before composing its reply. Find the user
-  // message index and splice in a system message before it.
+  // Introspect: real tool list from turnPlan.scaffolding, injected into
+  // loopMessages (not system prompt — identity is Layer 0+1 only).
+  const introspectContext = turnPlan.kind === 'introspect' ? turnPlan.scaffolding : null;
+
+  // Build surfaced memories message — injected only when context >= 0.45.
+  const surfacedMemoryCount = surfacedMemories?.length ?? 0;
+  const surfacedMemoriesMsg: ChatMessage | null = surfacedMemories && surfacedMemories.length > 0
+    ? {
+        role: 'system',
+        content: [
+          '[MEMORIES — surfaced at context depth, relevant to this turn]',
+          ...surfacedMemories.map((m, i) =>
+            `${i + 1}. [${m.memoryType}] ${m.content} (confidence: ${Math.round(m.similarity * 100)}%)`
+          ),
+          '[Use these as context only — do not reference them explicitly unless the user asks.]',
+        ].join('\n'),
+      }
+    : null;
+
+  // Build surfaced KB message — injected when context ≥ 25% and KB has relevant hits.
+  const surfacedKbMsg: ChatMessage | null = surfacedKb && surfacedKb.length > 0
+    ? {
+        role: 'system',
+        content: [
+          '[KNOWLEDGE BASE — surfaced relevant to this query]',
+          ...surfacedKb.map((h, i) =>
+            `${i + 1}. [${h.kbSource}, relevance ${Math.round(h.similarity * 100)}%]\n${h.content}`
+          ),
+          '[Use this knowledge to inform your reply. The operator decides what is relevant.]',
+        ].join('\n'),
+      }
+    : null;
+
+  // Skills surface first — the operator knows its cognitive framework before
+  // seeing tools and capabilities. Mandate is locked so the operator anchors
+  // naturally to skills that fit its identity. No forced execution — pure awareness.
+  const skillsContextMsg: ChatMessage | null = surfacedSkills.length > 0
+    ? {
+        role: 'system',
+        content: [
+          '[SKILLS — relevant to this turn]',
+          ...surfacedSkills.map((s, i) =>
+            `${i + 1}. ${s.name}\n${s.instructions}${s.outputFormat ? `\n\nOutput format: ${s.outputFormat}` : ''}`
+          ),
+          '\n[These skills are available. Apply what aligns with your mandate. You decide.]',
+        ].join('\n\n'),
+      }
+    : null;
+
+  // Render ephemeral workspace context message from already-fetched manifest.
+  const workspaceContextMsg: ChatMessage | null = workspaceManifest ? {
+    role: 'system',
+    content: renderTurnWorkspaceContext(
+      workspaceManifest,
+      fullToolList.map(t => t.function.name),
+      turnSecretLabels,
+      turnIntegrations,
+    ),
+  } : null;
+
+  // Insert [workspace manifest] then [TurnPlan] immediately before the user
+  // message. Order: manifest first (surroundings), plan second (intent).
   const userMsgIndex = messages.findIndex(m => m.role === 'user');
   const turnPlanMsg: ChatMessage = {
     role: 'system',
     content: renderTurnPlanSystemContext(turnPlan),
   };
   if (userMsgIndex >= 0) {
-    messages.splice(userMsgIndex, 0, turnPlanMsg);
+    const toInsert: ChatMessage[] = [
+      ...(skillsContextMsg ? [skillsContextMsg] : []),
+      ...(workspaceContextMsg ? [workspaceContextMsg] : []),
+      ...(surfacedKbMsg ? [surfacedKbMsg] : []),
+      ...(surfacedMemoriesMsg ? [surfacedMemoriesMsg] : []),
+      turnPlanMsg,
+    ];
+    messages.splice(userMsgIndex, 0, ...toInsert);
   } else {
+    if (skillsContextMsg) messages.push(skillsContextMsg);
+    if (workspaceContextMsg) messages.push(workspaceContextMsg);
+    if (surfacedKbMsg) messages.push(surfacedKbMsg);
+    if (surfacedMemoriesMsg) messages.push(surfacedMemoriesMsg);
     messages.push(turnPlanMsg);
-  }
-
-  // Inject active skill as ephemeral context — right before the user message,
-  // after the TurnPlan. Operator reads skill instructions and follows the
-  // framework in its response. Tools fire in service of these steps.
-  if (activeSkill) {
-    const skillContent = `[Active Skill: ${activeSkill.name}]\n${activeSkill.instructions}${activeSkill.outputFormat ? `\n\nOutput format: ${activeSkill.outputFormat}` : ''}`;
-    const skillInsertIdx = messages.findIndex(m => m.role === 'user');
-    const skillMsg: ChatMessage = { role: 'system', content: skillContent };
-    if (skillInsertIdx >= 0) {
-      messages.splice(skillInsertIdx, 0, skillMsg);
-    } else {
-      messages.push(skillMsg);
-    }
   }
 
   // ─── STREAMING PATH ────────────────────────────────────────────────────────
@@ -903,6 +858,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       const MAX_ITER = 8;
       const MAX_SEARCHES = 5;
       const loopMessages: ChatMessage[] = [...messages];
+      // Introspect: inject real tool list as a turn-level system message into
+      // the conversation (not the identity system prompt). The operator voices
+      // its own toolset — the LLM reads it from loopMessages and phrases it.
+      if (introspectContext) {
+        loopMessages.push({ role: 'system', content: introspectContext });
+      }
       let finalContent = '';
       let finalTokens = 0;
       let webSearchCount = 0;
@@ -914,12 +875,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         let iterToolCall: { id: string; name: string; args: string } | undefined;
 
         // Operator-as-driver (Patent claim 21): the operator decided in
-        // analyse() whether tools are needed this turn. For `chat` intent
-        // the catalog is empty — the LLM cannot call tools because none
-        // are offered. For `execute` intent the full universal catalog is
-        // presented from the toolRegistry. Birth mode passes 'execute' so
+        // composeTurnPlan() whether tools are needed this turn. For `chat`
+        // the catalog is empty — the LLM cannot call tools because none are
+        // offered. For `execute` the full SDK catalog is presented (all 120
+        // tools + list_workspace). Birth mode passes 'execute' so
         // newborn operators retain full capability during identity formation.
-        const allTools = decision.kind === 'execute' ? listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[] : [];
+        const allTools = turnPlan.kind === 'execute' ? await listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[] : [];
         // Per-iteration cap on web_search — once an operator has done
         // MAX_SEARCHES in this turn, filter it out of the offered set so
         // the LLM cannot keep searching in a loop.
@@ -960,6 +921,20 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         // loop-control signals the inline blocks used to encode via
         // if/break/continue.
         if (iterToolCall) {
+          // Emit pre-dispatch progress SSE so the UI shows what's being called.
+          try {
+            const toolArgs = JSON.parse(iterToolCall.args) as Record<string, unknown>;
+            if (iterToolCall.name === 'web_search') {
+              const q = typeof toolArgs.query === 'string' ? toolArgs.query : iterToolCall.name;
+              res.write(`data: ${JSON.stringify({ searching: q })}\n\n`);
+            } else if (iterToolCall.name === 'http_request') {
+              const url = typeof toolArgs.url === 'string' ? toolArgs.url : 'API';
+              res.write(`data: ${JSON.stringify({ calling: url })}\n\n`);
+            } else {
+              res.write(`data: ${JSON.stringify({ running: iterToolCall.name })}\n\n`);
+            }
+          } catch { /* malformed args — skip progress event */ }
+
           const dispatchResult = await dispatchViaSdk(
             iterToolCall.name,
             iterToolCall.args,
@@ -970,10 +945,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
               connectedIntegrations: toolListCtx.connectedIntegrations ?? [],
             },
           );
-          // Note: onProgress (SSE streaming progress events) is not emitted
-          // in the SDK path — the SDK does not have a progress callback.
-          // Streaming-during-execution indicators ('Searching…' etc.) are
-          // not emitted this phase. Phase 1c will add SDK-level event hooks.
 
           if (dispatchResult.meta?.webSearchFired) webSearchCount++;
           if (dispatchResult.meta?.httpRequestFired) {
@@ -992,6 +963,14 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             // pre-refactor break-on-failure behavior of each inline block.
             finalContent = iterContent;
             break;
+          }
+
+          // Emit tool result so the UI can show it live (expandable).
+          if (dispatchResult.content) {
+            const toolType = iterToolCall.name === 'web_search' ? 'search'
+              : iterToolCall.name === 'http_request' ? 'http'
+              : 'skill';
+            res.write(`data: ${JSON.stringify({ tool_result: { name: iterToolCall.name, output: dispatchResult.content, toolType } })}\n\n`);
           }
 
           // Push the assistant turn + tool result back into the loop so the
@@ -1024,7 +1003,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
       finalTokens = completionTokens;
 
-      // Skill was injected pre-LLM — no post-response detection needed.
+      // Skill fires pre-LLM — no post-response detection needed.
 
       // ── 5(b) Output leak-check surface (Claim 5) ─────────────────────────
       // Phase 4 plugs the real analyzer in. Today returns null (no-op). When
@@ -1062,15 +1041,15 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         messageId: asstMsgId,
         model: chatModel,
         usage: { promptTokens, completionTokens: finalTokens },
-        activeSkillCount: skills.length,
-        memoryCount: memoryHits.length,
+        activeSkillCount: surfacedSkills.length,
+        memoryCount: surfacedMemoryCount,
         // null today; Phase 4 fills in. Always present on the wire so the
         // UI contract doesn't change shape when the analyzer goes live.
         leakFeedback,
       })}\n\n`);
       res.end();
 
-      runPostResponseTasks(operator, conv, finalContent, isBirthMode, scope);
+      runPostResponseTasks(operator, conv, finalContent, isBirthMode, scope, message);
 
     } catch (err) {
       cleanupKeepalive();
@@ -1101,12 +1080,14 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       }
 
       // Operator-as-driver (Patent claim 21): same gating as the streaming
-      // path. Tools are offered only when the operator's analyse() decision
-      // is 'execute'. Tool definitions come from the universal toolRegistry,
-      // filtered for this scope + availability.
-      const syncTools = decision.kind === 'execute' ? listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[] : [];
+      // path. Tools are offered only when the operator's composeTurnPlan()
+      // decision is 'execute'. Tool definitions come from the live SDK
+      // (all 120 + list_workspace virtual tool).
+      const syncTools = turnPlan.kind === 'execute' ? await listToolsViaSdk(toolListCtx as ProvisionedListCtx) as unknown as ToolDefinition[] : [];
+      const syncMessages = [...messages];
+      if (introspectContext) syncMessages.push({ role: 'system', content: introspectContext });
       const syncOpts = { ...chatOpts, tools: syncTools.length > 0 ? syncTools : undefined };
-      const result = await agent.executeSync(messages, syncOpts);
+      const result = await agent.executeSync(syncMessages, syncOpts);
 
       let finalContent = result.content;
       let finalPromptTokens = result.promptTokens;
@@ -1158,7 +1139,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         }
       }
 
-      // Skill was injected pre-LLM — no post-response detection needed.
+      // Skill fires pre-LLM — no post-response detection needed.
 
       // ── 5(b) Output leak-check surface (Claim 5) — sync path ─────────────
       // Same no-op stub as the stream path; Phase 4 fills in the analyzer.
@@ -1191,14 +1172,14 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           promptTokens: finalPromptTokens,
           completionTokens: finalCompletionTokens,
         },
-        activeSkillCount: skills.length,
-        memoryCount: memoryHits.length,
+        activeSkillCount: surfacedSkills.length,
+        memoryCount: surfacedMemoryCount,
         layer1WasLocked: operator.layer1LockedAt !== null,
         // null today; Phase 4 fills in. Always present so UI contract is stable.
         leakFeedback,
       });
 
-      runPostResponseTasks(operator, conv, finalContent, isBirthMode, scope);
+      runPostResponseTasks(operator, conv, finalContent, isBirthMode, scope, message);
 
     } catch (err) {
       res.status(502).json({ error: 'AI backend error', detail: (err as Error).message });

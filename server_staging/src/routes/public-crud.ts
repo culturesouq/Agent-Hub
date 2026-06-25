@@ -18,7 +18,7 @@ import { OperatorAgent } from '../utils/operatorAgent.js';
 import { buildOperatorToolset } from '../utils/operatorToolset.js';
 import { runSyncAgentLoop } from '../utils/operatorAgentLoop.js';
 import { analyzeInputForSafety, analyzeOutputForLeak } from '../utils/operatorFirewall.js';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 const router = Router();
 router.use(requireSlotKey);
@@ -58,30 +58,40 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     ? `${action}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`
     : action;
 
-  // ── OPERATOR-IN-CONTROL ───────────────────────────────────────────────
+  // ── OPERATOR-IN-CONTROL ──────────────────────────────────────────────
   const actionAgent = new OperatorAgent({
     operatorId: operator.id,
     operatorName: operator.name,
     isBirthMode: false,
     scopeType: 'action',
   });
-
   const actionDecision = actionAgent.analyse(actionText);
-  void actionDecision; // retained for future tool-gating
+  void actionDecision;
 
-  // ── Skill detection — vector search, no bulk load ─────────────────────
-  // Action endpoint: if a skill fires it executes directly and returns.
-  // Embed once, check operator-specific skills first, then platform catalog.
+  // ── Skill retrieval — universal catalog, one vector query ────────────
+  // Action surface: if a skill matches, execute it directly and return.
+  // No archetype filter, no installed-skills distinction — all operators
+  // have access to the full platform catalog.
   const actionEmbedding = await embed(actionText).catch(() => null);
   if (actionEmbedding) {
-    const skillMatch = await searchSkillByVector(actionEmbedding, 0.55).catch(() => null);
+    const [skillMatch] = await searchSkillByVector(actionEmbedding, 0.55, 1).catch(() => []);
     if (skillMatch) {
       try {
         const skillModel = operator.defaultModel && operator.defaultModel !== 'opsoul/auto'
           ? operator.defaultModel
           : CHAT_MODEL;
         const skillResult = await executeSkill(
-          { installId: `platform-${skillMatch.id}`, skillId: skillMatch.id, name: skillMatch.name, instructions: skillMatch.instructions, outputFormat: skillMatch.outputFormat, customInstructions: null, extractedParams: actionText, operatorId: slot.operatorId, operatorOwnerId: slot.ownerId },
+          {
+            installId:          `platform-${skillMatch.id}`,
+            skillId:            skillMatch.id,
+            name:               skillMatch.name,
+            instructions:       skillMatch.instructions,
+            outputFormat:       skillMatch.outputFormat,
+            customInstructions: null,
+            extractedParams:    actionText,
+            operatorId:         slot.operatorId,
+            operatorOwnerId:    slot.ownerId,
+          },
           skillModel,
         );
         res.json({ result: skillResult.output, skill: skillMatch.name });
@@ -195,7 +205,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       model: resolvedModel,
       turnPlan: actionTurnPlan,
       // Patent claim 21: operator-decided tool gating (legacy fallback).
-      analyseDecision: actionDecision.kind,
+      analyseDecision: actionTurnPlan.kind,
     });
   } catch (llmErr: unknown) {
     console.error('[public-crud] action LLM error', llmErr);

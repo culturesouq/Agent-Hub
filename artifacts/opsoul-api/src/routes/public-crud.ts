@@ -3,17 +3,14 @@ import { z } from 'zod';
 import { db } from '@workspace/db';
 import {
   operatorsTable,
-  operatorSkillsTable,
-  platformSkillsTable,
   operatorIntegrationsTable,
   operatorSecretsTable,
 } from '@workspace/db';
 import { requireSlotKey } from '../middleware/requireSlotKey.js';
 import { CHAT_MODEL } from '../utils/openrouter.js';
 import { executeSkill } from '../utils/skillExecutor.js';
-import { detectSkillTrigger } from '../utils/skillTriggerEngine.js';
-import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
-import { loadArchetypeSkills } from '../utils/archetypeSkills.js';
+import { embed } from '@workspace/opsoul-utils/ai';
+import { searchSkillByVector } from '../utils/vectorSearch.js';
 import { assembleOperatorPrompt } from '../utils/systemPrompt.js';
 import { distillActionTaskPattern } from '../utils/memoryEngine.js';
 import { buildScopeContext, type ValidatedScope } from '../utils/scopeResolver.js';
@@ -21,7 +18,7 @@ import { OperatorAgent } from '../utils/operatorAgent.js';
 import { buildOperatorToolset } from '../utils/operatorToolset.js';
 import { runSyncAgentLoop } from '../utils/operatorAgentLoop.js';
 import { analyzeInputForSafety, analyzeOutputForLeak } from '../utils/operatorFirewall.js';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 const router = Router();
 router.use(requireSlotKey);
@@ -57,92 +54,51 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  // ── Skills ──
-  const installedRows = await db
-    .select({
-      id: operatorSkillsTable.id,
-      skillId: operatorSkillsTable.skillId,
-      customInstructions: operatorSkillsTable.customInstructions,
-      name: platformSkillsTable.name,
-      instructions: platformSkillsTable.instructions,
-      outputFormat: platformSkillsTable.outputFormat,
-      triggerDescription: platformSkillsTable.triggerDescription,
-      integrationType: platformSkillsTable.integrationType,
-    })
-    .from(operatorSkillsTable)
-    .innerJoin(platformSkillsTable, eq(operatorSkillsTable.skillId, platformSkillsTable.id))
-    .where(and(eq(operatorSkillsTable.operatorId, slot.operatorId), eq(operatorSkillsTable.isActive, true)));
-
-  const installedNames = new Set(installedRows.map(s => s.name));
-  const archetypeDefaults = await loadArchetypeSkills(operator.archetype ?? ['All']);
-
-  const allSkills: InstalledSkill[] = [
-    ...installedRows.map(s => ({
-      installId:          s.id,
-      skillId:            s.skillId,
-      name:               s.name,
-      triggerDescription: s.triggerDescription ?? '',
-      instructions:       s.instructions,
-      outputFormat:       s.outputFormat ?? null,
-      customInstructions: s.customInstructions ?? null,
-      integrationType:    s.integrationType ?? null,
-    })),
-    ...archetypeDefaults
-      .filter(a => !installedNames.has(a.name))
-      .map(a => ({
-        installId:          a.installId,
-        skillId:            a.skillId,
-        name:               a.name,
-        triggerDescription: a.triggerDescription,
-        instructions:       a.instructions,
-        outputFormat:       a.outputFormat,
-        customInstructions: null,
-        integrationType:    a.integrationType ?? null,
-      })),
-  ];
-
   const actionText = payload
     ? `${action}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`
     : action;
 
-  // ── OPERATOR-IN-CONTROL ───────────────────────────────────────────────
-  // STEP 1 — Operator analyses the inbound action call BEFORE any LLM /
-  // skill is dispatched. Action calls are programmatic — but the operator
-  // still owns the decision to refuse architecture-introspection actions,
-  // returning the refusal text in its own voice. No LLM call needed.
+  // ── OPERATOR-IN-CONTROL ──────────────────────────────────────────────
   const actionAgent = new OperatorAgent({
     operatorId: operator.id,
     operatorName: operator.name,
     isBirthMode: false,
     scopeType: 'action',
   });
+  const actionDecision = actionAgent.analyse(actionText);
+  void actionDecision;
 
-
-  // ── Try skill trigger first ──
-  const trigger = await detectSkillTrigger(actionText, allSkills, operator.name);
-  if (trigger) {
-    try {
-      trigger.operatorId = slot.operatorId;
-      trigger.operatorOwnerId = slot.ownerId;
-      // Resolve via the same pattern chat.ts uses: operator default if set
-      // and not the auto sentinel, otherwise the platform CHAT_MODEL from
-      // the registry. Was hardcoded 'moonshotai/kimi-k2.5' — coupled action
-      // surface to one provider regardless of operator config.
-      const skillModel = operator.defaultModel && operator.defaultModel !== 'opsoul/auto'
-        ? operator.defaultModel
-        : CHAT_MODEL;
-      const skillResult = await executeSkill(trigger, skillModel);
-      res.json({ result: skillResult.output, skill: trigger.name });
-      distillActionTaskPattern(
-        slot.operatorId,
-        slot.ownerId,
-        operator.name,
-        action,
-        payload ?? null,
-        skillResult.output,
-      ).catch(() => {});
-      return;
-    } catch { /* fall through to LLM */ }
+  // ── Skill retrieval — universal catalog, one vector query ────────────
+  // Action surface: if a skill matches, execute it directly and return.
+  // No archetype filter, no installed-skills distinction — all operators
+  // have access to the full platform catalog.
+  const actionEmbedding = await embed(actionText).catch(() => null);
+  if (actionEmbedding) {
+    const [skillMatch] = await searchSkillByVector(actionEmbedding, 0.55, 1).catch(() => []);
+    if (skillMatch) {
+      try {
+        const skillModel = operator.defaultModel && operator.defaultModel !== 'opsoul/auto'
+          ? operator.defaultModel
+          : CHAT_MODEL;
+        const skillResult = await executeSkill(
+          {
+            installId:          `platform-${skillMatch.id}`,
+            skillId:            skillMatch.id,
+            name:               skillMatch.name,
+            instructions:       skillMatch.instructions,
+            outputFormat:       skillMatch.outputFormat,
+            customInstructions: null,
+            extractedParams:    actionText,
+            operatorId:         slot.operatorId,
+            operatorOwnerId:    slot.ownerId,
+          },
+          skillModel,
+        );
+        res.json({ result: skillResult.output, skill: skillMatch.name });
+        distillActionTaskPattern(slot.operatorId, slot.ownerId, operator.name, action, payload ?? null, skillResult.output).catch(() => {});
+        return;
+      } catch { /* fall through to LLM */ }
+    }
   }
 
   // KB + station + skill injection pre-MCP removed — the agent loop's

@@ -149,14 +149,13 @@ export interface SkillHit {
 }
 
 // Vector search against the full platform skill catalog.
-// Embeds the query once upstream; this function does one DB query.
-// Returns the single best match below distanceThreshold, or null.
-// User-message threshold: 0.55 (similarity >= 0.45)
-// Operator-response threshold: 0.40 (similarity >= 0.60)
+// Embedding computed once upstream (reused from KB/memory search) — one DB query.
+// Returns up to `limit` skills within distanceThreshold; empty array when none match.
 export async function searchSkillByVector(
   embedding: number[],
   distanceThreshold: number = 0.55,
-): Promise<SkillHit | null> {
+  limit: number = 3,
+): Promise<SkillHit[]> {
   const vecStr = `[${embedding.join(',')}]`;
 
   const result = await pool.query<{
@@ -171,24 +170,20 @@ export async function searchSkillByVector(
             (embedding <=> $1::vector) AS distance
      FROM platform_skills
      WHERE embedding IS NOT NULL
+       AND (embedding <=> $1::vector) < $2
      ORDER BY distance ASC
-     LIMIT 1`,
-    [vecStr],
+     LIMIT $3`,
+    [vecStr, distanceThreshold, limit],
   );
 
-  if (result.rows.length === 0) return null;
-  const row = result.rows[0];
-  const distance = Number(row.distance);
-  if (distance > distanceThreshold) return null;
-
-  return {
+  return result.rows.map(row => ({
     id: row.id,
     name: row.name,
     instructions: row.instructions,
     outputFormat: row.output_format,
     triggerDescription: row.trigger_description,
-    similarity: 1 - distance,
-  };
+    similarity: 1 - Number(row.distance),
+  }));
 }
 
 export function buildRagContext(hits: VectorHit[]): string {
