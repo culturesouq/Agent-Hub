@@ -2,12 +2,73 @@
 
 > ★★★ TOP PRINCIPLE (2026-06-07): **Mohamed has new methods and a different way of thinking. Follow HIS clarifications; never fall back to old/textbook/convention/copied-defaults. His way overrides convention; when unsure, ASK.** We work together — not "owner".
 
+---
+
+## ★★★ LOCKED ARCHITECTURE PRINCIPLES — DO NOT CHANGE WITHOUT EXPLICIT DIRECTIVE
+
+> These are not preferences. They are the foundation OpSoul is built on. No implementation decision, no shortcut, no "optimization" overrides these. If any code contradicts them, the code is wrong — not the principle.
+
+### 1. THE OPERATOR IS THE DRIVER — NOT THE SYSTEM, NOT THE LLM
+
+The operator decides everything that happens in a turn:
+- Which tools to call
+- Which skills to apply
+- What to say to the user
+- When to use the LLM and what to ask it
+
+The LLM is the execution engine. The operator instructs it. The user never speaks to the LLM directly — the user speaks to the operator.
+
+**What this means in code:**
+- Tools are ALWAYS offered to the operator every turn — no heuristic, no gate, no "does this message need tools?" check
+- `detectToolNeed()` or any equivalent that decides FOR the operator whether it gets tools = violation of this principle
+- `turnPlan.kind === 'execute'` gating tools = violation. Removed `efbc61e` 2026-06-25
+- The operator reads its workspace (tools + skills) and decides. The system never decides on its behalf
+
+**Why this matters:** When the system gates tools, operators narrate instead of act. They say "I would search for..." instead of searching. That narration is a symptom of the system removing operator agency. The fix is never prompt engineering — it is restoring tool access.
+
+### 2. SKILLS ARE ACTIVE CAPABILITIES — NOT A SILENT REGISTRY
+
+Skills are part of the operator's workspace. The operator sees them, knows them, and chooses to apply them. Skills are NOT:
+- Instructions the system secretly injects into context
+- A passive registry the system queries on the operator's behalf
+- Limited by the system to 3 or any arbitrary number
+
+**What this means in code:**
+- Skills appear in `list_workspace` — operator sees them alongside tools
+- `searchSkillByVector` surfaces relevant skills into self-awareness context — operator reads them and decides whether to apply
+- Skill limit is 10 by default (not 3) — operator sees what is relevant, not what the system feels like showing
+- Skills are the operator's cognitive framework. Tools are the operator's hands. Self-awareness (skills first) guides which hands to use
+
+### 3. SELF-AWARENESS CONTEXT ORDER IS FIXED
+
+Every turn, context is built in this order — never rearranged:
+```
+skills → workspace manifest → KB → memories → TurnPlan → user message
+```
+Skills come first because the operator must know what it IS before it decides what to DO.
+
+### 4. CAPABILITIES MUST BE REAL
+
+Never tell an operator it has a skill or tool that is not wired. Narration (the operator describing what it would do instead of doing it) is always a symptom of a capability gap — a missing tool, a broken integration, a gated function. Fix the gap. Never patch narration with prompting.
+
+### 5. NO SYSTEM DECISIONS ON BEHALF OF THE OPERATOR
+
+The system's job is to surface information (workspace, KB, memory, skills) and execute what the operator instructs. The system does not:
+- Decide which tools the operator gets this turn
+- Decide which skills are "relevant enough" to show
+- Decide the operator's intent from message heuristics
+- Switch the operator into "chat mode" or "execute mode"
+
+The operator is always in one mode: **its own mode**. It reads what it has and decides.
+
+---
+
 > One file. Read top to bottom.
 > Live state at the top. Principles in the middle. Full history at the bottom.
 
 ---
 
-## ✅ SESSION WORK — 2026-06-24 / 2026-06-25  ·  COMPLETE
+## ✅ SESSION WORK — 2026-06-24 / 2026-06-25  ·  IN PROGRESS
 
 ### Universal Skills Self-Awareness Architecture — SHIPPED `aa5ac1a` · pushed 2026-06-25
 
@@ -38,7 +99,22 @@ Skills are like tools — operator must KNOW they exist before it can choose to 
 skills → workspace manifest → KB → memories → TurnPlan → user message
 ```
 
-**Both codebases synced:** `artifacts/opsoul-api/src/` and `server_staging/src/` identical as of `aa5ac1a`.
+**Both codebases synced:** `artifacts/opsoul-api/src/` and `server_staging/src/` identical as of `efbc61e`.
+
+### Operator-as-Driver Restoration — COMMITTED `efbc61e` · 2026-06-25 · AWAITING DEPLOY
+
+**What was broken (discovered this session):**
+- `detectToolNeed()` heuristic in `operatorAgent.ts` was deciding FOR the operator whether it gets tools. Short messages → `'chat'` mode → zero tools offered. Operator was narrating instead of acting.
+- Skill limit hardcoded to 3 — system was deciding how many skills the operator sees
+- Skills were invisible in `list_workspace` — operator had no way to know its skills existed
+- These three violations together meant the operator was NOT the driver
+
+**Three surgical fixes (`efbc61e`):**
+1. `chat.ts` lines 883 + 1086 — removed `turnPlan.kind === 'execute'` gate. Tools always fetched and offered every turn. Operator decides which to use.
+2. `vectorSearch.ts` line 157 — skill limit `3 → 10`. Operator sees more relevant skills.
+3. `sdkToolBridge.ts` `handleListWorkspace` — skills added to workspace output. Operator sees all platform skills (name + description) alongside tools.
+
+**Pending deploy:** build + push `efbc61e` image, deploy to Container App.
 
 **Previous session commits (skills evolution, still live):**
 - `0a41e3e` — seed script `seedUniversalSkills.ts` (1077 skills, 35 domains, `archetype: null`)
