@@ -213,8 +213,8 @@ Removed "openai": "^6.27.0" from package.json. Lockfile updated.
 ### ✅ Phase 5 — Replace Azure OpenAI embeddings with Bedrock — DONE commit 6582613 2026-06-25
 Rewrote lib/opsoul-utils/src/ai.ts to use BedrockRuntimeClient + InvokeModelCommand + Bearer middleware. Model: cohere.embed-multilingual-v3 (1024d). Replaced openai dep in opsoul-utils/package.json. ⚠ KB vectors stale (1536→1024d) — must re-embed all after deploy.
 
-### Phase 6 — Fix `/v1/action` 503 — last code change before deploy
-Replace raw `fetch()` in `bedrockConverse()` (`src/utils/bedrock.ts` after Phase 1) with `ConverseCommand` through `bedrockSdkClient`. Add `ConverseCommand` to the existing AWS SDK import. Both streaming and non-streaming now go through the same SDK client with the same proven Bearer middleware. Delete old raw fetch block.
+### ✅ Phase 6 — Fix `/v1/action` 503 — DONE commit 30c10c0 2026-06-25
+Replaced raw fetch() in bedrockConverse() with ConverseCommand via bedrockSdkClient. Added ConverseCommand to SDK import. Both streaming and non-streaming now use same Bearer middleware. Raw fetch block deleted.
 
 ### Phase 7 — Deploy
 Build: `docker build --platform linux/amd64 -t banistudioacr.azurecr.io/opsoul-api:bedrock-clean-<hash> .`
