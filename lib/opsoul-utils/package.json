@@ -10,7 +10,7 @@
     "./ai": "./src/ai.ts"
   },
   "dependencies": {
-    "openai": "^6.27.0"
+    "@aws-sdk/client-bedrock-runtime": "^3.826.0"
   },
   "devDependencies": {
     "@types/node": "catalog:"

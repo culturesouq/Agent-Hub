@@ -1,19 +1,32 @@
-import OpenAI from 'openai';
+import {
+  BedrockRuntimeClient,
+  InvokeModelCommand,
+} from '@aws-sdk/client-bedrock-runtime';
 
-let _client: OpenAI | null = null;
+const EMBED_MODEL = 'cohere.embed-multilingual-v3';
+const EMBED_REGION = 'us-east-1';
 
-function getClient(): OpenAI {
-  if (!_client) {
-    const apiKey = process.env.AZURE_OPENAI_KEY ?? '';
-    _client = new OpenAI({
-      apiKey: 'unused',
-      baseURL: 'https://hajeri-data.openai.azure.com/openai/deployments/text-embedding-3-small',
-      defaultQuery: { 'api-version': '2024-02-01' },
-      defaultHeaders: { 'api-key': apiKey },
-    });
-  }
-  return _client;
-}
+const bedrockEmbedClient = new BedrockRuntimeClient({
+  region: EMBED_REGION,
+  credentials: { accessKeyId: 'BEDROCK_KEY', secretAccessKey: 'BEDROCK_KEY' },
+});
+
+bedrockEmbedClient.middlewareStack.add(
+  (next) => async (args) => {
+    const req = args.request as { headers?: Record<string, string> };
+    if (req?.headers) {
+      const apiKey = process.env.AWS_BEDROCK_API_KEY ?? '';
+      delete req.headers['authorization'];
+      delete req.headers['Authorization'];
+      delete req.headers['x-amz-date'];
+      delete req.headers['x-amz-security-token'];
+      delete req.headers['x-amz-content-sha256'];
+      req.headers['authorization'] = `Bearer ${apiKey}`;
+    }
+    return next(args);
+  },
+  { step: 'finalizeRequest', name: 'bedrockBearerAuth', priority: 'low' },
+);
 
 const embedCache = new Map<string, number[]>();
 
@@ -22,11 +35,21 @@ export async function embed(text: string): Promise<number[]> {
   const cached = embedCache.get(input);
   if (cached) return cached;
 
-  const res = await getClient().embeddings.create({
-    model: 'text-embedding-3-small',
-    input,
+  const body = JSON.stringify({ texts: [input], input_type: 'search_document' });
+
+  const command = new InvokeModelCommand({
+    modelId: EMBED_MODEL,
+    contentType: 'application/json',
+    accept: 'application/json',
+    body: Buffer.from(body),
   });
-  const embedding = res.data[0].embedding;
+
+  const response = await bedrockEmbedClient.send(command);
+  const raw = JSON.parse(Buffer.from(response.body).toString('utf-8')) as {
+    embeddings: number[][];
+  };
+
+  const embedding = raw.embeddings[0];
   embedCache.set(input, embedding);
   return embedding;
 }

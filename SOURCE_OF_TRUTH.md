@@ -207,8 +207,8 @@ Deleted operatorModelConfig.ts. Removed getOperatorModelOverride() from chat.ts 
 ### ✅ Phase 3 — Clean the UI — DONE commit fa119a6 2026-06-25
 Removed ByoModelPanel, all BYO banners, OpenRouter text from SettingsSection.tsx. Collapsed Setup.tsx to 2 steps (removed BYO key step). Updated PrivacyPage.tsx. Removed hasCustomApiKey from types.ts. FALLBACK_MODELS now points to Bedrock Claude Sonnet 4.6.
 
-### Phase 4 — Remove `openai` npm package
-Remove `"openai": "^6.27.0"` from `artifacts/opsoul-api/package.json`. Update lockfile (`pnpm install`).
+### ✅ Phase 4 — Remove `openai` npm package — DONE commit 3dc2586 2026-06-25
+Removed "openai": "^6.27.0" from package.json. Lockfile updated.
 
 ### Phase 5 — Replace Azure OpenAI embeddings with Bedrock
 Rewrite `lib/opsoul-utils/src/ai.ts` `embed()` to call `InvokeModelCommand` through `bedrockSdkClient` (same Bearer middleware). Remove `import OpenAI`, remove `AZURE_OPENAI_KEY` dependency. **⚠ Mohamed to pick model:** Titan Embed v2 (AWS native, 1024d) or Cohere Embed Multilingual v3 (1024d, better Arabic/English for Nahil). Either requires re-embedding all KB entries in DB after deploy (dimension changes from current 1536).
