@@ -233,7 +233,11 @@ Revision: opsoul--0000125 — Running
 - Several secrets stored as plaintext env vars (DATABASE_URL, JWT_SECRET, etc.) — should be moved to secretRef.
 - AWS Marketplace subscriptions need up to 15 min to propagate. Anthropic models require FTU form per account.
 
-**Pending before next deploy:**
+**DEPLOYED ✅ — revision `opsoul--0000126` · image `analyse-fix-bc216d6` · 2026-06-25T16:17:59Z**
+- Running / Healthy — 2 replicas
+- ACR cleaned: only `analyse-fix-bc216d6` (live) and `bedrock-clean-fa0963e` (rollback) remain
+
+**Pending:**
 ⚠ Remove `AZURE_OPENAI_KEY` from `REQUIRED_VARS` in `lib/opsoul-utils/src/env.ts` (Mohamed approves)
 ⚠ re-embed all KB entries (dim changed 1536→1024 with Cohere Multilingual v3)
 
