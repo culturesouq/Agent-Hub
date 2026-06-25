@@ -15,7 +15,7 @@ import {
 } from '@workspace/db';
 import type { InstalledSkill } from '../utils/skillTriggerEngine.js';
 import { detectSkillTrigger } from '../utils/skillTriggerEngine.js';
-import { executeSkill } from '../utils/skillExecutor.js';
+// executeSkill removed — skills now inform the operator pre-LLM, no separate execution step
 import { embed, semanticDistance } from '@workspace/opsoul-utils/ai';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { lockLayer1IfUnlocked } from '../utils/lockLayer1.js';
@@ -45,7 +45,6 @@ import { eq, and, asc, sql } from 'drizzle-orm';
 import { isWebSearchAvailable, isFirecrawlAvailable } from '../utils/capabilityEngine.js';
 import {
   persistUrlScrapedResult,
-  persistSkillResult,
 } from '../utils/toolPersistence.js';
 // listToolsForContext and dispatchTool are kept in their origin files (Phase 1c removes them).
 // chat.ts now routes through the SDK bridge instead.
@@ -610,6 +609,28 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     }
   }
 
+  // ── SKILL DETECTION — runs BEFORE the LLM, before tool selection ─────────
+  // The skill is the cognitive framework for this turn. Tools fire in service
+  // of the skill, not the other way around. One vector query, no bulk load.
+  let activeSkill: import('../utils/vectorSearch.js').SkillHit | null = null;
+  if (messageEmbedding) {
+    // 1. Operator-specific installed skills take precedence (small set, on-the-fly embed)
+    const operatorSkillList = buildAgencySkills(skills, [], installedNames, operator);
+    if (operatorSkillList.length > 0) {
+      const opTrigger = await detectSkillTrigger(message, operatorSkillList).catch(() => null);
+      if (opTrigger) {
+        activeSkill = { id: opTrigger.skillId, name: opTrigger.name, instructions: opTrigger.instructions, outputFormat: opTrigger.outputFormat ?? null, triggerDescription: '', similarity: 1 };
+      }
+    }
+    // 2. Platform catalog — one cosine-distance query
+    if (!activeSkill) {
+      activeSkill = await searchSkillByVector(messageEmbedding, 0.55).catch(() => null);
+    }
+    if (activeSkill) {
+      console.log(`[skill] pre-LLM: "${activeSkill.name}" sim=${activeSkill.similarity.toFixed(3)}`);
+    }
+  }
+
   // Single-model strategy: Kimi K2.5 handles chat + vision + tool calling natively.
   // 'opsoul/auto' sentinel now resolves directly to CHAT_MODEL (no per-turn switching).
   chatModel = rawModel === 'opsoul/auto' ? CHAT_MODEL : rawModel;
@@ -803,6 +824,20 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     messages.push(turnPlanMsg);
   }
 
+  // Inject active skill as ephemeral context — right before the user message,
+  // after the TurnPlan. Operator reads skill instructions and follows the
+  // framework in its response. Tools fire in service of these steps.
+  if (activeSkill) {
+    const skillContent = `[Active Skill: ${activeSkill.name}]\n${activeSkill.instructions}${activeSkill.outputFormat ? `\n\nOutput format: ${activeSkill.outputFormat}` : ''}`;
+    const skillInsertIdx = messages.findIndex(m => m.role === 'user');
+    const skillMsg: ChatMessage = { role: 'system', content: skillContent };
+    if (skillInsertIdx >= 0) {
+      messages.splice(skillInsertIdx, 0, skillMsg);
+    } else {
+      messages.push(skillMsg);
+    }
+  }
+
   // ─── STREAMING PATH ────────────────────────────────────────────────────────
 
   if (stream) {
@@ -989,56 +1024,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
       finalTokens = completionTokens;
 
-      // ── Skill detection (streaming path) — fires after tool loop, before DB commit ──
-      if (!httpRequestFired && finalContent && finalContent.trim().length > 10) {
-        let trigger: Awaited<ReturnType<typeof detectSkillTrigger>> = null;
-
-        // 1. Operator-specific installed skills (small set, takes precedence)
-        const operatorSkills = buildAgencySkills(skills, [], installedNames, operator);
-        if (operatorSkills.length > 0) {
-          trigger = await detectSkillTrigger(message, operatorSkills, finalContent).catch(() => null);
-        }
-
-        // 2. Platform catalog — one vector query, no bulk load
-        if (!trigger && messageEmbedding) {
-          const platformMatch = await searchSkillByVector(messageEmbedding, 0.55).catch(() => null);
-          if (platformMatch) {
-            console.log(`[agency] stream user → platform skill "${platformMatch.name}" sim=${platformMatch.similarity.toFixed(3)}`);
-            trigger = { installId: `platform-${platformMatch.id}`, skillId: platformMatch.id, name: platformMatch.name, instructions: platformMatch.instructions, outputFormat: platformMatch.outputFormat, customInstructions: null, extractedParams: message, initiatedBy: 'user' };
-          } else {
-            const opEmbed = await embed(finalContent).catch(() => null);
-            if (opEmbed) {
-              const opMatch = await searchSkillByVector(opEmbed, 0.40).catch(() => null);
-              if (opMatch) {
-                console.log(`[agency] stream operator → platform skill "${opMatch.name}" sim=${opMatch.similarity.toFixed(3)}`);
-                trigger = { installId: `platform-${opMatch.id}`, skillId: opMatch.id, name: opMatch.name, instructions: opMatch.instructions, outputFormat: opMatch.outputFormat, customInstructions: null, extractedParams: finalContent, initiatedBy: 'operator' };
-              }
-            }
-          }
-        }
-
-        if (trigger) {
-            trigger.operatorId = operator.id;
-            trigger.operatorOwnerId = operator.ownerId;
-            console.log(`[agency] stream — skill triggered: ${trigger.name}`);
-            const skillResult = await executeSkill(trigger, chatModel);
-            if (skillResult.success) {
-              const secondMsgs: ChatMessage[] = [
-                ...(loopMessages.length > 0 ? loopMessages : messages),
-                { role: 'assistant', content: finalContent },
-                { role: 'system', content: `[Skill result — ${trigger.name}]\n${skillResult.output}` },
-              ];
-              const secondResult = await agent.executeSync(secondMsgs, chatOpts).catch(() => null);
-              if (secondResult?.content && secondResult.content.trim().length > 0) {
-                res.write(`data: ${JSON.stringify({ clear: true })}\n\n`);
-                res.write(`data: ${JSON.stringify({ delta: secondResult.content })}\n\n`);
-                finalContent = secondResult.content;
-              }
-              await persistSkillResult(operator.id, operator.ownerId, conv.id, trigger, skillResult).catch(() => {});
-            }
-          }
-        }
-      }
+      // Skill was injected pre-LLM — no post-response detection needed.
 
       // ── 5(b) Output leak-check surface (Claim 5) ─────────────────────────
       // Phase 4 plugs the real analyzer in. Today returns null (no-op). When
@@ -1172,57 +1158,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         }
       }
 
-      // ── Skill detection (sync path) ───────────────────────────────────────────
-      if (!capabilityFired && finalContent && finalContent.trim().length > 10) {
-        let trigger: Awaited<ReturnType<typeof detectSkillTrigger>> = null;
-
-        // 1. Operator-specific installed skills (small set, takes precedence)
-        const operatorSkills = buildAgencySkills(skills, [], installedNames, operator);
-        if (operatorSkills.length > 0) {
-          trigger = await detectSkillTrigger(message, operatorSkills, finalContent).catch(() => null);
-        }
-
-        // 2. Platform catalog — one vector query, no bulk load
-        if (!trigger && messageEmbedding) {
-          const platformMatch = await searchSkillByVector(messageEmbedding, 0.55).catch(() => null);
-          if (platformMatch) {
-            console.log(`[agency] sync user → platform skill "${platformMatch.name}" sim=${platformMatch.similarity.toFixed(3)}`);
-            trigger = { installId: `platform-${platformMatch.id}`, skillId: platformMatch.id, name: platformMatch.name, instructions: platformMatch.instructions, outputFormat: platformMatch.outputFormat, customInstructions: null, extractedParams: message, initiatedBy: 'user' };
-          } else {
-            const opEmbed = await embed(finalContent).catch(() => null);
-            if (opEmbed) {
-              const opMatch = await searchSkillByVector(opEmbed, 0.40).catch(() => null);
-              if (opMatch) {
-                console.log(`[agency] sync operator → platform skill "${opMatch.name}" sim=${opMatch.similarity.toFixed(3)}`);
-                trigger = { installId: `platform-${opMatch.id}`, skillId: opMatch.id, name: opMatch.name, instructions: opMatch.instructions, outputFormat: opMatch.outputFormat, customInstructions: null, extractedParams: finalContent, initiatedBy: 'operator' };
-              }
-            }
-          }
-        }
-
-        if (trigger) {
-            trigger.operatorId = operator.id;
-            trigger.operatorOwnerId = operator.ownerId;
-            console.log(`[agency] sync — skill triggered: ${trigger.name}`);
-            const skillResult = await executeSkill(trigger, chatModel);
-            if (skillResult.success) {
-              const secondMsgs: ChatMessage[] = [
-                ...messages,
-                { role: 'assistant', content: finalContent },
-                { role: 'system', content: `[Skill result — ${trigger.name}]\n${skillResult.output}` },
-              ];
-              const secondResult = await agent.executeSync(secondMsgs, chatOpts).catch(() => null);
-              if (secondResult?.content && secondResult.content.trim().length > 0) {
-                finalContent = secondResult.content;
-                finalPromptTokens = secondResult.promptTokens;
-                finalCompletionTokens = secondResult.completionTokens;
-              }
-              capabilityFired = true;
-              await persistSkillResult(operator.id, operator.ownerId, conv.id, trigger, skillResult).catch(() => {});
-            }
-          }
-        }
-      }
+      // Skill was injected pre-LLM — no post-response detection needed.
 
       // ── 5(b) Output leak-check surface (Claim 5) — sync path ─────────────
       // Same no-op stub as the stream path; Phase 4 fills in the analyzer.
