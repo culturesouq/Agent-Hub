@@ -219,8 +219,23 @@ Replaced raw fetch() in bedrockConverse() with ConverseCommand via bedrockSdkCli
 ### ✅ Phase 7 — Deploy — DONE 2026-06-25
 Image: banistudioacr.azurecr.io/opsoul-api:bedrock-clean-fa0963e
 Revision: opsoul--0000125 — Running
-⚠ TODO: remove AZURE_OPENAI_KEY from container env (no longer used)
-⚠ TODO: re-embed all KB entries (dim changed 1536→1024 with Cohere Multilingual v3)
+
+### ✅ Phase 8 — Fix real root cause of /v1/action 503 — DONE commit bc216d6 2026-06-25
+
+**Root cause (found by 5-agent audit):**
+`public-crud.ts:68` called `actionAgent.analyse(actionText)` — a method that does not exist on `OperatorAgent`. The class only has `composeTurnPlan()`. The TypeError crashed every `/v1/action` request before it ever reached Bedrock. The result was immediately `void`-ed anyway (dead code). The Bedrock/auth investigation was a red herring — Bedrock was never reached.
+
+**Fix:** Deleted the two dead lines (68–69). `composeTurnPlan()` at line 186 was already correct and continues to serve as the turn plan entry point.
+
+**Other findings from the audit (not causing 503, but noted):**
+- `AZURE_OPENAI_KEY` is still listed in `REQUIRED_VARS` in `lib/opsoul-utils/src/env.ts` — removing the env var from Azure without first removing it from the code would crash the app on boot. SoT line at "AZURE_OPENAI_KEY env var removed ✅ done" was WRONG — the code validator still requires it. Fix order: remove from env.ts first → deploy → then remove from Azure.
+- `tsx` is installed on-demand at every cold start (npm warn) — adds ~5s gap where port is not bound. Fix: bake tsx into Docker image.
+- Several secrets stored as plaintext env vars (DATABASE_URL, JWT_SECRET, etc.) — should be moved to secretRef.
+- AWS Marketplace subscriptions need up to 15 min to propagate. Anthropic models require FTU form per account.
+
+**Pending before next deploy:**
+⚠ Remove `AZURE_OPENAI_KEY` from `REQUIRED_VARS` in `lib/opsoul-utils/src/env.ts` (Mohamed approves)
+⚠ re-embed all KB entries (dim changed 1536→1024 with Cohere Multilingual v3)
 
 ---
 
