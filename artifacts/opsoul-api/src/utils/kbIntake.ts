@@ -3,7 +3,7 @@ import { pool, db } from '@workspace/db';
 import { operatorsTable } from '@workspace/db';
 import { eq } from 'drizzle-orm';
 import { embed } from '@workspace/opsoul-utils/ai';
-import { chatCompletion } from './openrouter.js';
+import { chatCompletion } from './bedrock.js';
 import { DEFAULT_MODEL_ID } from './modelRegistry.js';
 
 const GATE_MODEL = DEFAULT_MODEL_ID;

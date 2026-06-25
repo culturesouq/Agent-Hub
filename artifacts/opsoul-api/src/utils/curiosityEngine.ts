@@ -1,5 +1,5 @@
 import { webSearch } from './webSearch.js';
-import { chatCompletion } from './openrouter.js';
+import { chatCompletion } from './bedrock.js';
 import { DEFAULT_MODEL_ID } from './modelRegistry.js';
 
 // Source Trust Tiers — canonical 5-tier ladder (Claim 32 / D-3).

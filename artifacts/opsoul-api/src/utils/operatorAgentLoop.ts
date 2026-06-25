@@ -44,7 +44,7 @@
 
 import { dispatchViaSdk } from './sdkToolBridge.js';
 import { renderTurnPlanSystemContext, type OperatorAgent, type TurnPlan } from './operatorAgent.js';
-import type { ChatMessage, ToolDefinition } from './openrouter.js';
+import type { ChatMessage, ToolDefinition } from './bedrock.js';
 import type { OperatorToolset } from './operatorToolset.js';
 
 export interface RunSyncAgentLoopOptions {

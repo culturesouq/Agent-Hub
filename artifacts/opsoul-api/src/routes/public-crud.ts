@@ -7,7 +7,7 @@ import {
   operatorSecretsTable,
 } from '@workspace/db';
 import { requireSlotKey } from '../middleware/requireSlotKey.js';
-import { CHAT_MODEL } from '../utils/openrouter.js';
+import { CHAT_MODEL } from '../utils/bedrock.js';
 import { executeSkill } from '../utils/skillExecutor.js';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { searchSkillByVector } from '../utils/vectorSearch.js';

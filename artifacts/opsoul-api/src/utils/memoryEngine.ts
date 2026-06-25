@@ -3,7 +3,7 @@ import { db, pool } from '@workspace/db';
 import { operatorMemoryTable, operatorMainMemoryTable, messagesTable, conversationsTable, operatorsTable } from '@workspace/db';
 import { eq, and, isNull, isNotNull, inArray, desc } from 'drizzle-orm';
 import { embed } from '@workspace/opsoul-utils/ai';
-import { chatCompletion } from './openrouter.js';
+import { chatCompletion } from './bedrock.js';
 import { gateAndStoreOperatorKb } from './kbIntake.js';
 import { redactPii } from './growGuards.js';
 import { DEFAULT_MODEL_ID } from './modelRegistry.js';

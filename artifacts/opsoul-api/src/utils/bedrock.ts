@@ -7,21 +7,16 @@
  *   - CHAT_MODEL / KB_MODEL / AUTO_MODEL / MODEL_OPTIONS
  *
  * Platform path: AWS Bedrock Converse API, Bearer token auth (AWS_BEDROCK_API_KEY).
- * BYO override path: OpenAI-compat via operator's own key (unchanged).
  */
 
-import OpenAI from 'openai';
-import type { ChatCompletion, ChatCompletionChunk, ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/index.js';
 import {
   BedrockRuntimeClient,
   ConverseStreamCommand,
 } from '@aws-sdk/client-bedrock-runtime';
 import {
   resolveModel,
-  resolveApiKey,
   listAvailableModels,
   DEFAULT_MODEL_ID,
-  type ProviderConfig,
 } from './modelRegistry.js';
 
 // ── PUBLIC CONSTANTS ──────────────────────────────────────────────────────────
@@ -170,18 +165,17 @@ export interface StreamChunk {
   usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
 }
 
+export interface ModelOverride {
+  model: string;
+  apiKey: string;
+  baseUrl?: string;
+}
+
 export interface ChatOptions {
   apiKey?: string | null;
   model?: string | null;
   tools?: ToolDefinition[];
   modelOverride?: ModelOverride;
-}
-
-export interface ModelOverride {
-  model: string;
-  apiKey: string;
-  baseUrl?: string;
-  provider?: 'openai' | 'anthropic' | 'azure_openai' | 'openrouter' | 'custom';
 }
 
 export interface CompletionResult {
@@ -218,7 +212,6 @@ function toConverseMessages(messages: ChatMessage[]): {
     }
 
     if (msg.role === 'tool') {
-      // Tool result — merge consecutive results into the same user message.
       const block: ConverseContentBlock = {
         toolResult: {
           toolUseId: msg.tool_call_id,
@@ -259,7 +252,6 @@ function toConverseMessages(messages: ChatMessage[]): {
       } else {
         for (const p of msg.content as ContentPart[]) {
           if (p.type === 'text') blocks.push({ text: p.text });
-          // images: Converse API uses a different image format — skip for now
         }
       }
       if (blocks.length > 0) out.push({ role: 'user', content: blocks });
@@ -279,20 +271,13 @@ function toConverseTools(tools: ToolDefinition[]) {
   }));
 }
 
-// ── BEDROCK CLIENT — streaming uses SDK (handles binary EventStream protocol) ─
+// ── BEDROCK CLIENT (Bearer token auth via custom middleware) ──────────────────
 
-// The SDK ConverseStreamCommand handles AWS binary EventStream decoding.
-// We configure it with a custom token provider for the long-term API key.
 const bedrockSdkClient = new BedrockRuntimeClient({
   region: 'us-east-1',
-  // IAM credentials are not used — the Bearer token header is injected
-  // via a custom middleware added below.
   credentials: { accessKeyId: 'BEDROCK_KEY', secretAccessKey: 'BEDROCK_KEY' },
 });
 
-// Inject Bearer token AFTER SigV4 runs (priority: low = last in finalizeRequest).
-// SigV4 adds its own Authorization header; we delete it and set ours so Bedrock
-// only ever sees one Authorization value.
 bedrockSdkClient.middlewareStack.add(
   (next) => async (args) => {
     const req = args.request as { headers?: Record<string, string> };
@@ -310,7 +295,7 @@ bedrockSdkClient.middlewareStack.add(
   { step: 'finalizeRequest', name: 'bedrockBearerAuth', priority: 'low' },
 );
 
-// ── BEDROCK NON-STREAMING (fetch — clean JSON in/out) ─────────────────────────
+// ── BEDROCK NON-STREAMING ─────────────────────────────────────────────────────
 
 async function bedrockConverse(
   modelId: string,
@@ -365,88 +350,6 @@ async function bedrockConverse(
   };
 }
 
-// ── BEDROCK STREAMING (SDK ConverseStreamCommand) ─────────────────────────────
-
-async function* bedrockConverseStream(
-  modelId: string,
-  system: Array<{ text: string }>,
-  messages: ConverseMessage[],
-  tools: ToolDefinition[],
-  maxTokens: number,
-): AsyncGenerator<StreamChunk> {
-  const input: Record<string, unknown> = { modelId, messages, inferenceConfig: { maxTokens } };
-  if (system.length > 0) input.system = system;
-  if (tools.length > 0) input.toolConfig = { tools: toConverseTools(tools) };
-
-  const command = new ConverseStreamCommand(input as Parameters<typeof ConverseStreamCommand>[0]);
-  const response = await bedrockSdkClient.send(command);
-
-  let toolAccumulator: { id: string; name: string; arguments: string } | null = null;
-  let inputTokens = 0, outputTokens = 0;
-
-  for await (const event of response.stream!) {
-    if (event.contentBlockDelta) {
-      const delta = event.contentBlockDelta.delta;
-      if (delta?.text) {
-        yield { delta: delta.text, done: false };
-      } else if (delta?.toolUse?.input && toolAccumulator) {
-        toolAccumulator.arguments += delta.toolUse.input;
-      }
-    } else if (event.contentBlockStart) {
-      const start = event.contentBlockStart.start;
-      if (start?.toolUse) {
-        toolAccumulator = {
-          id:        start.toolUse.toolUseId ?? '',
-          name:      start.toolUse.name      ?? '',
-          arguments: '',
-        };
-      }
-    } else if (event.metadata?.usage) {
-      inputTokens  = event.metadata.usage.inputTokens  ?? 0;
-      outputTokens = event.metadata.usage.outputTokens ?? 0;
-    } else if (event.messageStop) {
-      yield {
-        delta: '', done: true,
-        toolCall: toolAccumulator
-          ? { id: toolAccumulator.id, name: toolAccumulator.name, args: toolAccumulator.arguments }
-          : undefined,
-        usage: {
-          promptTokens:     inputTokens,
-          completionTokens: outputTokens,
-          totalTokens:      inputTokens + outputTokens,
-        },
-      };
-    }
-  }
-}
-
-// ── OPENAI-COMPAT CLIENT (BYO model overrides only) ──────────────────────────
-
-const openaiClientCache = new Map<string, OpenAI>();
-const DEFAULT_OPENAI_BASE: Record<string, string> = {
-  openai:     'https://api.openai.com/v1',
-  openrouter: 'https://openrouter.ai/api/v1',
-};
-
-function getClientForOverride(override: ModelOverride): { client: OpenAI; sendAs: string } {
-  const provider = override.provider ?? 'openai';
-  if (provider === 'anthropic') throw new Error('ModelOverride provider=anthropic not supported.');
-  if ((provider === 'azure_openai' || provider === 'custom') && !override.baseUrl) {
-    throw new Error(`ModelOverride provider=${provider} requires baseUrl`);
-  }
-  const baseURL   = override.baseUrl ?? DEFAULT_OPENAI_BASE[provider] ?? 'https://api.openai.com/v1';
-  const cacheKey  = `${baseURL}::${override.apiKey}`;
-  const cached    = openaiClientCache.get(cacheKey);
-  if (cached) return { client: cached, sendAs: override.model };
-  const client = new OpenAI({
-    baseURL,
-    apiKey: override.apiKey || 'unused',
-    defaultHeaders: { 'HTTP-Referer': process.env.APP_URL || 'https://opsoul.io', 'X-Title': 'OpSoul' },
-  });
-  openaiClientCache.set(cacheKey, client);
-  return { client, sendAs: override.model };
-}
-
 // ── STREAM CHAT (public) ──────────────────────────────────────────────────────
 
 export async function* streamChat(
@@ -457,38 +360,6 @@ export async function* streamChat(
   const outputTokens = Math.min(MAX_TOKENS, LLM_BUDGET_OUTPUT_TOKENS);
   enforceBudget(messages, outputTokens);
 
-  // BYO override — operator has a custom model configured.
-  if (opts.modelOverride) {
-    const { client, sendAs } = getClientForOverride(opts.modelOverride);
-    const params: Parameters<typeof client.chat.completions.create>[0] = {
-      model: sendAs, messages: messages as Parameters<typeof client.chat.completions.create>[0]['messages'],
-      max_tokens: outputTokens, stream: true, stream_options: { include_usage: true },
-    };
-    if (opts.tools?.length) params.tools = opts.tools as Parameters<typeof client.chat.completions.create>[0]['tools'];
-    const stream = await withRetry(
-      () => client.chat.completions.create(params) as Promise<AsyncIterable<ChatCompletionChunk>>,
-      `streamChat(${sendAs}) connect`,
-    );
-    let tc: { id: string; name: string; arguments: string } | null = null;
-    for await (const chunk of stream) {
-      const d = chunk.choices[0]?.delta;
-      const tcd = d?.tool_calls?.[0];
-      if (tcd) {
-        if (tcd.id) tc = { id: tcd.id, name: tcd.function?.name ?? '', arguments: tcd.function?.arguments ?? '' };
-        else if (tc && tcd.function?.arguments) tc.arguments += tcd.function.arguments;
-      }
-      if (chunk.usage) {
-        yield { delta: d?.content ?? '', done: true,
-          toolCall: tc ? { id: tc.id, name: tc.name, args: tc.arguments } : undefined,
-          usage: { promptTokens: chunk.usage.prompt_tokens, completionTokens: chunk.usage.completion_tokens, totalTokens: chunk.usage.total_tokens } };
-      } else {
-        yield { delta: d?.content ?? '', done: false };
-      }
-    }
-    return;
-  }
-
-  // Platform default — Bedrock Claude Sonnet 4.6.
   const { sendAs } = resolveModel(opts.model ?? CHAT_MODEL);
   const { system, messages: convMessages } = toConverseMessages(messages);
   const response = await withRetry(
@@ -514,7 +385,7 @@ export async function* streamChat(
       const tu = event.contentBlockStart.start.toolUse;
       toolAccumulator = { id: tu.toolUseId ?? '', name: tu.name ?? '', arguments: '' };
     } else if (event.metadata?.usage) {
-      inputTokens       = event.metadata.usage.inputTokens  ?? 0;
+      inputTokens        = event.metadata.usage.inputTokens  ?? 0;
       outputTokensActual = event.metadata.usage.outputTokens ?? 0;
     } else if (event.messageStop) {
       yield {
@@ -536,29 +407,6 @@ export async function chatCompletion(
   const outputTokens = Math.min(MAX_TOKENS, LLM_BUDGET_OUTPUT_TOKENS);
   enforceBudget(messages, outputTokens);
 
-  // BYO override.
-  if (opts.modelOverride) {
-    const { client, sendAs } = getClientForOverride(opts.modelOverride);
-    const params: Parameters<typeof client.chat.completions.create>[0] = {
-      model: sendAs, messages: messages as Parameters<typeof client.chat.completions.create>[0]['messages'],
-      max_tokens: outputTokens, stream: false,
-    };
-    if (opts.tools?.length) params.tools = opts.tools as Parameters<typeof client.chat.completions.create>[0]['tools'];
-    const response = await withRetry(
-      () => client.chat.completions.create(params) as Promise<ChatCompletion>,
-      `chatCompletion(${sendAs})`,
-    );
-    const choice = response.choices[0];
-    const tc = choice?.message?.tool_calls?.[0];
-    return {
-      content:          choice?.message?.content ?? '',
-      toolCall:         tc ? { id: tc.id, name: (tc as ChatCompletionMessageFunctionToolCall).function.name, args: (tc as ChatCompletionMessageFunctionToolCall).function.arguments } : undefined,
-      promptTokens:     response.usage?.prompt_tokens     ?? 0,
-      completionTokens: response.usage?.completion_tokens ?? 0,
-    };
-  }
-
-  // Platform default — Bedrock Claude Sonnet 4.6.
   const { sendAs } = resolveModel(opts.model ?? CHAT_MODEL);
   const { system, messages: convMessages } = toConverseMessages(messages);
   return await withRetry(

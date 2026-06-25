@@ -4,7 +4,7 @@
  * surface in self-awareness context before the user message. One LLM call.
  */
 
-import { chatCompletion, type ChatOptions, type ChatMessage } from './openrouter.js';
+import { chatCompletion, type ChatOptions, type ChatMessage } from './bedrock.js';
 import { searchSkillByVector } from './vectorSearch.js';
 
 export type { ChatMessage };

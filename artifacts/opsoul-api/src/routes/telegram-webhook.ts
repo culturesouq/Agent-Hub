@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { db } from '@workspace/db';
 import { operatorIntegrationsTable, operatorsTable, conversationsTable, messagesTable, operatorSecretsTable } from '@workspace/db';
 import { decryptToken } from '@workspace/opsoul-utils/crypto';
-import { CHAT_MODEL } from '../utils/openrouter.js';
+import { CHAT_MODEL } from '../utils/bedrock.js';
 import { assembleOperatorPrompt } from '../utils/systemPrompt.js';
 import { buildChannelScope, buildScopeContext } from '../utils/scopeResolver.js';
 import { OperatorAgent } from '../utils/operatorAgent.js';
@@ -11,7 +11,7 @@ import { buildOperatorToolset } from '../utils/operatorToolset.js';
 import { analyzeInputForSafety, analyzeOutputForLeak } from '../utils/operatorFirewall.js';
 import { runSyncAgentLoop } from '../utils/operatorAgentLoop.js';
 import { eq, and, asc, sql } from 'drizzle-orm';
-import type { ChatMessage } from '../utils/openrouter.js';
+import type { ChatMessage } from '../utils/bedrock.js';
 
 const router = Router();
 

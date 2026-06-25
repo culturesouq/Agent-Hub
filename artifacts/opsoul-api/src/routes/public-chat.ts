@@ -18,8 +18,8 @@ import { OperatorAgent } from '../utils/operatorAgent.js';
 import { buildOperatorToolset } from '../utils/operatorToolset.js';
 import { runSyncAgentLoop } from '../utils/operatorAgentLoop.js';
 import { analyzeInputForSafety, analyzeOutputForLeak } from '../utils/operatorFirewall.js';
-import { CHAT_MODEL } from '../utils/openrouter.js';
-import type { ChatMessage, ContentPart } from '../utils/openrouter.js';
+import { CHAT_MODEL } from '../utils/bedrock.js';
+import type { ChatMessage, ContentPart } from '../utils/bedrock.js';
 import { DEFAULT_MODEL_ID } from '../utils/modelRegistry.js';
 
 import { eq, and, desc, sql } from 'drizzle-orm';

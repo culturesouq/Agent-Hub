@@ -14,7 +14,7 @@ import { runGrowCycle } from '../utils/growEngine.js';
 import { recomputeSelfAwareness } from '../utils/selfAwarenessEngine.js';
 import { buildSystemPrompt } from '../utils/systemPrompt.js';
 import type { OperatorIdentity } from '../utils/systemPrompt.js';
-import { chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
+import { chatCompletion, CHAT_MODEL } from '../utils/bedrock.js';
 import type { Layer2Soul } from '../validation/operator.js';
 
 const router = Router({ mergeParams: true });

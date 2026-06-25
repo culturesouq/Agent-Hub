@@ -24,14 +24,14 @@ import { OperatorAgent, renderTurnPlanSystemContext } from '../utils/operatorAge
 import type { SelfAwarenessSnapshot, BuildSystemPromptOpts } from '../utils/systemPrompt.js';
 import { distillMemoriesFromConversations, searchMemory } from '../utils/memoryEngine.js';
 import { triggerSelfAwareness, buildWorkspaceManifest, renderTurnWorkspaceContext, detectCuriositySignals } from '../utils/selfAwarenessEngine.js';
-import { chatCompletion, CHAT_MODEL } from '../utils/openrouter.js';
+import { chatCompletion, CHAT_MODEL } from '../utils/bedrock.js';
 import { BIRTH_MODEL_ID, resolveModel, DEFAULT_MODEL_ID } from '../utils/modelRegistry.js';
 import { decryptToken } from '@workspace/opsoul-utils/crypto';
 import { getOperatorModelOverride } from '../utils/operatorModelConfig.js';
-import type { ChatMessage, ToolDefinition } from '../utils/openrouter.js';
+import type { ChatMessage, ToolDefinition } from '../utils/bedrock.js';
 import { buildOwnerScope, buildScopeContext, type ValidatedScope } from '../utils/scopeResolver.js';
 import { scrapeUrl } from '../utils/urlScraper.js';
-import type { ContentPart } from '../utils/openrouter.js';
+import type { ContentPart } from '../utils/bedrock.js';
 import { gateAndStoreOperatorKb } from '../utils/kbIntake.js';
 import { searchBothKbs, KB_RETRIEVAL_MIN_CONFIDENCE, searchSkillByVector, type SkillHit } from '../utils/vectorSearch.js';
 import { eq, and, asc, sql } from 'drizzle-orm';

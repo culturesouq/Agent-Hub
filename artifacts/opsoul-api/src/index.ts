@@ -281,7 +281,7 @@ async function start(): Promise<void> {
     console.log(`[opsoul-api] Operator KB: /api/operators/:id/operator-kb — ingest, list, get, patch, delete`);
     console.log(`[opsoul-api] KB Search: POST /api/operators/:id/kb/search — pgvector semantic search + RAG`);
     console.log(`[opsoul-api] Conversations: /api/operators/:id/conversations — CRUD + message history`);
-    console.log(`[opsoul-api] Chat: POST /api/operators/:id/conversations/:convId/messages — OpenRouter stream/sync`);
+    console.log(`[opsoul-api] Chat: POST /api/operators/:id/conversations/:convId/messages — Bedrock stream/sync`);
     console.log(`[opsoul-api] GROW: /api/operators/:id/grow — trigger, proposals, decide`);
     console.log(`[opsoul-api] Self-Awareness: GET /grow/self-awareness, POST /grow/self-awareness/recompute`);
     console.log(`[opsoul-api] Platform Skills: /api/platform-skills — CRUD skill library`);

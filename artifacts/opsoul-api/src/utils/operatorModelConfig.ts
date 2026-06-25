@@ -20,8 +20,8 @@ import { db } from '@workspace/db';
 import { operatorsTable } from '@workspace/db';
 import { eq } from 'drizzle-orm';
 import { encryptToken, decryptToken } from '@workspace/opsoul-utils/crypto';
-import type { ModelOverride } from './openrouter.js';
-import { chatCompletion } from './openrouter.js';
+import type { ModelOverride } from './bedrock.js';
+import { chatCompletion } from './bedrock.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

@@ -12,7 +12,7 @@ import {
   opsLogsTable,
 } from '@workspace/db';
 import { eq, and, desc, inArray, lte, isNull } from 'drizzle-orm';
-import { chatCompletion } from './openrouter.js';
+import { chatCompletion } from './bedrock.js';
 import { getOperatorModelOverride } from './operatorModelConfig.js';
 import { semanticDistance } from '@workspace/opsoul-utils/ai';
 import type { Layer2Soul } from '../validation/operator.js';

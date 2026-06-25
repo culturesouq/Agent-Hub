@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { chatCompletion } from './openrouter.js';
+import { chatCompletion } from './bedrock.js';
 import { db } from '@workspace/db';
 import {
   operatorsTable,

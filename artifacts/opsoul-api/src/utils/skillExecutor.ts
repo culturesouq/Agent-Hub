@@ -1,6 +1,6 @@
 const DEBUG = process.env.LOG_LEVEL === 'debug';
 
-import { chatCompletion } from './openrouter.js';
+import { chatCompletion } from './bedrock.js';
 import { DEFAULT_MODEL_ID } from './modelRegistry.js';
 import { db } from '@workspace/db';
 import { operatorIntegrationsTable } from '@workspace/db';

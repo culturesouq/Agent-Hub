@@ -38,7 +38,7 @@
 
 import type { ScopeType } from './scopeResolver.js';
 import type { WorkspaceManifest } from './selfAwarenessEngine.js';
-import { chatCompletion, streamChat, type ChatMessage, type ChatOptions, type StreamChunk, type CompletionResult } from './openrouter.js';
+import { chatCompletion, streamChat, type ChatMessage, type ChatOptions, type StreamChunk, type CompletionResult } from './bedrock.js';
 
 export type AnalyseDecisionKind = 'execute' | 'chat' | 'introspect';
 

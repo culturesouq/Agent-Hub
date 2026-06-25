@@ -11,7 +11,7 @@ import {
   SetGrowLockSchema,
   type Layer2Soul,
 } from '../validation/operator.js';
-import { chatCompletion, MODEL_OPTIONS, CHAT_MODEL } from '../utils/openrouter.js';
+import { chatCompletion, MODEL_OPTIONS, CHAT_MODEL } from '../utils/bedrock.js';
 import { DEFAULT_MODEL_ID } from '../utils/modelRegistry.js';
 import {
   setOperatorModelConfig,
@@ -747,7 +747,7 @@ router.post('/:id/model-settings/verify-key', async (req: Request, res: Response
   if (!apiKey?.trim()) { res.status(400).json({ error: 'apiKey required' }); return; }
 
   try {
-    const { chatCompletion: cc } = await import('../utils/openrouter.js');
+    const { chatCompletion: cc } = await import('../utils/bedrock.js');
     const result = await cc(
       [{ role: 'user', content: 'Reply with the single word: verified' }],
       { apiKey: apiKey.trim(), model: DEFAULT_MODEL_ID },

@@ -22,7 +22,7 @@
  */
 
 import { listToolsForContext } from './toolRegistry.js';
-import type { ToolDefinition } from './openrouter.js';
+import type { ToolDefinition } from './bedrock.js';
 import type { ToolHandlerContext } from './toolHandlers.js';
 import { isWebSearchAvailable, isFirecrawlAvailable } from './capabilityEngine.js';
 import type { ScopeType, ValidatedScope } from './scopeResolver.js';

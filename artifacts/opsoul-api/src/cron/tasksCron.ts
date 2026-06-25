@@ -2,7 +2,7 @@ import { db } from '@workspace/db';
 import { tasksTable, operatorsTable } from '@workspace/db';
 import { eq, and, lte, isNotNull } from 'drizzle-orm';
 import { assembleOperatorPrompt } from '../utils/systemPrompt.js';
-import { CHAT_MODEL } from '../utils/openrouter.js';
+import { CHAT_MODEL } from '../utils/bedrock.js';
 import { embed } from '@workspace/opsoul-utils/ai';
 import { storeMemory, searchMemory } from '../utils/memoryEngine.js';
 import { searchBothKbs, buildRagContext } from '../utils/vectorSearch.js';

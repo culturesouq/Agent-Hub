@@ -15,7 +15,7 @@
  * Migrated from inline definitions in routes/chat.ts lines ~957–1185.
  */
 
-import type { ToolDefinition } from './openrouter';
+import type { ToolDefinition } from './bedrock';
 
 /** Scope types match scopeResolver.ts. See utils/scopeResolver.ts for semantics. */
 export type ScopeType = 'owner' | 'public' | 'authenticated' | 'action' | 'channel';
