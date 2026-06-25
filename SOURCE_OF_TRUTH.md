@@ -42,9 +42,16 @@ Workflow `wf_7d06cfd9-f50` running (2026-06-24 late night). 35 parallel agents, 
 - Operator-specific installed skills checked first (small set, old embed-on-the-fly path). Platform catalog only if no operator-specific match.
 - No `loadAllPlatformSkills()`, no bulk embed storm, no noise. Identical principle to KB retrieval.
 
+**Skill-first architecture (commit `d91c4ce`):** Skills detect BEFORE the LLM, not after. Sequence every turn:
+1. `messageEmbedding` computed (reused for KB + skill)
+2. Skill detected: operator-specific first, then `searchSkillByVector()` against platform catalog
+3. Active skill injected into messages as ephemeral `[Active Skill: name]` system context — right before user message, after TurnPlan
+4. LLM runs: reads skill instructions, chooses tools IN SERVICE of the skill's steps, produces one response already shaped by the skill
+- Removed: post-response skill detection, `executeSkill()`, `persistSkillResult()`. No more 3-LLM-call chain per skill.
+
 **TO ACTIVATE (Mohamed gives go):**
-1. Push 3 commits to remote (`git push`)
-2. Run `seedUniversalSkills.ts` against live DB — adds column + inserts 1077 skills + embeds all triggerDescriptions
+1. Push 4 commits to remote (`git push`)
+2. Run `seedUniversalSkills.ts` against live DB — adds `embedding vector(1536)` column, inserts 1077 skills, embeds all triggerDescriptions
 3. Build + deploy new image
 
 ---
