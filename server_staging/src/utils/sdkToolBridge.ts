@@ -245,6 +245,15 @@ async function handleListWorkspace(
   lines.push(`SECRETS (labels only): ${secretLabels.length > 0 ? secretLabels.join(', ') : 'none'}`);
 
   lines.push('');
+  lines.push('LOCAL TOOLS (run inside OpSoul — always available, no SDK needed):');
+  lines.push('  list_workspace — view your full workspace: tools, skills, KB, integrations, files, secrets');
+  lines.push('  kb_search / kb_query — semantic search your knowledge base');
+  lines.push('  kb_seed — store a new knowledge entry');
+  lines.push('  kb_delete_learned — remove a learned KB entry');
+  lines.push('  kb_pending_list — list KB entries awaiting verification');
+  lines.push('  db_query — query OpSoul database directly (skills, memory counts, tasks, etc.)');
+
+  lines.push('');
   const matchingSkills = keyword
     ? allSkills.filter(s => s.name.toLowerCase().includes(keyword) || (s.description ?? '').toLowerCase().includes(keyword))
     : allSkills;
@@ -341,6 +350,22 @@ export async function dispatchViaSdk(
     if (rows.length === 0) return { content: 'No pending KB entries.', meta: { terminateLoop: false } };
     const lines = rows.map((r, i) => `${i + 1}. (id ${r.id}) [conf ${r.confidenceScore}] ${r.content.slice(0, 200)}`);
     return { content: `${rows.length} pending KB entries:\n${lines.join('\n')}`, meta: { terminateLoop: false } };
+  }
+
+  // db_query — runs directly against OpSoul's Postgres. Read-only SELECT only.
+  if (name === 'db_query') {
+    const sql = typeof params.query === 'string' ? params.query.trim() : '';
+    if (!sql) return { content: 'query param is required.', meta: { terminateLoop: false } };
+    if (!/^select\s/i.test(sql)) return { content: 'Only SELECT queries are allowed.', meta: { terminateLoop: false } };
+    try {
+      const result = await pool.query(sql);
+      if (result.rows.length === 0) return { content: 'Query returned 0 rows.', meta: { terminateLoop: false } };
+      const header = Object.keys(result.rows[0]).join(' | ');
+      const rowLines = result.rows.slice(0, 50).map(r => Object.values(r).map(v => String(v ?? '')).join(' | '));
+      return { content: `${header}\n${rowLines.join('\n')}\n(${result.rows.length} row${result.rows.length !== 1 ? 's' : ''})`, meta: { terminateLoop: false } };
+    } catch (err) {
+      return { content: `Query error: ${(err as Error).message}`, meta: { terminateLoop: false } };
+    }
   }
 
   const headers: Record<string, string> = {
