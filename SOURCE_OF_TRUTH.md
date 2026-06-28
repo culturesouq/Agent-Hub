@@ -74,6 +74,63 @@ The operator is always in one mode: **its own mode**. It reads what it has and d
 
 ---
 
+## BEDROCK SPIKE — FIXED (2026-06-28)
+
+**Root cause (confirmed 2026-06-27):** Nahil weather cron (`server/cron/weather.js`) fires every 6 hours and was making **6 separate `/v1/action` calls** (one per UAE region) in rapid succession → burst hit Bedrock throttle → all 3 retries failed → ThrottlingException spam in logs.
+
+**Fix shipped 2026-06-28:**
+- `nahil_2/server/cron/weather.js` — 6 individual Nahil calls → **1 batch call** for all regions. All OWM+NASA fetches still parallel; one `generateAllAdvisories()` call returns array; upsert loop unchanged.
+- `opsoul-audit/artifacts/opsoul-api/src/routes/public-crud.ts` — action limit raised `max(500)` → `max(2000)` to accommodate the batch prompt.
+
+**GROW** clean: 6 operators processed daily at 02:00 UTC (Vael+4, Nahil+5, Reem+3 on 2026-06-28).
+**Memory decay** clean: 0 decayed, 0 archived.
+**Nahil seed:** stopped manually 2026-06-27. Do not restart until seed logic is fixed.
+
+---
+
+## INTERCOM LAYER — ARCHITECTURE FINDING (2026-06-27)
+
+### The insight
+What made Base44 Superagents powerful: they lived in the SAME environment as the apps. They called apps internally by ID — not external HTTP. OpSoul operators are strong in identity and reasoning but crippled in execution because every action is an external call. The fix is an intercom layer — operators call apps internally via Bani Studio as the router.
+
+Dev/prod unification: Base44 dev and prod are the same environment. Agent calls by ID work identically in both. No URL switching. The ID IS the address — the platform resolves it. This is why Base44 Superagents worked seamlessly across dev/prod.
+
+### Architecture
+- **Bani Studio** is the intercom router — `POST /intercom {app_id, operation, entity, data, [3 keys]}`
+- **Each app** exposes `POST /crud` — standard endpoint, publicly accessible, protected by 3 keys
+- **Azure internal DNS** — apps on `bani-studio-env` call each other at `http://<app-name>` internally, never hitting the internet
+- **External customers** (commercial OpSoul, npm package) call the public URL directly with 3 keys — same endpoint, same validation, different road in
+
+### The flow
+```
+User → OpSoul operator
+     → POST bani-studio/intercom {app_id:"foundermoment", op:"create", ...3 keys}
+     → bani-studio validates scope (3 keys)
+     → POST http://foundermoment/crud  ← internal DNS, never hits internet
+     → result back to operator → operator responds to user
+
+External customer (npm):
+     → POST https://foundermoment.azurecontainerapps.io/crud + 3 keys
+     → same validation, same scope enforcement
+```
+
+### What stays untouched
+- 3 keys mechanism → unchanged
+- Scope isolation → unchanged
+- Operator identity/soul → unchanged
+- The intercom is TRANSPORT only — the 3 keys ARE the security
+
+### Critical rule
+The `/crud` endpoint treats internal and external calls identically — same 3-key validation, no shortcuts for "internal = trusted." Internal calls skip the internet, not the gate.
+
+### Current infrastructure — 9 apps already sharing bani-studio-env
+bani-studio · opsoul · foundermoment · nahilai · sovereign-rag · hafeet-tutoring · authentic-tour · hajeri-ui · cultureyes
+All can call each other internally today. Future apps: deploy to bani-studio-env → automatically part of intercom. App name = ID.
+
+---
+
+---
+
 ## ✅ SESSION WORK — 2026-06-25 (continued)
 
 ### SRAG (sovereign-rag) — Audit + Reactivation · 2026-06-25

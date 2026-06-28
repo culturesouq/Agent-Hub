@@ -23,7 +23,7 @@ const router = Router();
 router.use(requireSlotKey);
 
 const CrudActionSchema = z.object({
-  action:  z.string().min(1).max(500),
+  action:  z.string().min(1).max(2000),
   payload: z.record(z.unknown()).optional(),
 });
 
