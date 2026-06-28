@@ -79,8 +79,8 @@ The operator is always in one mode: **its own mode**. It reads what it has and d
 **Root cause (confirmed 2026-06-27):** Nahil weather cron (`server/cron/weather.js`) fires every 6 hours and was making **6 separate `/v1/action` calls** (one per UAE region) in rapid succession → burst hit Bedrock throttle → all 3 retries failed → ThrottlingException spam in logs.
 
 **Fix shipped 2026-06-28:**
-- `nahil_2/server/cron/weather.js` — 6 individual Nahil calls → **1 batch call** for all regions. All OWM+NASA fetches still parallel; one `generateAllAdvisories()` call returns array; upsert loop unchanged.
-- `opsoul-audit/artifacts/opsoul-api/src/routes/public-crud.ts` — action limit raised `max(500)` → `max(2000)` to accommodate the batch prompt.
+- `nahil_2/server/cron/weather.js` — 6 individual Nahil calls → **1 batch call** for all regions. All OWM+NASA fetches still parallel; one `generateAllAdvisories()` call returns array; upsert loop unchanged. Deployed: `nahilai--0000164` (image `v20260628-b601a49`)
+- `opsoul-audit/artifacts/opsoul-api/src/routes/public-crud.ts` — action limit raised `max(500)` → `max(2000)` to accommodate the batch prompt. Deployed: `opsoul--0000129` (image `phase10-091b9b9`)
 
 **GROW** clean: 6 operators processed daily at 02:00 UTC (Vael+4, Nahil+5, Reem+3 on 2026-06-28).
 **Memory decay** clean: 0 decayed, 0 archived.
