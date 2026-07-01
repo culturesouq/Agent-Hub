@@ -5869,3 +5869,50 @@ az containerapp update -n opsoul -g bani-studio-rg --image banistudioacr.azurecr
 5. `f1f614c` — Dead code: `persistWebSearchResult` removed, `KbSeedResult` re-export removed
 6. `9090c6e` — `analyse()` consolidated: returns full TurnPlan, no more double composeTurnPlan() per turn
 7. `9090c6e` — KB auto-surfaced at 25% context threshold (mirrors memory at 45%); embed computed once, reused for both
+
+---
+
+## DEPLOYED `opsoul--0000133` · image `banistudioacr.azurecr.io/opsoul-api:sonnet5-606685b` · digest `sha256:d0e07df27a39b17d33755cd5e92e9d09c432c9e9b2e1a16d1ddf0fade269037d`
+
+**Deploy timestamp:** 2026-07-02 ~00:35 UTC+4 (20:35 UTC)
+**Built:** locally via Docker (`docker build --platform linux/amd64 --target production`), NOT `az acr build`
+— cloud build failed 6 consecutive times ("failed to download context"), confirmed client-side upload
+succeeded every time (HTTP 201 to blob storage) so the failure is server-side in ACR's build-agent
+infrastructure, root cause not identified. Colima + local Docker build was the working fallback.
+**Revision:** `opsoul--0000133` · provisioningState: Provisioned · Healthy · 100% traffic
+**Previous working revision:** `opsoul--0000128` (image `phase10-0773fe2`, now deleted from ACR — superseded)
+
+### What shipped
+
+1. **CultureYes SDK bridge connected for real.** `CY_SDK_URL` +
+   `CY_SDK_KEY` wired to a genuine consumer registration on the rebuilt SDK
+   (`https://cultureyes-sdk-server.wonderfulrock-95def358.uaenorth.azurecontainerapps.io`). Verified
+   end-to-end: real key, real `/execute` call, real tool-catalog response.
+
+2. **`AZURE_OPENAI_KEY` removed** — env var + underlying secret, both gone from the container. It was never
+   actually used for any LLM call (OpSoul is single-model: Claude Sonnet 4.6 via AWS Bedrock, see
+   `modelRegistry.ts`) — it only existed because `lib/opsoul-utils/src/env.ts`'s startup `validateEnv()`
+   required it to exist or the app would crash on boot. Fixed in code (commit `606685b`, dropped from
+   `REQUIRED_VARS`) before removing the container-side secret, so removing it doesn't crash the next
+   restart.
+
+3. **Found and fixed a real, pre-existing 503 along the way** (not caused by #1/#2): the Container App was
+   already configured (before any of tonight's changes) to pull image tag `opsoul-api:phase10-091b9b9` —
+   a tag that was **never actually pushed** to the registry (git commit `091b9b9` exists, matching
+   "fix: raise action limit to 2000 for Nahil batch weather advisory" — that build/push evidently never
+   completed). Fixed by pointing at the last genuinely-existing image until this deploy superseded it
+   properly.
+
+4. **Pushed 23 previously-local-only commits** to `origin/main` — all real, already-deployed work (phases
+   1–10, matches live revision history), just never published to GitHub. Same "push every commit"
+   discipline now standard on the CultureYes SDK repo, applied here too.
+
+**Verified live (not just provisioningState):** `/health` → 200 across multiple checks both immediately
+after deploy and after the secret removal; both replicas confirmed `ready:true`; `CY_SDK_URL`/`CY_SDK_KEY`
+confirmed intact after the `AZURE_OPENAI_KEY` removal (untouched by that change).
+
+**Known open item:** whatever deploy was meant to produce `phase10-091b9b9` never finished pushing its
+image — worth checking that pipeline/CI step separately, it's a gap unrelated to tonight's fix.
+
+**Known infra issue:** `az acr build` is currently unreliable for this repo specifically (works fine for
+other repos on the same ACR) — use local `docker build` + `docker push` as the fallback if it recurs.
