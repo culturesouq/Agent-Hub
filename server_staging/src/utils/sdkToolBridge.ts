@@ -178,7 +178,11 @@ interface SdkExecuteResult {
   ok: boolean;
   content: string;
   data?: unknown;
-  error?: { code: string; message: string };
+  // Two real shapes reach here: the thrown-exception envelope wraps error as
+  // {code, message}; a raw ToolResult (packages/types/src/index.ts) — which
+  // /execute already returns today on business-logic failures with a 200 —
+  // has error as a plain string. Handle both, not just the envelope shape.
+  error?: { code: string; message: string } | string;
 }
 
 // ── list_workspace handler ────────────────────────────────────────────────────
@@ -390,8 +394,9 @@ export async function dispatchViaSdk(
   const result = await res.json() as SdkExecuteResult;
 
   if (!res.ok && result.error) {
+    const errorText = typeof result.error === "string" ? result.error : result.error.message;
     return {
-      content: `Tool error: ${result.error.message}`,
+      content: `Tool error: ${errorText}`,
       meta: { terminateLoop: true },
     };
   }
