@@ -3,7 +3,6 @@ const REQUIRED_VARS = [
   'JWT_SECRET',
   'SESSION_SECRET',
   'ENCRYPTION_KEY',
-  'AZURE_OPENAI_KEY',
 ] as const;
 
 export function validateEnv(): void {
